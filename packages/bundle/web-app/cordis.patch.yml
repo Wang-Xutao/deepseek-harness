@@ -284,6 +284,10 @@
     - id: ui-settings-plugins
       name: '@deepseek-ai/dsh-client-ui-settings-plugins'
 
+    # Desktop version display and GitHub Releases update controls.
+    - id: ui-settings-updates
+      name: '@deepseek-ai/dsh-client-ui-settings-updates'
+
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
       name: '@deepseek-ai/dsh-client-ui-plan'

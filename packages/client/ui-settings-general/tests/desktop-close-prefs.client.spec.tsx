@@ -21,8 +21,23 @@ describe('DesktopClosePrefs', () => {
 
   it('loads bridge and selects via Menu like other general rows', async () => {
     const getPrefs = vi.fn(async () => ({ closeAction: 'ask' as const }))
-    const setPrefs = vi.fn(async (prefs: { closeAction: 'ask' | 'tray' | 'quit' }) => prefs)
-    window.bafDesktop = { isDesktop: true, getPrefs, setPrefs }
+    const setPrefs = vi.fn(async (prefs: { closeAction?: 'ask' | 'tray' | 'quit' }) => ({
+      closeAction: prefs.closeAction ?? 'ask',
+    }))
+    window.bafDesktop = {
+      isDesktop: true,
+      getPrefs,
+      setPrefs,
+      getVersions: async () => ({ bafDsh: '0.0.3', dsh: '0.1.0-rc.8', bafPlugin: '0.0.1' }),
+      checkForUpdate: async () => ({
+        status: 'up-to-date',
+        versions: { bafDsh: '0.0.3', dsh: '0.1.0-rc.8', bafPlugin: '0.0.1' },
+        checkedAt: '',
+      }),
+      startUpdate: async () => ({ ok: true, versions: { bafDsh: '0.0.3', dsh: '0.1.0-rc.8', bafPlugin: '0.0.1' } }),
+      getLastCheckResult: async () => null,
+      onUpdateProgress: () => () => {},
+    } as NonNullable<Window['bafDesktop']>
 
     render(<DesktopClosePrefs {...kit} t={t as never} />)
     expect(await screen.findByTestId('desktop-close-prefs')).toBeTruthy()

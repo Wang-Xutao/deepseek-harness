@@ -1,0 +1,121 @@
+# Build and publish baf-dsh update artifacts to GitHub Releases.
+# Trigger: push tag baf-dsh-v* (must point at a commit on baf).
+name: Release (baf-dsh)
+
+on:
+  push:
+    tags:
+      - 'baf-dsh-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: baf-dsh-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PRIMARY_NODE_VERSION: '22'
+
+jobs:
+  release:
+    name: Pack and publish baf-dsh
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on baf
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          git fetch origin baf:refs/remotes/origin/baf || true
+          if ! git merge-base --is-ancestor "$TAG" origin/baf 2>/dev/null; then
+            if ! git branch -r --contains "$TAG" | grep -E 'origin/baf$' >/dev/null; then
+              echo "Tag $TAG is not contained in origin/baf"
+              exit 1
+            fi
+          fi
+          VER="${TAG#baf-dsh-v}"
+          PKG_VER=$(node -p "require('./overlay/desktop/package.json').version")
+          if [ "$VER" != "$PKG_VER" ]; then
+            echo "Tag version $VER != desktop package.json $PKG_VER"
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Install and build harness
+        shell: bash
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm run build
+          pnpm --filter @deepseek-ai/dsh-client-ui-settings-updates run bundle
+          pnpm --filter @deepseek-ai/dsh-client-ui-settings-general run bundle
+          pnpm --filter @deepseek-ai/dsh-client-ui-sidebar run bundle
+          pnpm --filter @deepseek-ai/dsh-web-frontend run build
+
+      - name: Install overlay desktop deps
+        working-directory: overlay
+        shell: bash
+        run: |
+          npm install
+          npm --prefix desktop install
+
+      - name: Pack content / dsh / installer
+        working-directory: overlay
+        shell: bash
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+          BAF_UPDATE_PRIVATE_KEY_PEM: ${{ secrets.BAF_UPDATE_PRIVATE_KEY_PEM }}
+        run: |
+          node scripts/pack-plugin.mjs
+          npm run brand-web
+          node scripts/pack-dsh.mjs
+          node scripts/pack-runtime.mjs
+          npm run prepare-branding
+          npm --prefix desktop run dist
+          node scripts/generate-manifest.mjs
+
+      - name: Publish version release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#baf-dsh-v}"
+          UPDATE_DIR="overlay/desktop/dist/update"
+          SETUP="overlay/desktop/dist/baf-dsh-Setup-${VER}.exe"
+          mapfile -t ZIPS < <(ls "$UPDATE_DIR"/baf-plugin-*.zip "$UPDATE_DIR"/baf-runtime-*.zip 2>/dev/null || true)
+          ARGS=(gh release create "$TAG" "$UPDATE_DIR/manifest.json")
+          [ -f "$UPDATE_DIR/manifest.sig" ] && ARGS+=("$UPDATE_DIR/manifest.sig")
+          for z in "${ZIPS[@]:-}"; do [ -n "$z" ] && ARGS+=("$z"); done
+          [ -f "$SETUP" ] && ARGS+=("$SETUP")
+          ARGS+=(--title "$TAG" --notes "baf-dsh ${VER} (channel stable)")
+          "${ARGS[@]}"
+
+      - name: Refresh baf-channel-stable
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          UPDATE_DIR="overlay/desktop/dist/update"
+          gh release delete baf-channel-stable --yes || true
+          git push origin :refs/tags/baf-channel-stable || true
+          git tag -f baf-channel-stable
+          git push -f origin baf-channel-stable
+          ASSETS=("$UPDATE_DIR/manifest.json")
+          [ -f "$UPDATE_DIR/manifest.sig" ] && ASSETS+=("$UPDATE_DIR/manifest.sig")
+          gh release create baf-channel-stable "${ASSETS[@]}" \
+            --title "baf-channel-stable" \
+            --notes "Stable channel pointer for baf-dsh updater"

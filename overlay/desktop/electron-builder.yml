@@ -23,6 +23,8 @@ extraResources:
     to: installer/check-node.ps1
   - from: branding/icon.ico
     to: icon.ico
+  - from: ../plugin
+    to: plugin
 asar: true
 forceCodeSigning: false
 npmRebuild: false

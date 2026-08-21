@@ -7,4 +7,6 @@
 | 路径 | 原因 |
 |------|------|
 | `packages/client/ui-settings-general/` | 在「通用设置」末尾增加桌面关闭偏好（仅 Electron `window.bafDesktop` 时显示）。改源码后须 `bundle`，再 `pack-dsh` 打进安装包。 |
+| `packages/client/ui-settings-updates/` | 设置「版本与更新」页（order 25）；经 `window.bafDesktop` 调用桌面 UpdateService。 |
 | `packages/client/ui-sidebar/src/client/SidebarRoot.tsx` | 侧栏品牌回退读取 `DSH_CLIENT_TITLE` / `DSH_CLIENT_BUILD_LABEL`（未设置时仍为「DSH Local Build」+ commit 徽标）。打包时由 `overlay/scripts/brand-web.mjs` 注入「BAF DSH」与 `v<version>`。 |
+| `packages/bundle/web-app/cordis.patch.yml` + `package.json` | 挂载 `ui-settings-updates`。 |

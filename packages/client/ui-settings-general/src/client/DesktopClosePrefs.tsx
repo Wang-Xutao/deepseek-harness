@@ -15,12 +15,11 @@ export type BafDesktopBridge = {
   isDesktop: true
   getPrefs: () => Promise<{ closeAction: DesktopCloseAction }>
   setPrefs: (prefs: { closeAction: DesktopCloseAction }) => Promise<{ closeAction: DesktopCloseAction }>
-}
-
-declare global {
-  interface Window {
-    bafDesktop?: BafDesktopBridge
-  }
+  getVersions?: () => Promise<unknown>
+  checkForUpdate?: () => Promise<unknown>
+  startUpdate?: () => Promise<unknown>
+  getLastCheckResult?: () => Promise<unknown>
+  onUpdateProgress?: (cb: (payload: unknown) => void) => () => void
 }
 
 export type DesktopClosePrefsProps =
@@ -30,7 +29,7 @@ const OPTIONS: readonly DesktopCloseAction[] = ['ask', 'tray', 'quit']
 
 function readBridge(): BafDesktopBridge | undefined {
   if (typeof window === 'undefined') return undefined
-  const bridge = window.bafDesktop
+  const bridge = (window as Window & { bafDesktop?: BafDesktopBridge }).bafDesktop
   if (bridge === undefined || bridge.isDesktop !== true) return undefined
   return bridge
 }

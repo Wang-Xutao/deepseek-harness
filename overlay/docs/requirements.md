@@ -28,3 +28,14 @@
 - 不随包装 pnpm；不做 macOS/Linux 安装包。
 
 数据目录仍为 `%USERPROFILE%\.dsh`。API key 仍由 Web 设置页写入。
+
+## 需求 2：版本管理、发布与升级
+
+状态：已落地骨架（GitHub Releases 通道 + 设置页 + splash 后台检查；主界面就绪后对话框提示；plugin/runtime 热更与壳层 Setup）。
+
+- 三层版本：`bafDsh` / `dsh` / `bafPlugin`（本地 `%APPDATA%/baf-dsh/versions.json`）。不展示工具链版本。
+- 设置 →「版本与更新」（`order: 25`）：展示三版本，「检查更新」「更新」。
+- splash 仅后台检查；无更新或检查失败直接进主界面；有更新则主窗就绪后对话框选择立即/稍后。
+- 发版：在 `baf` 上打 tag `baf-dsh-vX.Y.Z` → Actions 构建并上传 Release，并刷新 `baf-channel-stable` 的 manifest。
+- 小改：plugin / runtime zip 热替换后重启 `dsh`；大改：下载 Setup 覆盖安装。
+- 公开仓：不使用 GitHub Token，不验签；私有通道后续再开。

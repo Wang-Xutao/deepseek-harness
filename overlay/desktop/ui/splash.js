@@ -1,4 +1,4 @@
-const statuses = ['正在启动服务…', '正在准备界面…', '即将完成…']
+const statuses = ['正在启动服务…', '正在检查更新…', '正在准备界面…', '即将完成…']
 let i = 0
 setInterval(() => {
   i = (i + 1) % statuses.length

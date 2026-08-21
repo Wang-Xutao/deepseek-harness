@@ -321,6 +321,7 @@ for (const app of readdirSync(join(repoRoot, 'apps'))) {
 const FORCE_PACKAGES = [
   'apps/web',
   'packages/client/ui-settings-general',
+  'packages/client/ui-settings-updates',
   'packages/boot/app-boot',
   'packages/boot/cmdline',
   'packages/runtime-diagnostics/invariants',
