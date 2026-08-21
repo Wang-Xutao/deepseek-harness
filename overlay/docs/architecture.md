@@ -24,11 +24,11 @@ baf-dsh.exe（原生标题栏，无系统菜单）
 |------|------|
 | exe / 快捷方式 / 任务栏 / 托盘 | `overlay/desktop/branding/icon.ico` |
 | 安装欢迎/完成侧栏、页眉 | `prepare-nsis-branding.mjs` 从 `deepseek.png` 生成 BMP |
-| splash / 关闭确认框 | `desktop/ui/deepseek.png` |
+| splash / 关闭确认框 | `desktop/ui/`：splash 为 `sora.png` + `deepseek.png`；关闭框仍用 `deepseek.png` |
 
 ## Node 与 Electron 分工
 
-- Electron：原生窗口、splash、托盘、子进程监护、关闭 HTML 确认框；启动失败用中文提示框，技术细节写入 `userData/launch-error.log`。
+- Electron：原生窗口、splash、托盘、子进程监护、关闭 HTML 确认框；启动失败用中文提示框，技术细节写入 `userData/launch-error.log`。启动 `dsh web` 时带 `--no-open`，只在 Electron 窗口内打开 UI，不唤起系统默认浏览器。
 - 系统 Node：跑 `@deepseek-ai/dsh`。
 - `afterPack` 将依赖打成 `modules.zip`；安装脚本解压。
 - 关闭偏好：`%APPDATA%/baf-dsh/desktop-prefs.json`（`closeAction`: `ask` | `tray` | `quit`），Web 通用设置与关闭确认框共用。

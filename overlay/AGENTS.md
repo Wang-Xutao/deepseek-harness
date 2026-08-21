@@ -20,7 +20,7 @@ Electron **只做窗口**。harness 仍由系统（或安装器装上的）Node 
 
 产品名 **baf-dsh**，独立版本号，对照表见 [docs/version-map.md](docs/version-map.md)。
 
-安装包与运行中的 exe/托盘图标直接使用 `desktop/branding/icon.ico`；安装向导 logo 使用 `desktop/branding/deepseek.png`。禁止再做 PNG→ICO 转换。关闭窗口时须提供「最小化到托盘 / 退出」选择。
+安装包与运行中的 exe/托盘图标直接使用 `desktop/branding/icon.ico`；安装向导 logo 使用 `desktop/branding/deepseek.png`；splash 左侧用 `sora.png`、右侧用 `deepseek.png`。禁止再做 PNG→ICO 转换。关闭窗口时须提供「最小化到托盘 / 退出」选择。
 
 ## 打包
 

@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "fetch-node": "node scripts/fetch-node-msi.mjs",
+    "brand-web": "node scripts/brand-web.mjs",
     "pack-dsh": "node scripts/pack-dsh.mjs",
     "prepare-branding": "node scripts/prepare-nsis-branding.mjs",
     "test": "npm --prefix desktop test",
-    "dist": "npm run fetch-node && npm run pack-dsh && npm run prepare-branding && npm --prefix desktop run dist"
+    "dist": "npm run fetch-node && npm run brand-web && npm run pack-dsh && npm run prepare-branding && npm --prefix desktop run dist",
+    "dist:dir": "npm run brand-web && npm run pack-dsh && npm --prefix desktop run dist:dir"
   },
   "devDependencies": {
     "png-to-ico": "^3.0.1"

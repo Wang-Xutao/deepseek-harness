@@ -5,3 +5,4 @@
 | baf-dsh | 上游 DeepSeek Harness（根 package.json） | 说明 |
 |---------|------------------------------------------|------|
 | 0.0.1 | 0.1.0-rc.7 | 首个桌面安装包：Electron 托管 `dsh web`，NSIS + Node 检测/随装 |
+| 0.0.2 | 0.1.0-rc.8 | splash 双 logo（SORA + DeepSeek）；侧栏品牌「BAF DSH」+ `v` 版本徽标 |

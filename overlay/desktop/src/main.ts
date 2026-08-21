@@ -360,7 +360,8 @@ app.whenReady().then(async () => {
     app.quit()
     return
   }
-  child = spawn(node, [bin, 'web', '--host', '127.0.0.1', '--port', '0'], {
+  // Desktop embeds the UI; do not also hand off to the system browser.
+  child = spawn(node, [bin, 'web', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
     cwd: homedir(),
     env: {
       ...process.env,

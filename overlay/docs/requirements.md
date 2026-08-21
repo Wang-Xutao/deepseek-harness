@@ -21,6 +21,8 @@
 - 大体量依赖以单个 `modules.zip` 进入安装包，安装末段再解压。
 - 安装器检测 Node `^22.19.0 || >=24.0.0`；不合格则静默安装 Node 22.19.0 x64 MSI。
 - 图标：`desktop/branding/icon.ico`；安装侧栏/页眉：由 `deepseek.png` 生成的 BMP。
+- splash：同一行显示 `sora.png`（左）与 `deepseek.png`（右）；资源同时放在 `branding/` 与 `ui/`，黑底需做成透明。
+- 启动内嵌 `dsh web` 时使用 `--no-open`，不另外打开系统浏览器。
 - 无系统菜单栏；使用系统原生标题栏；启动时先显示 splash。
 - 关闭行为可在 Web「设置 → 通用设置」末尾配置（每次询问 / 托盘 / 退出）；与关闭确认框「下次不再询问」共用 `%APPDATA%/baf-dsh/desktop-prefs.json`。
 - 不随包装 pnpm；不做 macOS/Linux 安装包。

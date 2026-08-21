@@ -143,10 +143,14 @@ export function SidebarRoot({
                 {renderSlot('sidebar.brand.name', {}, {
                   fallback: (
                     <>
-                      <span className={css.fallbackBrandName}>DSH Local Build</span>
-                      {process.env.DSH_CLIENT_COMMIT_HASH
-                        ? <span className={css.buildRevision}>{process.env.DSH_CLIENT_COMMIT_HASH}</span>
-                        : null}
+                      <span className={css.fallbackBrandName}>
+                        {process.env.DSH_CLIENT_TITLE || 'DSH Local Build'}
+                      </span>
+                      {process.env.DSH_CLIENT_BUILD_LABEL
+                        ? <span className={css.buildRevision}>{process.env.DSH_CLIENT_BUILD_LABEL}</span>
+                        : process.env.DSH_CLIENT_COMMIT_HASH
+                          ? <span className={css.buildRevision}>{process.env.DSH_CLIENT_COMMIT_HASH}</span>
+                          : null}
                     </>
                   ),
                 })}

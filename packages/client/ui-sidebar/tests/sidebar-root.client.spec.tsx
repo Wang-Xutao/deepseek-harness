@@ -108,6 +108,23 @@ describe('SidebarRoot shell', () => {
     expect(container.querySelector('svg')).not.toBeNull()
   })
 
+  it('prefers build-time product title and build label when set', () => {
+    vi.stubEnv('DSH_CLIENT_TITLE', 'BAF DSH')
+    vi.stubEnv('DSH_CLIENT_BUILD_LABEL', 'v0.0.2')
+    vi.stubEnv('DSH_CLIENT_COMMIT_HASH', '0123456')
+    render(<SidebarRoot
+      collapsed={false} width={300}
+      useSessions={neverHook} useWorkspaces={neverHook}
+      startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
+      renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
+        options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
+    />)
+
+    expect(screen.getByText('BAF DSH')).toBeTruthy()
+    expect(screen.getByText('v0.0.2')).toBeTruthy()
+    expect(screen.queryByText('0123456')).toBeNull()
+  })
+
   it('hands the region its wide flag and clamps expandSidebar to the collapsed state', () => {
     const b = mountShell()
     expect(b.regionOwner().wide).toBe(true)

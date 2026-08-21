@@ -7,3 +7,4 @@
 | 路径 | 原因 |
 |------|------|
 | `packages/client/ui-settings-general/` | 在「通用设置」末尾增加桌面关闭偏好（仅 Electron `window.bafDesktop` 时显示）。改源码后须 `bundle`，再 `pack-dsh` 打进安装包。 |
+| `packages/client/ui-sidebar/src/client/SidebarRoot.tsx` | 侧栏品牌回退读取 `DSH_CLIENT_TITLE` / `DSH_CLIENT_BUILD_LABEL`（未设置时仍为「DSH Local Build」+ commit 徽标）。打包时由 `overlay/scripts/brand-web.mjs` 注入「BAF DSH」与 `v<version>`。 |
