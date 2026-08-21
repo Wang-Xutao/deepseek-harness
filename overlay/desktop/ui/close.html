@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>关闭窗口</title>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body class="dialog">
+  <div class="card card-close">
+    <div class="brand-row">
+      <img src="deepseek.png" alt="" />
+      <div>
+        <h1>baf-dsh</h1>
+        <p>关闭窗口</p>
+      </div>
+    </div>
+    <div class="choices" role="radiogroup" aria-label="关闭方式">
+      <label class="choice">
+        <input type="radio" name="action" value="tray" checked />
+        <div>
+          <strong>最小化到托盘</strong>
+        </div>
+      </label>
+      <label class="choice">
+        <input type="radio" name="action" value="quit" />
+        <div>
+          <strong>退出应用</strong>
+        </div>
+      </label>
+    </div>
+    <label class="check">
+      <input id="remember" type="checkbox" />
+      <span>下次不再询问</span>
+    </label>
+    <div class="actions">
+      <button class="ghost" type="button" id="cancel">取消</button>
+      <button class="primary" type="button" id="ok">确定</button>
+    </div>
+  </div>
+  <script src="close.js"></script>
+</body>
+</html>

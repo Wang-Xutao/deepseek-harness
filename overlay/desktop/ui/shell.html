@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>baf-dsh</title>
+  <link rel="stylesheet" href="shell.css" />
+</head>
+<body>
+  <header id="titlebar">
+    <div class="left">
+      <img src="deepseek.png" alt="" />
+      <span class="name">baf-dsh</span>
+    </div>
+    <div class="controls">
+      <button type="button" id="min" title="最小化" aria-label="最小化">─</button>
+      <button type="button" id="max" title="最大化" aria-label="最大化">□</button>
+      <button type="button" id="close" title="关闭" aria-label="关闭">×</button>
+    </div>
+  </header>
+  <div id="content" aria-hidden="true"></div>
+  <script src="shell.js"></script>
+</body>
+</html>

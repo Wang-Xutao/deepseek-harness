@@ -1,0 +1,53 @@
+appId: com.baf.dsh.desktop
+productName: baf-dsh
+executableName: baf-dsh
+copyright: BAF overlay over DeepSeek Harness
+artifactName: baf-dsh-Setup-${version}.${ext}
+directories:
+  output: dist
+  buildResources: branding
+files:
+  - lib/**/*
+  - ui/**/*
+  - package.json
+extraResources:
+  - from: resources/dsh
+    to: dsh
+    filter:
+      - "**/*"
+      - "!node_modules"
+      - "!node_modules/**"
+  - from: ../.cache/node-v22.19.0-x64.msi
+    to: node-installer/node-v22.19.0-x64.msi
+  - from: ../installer/check-node.ps1
+    to: installer/check-node.ps1
+  - from: branding/icon.ico
+    to: icon.ico
+asar: true
+forceCodeSigning: false
+npmRebuild: false
+nodeGypRebuild: false
+win:
+  icon: branding/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  installerIcon: branding/icon.ico
+  uninstallerIcon: branding/icon.ico
+  installerHeaderIcon: branding/icon.ico
+  installerHeader: branding/installerHeader.bmp
+  installerSidebar: branding/installerSidebar.bmp
+  uninstallerSidebar: branding/installerSidebar.bmp
+  include: ../installer/node-check.nsh
+  shortcutName: baf-dsh
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  runAfterFinish: true
+  displayLanguageSelector: false
+  warningsAsErrors: false

@@ -1,0 +1,28 @@
+# 二次开发需求总账
+
+后续需求追加到本文件。实现前先改这里，再改代码。
+
+## 总原则
+
+- 二次开发会改原始仓库；优先把新代码放在 `overlay/`，减少与上游的路径重叠。
+- 不绑定上游贡献流程；以安装后能稳定使用为准。
+- 产品名为 **baf-dsh**，使用独立版本号；与上游对照见 [version-map.md](version-map.md)。
+- 安装包与应用程序图标直接使用 `overlay/desktop/branding/icon.ico`，不要再做 PNG→ICO 转换。
+- 安装向导欢迎/完成页侧栏与页眉使用由 `deepseek.png` 生成的 BMP（`installerSidebar.bmp` / `installerHeader.bmp`）。
+
+## 需求 1：Web 改装桌面端并打 Windows 安装包
+
+状态：已落地；产物名为 `baf-dsh-Setup-<version>.exe`。
+
+- Electron 托管现有 `dsh web`。打包时必须把 dsh 依赖解引用为真实文件（electron-builder 不会可靠复制 pnpm 符号链接），否则安装后会启动失败。
+- 启动失败由 Electron 层转成用户可读提示，不直接展示底层错误码或堆栈。
+- Windows NSIS 安装包；安装详情默认折叠，点击「显示详细信息」展开；进度开始前即开始写入详情并持续输出；完整步骤另写入安装目录 `install-steps.log`。
+- 卸载页不显示详情日志框，仅进度条。
+- 大体量依赖以单个 `modules.zip` 进入安装包，安装末段再解压。
+- 安装器检测 Node `^22.19.0 || >=24.0.0`；不合格则静默安装 Node 22.19.0 x64 MSI。
+- 图标：`desktop/branding/icon.ico`；安装侧栏/页眉：由 `deepseek.png` 生成的 BMP。
+- 无系统菜单栏；使用系统原生标题栏；启动时先显示 splash。
+- 关闭行为可在 Web「设置 → 通用设置」末尾配置（每次询问 / 托盘 / 退出）；与关闭确认框「下次不再询问」共用 `%APPDATA%/baf-dsh/desktop-prefs.json`。
+- 不随包装 pnpm；不做 macOS/Linux 安装包。
+
+数据目录仍为 `%USERPROFILE%\.dsh`。API key 仍由 Web 设置页写入。

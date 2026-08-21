@@ -1,0 +1,15 @@
+{
+  "name": "dsh-overlay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch-node": "node scripts/fetch-node-msi.mjs",
+    "pack-dsh": "node scripts/pack-dsh.mjs",
+    "prepare-branding": "node scripts/prepare-nsis-branding.mjs",
+    "test": "npm --prefix desktop test",
+    "dist": "npm run fetch-node && npm run pack-dsh && npm run prepare-branding && npm --prefix desktop run dist"
+  },
+  "devDependencies": {
+    "png-to-ico": "^3.0.1"
+  }
+}

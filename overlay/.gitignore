@@ -1,0 +1,11 @@
+node_modules/
+desktop/lib/
+desktop/dist/
+desktop/resources/
+desktop/release/
+desktop/.smoke-*
+.cache/
+*.msi
+assets/*.ico
+desktop/branding/installerSidebar.bmp
+desktop/branding/installerHeader.bmp

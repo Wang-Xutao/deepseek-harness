@@ -1,0 +1,88 @@
+:root {
+  --title-h: 40px;
+  --bg: #ffffff;
+  --text: #1a1d26;
+  --muted: #6b7385;
+  --line: #e8ecf5;
+  --hover: #f2f4fa;
+  --accent: #5e73ff;
+  --close-hover: #e81123;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--text);
+  user-select: none;
+}
+
+#titlebar {
+  height: var(--title-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 0 12px;
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+  background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.left img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.left .name {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.controls {
+  display: flex;
+  align-items: stretch;
+  height: var(--title-h);
+  -webkit-app-region: no-drag;
+}
+
+.controls button {
+  width: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.controls button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.controls button#close:hover {
+  background: var(--close-hover);
+  color: #fff;
+}
+
+#content {
+  height: calc(100% - var(--title-h));
+  background: #f5f7fc;
+}
