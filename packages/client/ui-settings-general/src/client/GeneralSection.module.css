@@ -7,6 +7,10 @@
   width: 100%;
 }
 
-.section > :global([data-slot='settings.general.item']) > :last-child {
+.section > :global([data-slot='settings.general.item']):last-child > :last-child {
+  border-bottom: none;
+}
+
+.section > :last-child {
   border-bottom: none;
 }

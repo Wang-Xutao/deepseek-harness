@@ -46,7 +46,7 @@ describe('GeneralSection', () => {
     const renderSlot = vi.fn(
       ((key: string) => <div data-testid={`slot-${key}`} />) as GeneralSectionComponentProps['renderSlot'],
     )
-    const props: GeneralSectionComponentProps = { ...kit, renderSlot, close: vi.fn() }
+    const props: GeneralSectionComponentProps = { ...kit, renderSlot, close: vi.fn(), t }
     const view = render(<GeneralSection {...props} />)
     return { view, renderSlot }
   }
@@ -55,6 +55,11 @@ describe('GeneralSection', () => {
     const { renderSlot } = mount()
     expect(renderSlot).toHaveBeenCalledWith('settings.general.item', {})
     expect(screen.getByTestId('slot-settings.general.item')).toBeTruthy()
+  })
+
+  it('hides desktop close prefs outside Electron', () => {
+    mount()
+    expect(screen.queryByTestId('desktop-close-prefs')).toBeNull()
   })
 })
 
