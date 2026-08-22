@@ -172,6 +172,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.hero.brand.mark': { kind: 'single'; scope: 'root'; owner: HeroBrandMarkOwnerProps }
     /**
+     * Optional mark after the blank-session headline (product deployments).
+     * Declared by this package's `conversation` entry; empty when unoccupied.
+     */
+    'conversation.hero.brand.trailing': { kind: 'single'; scope: 'root'; owner: HeroBrandMarkOwnerProps }
+    /**
      * The agent-preset chip beside the workspace picker on the new-session
      * screen. Root scope: no session exists yet, so the choice is staged for
      * the next one rather than applied to a current one.
@@ -624,6 +629,7 @@ export type ConversationSlotProps =
     | 'conversation.input.dock' | 'conversation.composer.dock'
     | 'conversation.input.left' | 'conversation.input.right'
     | 'conversation.hero.brand.mark'
+    | 'conversation.hero.brand.trailing'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
   >

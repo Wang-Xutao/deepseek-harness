@@ -72,6 +72,7 @@
     "@deepseek-ai/dsh-client-ui-plan": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings-plugins": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings-updates": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-baf-desktop": "workspace:^",
     "@deepseek-ai/dsh-client-ui-user-questions": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings-general": "workspace:^",

@@ -39,3 +39,11 @@
 - 发版：在 `baf` 上打 tag `baf-dsh-vX.Y.Z` → Actions 构建并上传 Release，并刷新 `baf-channel-stable` 的 manifest。
 - 小改：plugin / runtime zip 热替换后重启 `dsh`；大改：下载 Setup 覆盖安装。
 - 公开仓：不使用 GitHub Token，不验签；私有通道后续再开。
+
+## 需求 3：品牌 Hero、IDE 快捷打开与帮助占位
+
+状态：已落地（MkDocs 正文仍为占位）。
+
+- 空状态主标题改为「探索未至之境，拉启智能篇章」；左侧鲸鱼标、右侧黑白 Sora 标，预览版徽标保留；排版需与标题同排对齐。
+- splash 检测 PATH（及 Windows 常见安装目录）中 `code`（VS Code）与 `cursor` CLI；若可用，主界面右上角显示对应品牌图标（含空会话 Hero 态）；点击后以当前工作区路径打开该 IDE（无工作区则提示）。
+- 侧栏「设置」上方增加「帮助」；点击后在右侧打开 MkDocs 帮助文档占位页，可关闭回到对话。

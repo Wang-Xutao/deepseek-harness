@@ -72,60 +72,68 @@ export function ConversationSessionHeader({
   const hideChrome = blank && composerPhase === 'blank'
 
   return (
-    <header
-      className={clsx(css.header, hideChrome && css.headerHidden)}
-      aria-hidden={hideChrome || undefined}
-    >
-      {!hideChrome && (
-        <>
-          <div className={css.titleRow}>
-            <div className={css.titleCluster}>
-              <nav className={css.crumbs} aria-label={t('session.hierarchy')}>
-                {ancestry.map((summary, index) => {
-                  const last = index === ancestry.length - 1
-                  return (
-                    <span key={summary.id} className={css.crumbSeg}>
-                      {index > 0 && <span className={css.crumbSep}>/</span>}
-                      <button
-                        type="button"
-                        className={clsx(css.crumb, last && css.crumbCurrent)}
-                        disabled={last}
-                        onClick={() => { open(summary.id) }}
-                      >
-                        {summary.displayTitle}
-                      </button>
-                    </span>
-                  )
-                })}
-                {ancestry.length === 0 && <span className={css.crumbCurrent}>{sessionId}</span>}
-              </nav>
-              <div className={css.headerActions}>
-                {renderSlot('conversation.session.header.actions', {})}
+    <>
+      <header
+        className={clsx(css.header, hideChrome && css.headerHidden)}
+        aria-hidden={hideChrome || undefined}
+      >
+        {!hideChrome && (
+          <>
+            <div className={css.titleRow}>
+              <div className={css.titleCluster}>
+                <nav className={css.crumbs} aria-label={t('session.hierarchy')}>
+                  {ancestry.map((summary, index) => {
+                    const last = index === ancestry.length - 1
+                    return (
+                      <span key={summary.id} className={css.crumbSeg}>
+                        {index > 0 && <span className={css.crumbSep}>/</span>}
+                        <button
+                          type="button"
+                          className={clsx(css.crumb, last && css.crumbCurrent)}
+                          disabled={last}
+                          onClick={() => { open(summary.id) }}
+                        >
+                          {summary.displayTitle}
+                        </button>
+                      </span>
+                    )
+                  })}
+                  {ancestry.length === 0 && <span className={css.crumbCurrent}>{sessionId}</span>}
+                </nav>
+                <div className={css.headerActions}>
+                  {renderSlot('conversation.session.header.actions', {})}
+                </div>
+              </div>
+              <div className={css.headerUtilities}>
+                {renderSlot('conversation.session.header.utilities', {})}
               </div>
             </div>
-            <div className={css.headerUtilities}>
-              {renderSlot('conversation.session.header.utilities', {})}
-            </div>
-          </div>
-          {tabs.length > 1 && (
-            <div className={css.tabs} role="tablist">
-              {tabs.map(viewTab => (
-                <button
-                  key={viewTab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={viewTab.id === active?.id}
-                  className={clsx(css.tab, viewTab.id === active?.id && css.tabActive)}
-                  onClick={() => { actions.setView(viewTab.id) }}
-                >
-                  {viewTab.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </>
+            {tabs.length > 1 && (
+              <div className={css.tabs} role="tablist">
+                {tabs.map(viewTab => (
+                  <button
+                    key={viewTab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={viewTab.id === active?.id}
+                    className={clsx(css.tab, viewTab.id === active?.id && css.tabActive)}
+                    onClick={() => { actions.setView(viewTab.id) }}
+                  >
+                    {viewTab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </header>
+      {hideChrome && (
+        <div className={css.headerUtilitiesFloat} data-testid="session-header-utilities-float">
+          {/* Blank hero: IDE open only — hide Session-log download and other utilities. */}
+          {renderSlot('conversation.session.header.utilities', {}, { only: 'ide-open' })}
+        </div>
       )}
-    </header>
+    </>
   )
 }
 

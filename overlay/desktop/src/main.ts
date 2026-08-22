@@ -25,6 +25,7 @@ import { parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './pr
 import { parseWebReadyUrl } from './ready-url.ts'
 import { DEFAULT_CHANNEL_TAG, DEFAULT_UPDATE_OWNER, DEFAULT_UPDATE_REPO } from './update/defaults.ts'
 import { UpdateService, type CheckUpdateResult } from './update/service.ts'
+import { detectIdeTools, openFolderInIde, type IdeAvailability } from './ide-tools.ts'
 import { userFacingLaunchError } from './user-errors.ts'
 import { DEFAULT_VERSIONS, type AppVersions } from './versions.ts'
 
@@ -172,6 +173,9 @@ let closeDialog: BrowserWindow | undefined
 let quitting = false
 let prefs: AppPrefs = { ...DEFAULT_PREFS }
 let updateService: UpdateService | undefined
+let ideTools: IdeAvailability = { vscode: false, cursor: false }
+/** In-flight / completed splash probe; UI must await this, not the seed false/false. */
+let ideToolsPromise: Promise<IdeAvailability> = Promise.resolve(ideTools)
 
 function killChildTree(): void {
   if (child?.pid === undefined) return
@@ -517,6 +521,18 @@ ipcMain.handle('update:start', async () => {
 })
 ipcMain.handle('update:lastCheck', () => updateService?.getLastCheck() ?? null)
 
+ipcMain.handle('ide:getTools', () => ideToolsPromise)
+
+ipcMain.handle('ide:open', async (_event, raw: unknown) => {
+  if (raw === null || typeof raw !== 'object') return { ok: false, error: '无效请求' }
+  const o = raw as { ide?: unknown, folderPath?: unknown }
+  const ide = o.ide === 'vscode' || o.ide === 'cursor' ? o.ide : undefined
+  const folderPath = typeof o.folderPath === 'string' ? o.folderPath.trim() : ''
+  if (ide === undefined || folderPath.length === 0) return { ok: false, error: '缺少 IDE 或路径' }
+  // Re-resolve at click time so a late PATH / install still works.
+  return openFolderInIde(ide, folderPath)
+})
+
 ipcMain.on('close-dialog:choice', (_event, payload: { action?: string, remember?: boolean }) => {
   const action = payload.action
   const remember = payload.remember === true
@@ -546,6 +562,11 @@ app.whenReady().then(async () => {
 
   // Background check during splash; never block startup on network/UI.
   const checkPromise = updateService.checkForUpdate()
+  // Probe IDE CLIs during splash; expose the same Promise so the UI awaits completion.
+  ideToolsPromise = detectIdeTools().then((tools) => {
+    ideTools = tools
+    return tools
+  })
 
   try {
     await startDshAndShow()

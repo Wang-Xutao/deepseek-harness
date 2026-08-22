@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('bafDesktop', {
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   startUpdate: () => ipcRenderer.invoke('update:start'),
   getLastCheckResult: () => ipcRenderer.invoke('update:lastCheck'),
+  getIdeTools: () => ipcRenderer.invoke('ide:getTools'),
+  openInIde: (ide: 'vscode' | 'cursor', folderPath: string) =>
+    ipcRenderer.invoke('ide:open', { ide, folderPath }),
   onUpdateProgress: (cb: (payload: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
       cb(payload)

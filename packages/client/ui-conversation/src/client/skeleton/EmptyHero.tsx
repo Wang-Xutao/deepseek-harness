@@ -126,6 +126,7 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
             })}
           </span>
           <span className={css.headlineText}>{t('hero.headline')}</span>
+          {renderSlot('conversation.hero.brand.trailing', { size: 28, className: css.trailingMark })}
           <span className={css.previewBadge}>{t('hero.preview')}</span>
         </div>
         <div className={css.body}>

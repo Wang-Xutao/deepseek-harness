@@ -8,6 +8,7 @@
   flex-direction: column;
   height: 100%;
   min-width: 0;
+  position: relative;
   background: var(--dsw-alias-bg-base);
 
   /* Shared width axis for the whole column: one content width W
@@ -129,6 +130,22 @@
 }
 
 .headerUtilities:empty {
+  display: none;
+}
+
+/* Blank hero: title chrome is hidden, but right-top utilities (e.g. IDE open)
+   stay available over the conversation column. */
+.headerUtilitiesFloat {
+  position: absolute;
+  top: 12px;
+  right: 28px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.headerUtilitiesFloat:empty {
   display: none;
 }
 

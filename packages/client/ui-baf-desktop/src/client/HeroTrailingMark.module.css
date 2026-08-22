@@ -1,0 +1,7 @@
+.mark {
+  display: block;
+  object-fit: contain;
+  flex: none;
+  user-select: none;
+  pointer-events: none;
+}
