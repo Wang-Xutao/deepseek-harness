@@ -1,5 +1,5 @@
 /**
- * Browser half: hero trailing Sora mark, IDE open utilities, and help placeholder.
+ * Browser half: hero trailing Sora mark, IDE open utilities, and help docs panel.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'

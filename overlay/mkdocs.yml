@@ -1,0 +1,23 @@
+site_name: baf-dsh
+site_description: baf-dsh — 桌面客户端帮助手册
+site_author: BAF
+docs_dir: docs/help
+site_dir: site
+
+# false：生成 install.html 等直链，嵌入 iframe / file:// 时更稳妥
+use_directory_urls: false
+
+theme:
+  name: readthedocs
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/embedded.js
+
+nav:
+  - 概述: index.md
+  - 安装与启动: install.md
+  - 快速上手: getting-started.md
+  - 常见问题: faq.md

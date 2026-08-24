@@ -64,4 +64,12 @@ for (const args of steps) {
   }
 }
 
+const syncDocs = spawnSync(process.execPath, [resolve(overlayRoot, 'scripts/build-docs.mjs')], {
+  cwd: overlayRoot,
+  stdio: 'inherit',
+})
+if (syncDocs.status !== 0) {
+  process.exit(syncDocs.status ?? 1)
+}
+
 console.log(`brand-web: embedded title "BAF DSH" / label "v${version}"`)

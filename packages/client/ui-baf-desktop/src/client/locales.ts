@@ -4,7 +4,7 @@ export type BafDesktopKey =
   | 'help.trigger'
   | 'help.title'
   | 'help.close'
-  | 'help.placeholder'
+  | 'help.openBrowser'
   | 'ide.openVscode'
   | 'ide.openCursor'
   | 'ide.noWorkspace'
@@ -14,7 +14,7 @@ export const zh: Record<BafDesktopKey, string> = {
   'help.trigger': '帮助',
   'help.title': '帮助',
   'help.close': '关闭帮助',
-  'help.placeholder': '帮助文档（MkDocs）即将提供。当前为占位页。',
+  'help.openBrowser': '在浏览器中打开',
   'ide.openVscode': '在 VS Code 中打开工作区',
   'ide.openCursor': '在 Cursor 中打开工作区',
   'ide.noWorkspace': '当前没有工作区目录可打开。',
@@ -25,7 +25,7 @@ export const en: Record<BafDesktopKey, string> = {
   'help.trigger': 'Help',
   'help.title': 'Help',
   'help.close': 'Close help',
-  'help.placeholder': 'Help docs (MkDocs) are coming soon. This is a placeholder.',
+  'help.openBrowser': 'Open in browser',
   'ide.openVscode': 'Open workspace in VS Code',
   'ide.openCursor': 'Open workspace in Cursor',
   'ide.noWorkspace': 'No workspace folder is available to open.',

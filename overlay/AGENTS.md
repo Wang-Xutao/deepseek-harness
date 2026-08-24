@@ -1,6 +1,6 @@
 # overlay — 二次开发约定
 
-本目录是 DeepSeek Harness 的二次开发层。后续改桌面壳、安装器、自研需求时先读这里，再读 [docs/requirements.md](docs/requirements.md)。
+本目录是 DeepSeek Harness 的二次开发层。后续改桌面壳、安装器、自研需求时先读这里，再读 [docs/product/requirements.md](docs/product/requirements.md)。文档分类见 [docs/README.md](docs/README.md)。
 
 ## 目标
 
@@ -8,7 +8,7 @@
 
 ## 冲突策略
 
-1. 桌面壳、安装器、图标、打包脚本、二次开发文档：只放 `overlay/`。
+1. 桌面壳、安装器、图标、打包脚本、二次开发文档：只放 `overlay/`（文档分类见 [docs/README.md](docs/README.md)；用户手册源在 `docs/help/`，构建产物在 `site/`）。
 2. 必须改上游时：新增文件优于改热文件；追加一行优于改一段逻辑。
 3. 不要把桌面壳塞进现有 `packages/` 包里「顺便改」。
 4. `overlay/` 不加入 pnpm workspace；此处用独立 `npm`，避免和根 `pnpm-workspace.yaml` 缠在一起。
@@ -18,10 +18,10 @@
 
 Electron **只做窗口**。harness 仍由系统（或安装器装上的）Node 启动 `dsh web`。Electron 内嵌 Node 版本对不齐 `^22.19 || >=24`，禁止用它跑 `dsh`。
 
-产品名 **baf-dsh**，独立版本号，对照表见 [docs/version-map.md](docs/version-map.md)。
+产品名 **baf-dsh**，独立版本号，对照表见 [docs/release/version-map.md](docs/release/version-map.md)。
 
 安装包与运行中的 exe/托盘图标直接使用 `desktop/branding/icon.ico`；安装向导 logo 使用 `desktop/branding/deepseek.png`；splash 左侧用 `sora.png`、右侧用 `deepseek.png`。禁止再做 PNG→ICO 转换。关闭窗口时须提供「最小化到托盘 / 退出」选择。
 
 ## 打包
 
-命令与产物见 [docs/build.md](docs/build.md)。产物在 `desktop/dist/`。
+命令与产物见 [docs/engineering/build.md](docs/engineering/build.md)。产物在 `desktop/dist/`。用户帮助：`docs/help/` → `npm run docs:build` → `site/`（并同步到 `apps/web/dist/help/`）。

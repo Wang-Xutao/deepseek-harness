@@ -6,7 +6,7 @@
 
 - 二次开发会改原始仓库；优先把新代码放在 `overlay/`，减少与上游的路径重叠。
 - 不绑定上游贡献流程；以安装后能稳定使用为准。
-- 产品名为 **baf-dsh**，使用独立版本号；与上游对照见 [version-map.md](version-map.md)。
+- 产品名为 **baf-dsh**，使用独立版本号；与上游对照见 [../release/version-map.md](../release/version-map.md)。
 - 安装包与应用程序图标直接使用 `overlay/desktop/branding/icon.ico`，不要再做 PNG→ICO 转换。
 - 安装向导欢迎/完成页侧栏与页眉使用由 `deepseek.png` 生成的 BMP（`installerSidebar.bmp` / `installerHeader.bmp`）。
 
@@ -40,10 +40,11 @@
 - 小改：plugin / runtime zip 热替换后重启 `dsh`；大改：下载 Setup 覆盖安装。
 - 公开仓：不使用 GitHub Token，不验签；私有通道后续再开。
 
-## 需求 3：品牌 Hero、IDE 快捷打开与帮助占位
+## 需求 3：品牌 Hero、IDE 快捷打开与帮助文档
 
-状态：已落地（MkDocs 正文仍为占位）。
+状态：已落地（帮助站骨架：`docs/help/` → `site/` → 面板 iframe）。
 
 - 空状态主标题改为「探索未至之境，拉启智能篇章」；左侧鲸鱼标、右侧黑白 Sora 标，预览版徽标保留；排版需与标题同排对齐。
 - splash 检测 PATH（及 Windows 常见安装目录）中 `code`（VS Code）与 `cursor` CLI；若可用，主界面右上角显示对应品牌图标（含空会话 Hero 态）；点击后以当前工作区路径打开该 IDE（无工作区则提示）。
-- 侧栏「设置」上方增加「帮助」；点击后在右侧打开 MkDocs 帮助文档占位页，可关闭回到对话。
+- 侧栏「设置」上方增加「帮助」；点击后在右侧加宽面板内嵌 MkDocs 站点（`/help/`），顶部可「在浏览器中打开」，可关闭回到对话。
+- 用户帮助源文档在 `overlay/docs/help/`；构建产物 `overlay/site/`，打包时同步到 Web 静态目录 `apps/web/dist/help/`。

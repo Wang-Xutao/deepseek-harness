@@ -10,6 +10,10 @@
     "pack-runtime": "node scripts/pack-runtime.mjs",
     "generate-manifest": "node scripts/generate-manifest.mjs",
     "prepare-branding": "node scripts/prepare-nsis-branding.mjs",
+    "docs:build": "node scripts/build-docs.mjs",
+    "build-release": "node scripts/build-release.mjs",
+    "publish-release": "node scripts/publish-release.mjs",
+    "release": "node scripts/build-release.mjs && node scripts/publish-release.mjs",
     "test": "npm --prefix desktop test",
     "dist": "npm run fetch-node && npm run brand-web && npm run pack-dsh && npm run prepare-branding && npm --prefix desktop run dist",
     "dist:dir": "npm run brand-web && npm run pack-dsh && npm --prefix desktop run dist:dir"

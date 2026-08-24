@@ -43,13 +43,51 @@ npm run dist:dir
 
 产物为 `overlay/desktop/dist/win-unpacked/baf-dsh.exe`（保留展开的 `resources/dsh/node_modules`，可直接双击）。本机仍需符合要求的 Node 以启动内嵌 `dsh web`。
 
-版本对照：改 `desktop/package.json` 的 `version` 时同步更新 [version-map.md](version-map.md)。
+版本对照：改 `desktop/package.json` 的 `version` 时同步更新 [../release/version-map.md](../release/version-map.md)。
+
+用户帮助站（MkDocs）：
+
+```powershell
+cd overlay
+npm run docs:build
+```
+
+源文档在 `docs/help/`，产物在 `site/`，并同步到 `apps/web/dist/help/`（供主界面帮助面板与浏览器打开）。`brand-web` 结束时也会执行该同步。
 
 ### 发版（GitHub Releases）
 
+**方式 A — 本地打包并上传（推荐，不依赖 Actions）**
+
+```powershell
+# 1. 安装并登录 GitHub CLI
+winget install GitHub.cli
+gh auth login
+
+# 2. 在 overlay 目录一键构建 + 发布
+cd overlay
+$env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
+$env:CI = 'true'
+npm run release
+
+# 或分步：
+# npm run build-release          # 仅本地打包
+# npm run publish-release        # 仅上传到 GitHub Releases
+# node scripts/publish-release.mjs --dry-run   # 预览将上传的文件
+```
+
+`publish-release` 会创建/更新：
+
+- `baf-dsh-vX.Y.Z` — 安装包、plugin/runtime zip、manifest
+- `baf-channel-stable` — 仅 manifest（客户端检查更新读此 Release）
+
+默认仓库 `Wang-Xutao/deepseek-harness`，可 `--repo owner/name` 覆盖。
+
+**方式 B — GitHub Actions（需账号 Actions 可用）**
+
 1. 在 `baf` 对齐三层版本与 version-map；`desktop/package.json` 的 version = 即将打的 tag 号。
 2. `git tag baf-dsh-vX.Y.Z && git push origin baf-dsh-vX.Y.Z`。
-3. Actions [baf-dsh-release.yml](../../.github/workflows/baf-dsh-release.yml) 构建 plugin/runtime/Setup、生成 manifest、创建 Release，并刷新 `baf-channel-stable`。
+3. Actions [baf-dsh-release.yml](../../.github/workflows/baf-dsh-release.yml) 构建并上传 Release，并刷新 `baf-channel-stable`。
 4. 可选 Secret：`BAF_UPDATE_PRIVATE_KEY_PEM`；公钥写入 `desktop/src/update/public-key.ts`（`node overlay/scripts/gen-update-keypair.mjs`）。
 
 本地辅助：

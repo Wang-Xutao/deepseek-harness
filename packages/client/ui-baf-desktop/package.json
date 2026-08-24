@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-baf-desktop",
-  "description": "baf-dsh desktop chrome: hero trailing mark, IDE open buttons, and help placeholder",
+  "description": "baf-dsh desktop chrome: hero trailing mark, IDE open buttons, and help docs panel",
   "version": "0.1.0-rc.8",
   "publishConfig": {
     "access": "public"

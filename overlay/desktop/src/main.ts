@@ -19,6 +19,7 @@ import {
   Menu,
   Tray,
   nativeImage,
+  shell,
 } from 'electron'
 import { findSupportedNode } from './find-node.ts'
 import { parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './prefs.ts'
@@ -382,6 +383,13 @@ async function createWindow(url: string): Promise<void> {
     handleWindowCloseRequest()
   })
 
+  window.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (target.startsWith('http://') || target.startsWith('https://') || target.startsWith('file:')) {
+      void shell.openExternal(target)
+    }
+    return { action: 'deny' }
+  })
+
   await window.loadURL(url)
   closeSplash()
   window.show()
@@ -531,6 +539,20 @@ ipcMain.handle('ide:open', async (_event, raw: unknown) => {
   if (ide === undefined || folderPath.length === 0) return { ok: false, error: '缺少 IDE 或路径' }
   // Re-resolve at click time so a late PATH / install still works.
   return openFolderInIde(ide, folderPath)
+})
+
+ipcMain.handle('shell:openExternal', async (_event, raw: unknown) => {
+  if (typeof raw !== 'string' || raw.trim() === '') return { ok: false, error: '无效 URL' }
+  const url = raw.trim()
+  if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file:')) {
+    return { ok: false, error: '仅支持 http(s)/file URL' }
+  }
+  try {
+    await shell.openExternal(url)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
 })
 
 ipcMain.on('close-dialog:choice', (_event, payload: { action?: string, remember?: boolean }) => {

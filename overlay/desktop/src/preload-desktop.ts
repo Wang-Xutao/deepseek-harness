@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('bafDesktop', {
   getIdeTools: () => ipcRenderer.invoke('ide:getTools'),
   openInIde: (ide: 'vscode' | 'cursor', folderPath: string) =>
     ipcRenderer.invoke('ide:open', { ide, folderPath }),
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   onUpdateProgress: (cb: (payload: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
       cb(payload)

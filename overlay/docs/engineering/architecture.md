@@ -2,7 +2,7 @@
 
 Electron 主进程拉起本机 Node 上的 `dsh web`，解析 stdout 就绪行后把 loopback URL 载入原生标题栏窗口。
 
-产品名 **baf-dsh**，独立版本见 [version-map.md](version-map.md)。
+产品名 **baf-dsh**，独立版本见 [../release/version-map.md](../release/version-map.md)。
 
 ```text
 NSIS 安装包（baf-dsh-Setup-x.y.z.exe）
