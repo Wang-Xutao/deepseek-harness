@@ -4,6 +4,7 @@ desktop/dist/
 desktop/resources/
 desktop/release/
 desktop/.smoke-*
+site/
 .cache/
 *.msi
 assets/*.ico
