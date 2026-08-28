@@ -21,6 +21,7 @@ import {
   nativeImage,
   shell,
 } from 'electron'
+import { ensureDshModulesExpanded } from './ensure-dsh-modules.ts'
 import { findSupportedNode } from './find-node.ts'
 import { parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './prefs.ts'
 import { parseWebReadyUrl } from './ready-url.ts'
@@ -278,10 +279,12 @@ function minimizeToTray(): void {
 
 function applyCloseAction(action: Exclude<CloseAction, 'ask'>): void {
   if (action === 'tray') {
+    setMainWindowScrim(false)
     minimizeToTray()
     return
   }
   quitting = true
+  setMainWindowScrim(false)
   mainWindow?.destroy()
   app.quit()
 }
@@ -294,11 +297,12 @@ function closeSplash(): void {
 
 function openSplash(): void {
   splashWindow = new BrowserWindow({
-    width: 360,
-    height: 280,
+    width: 380,
+    height: 300,
     resizable: false,
     frame: false,
     transparent: true,
+    hasShadow: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: true,
@@ -315,14 +319,49 @@ function openSplash(): void {
   void splashWindow.loadFile(uiPath('splash.html'))
 }
 
+const CLOSE_SCRIM_ID = 'baf-close-scrim'
+
+/** Dim + blur the main window while the close dialog is open. */
+function setMainWindowScrim(active: boolean): void {
+  try {
+    const win = mainWindow
+    if (win === undefined || win.isDestroyed()) return
+    const contents = win.webContents
+    if (contents === null || contents === undefined || contents.isDestroyed()) return
+    const script = active
+      ? `(() => {
+          if (document.getElementById('${CLOSE_SCRIM_ID}')) return;
+          const el = document.createElement('div');
+          el.id = '${CLOSE_SCRIM_ID}';
+          el.setAttribute('aria-hidden', 'true');
+          el.style.cssText = [
+            'position:fixed',
+            'inset:0',
+            'z-index:2147483647',
+            'background:rgba(26,29,38,0.32)',
+            'backdrop-filter:blur(8px)',
+            '-webkit-backdrop-filter:blur(8px)',
+            'pointer-events:none',
+          ].join(';');
+          document.documentElement.appendChild(el);
+        })()`
+      : `document.getElementById('${CLOSE_SCRIM_ID}')?.remove()`
+    void contents.executeJavaScript(script).catch(() => {
+      // Page may be mid-navigation or destroyed; ignore.
+    })
+  } catch {
+    // Window may be mid-teardown; ignore.
+  }
+}
+
 function openCloseDialog(): void {
   if (closeDialog !== undefined && !closeDialog.isDestroyed()) {
     closeDialog.focus()
     return
   }
   closeDialog = new BrowserWindow({
-    width: 400,
-    height: 300,
+    width: 360,
+    height: 280,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -331,8 +370,9 @@ function openCloseDialog(): void {
     show: false,
     frame: false,
     transparent: true,
+    hasShadow: false,
     backgroundColor: '#00000000',
-    title: APP_NAME,
+    title: 'BAF DSH',
     icon: iconPath(),
     webPreferences: {
       preload: libFile('preload-dialog.js'),
@@ -342,8 +382,12 @@ function openCloseDialog(): void {
     },
   })
   void closeDialog.loadFile(uiPath('close.html'))
-  closeDialog.once('ready-to-show', () => closeDialog?.show())
+  closeDialog.once('ready-to-show', () => {
+    setMainWindowScrim(true)
+    closeDialog?.show()
+  })
   closeDialog.on('closed', () => {
+    if (!quitting) setMainWindowScrim(false)
     closeDialog = undefined
   })
 }
@@ -431,6 +475,10 @@ function createUpdateService(): UpdateService {
 async function startDshProcess(): Promise<string> {
   const node = findSupportedNode()
   if (node === undefined) throw new Error('未找到符合要求的 Node.js')
+  if (app.isPackaged) {
+    // NSIS packs node_modules as modules.zip; expand if Setup (or a prior run) did not.
+    ensureDshModulesExpanded(join(process.resourcesPath, 'dsh'))
+  }
   const bin = dshBin()
   if (!existsSync(bin)) throw new Error(`未找到 dsh 入口：${bin}`)
   mkdirSync(pluginDir(), { recursive: true })
@@ -558,17 +606,26 @@ ipcMain.handle('shell:openExternal', async (_event, raw: unknown) => {
 ipcMain.on('close-dialog:choice', (_event, payload: { action?: string, remember?: boolean }) => {
   const action = payload.action
   const remember = payload.remember === true
-  if (closeDialog !== undefined && !closeDialog.isDestroyed()) {
-    closeDialog.close()
-  }
+  const dialog = closeDialog
   closeDialog = undefined
-  if (action === 'cancel' || action === undefined) return
-  if (action !== 'tray' && action !== 'quit') return
+  if (action === 'cancel' || action === undefined) {
+    setMainWindowScrim(false)
+    if (dialog !== undefined && !dialog.isDestroyed()) dialog.close()
+    return
+  }
+  if (action !== 'tray' && action !== 'quit') {
+    setMainWindowScrim(false)
+    if (dialog !== undefined && !dialog.isDestroyed()) dialog.close()
+    return
+  }
   if (remember) {
     prefs = { ...prefs, closeAction: action }
     savePrefs(prefs)
   }
+  // Clear scrim and apply before destroying the dialog, so closed handlers
+  // do not race against a destroyed main window's webContents.
   applyCloseAction(action)
+  if (dialog !== undefined && !dialog.isDestroyed()) dialog.close()
 })
 
 app.whenReady().then(async () => {

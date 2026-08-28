@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { HeroTrailingMark } from './HeroTrailingMark.tsx'
+import { SidebarBrandMark } from './SidebarBrandMark.tsx'
 import { IdeOpenButtons } from './IdeOpenButtons.tsx'
 import { HelpFooterAction } from './HelpFooterAction.tsx'
 import { en, zh, type BafDesktopKey } from './locales.ts'
@@ -30,6 +31,9 @@ export const inject = ['slots', 'locale']
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-baf-desktop: dictionaries')
+
+  ctx.slots.inject('sidebar.brand.mark', () =>
+    ctx.slots.register({ name: 'sidebar.brand.mark' }, SidebarBrandMark))
 
   ctx.slots.inject('conversation.hero.brand.trailing', () =>
     ctx.slots.register({ name: 'conversation.hero.brand.trailing' }, HeroTrailingMark))

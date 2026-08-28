@@ -2,8 +2,17 @@ function api() {
   return window.bafDialog
 }
 
-document.getElementById('cancel').addEventListener('click', () => {
+function cancelClose() {
   api()?.closeChoice({ action: 'cancel', remember: false })
+}
+
+document.getElementById('cancel').addEventListener('click', cancelClose)
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    cancelClose()
+  }
 })
 
 document.getElementById('ok').addEventListener('click', () => {

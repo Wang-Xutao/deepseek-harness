@@ -3,30 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
-  <title>关闭窗口</title>
+  <title>BAF DSH</title>
   <link rel="stylesheet" href="common.css" />
 </head>
 <body class="dialog">
   <div class="card card-close">
-    <div class="brand-row">
-      <img src="deepseek.png" alt="" />
-      <div>
-        <h1>baf-dsh</h1>
+    <header class="close-header">
+      <img class="close-mark" src="sora.png" alt="" />
+      <div class="close-title">
+        <h1>BAF DSH</h1>
         <p>关闭窗口</p>
       </div>
-    </div>
+    </header>
     <div class="choices" role="radiogroup" aria-label="关闭方式">
       <label class="choice">
         <input type="radio" name="action" value="tray" checked />
-        <div>
-          <strong>最小化到托盘</strong>
-        </div>
+        <span>最小化到托盘</span>
       </label>
       <label class="choice">
         <input type="radio" name="action" value="quit" />
-        <div>
-          <strong>退出应用</strong>
-        </div>
+        <span>退出应用</span>
       </label>
     </div>
     <label class="check">

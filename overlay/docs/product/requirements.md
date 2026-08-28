@@ -18,7 +18,7 @@
 - 启动失败由 Electron 层转成用户可读提示，不直接展示底层错误码或堆栈。
 - Windows NSIS 安装包；安装详情默认折叠，点击「显示详细信息」展开；进度开始前即开始写入详情并持续输出；完整步骤另写入安装目录 `install-steps.log`。
 - 卸载页不显示详情日志框，仅进度条。
-- 大体量依赖以单个 `modules.zip` 进入安装包，安装末段再解压。
+- 大体量依赖以单个 `modules.zip` 进入安装包，安装末段再解压；若启动时仍缺少 `node_modules`，桌面壳会尝试自行解压 `modules.zip`。
 - 安装器检测 Node `^22.19.0 || >=24.0.0`；不合格则静默安装 Node 22.19.0 x64 MSI。
 - 图标：`desktop/branding/icon.ico`；安装侧栏/页眉：由 `deepseek.png` 生成的 BMP。
 - splash：同一行显示 `sora.png`（左）与 `deepseek.png`（右）；资源同时放在 `branding/` 与 `ui/`，黑底需做成透明。

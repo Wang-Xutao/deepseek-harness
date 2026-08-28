@@ -72,7 +72,7 @@ export const zh = {
   'access.confirm.cancel': '取消',
   'access.confirm.enable': '启用 Full access',
   'hero.headline': '探索未至之境，拉启智能篇章',
-  'hero.preview': '预览版',
+  'hero.preview': 'BAF',
   'hero.chooseWorkspace': '选择工作区',
   'session.hierarchy': '会话层级',
   'details.title': '详情',

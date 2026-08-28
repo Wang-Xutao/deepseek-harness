@@ -30,7 +30,9 @@ npm run dist
 - `overlay/desktop/branding/deepseek.png`
 - `overlay/desktop/branding/sora.png`（splash 左侧；需同步到 `desktop/ui/sora.png`）
 
-安装产物在 `overlay/desktop/dist/`（例如 `baf-dsh-Setup-0.0.3.exe`）。
+安装产物在 `overlay/desktop/dist/`（例如 `baf-dsh-Setup-0.0.5.exe`）。
+
+`npm run dist` 打出的 `win-unpacked/` 内嵌 `modules.zip`（安装器会在安装末段解压）。请用 Setup 安装后启动；或改跑 `npm run dist:dir` 得到可直接双击的展开目录。桌面壳在发现缺少 `node_modules` 时也会尝试自行解压 `modules.zip`。
 
 只要可运行目录、不要安装包时：
 
