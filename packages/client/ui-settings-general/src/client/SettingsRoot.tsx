@@ -1,7 +1,7 @@
 /**
  * Settings shell root: the sidebar-foot trigger row plus the centered modal
  * panel (figma 501:29947, 1080x700) with the section nav rail. The shell is
- * a pure composition face â€” every piece of text (trigger label, panel title,
+ * a pure composition face â€?every piece of text (trigger label, panel title,
  * close label, sections) arrives from registrants through slots; accessible
  * names resolve to that content (trigger: its own text; dialog:
  * aria-labelledby the title node; close: visually-hidden slot text). Modal
@@ -10,7 +10,9 @@
  * sessions-derived empty-Hero fact is active. Visible dialog chrome belongs
  * to the step, so a mounted-but-deciding step paints nothing here.
  */
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import {
+  useCallback, useEffect, useId, useRef, useState, type ReactElement, type ReactNode,
+} from 'react'
 import clsx from 'clsx'
 import {
   IconAgentPresetOutline16, IconCloseOutline16, IconDataOutline16,
@@ -19,13 +21,57 @@ import {
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
 import css from './SettingsRoot.module.css'
 
+/** Outline glyph: three connected workflow nodes for the settings nav row. */
+function IconWorkflowOutline16({ size = 16, className }: { size?: number; className?: string | undefined }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="1.5" y="2.5" width="5" height="3" rx="1" />
+      <rect x="9.5" y="2.5" width="5" height="3" rx="1" />
+      <rect x="5.5" y="10.5" width="5" height="3" rx="1" />
+      <path d="M4 5.5v1.4c0 .8.6 1.4 1.4 1.4h1.6" />
+      <path d="M12 5.5v1.4c0 .8-.6 1.4-1.4 1.4H9" />
+      <path d="M8 8.3V10" />
+    </svg>
+  )
+}
+
 /** Nav glyph by section id; unknown ids fall back to the settings gear. */
-function navIcon(id: string) {
+function fallbackNavIcon(id: string): ReactElement {
   if (id === 'models') return <IconDataOutline16 className={css.navIcon} size={16} />
   if (id === 'agent-presets') return <IconAgentPresetOutline16 className={css.navIcon} size={16} />
   if (id === 'plugins') return <IconPersonalizationOutline16 className={css.navIcon} size={16} />
   if (id === 'version-updates') return <IconRefreshOutline16 className={css.navIcon} size={16} />
+  if (id === 'workflow') return <IconWorkflowOutline16 className={css.navIcon} size={16} />
   return <IconSettingsOutline16 className={css.navIcon} size={16} />
+}
+
+/** Coerce a slot `icon` value (component, element, or ref) into a rendered
+ * element. The icon field is intentionally opaque, so the consumer must
+ * accept whatever shape the registrant chose. */
+function renderSlotIcon(Icon: unknown, className: string): ReactElement {
+  // Already a React element (registrant pre-built it with props).
+  if (typeof Icon === 'object' && Icon !== null && 'type' in Icon) {
+    return <span className={className}>{Icon as ReactNode}</span>
+  }
+  // Function component: instantiate with our own size and className so the
+  // nav row keeps a consistent glyph footprint regardless of registrant.
+  if (typeof Icon === 'function') {
+    const Component = Icon as (props: { size?: number; className?: string }) => ReactNode
+    return <span className={className}>{<Component size={16} className={css.navIconGlyph} />}</span>
+  }
+  // Anything else (ref, tag, etc.) â€?render verbatim inside the wrapper.
+  return <span className={className}>{Icon as ReactNode}</span>
 }
 
 type PanelProps = {
@@ -74,7 +120,9 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
                 aria-current={row.id === active ? 'true' : undefined}
                 onClick={() => { onSelect(row.id) }}
               >
-                {navIcon(row.id)}
+                {row.Icon !== undefined
+                  ? renderSlotIcon(row.Icon, css.navIcon)
+                  : fallbackNavIcon(row.id)}
                 <span className={css.navLabel}>{row.label}</span>
               </button>
             ))}

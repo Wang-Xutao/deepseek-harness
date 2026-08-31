@@ -1,9 +1,9 @@
 /**
- * Settings shell contract â€” the types of the `sidebar.settings` occupant this
+ * Settings shell contract â€?the types of the `sidebar.settings` occupant this
  * package renders. They live here rather than in ui-settings because they
  * reference the sidebar's own slot type: ui-settings is the settings domain's
  * base layer and must not depend on any `ui-*` presentation package, or the
- * reference graph closes a cycle through ui-sidebar â†’ ui-layout â†’ ui-theme.
+ * reference graph closes a cycle through ui-sidebar â†?ui-layout â†?ui-theme.
  * The settings SLOT types (what registrants contribute) stay in ui-settings.
  */
 import type { HostObservable, InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -18,6 +18,13 @@ export interface SettingsSectionRow {
   id: string
   order: number
   label: string
+  /**
+   * Optional sidebar glyph contributed by the registrant via the list-slot
+   * `icon` option. Opaque (whatever the registrant declared â€?a React
+   * component, a ref, etc.); the shell never inspects the value, only paints
+   * it when present and falls back to its id-keyed glyph when absent.
+   */
+  Icon?: unknown
 }
 
 /** One ordered onboarding step projected from a slot registration. */
@@ -28,8 +35,7 @@ export interface SettingsOnboardingStep {
 
 /**
  * Registrant-private injected share of the settings shell (assembled in
- * apply): the ledger's nav-row projection as a hooks-compartment source â€”
- * the shell reads no locale state and subscribes through the bound hook.
+ * apply): the ledger's nav-row projection as a hooks-compartment source â€? * the shell reads no locale state and subscribes through the bound hook.
  */
 export type SettingsRootInjected = {
   hooks: {
@@ -43,7 +49,7 @@ export type SettingsRootInjected = {
 /**
  * Full component props of the settings shell root: the sidebar owner share
  * (wide/rail state) plus the declared render shares and the injected face
- * (hooks compartment bound to useSections). No store is registered â€” modal
+ * (hooks compartment bound to useSections). No store is registered â€?modal
  * open state and active section id are component-local viewing state.
  */
 export type SettingsRootComponentProps =

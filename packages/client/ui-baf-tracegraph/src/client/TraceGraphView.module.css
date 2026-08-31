@@ -1,16 +1,24 @@
 /*
- * 轨迹图 view styles.
+ * Trace-graph view styles.
  *
- * Layout (top → bottom):
- *   .stats      — horizontal row of metric cards
- *   .body       — three-column grid
- *      .turns   — left column (own scroll), turn list + orchestration
- *      .pipeline— middle column (own scroll), REQUEST → RESPONSE → TOOL cards
- *      .detail  — right column, sticky rail (does not scroll with pipeline)
+ * Layout (top to bottom):
+ *   .root      - viewport-filling flex column.
+ *   .stats     - fixed-height strip pinned to the top (does NOT scroll).
+ *   .body      - flex row; three columns: turns | pipeline | detail. The
+ *                splitter lives between pipeline and detail and resizes
+ *                their widths; only the pipeline column scrolls.
+ *   .turns     - left rail, fixed width, own scroll region, never scrolls
+ *                with the pipeline.
+ *   .pipeline  - the only column that grows with the run; owns the page
+ *                scroll. Request, Response, and Tool cards stack vertically
+ *                so each card reads as its own block.
+ *   .detail    - right rail, fixed width, own scroll region, never scrolls
+ *                with the pipeline.
  *
  * Stats cards no longer use a cursor-tracked spotlight; they keep a flat
- * hover treatment. Pipeline flow uses soft pipe connectors in place of the
- * earlier arrow triangles so REQUEST / RESPONSE / TOOL read as one run.
+ * hover treatment. The risk chrome on tool cards is loud (dangerous = solid
+ * red border + risk badge + matched-reasons line) so destructive operations
+ * never blend into the rest of the run.
  */
 
 .root {
@@ -83,8 +91,8 @@
 .statCard-toolCalls { animation-delay: 120ms; }
 .statCard-duration { animation-delay: 180ms; }
 
-/* Color-coded icon tile per metric kind. The accent strip is dropped —
- * the icon tile alone is enough color hint at this size. */
+/* Color-coded icon tile per metric kind. The accent strip is dropped, the
+ * icon tile alone is enough color hint at this size. */
 .statCard-turns     { color: var(--dsw-alias-text-info,    #0969da); }
 .statCard-steps     { color: var(--dsw-alias-text-brand,   #8250df); }
 .statCard-toolCalls { color: var(--dsw-alias-text-warning, #9a6700); }
@@ -132,46 +140,77 @@
 /* -------------------------------------------------------------------- body */
 
 .body {
-  display: grid;
-  /* turns | pipeline | detail. The detail column is a real grid track so it
-     can stay anchored to the right edge without floating overlays. */
-  grid-template-columns: 300px minmax(0, 1fr) 360px;
-  min-height: 0;
+  display: flex;
   flex: 1;
+  min-height: 0;
+  align-items: stretch;
+  overflow: hidden;
 }
 
+/* Left rail: fixed width, own scroll, never scrolls with the pipeline. */
 .turns {
+  flex: none;
+  width: 300px;
   border-right: 1px solid var(--dsw-alias-border-subtle);
   padding: 16px;
   overflow-y: auto;
-  min-height: 0;
+  overflow-x: hidden;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
+/* Pipeline column: only column that grows with the run. Request / Response /
+   Tool cards stack vertically (see `.flow`) so each one reads as its own
+   block. */
 .pipeline {
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 18px;
   overflow-y: auto;
-  min-height: 0;
+  overflow-x: hidden;
 }
 
-/* Right rail. The detail column is a normal grid track so it does not
-   scroll with the pipeline column. We give it position: sticky inside the
-   column to keep its content visible when the user scrolls the page itself,
-   and `align-self: start` so the rail hugs the top of the column. */
+/* Drag handle between pipeline and detail rails. */
+.splitter {
+  flex: none;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  transition: background 160ms ease;
+}
+
+.splitter::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  left: 2px;
+  width: 2px;
+  background: var(--dsw-alias-border-subtle);
+  transition: background 160ms ease;
+}
+
+.splitter:hover::before,
+.splitter[data-dragging="true"]::before {
+  background: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+}
+
+/* Right rail: fixed width, own scroll, never scrolls with the pipeline. */
 .detail {
+  flex: none;
+  width: 360px;
   border-left: 1px solid var(--dsw-alias-border-subtle);
   padding: 16px;
   overflow-y: auto;
-  min-height: 0;
+  overflow-x: hidden;
+  align-self: stretch;
   background:
     linear-gradient(180deg, var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)), var(--dsw-alias-bg-module-platform));
 }
 
 .detailSticky {
-  position: sticky;
-  top: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -247,7 +286,6 @@
   border: 2px solid var(--dsw-alias-text-tertiary);
   box-shadow: 0 0 0 3px var(--dsw-alias-bg-canvas);
 }
-
 .turnConnectorNode[data-status="running"] {
   border-color: var(--dsw-alias-text-warning, #9a6700);
   animation: traceGraphPulse 1.6s ease-in-out infinite;
@@ -327,7 +365,6 @@
   font-size: 13px;
   font-weight: 600;
 }
-
 .turnStatusPill {
   font-size: 10px;
   font-weight: 600;
@@ -337,7 +374,6 @@
   border-radius: 6px;
   border: 1px solid currentColor;
 }
-
 .statusCompleted { color: var(--dsw-alias-text-success, #1a7f37); }
 .statusFailed    { color: var(--dsw-alias-text-danger, #cf222e); }
 .statusRunning   { color: var(--dsw-alias-text-warning, #9a6700); }
@@ -565,7 +601,7 @@
   flex-wrap: wrap;
   gap: 10px;
   align-items: baseline;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   font-size: 12px;
   color: var(--dsw-alias-text-secondary);
 }
@@ -597,7 +633,6 @@
   font-size: 14px;
   color: var(--dsw-alias-text-primary);
 }
-
 .stepClock,
 .stepDuration {
   font-variant-numeric: tabular-nums;
@@ -616,31 +651,29 @@
 .stepUsageChip[data-kind="cached"]  { color: var(--dsw-alias-text-secondary); }
 .stepUsageChip[data-kind="output"]  { color: var(--dsw-alias-text-brand, #8250df); }
 
-/* Pipeline row: REQUEST → RESPONSE → TOOL cards separated by soft pipes.
-   The pipes are 2px wide pill shapes tinted by the destination card so the
-   three sections read as one cohesive run, not three stranded boxes. */
+/* Pipeline column: REQUEST / RESPONSE / TOOL stack vertically as cards.
+   Each card carries its own badge, body, and risk chrome. Soft pipes
+   between cards hint at the run direction without an arrow glyph. */
 .flow {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0;
-  align-items: stretch;
 }
 
 .card {
-  flex: 1 1 200px;
-  min-width: 0;
   border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
   border: 1px solid var(--dsw-alias-border-subtle);
   background: var(--dsw-alias-bg-canvas);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   transition:
     border-color 160ms ease,
     transform 160ms ease,
     box-shadow 160ms ease;
+  min-width: 0;
 }
 
 .card:hover {
@@ -650,24 +683,30 @@
 .cardHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.cardHeaderLeading {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
 }
 
 .cardBadge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid currentColor;
   background: color-mix(in srgb, currentColor 10%, var(--dsw-alias-bg-canvas));
 }
-
 .cardBadgeDot {
   width: 6px;
   height: 6px;
@@ -691,6 +730,49 @@
   background: color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 10%, var(--dsw-alias-bg-canvas));
 }
 
+/* Risk badges and tinted tool card frames. The badge sits to the right of
+   the existing TOOL chip so the destructive-vs-read-only distinction reads
+   at a glance without disrupting the row layout. */
+.toolRiskBadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 12%, var(--dsw-alias-bg-canvas));
+  flex: none;
+}
+.toolRiskSafe {
+  color: var(--dsw-alias-text-success, #1a7f37);
+}
+
+.toolRiskCaution {
+  color: var(--dsw-alias-text-warning, #9a6700);
+}
+
+.toolRiskDangerous {
+  color: var(--dsw-alias-text-danger, #cf222e);
+  animation: traceGraphFadeUp 280ms ease-out both;
+}
+
+.cardToolDangerous {
+  border-color: var(--dsw-alias-text-danger, #cf222e);
+  background: color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 14%, var(--dsw-alias-bg-canvas));
+  box-shadow:
+    inset 4px 0 0 var(--dsw-alias-text-danger, #cf222e),
+    0 6px 16px -10px color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 60%, transparent);
+}
+
+.cardToolCaution {
+  border-color: var(--dsw-alias-text-warning, #9a6700);
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #9a6700) 10%, var(--dsw-alias-bg-canvas));
+  box-shadow: inset 4px 0 0 var(--dsw-alias-text-warning, #9a6700);
+}
+
 .cardLine {
   margin: 0;
   color: var(--dsw-alias-text-secondary);
@@ -699,58 +781,75 @@
   white-space: nowrap;
 }
 
-/* The pipe between cards. Renders as a vertical bar that visually fuses the
-   previous and next cards, with a tiny connector "shoulder" that catches
-   the border-radius of the adjacent cards. No arrow — direction is implied
-   by ordering. */
+.cardKey {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--dsw-alias-text-secondary);
+  word-break: break-word;
+  white-space: normal;
+}
+
+.cardKeyLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-text-tertiary);
+  align-self: start;
+  padding-top: 2px;
+}
+
+.cardKeyValue {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  color: var(--dsw-alias-text-primary);
+  word-break: break-word;
+}
+
+/* The pipe between cards. Renders as a horizontal bar that visually fuses the
+   previous and next cards. No arrow: direction is implied by ordering. */
 .connector {
-  flex: none;
-  align-self: stretch;
-  width: 4px;
-  margin: 0 -1px;
+  height: 4px;
+  margin: -1px 12px;
   position: relative;
   background: var(--dsw-alias-border-subtle);
-  z-index: 0;
 }
 
 .connector::before,
 .connector::after {
   content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  height: 6px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
   background: inherit;
 }
 
-.connector::before { top: -3px; border-radius: 6px 6px 0 0; }
-.connector::after  { bottom: -3px; border-radius: 0 0 6px 6px; }
+.connector::before { left: -3px; border-radius: 6px 0 0 6px; }
+.connector::after  { right: -3px; border-radius: 0 6px 6px 0; }
 
-/* Tinted to match the destination card so the run visually flows left → right. */
+/* Tinted to match the destination card so the run visually flows top to
+   bottom. */
 .connectorRequest {
-  background: linear-gradient(180deg,
+  background: linear-gradient(90deg,
     color-mix(in srgb, var(--dsw-alias-text-info,    #0969da) 22%, var(--dsw-alias-bg-canvas)),
     color-mix(in srgb, var(--dsw-alias-text-brand,   #8250df) 22%, var(--dsw-alias-bg-canvas)));
 }
 
 .connectorResponse {
-  background: linear-gradient(180deg,
+  background: linear-gradient(90deg,
     color-mix(in srgb, var(--dsw-alias-text-brand,   #8250df) 22%, var(--dsw-alias-bg-canvas)),
     color-mix(in srgb, var(--dsw-alias-text-warning, #9a6700) 22%, var(--dsw-alias-bg-canvas)));
 }
 
 .toolsGrid {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0;
-  flex: 1 1 200px;
   min-width: 0;
   align-items: stretch;
-}
-
-.toolsGrid .card {
-  flex: 1 1 200px;
-  min-width: 0;
 }
 
 /* ------------------------------------------------------------------- detail */
@@ -839,70 +938,161 @@
   overflow: auto;
 }
 
+/* Tool call details: per-tool card with risk chrome so destructive and
+   read-write calls are obvious in the right rail. */
+.detailTools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.detailToolCard {
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+.detailToolCardCaution {
+  border-color: var(--dsw-alias-text-warning, #9a6700);
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #9a6700) 8%, var(--dsw-alias-bg-layer-1));
+  box-shadow: inset 4px 0 0 var(--dsw-alias-text-warning, #9a6700);
+}
+
+.detailToolCardDangerous {
+  border-color: var(--dsw-alias-text-danger, #cf222e);
+  background: color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 10%, var(--dsw-alias-bg-layer-1));
+  box-shadow:
+    inset 4px 0 0 var(--dsw-alias-text-danger, #cf222e),
+    0 6px 18px -12px color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 60%, transparent);
+}
+.detailToolCardError {
+  border-color: var(--dsw-alias-text-danger, #cf222e);
+}
+
+.detailToolHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detailToolName {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  color: var(--dsw-alias-text-primary);
+  word-break: break-all;
+}
+
+.detailToolCommand {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-canvas);
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 6px;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.detailToolCommandLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-text-tertiary);
+}
+
+.detailToolCardDangerous .detailToolCommand {
+  border-color: var(--dsw-alias-text-danger, #cf222e);
+  background: color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 6%, var(--dsw-alias-bg-canvas));
+  color: var(--dsw-alias-text-danger, #cf222e);
+  font-weight: 600;
+}
+
+.detailToolCardCaution .detailToolCommand {
+  border-color: var(--dsw-alias-text-warning, #9a6700);
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #9a6700) 6%, var(--dsw-alias-bg-canvas));
+  color: color-mix(in srgb, var(--dsw-alias-text-warning, #9a6700) 80%, var(--dsw-alias-text-primary) 20%);
+}
+
+.detailPathList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detailPath {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-module-platform);
+  border: 1px solid var(--dsw-alias-border-subtle);
+  color: var(--dsw-alias-text-secondary);
+  word-break: break-all;
+}
+
+.detailRiskReasons {
+  font-size: 11px;
+  color: var(--dsw-alias-text-tertiary);
+  word-break: break-word;
+}
+
+.detailToolCardDangerous .detailRiskReasons {
+  color: var(--dsw-alias-text-danger, #cf222e);
+  font-weight: 500;
+}
+
+.detailToolCardCaution .detailRiskReasons {
+  color: var(--dsw-alias-text-warning, #9a6700);
+}
+
 /* ----------------------------------------------------------- responsive */
 
-/* Narrower windows still keep all three columns but shrink them; the detail
-   rail stays present (no JS restructure). When the viewport drops below the
-   compact breakpoint the pipeline cards stack vertically inside the
-   middle column so the pipeline content remains fully visible without
-   horizontal overflow. */
+/* Narrower windows still keep all three columns but shrink them. When the
+   viewport drops below the compact breakpoint the body collapses the
+   splitter and lets the detail rail flow under the turns. */
 @media (max-width: 1440px) {
-  .body { grid-template-columns: 260px minmax(0, 1fr) 320px; }
-  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .turns { width: 260px; }
+  .detail { width: 320px; }
 }
 
 @media (max-width: 1280px) {
-  .body { grid-template-columns: 240px minmax(0, 1fr) 300px; }
+  .turns { width: 240px; }
+  .detail { width: 300px; }
   .pipeline { padding: 14px 16px; }
 }
 
 @media (max-width: 1080px) {
-  .body { grid-template-columns: 220px minmax(0, 1fr) 280px; }
+  .turns { width: 220px; }
+  .detail { width: 280px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-  /* Stack REQUEST → RESPONSE → TOOL vertically with vertical pipes so the
-     middle column does not require horizontal scrolling. */
-  .flow { flex-direction: column; gap: 10px; }
-  .connector {
-    width: auto;
-    height: 4px;
-    margin: -1px 0;
-  }
-  .connector::before,
-  .connector::after {
-    left: -3px;
-    right: -3px;
-    top: 0;
-    bottom: 0;
-    height: auto;
-    width: 6px;
-  }
-  .connector::before { border-radius: 6px 0 0 6px; }
-  .connector::after  { border-radius: 0 6px 6px 0; }
-  .connectorRequest,
-  .connectorResponse {
-    background: linear-gradient(90deg,
-      color-mix(in srgb, var(--dsw-alias-text-info,    #0969da) 22%, var(--dsw-alias-bg-canvas)),
-      color-mix(in srgb, var(--dsw-alias-text-brand,   #8250df) 22%, var(--dsw-alias-bg-canvas)));
-  }
-
-  .toolsGrid { flex-direction: column; gap: 10px; }
-  .toolsGrid .card { flex: 1 1 auto; }
 }
 
 @media (max-width: 860px) {
   /* Below 860px the page no longer hosts three columns side by side: the
-     detail rail moves under the pipeline so the layout never overflows. The
-     rail still owns its scroll region, so a long detail block does not push
-     the conversation view. */
-  .body { grid-template-columns: 1fr; grid-auto-rows: minmax(0, auto); }
+     detail rail moves under the pipeline so the layout never overflows. */
+  .body { flex-direction: column; }
   .turns,
   .pipeline,
   .detail {
-    overflow-y: visible;
+    width: 100%;
     border: none;
     border-bottom: 1px solid var(--dsw-alias-border-subtle);
+    max-height: none;
   }
+  .splitter { display: none; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

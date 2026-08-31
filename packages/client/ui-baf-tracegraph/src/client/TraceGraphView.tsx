@@ -1,11 +1,14 @@
 /**
- * 轨迹图 view: session stats strip, turn navigator with per-turn duration +
- * token totals, REQUEST→RESPONSE→TOOL pipeline cards, orchestration members
- * with inline child-session loading, and a fixed right-rail detail panel
- * that shows the currently-selected pipeline step without scrolling with
- * the pipeline column.
+ * Trace-graph view: session stats strip, turn navigator with per-turn duration
+ * + token totals, REQUEST->RESPONSE->TOOL pipeline cards (stacked vertically),
+ * orchestration members with inline child-session loading, and a fixed
+ * right-rail detail panel that shows the currently-selected pipeline step
+ * without scrolling with the pipeline column.
  */
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import {
+  useCallback, useEffect, useMemo, useRef, useState,
+  type CSSProperties,
+} from 'react'
 import clsx from 'clsx'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
@@ -42,6 +45,12 @@ const EMPTY_TRAJECTORY: TrajectorySnapshot = {
   runningCalls: [],
 }
 
+/** Detail rail width bounds (px). Below MIN the splitter refuses to drag
+ * further; above MAX the rail caps so it cannot starve the pipeline. */
+const DETAIL_MIN_WIDTH = 240
+const DETAIL_MAX_WIDTH = 640
+const DETAIL_DEFAULT_WIDTH = 360
+
 /** Session-bound controls for inline child loading. */
 export interface TraceGraphViewInjected {
   /**
@@ -75,12 +84,12 @@ function statusLabel(status: TraceGraphTurnStatus, t: (key: TraceGraphKey) => st
 }
 
 function formatClock(ms: number | null): string {
-  if (ms === null) return '—'
+  if (ms === null) return '-'
   return new Date(ms).toLocaleTimeString()
 }
 
 function formatDurationMs(ms: number | null): string {
-  if (ms === null) return '—'
+  if (ms === null) return '-'
   if (ms < 1000) return `${Math.round(ms)}ms`
   return `${(ms / 1000).toFixed(2)}s`
 }
@@ -108,7 +117,211 @@ function StatsCard({ icon, label, value, accent }: StatsCardProps) {
 }
 
 /**
- * 轨迹图 conversation view.
+ * Drag handle between pipeline and detail rails. Owns the global pointermove
+ * / pointerup listeners while a drag is active; the body suppresses text
+ * selection for the drag duration.
+ */
+function ColumnSplitter({
+  width,
+  onChange,
+}: {
+  width: number
+  onChange: (next: number) => void
+}) {
+  const [dragging, setDragging] = useState(false)
+  const startRef = useRef<{ x: number; width: number } | null>(null)
+
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    startRef.current = { x: event.clientX, width }
+    setDragging(true)
+    const target = event.currentTarget
+    target.setPointerCapture(event.pointerId)
+  }, [width])
+
+  const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const start = startRef.current
+    if (start === null) return
+    const delta = event.clientX - start.x
+    const next = Math.min(DETAIL_MAX_WIDTH, Math.max(DETAIL_MIN_WIDTH, start.width - delta))
+    onChange(next)
+  }, [onChange])
+
+  const endDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    startRef.current = null
+    setDragging(false)
+    const target = event.currentTarget
+    if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId)
+  }, [])
+
+  useEffect(() => {
+    if (!dragging) return
+    const previous = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+    return () => { document.body.style.userSelect = previous }
+  }, [dragging])
+
+  return (
+    <div
+      className={css.splitter}
+      data-dragging={dragging ? 'true' : undefined}
+      role="separator"
+      aria-orientation="vertical"
+      aria-valuenow={width}
+      aria-valuemin={DETAIL_MIN_WIDTH}
+      aria-valuemax={DETAIL_MAX_WIDTH}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+    />
+  )
+}
+
+interface RequestCardModel {
+  model: string
+  provider: string
+  systemCount: number
+  userCount: number
+  toolCount: number
+}
+
+function RequestCard({ request }: { request: RequestCardModel }) {
+  return (
+    <div className={clsx(css.card, css.cardRequest)}>
+      <div className={css.cardHeader}>
+        <span className={css.cardHeaderLeading}>
+          <span className={css.cardBadge} data-kind="request">
+            <span className={css.cardBadgeDot} />
+            REQUEST
+          </span>
+        </span>
+      </div>
+      <div className={css.cardKey}>
+        <span className={css.cardKeyLabel}>model</span>
+        <span className={css.cardKeyValue}>{request.model}</span>
+      </div>
+      <div className={css.cardKey}>
+        <span className={css.cardKeyLabel}>provider</span>
+        <span className={css.cardKeyValue}>{request.provider}</span>
+      </div>
+      <div className={css.cardKey}>
+        <span className={css.cardKeyLabel}>system</span>
+        <span className={css.cardKeyValue}>{request.systemCount}</span>
+      </div>
+      <div className={css.cardKey}>
+        <span className={css.cardKeyLabel}>user</span>
+        <span className={css.cardKeyValue}>{request.userCount}</span>
+      </div>
+      <div className={css.cardKey}>
+        <span className={css.cardKeyLabel}>tools</span>
+        <span className={css.cardKeyValue}>{request.toolCount}</span>
+      </div>
+    </div>
+  )
+}
+
+function ResponseCard({ response }: { response: TraceGraphPipelineStep['response'] }) {
+  return (
+    <div className={clsx(css.card, css.cardResponse)}>
+      <div className={css.cardHeader}>
+        <span className={css.cardHeaderLeading}>
+          <span className={css.cardBadge} data-kind="response">
+            <span className={css.cardBadgeDot} />
+            RESPONSE
+          </span>
+        </span>
+      </div>
+      <div className={css.cardKey}>
+        <span className={css.cardKeyLabel}>status</span>
+        <span className={css.cardKeyValue}>{response.status}</span>
+      </div>
+      <div className={css.cardKey}>
+        <span className={css.cardKeyLabel}>tool calls</span>
+        <span className={css.cardKeyValue}>{response.toolCallCount}</span>
+      </div>
+      {response.reasoningPreview !== '' && (
+        <div className={css.cardKey}>
+          <span className={css.cardKeyLabel}>reasoning</span>
+          <span className={css.cardKeyValue}>{response.reasoningPreview}</span>
+        </div>
+      )}
+      {response.contentPreview !== '' && (
+        <div className={css.cardKey}>
+          <span className={css.cardKeyLabel}>content</span>
+          <span className={css.cardKeyValue}>{response.contentPreview}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ToolCard({ tool }: { tool: TraceGraphPipelineStep['tools'][number] }) {
+  const riskClass = tool.risk === 'dangerous'
+    ? css.toolRiskDangerous
+    : tool.risk === 'caution' ? css.toolRiskCaution : css.toolRiskSafe
+  return (
+    <div
+      className={clsx(
+        css.card,
+        css.cardTool,
+        tool.isError && css.cardToolError,
+        tool.risk === 'dangerous' && css.cardToolDangerous,
+        tool.risk === 'caution' && css.cardToolCaution,
+      )}
+    >
+      <div className={css.cardHeader}>
+        <span className={css.cardHeaderLeading}>
+          <span className={css.cardBadge} data-kind="tool">
+            <span className={css.cardBadgeDot} />
+            TOOL �� {tool.name}
+          </span>
+        </span>
+        <span
+          className={clsx(css.toolRiskBadge, riskClass)}
+          title={tool.riskReasons.join(', ') || tool.risk}
+        >
+          {tool.risk === 'safe' ? 'safe' : tool.risk.toUpperCase()}
+        </span>
+      </div>
+      {tool.command !== undefined && (
+        <pre className={css.detailToolCommand}>{tool.command}</pre>
+      )}
+      {tool.targetPaths.length > 0 && (
+        <ul className={css.detailPathList}>
+          {tool.targetPaths.map(p => (
+            <li key={p} className={css.detailPath}>{p}</li>
+          ))}
+        </ul>
+      )}
+      {tool.riskReasons.length > 0 && (
+        <div className={css.detailRiskReasons}>
+          matched: {tool.riskReasons.join(', ')}
+        </div>
+      )}
+      {tool.argsPreview !== '' && (
+        <div className={css.cardKey}>
+          <span className={css.cardKeyLabel}>args</span>
+          <span className={css.cardKeyValue}>{tool.argsPreview}</span>
+        </div>
+      )}
+      {tool.resultPreview !== '' && (
+        <div className={css.cardKey}>
+          <span className={css.cardKeyLabel}>result</span>
+          <span className={css.cardKeyValue}>{tool.resultPreview}</span>
+        </div>
+      )}
+      <div className={css.cardKey}>
+        <span className={css.cardKeyLabel}>duration</span>
+        <span className={css.cardKeyValue}>{formatDurationMs(tool.durationMs)}</span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Trace-graph conversation view.
  */
 export function TraceGraphView({
   useSession,
@@ -136,6 +349,7 @@ export function TraceGraphView({
   const [childId, setChildId] = useState<SessionId | null>(null)
   const [childPhase, setChildPhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [childTick, setChildTick] = useState(0)
+  const [detailWidth, setDetailWidth] = useState(DETAIL_DEFAULT_WIDTH)
 
   useEffect(() => {
     if (turns.length === 0) {
@@ -228,6 +442,8 @@ export function TraceGraphView({
   const selectedStep = pipeline.find(step => step.key === selectedStepKey) ?? null
   const totalMs = (stats?.llmMs ?? 0) + (stats?.toolMs ?? 0)
 
+  const detailStyle = { width: `${detailWidth}px` } as CSSProperties
+
   return (
     <div className={css.root} data-trace-graph-view>
       <div className={css.stats} data-trace-graph-stats>
@@ -272,7 +488,7 @@ export function TraceGraphView({
                   {run.phases.map(phase => (
                     <div key={phase.key} className={css.orchPhase}>
                       <div className={css.orchPhaseTitle}>
-                        {phase.phase === null ? '—' : phase.phase || '∅'}
+                        {phase.phase === null ? '-' : phase.phase || '?'}
                       </div>
                       {phase.members.map(member => (
                         <button
@@ -357,7 +573,9 @@ export function TraceGraphView({
           ))}
         </section>
 
-        <aside className={css.detail} data-trace-graph-detail>
+        <ColumnSplitter width={detailWidth} onChange={setDetailWidth} />
+
+        <aside className={css.detail} data-trace-graph-detail style={detailStyle}>
           <div className={css.detailSticky}>
             <h2 className={css.sectionTitle}>{t('detail.title')}</h2>
             {selectedStep === null ? (
@@ -421,7 +639,7 @@ function TurnCard({ turn, index, selected, onSelect, t }: TurnCardProps) {
           </span>
           <span className={css.turnChip} data-kind="duration">
             <IconClockOutline14 size={12} />
-            <span>{t('turns.duration', { duration: turn.durationMs === null ? '—' : formatTraceGraphDuration(turn.durationMs) })}</span>
+            <span>{t('turns.duration', { duration: turn.durationMs === null ? '-' : formatTraceGraphDuration(turn.durationMs) })}</span>
           </span>
         </span>
         <span className={css.turnChevron} aria-hidden="true">
@@ -486,67 +704,14 @@ function PipelineStepCard({
         )}
       </header>
       <div className={css.flow}>
-        <div className={clsx(css.card, css.cardRequest)}>
-          <div className={css.cardHeader}>
-            <span className={css.cardBadge} data-kind="request">
-              <span className={css.cardBadgeDot} />
-              REQUEST
-            </span>
-          </div>
-          <div className={css.cardLine}>{step.request.model}</div>
-          <div className={css.cardLine}>{step.request.provider}</div>
-          <div className={css.cardLine}>
-            {t('pipeline.systemMessages', { n: step.request.systemCount })}
-          </div>
-          <div className={css.cardLine}>
-            {t('pipeline.tools', { n: step.request.toolCount })}
-          </div>
-        </div>
+        <RequestCard request={step.request} />
         <div className={clsx(css.connector, css.connectorRequest)} aria-hidden="true" />
-        <div className={clsx(css.card, css.cardResponse)}>
-          <div className={css.cardHeader}>
-            <span className={css.cardBadge} data-kind="response">
-              <span className={css.cardBadgeDot} />
-              RESPONSE
-            </span>
-          </div>
-          {step.response.reasoningPreview !== '' && (
-            <div className={css.cardLine}>
-              {t('pipeline.reasoning')}: {step.response.reasoningPreview}
-            </div>
-          )}
-          {step.response.contentPreview !== '' ? (
-            <div className={css.cardLine}>
-              {t('pipeline.content')}: {step.response.contentPreview}
-            </div>
-          ) : (
-            <div className={css.cardLine}>
-              {t('pipeline.toolCalls', { n: step.response.toolCallCount })}
-            </div>
-          )}
-        </div>
+        <ResponseCard response={step.response} />
         {step.tools.length > 0 && (
           <>
             <div className={clsx(css.connector, css.connectorResponse)} aria-hidden="true" />
             <div className={css.toolsGrid}>
-              {step.tools.map(tool => (
-                <div
-                  key={tool.callId}
-                  className={clsx(css.card, css.cardTool, tool.isError && css.cardToolError)}
-                >
-                  <div className={css.cardHeader}>
-                    <span className={css.cardBadge} data-kind="tool">
-                      <span className={css.cardBadgeDot} />
-                      TOOL · {tool.name}
-                    </span>
-                  </div>
-                  <div className={css.cardLine}>{tool.argsPreview || '—'}</div>
-                  {tool.resultPreview !== '' && (
-                    <div className={css.cardLine}>{tool.resultPreview}</div>
-                  )}
-                  <div className={css.cardLine}>{formatDurationMs(tool.durationMs)}</div>
-                </div>
-              ))}
+              {step.tools.map(tool => <ToolCard key={tool.callId} tool={tool} />)}
             </div>
           </>
         )}
@@ -612,6 +777,62 @@ function DetailPanel({ step }: DetailPanelProps) {
           usage,
         }, null, 2)}
       </pre>
+      {step.tools.length > 0 && (
+        <section className={css.detailTools}>
+          <header className={css.detailHeader}>
+            <span className={css.detailTitle}>tool calls</span>
+            <span className={css.detailStep}>{step.tools.length}</span>
+          </header>
+          {step.tools.map(tool => (
+            <article
+              key={tool.callId}
+              className={clsx(
+                css.detailToolCard,
+                tool.risk === 'dangerous' && css.detailToolCardDangerous,
+                tool.risk === 'caution' && css.detailToolCardCaution,
+                tool.isError && css.detailToolCardError,
+              )}
+            >
+              <div className={css.detailToolHeader}>
+                <span className={css.detailToolName}>{tool.name}</span>
+                <span
+                  className={clsx(
+                    css.toolRiskBadge,
+                    tool.risk === 'dangerous' && css.toolRiskDangerous,
+                    tool.risk === 'caution' && css.toolRiskCaution,
+                    tool.risk === 'safe' && css.toolRiskSafe,
+                  )}
+                >
+                  {tool.risk === 'safe' ? 'safe' : tool.risk.toUpperCase()}
+                </span>
+              </div>
+              {tool.command !== undefined && (
+                <div>
+                  <div className={css.detailToolCommandLabel}>
+                    {tool.risk === 'dangerous' ? '? command (dangerous)' : tool.risk === 'caution' ? '? command' : 'command'}
+                  </div>
+                  <pre className={css.detailToolCommand}>{tool.command}</pre>
+                </div>
+              )}
+              {tool.targetPaths.length > 0 && (
+                <div>
+                  <div className={css.detailToolCommandLabel}>target paths</div>
+                  <ul className={css.detailPathList}>
+                    {tool.targetPaths.map(p => (
+                      <li key={p} className={css.detailPath}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {tool.riskReasons.length > 0 && (
+                <div className={css.detailRiskReasons}>
+                  risk reasons: {tool.riskReasons.join(', ')}
+                </div>
+              )}
+            </article>
+          ))}
+        </section>
+      )}
     </div>
   )
 }

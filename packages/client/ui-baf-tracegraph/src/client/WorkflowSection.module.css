@@ -1,8 +1,11 @@
-/* 工作流 settings section styles, mirroring the Versions & updates page:
+/* Workflow settings section styles, mirroring the Versions & updates page:
  * 16/24 fw500 title, 14/22 label-tertiary intro, a single bordered row
- * (`border-l2`, 12px radius, 12/14 padding) carrying the toggle, and a
- * capsule 28x14 switch with a brand-tinted on-state. All colors resolve
- * through `--dsw-alias-*` tokens so light/dark themes follow the system. */
+ * (`border-l2`, 12px radius, 12/14 padding) carrying the toggle. The toggle
+ * is a 44x24 capsule with a 20px thumb that shows a check / cross glyph so
+ * the on/off state reads at a glance; the label tint mirrors the switch fill
+ * (success-green when on, secondary when off) so the two states are
+ * visually consistent. All colors resolve through `--dsw-alias-*` tokens so
+ * light/dark themes follow the system. */
 
 .section {
   display: flex;
@@ -26,7 +29,6 @@
   line-height: 22px;
   color: var(--dsw-alias-label-tertiary);
 }
-
 .rows {
   list-style: none;
   margin: 8px 0 0;
@@ -74,29 +76,30 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* Dense capsule switch: 40x22 with a 16px thumb, the same vocabulary the
-   settings shell's per-row switches use elsewhere. */
+/* Capsule switch: 44x24 with a 20px thumb. The thumb carries a check /
+   cross glyph tinted by the state so the on/off read is unambiguous at any
+   zoom. */
 .toggle {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 10px;
+  height: 32px;
+  padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 16px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
   cursor: pointer;
   transition:
     background 160ms ease,
     color 160ms ease,
     border-color 160ms ease;
 }
-
 .toggle:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
@@ -106,52 +109,77 @@
   outline: none;
   box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
 }
-
 .toggleTrack {
   position: relative;
   display: inline-block;
-  width: 28px;
-  height: 16px;
+  width: 40px;
+  height: 22px;
   border-radius: 999px;
-  background: var(--dsw-alias-bg-module-platform);
-  border: 1px solid var(--dsw-alias-border-l2);
+  background: color-mix(in srgb,
+    var(--dsw-alias-bg-module-platform) 88%,
+    var(--dsw-alias-text-tertiary) 12%);
+  border: 1px solid var(--dsw-alias-border-l3);
   transition:
-    background 200ms cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    background 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .toggleThumb {
   position: absolute;
-  top: 1px;
-  left: 1px;
-  width: 12px;
-  height: 12px;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  background: var(--dsw-alias-bg-canvas);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 0 0 1px var(--dsw-alias-border-l3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-text-tertiary);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
   transition:
-    transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
-    background 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    background 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggleThumb::before {
+  content: '×';
 }
 
 .toggle[data-state='on'] {
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-text-success, #1a7f37);
 }
 
 .toggle[data-state='on'] .toggleTrack {
   background: var(--dsw-alias-brand-primary);
   border-color: var(--dsw-alias-brand-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, transparent);
 }
 
 .toggle[data-state='on'] .toggleThumb {
-  transform: translateX(12px);
+  transform: translateX(18px);
   background: var(--dsw-alias-bg-canvas);
+  color: var(--dsw-alias-brand-primary);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.24),
+    0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent);
+}
+
+.toggle[data-state='on'] .toggleThumb::before {
+  content: '�?;
 }
 
 .toggleLabel {
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
   min-width: 56px;
   text-align: left;
 }

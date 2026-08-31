@@ -1,6 +1,6 @@
 /**
  * Fold a Trajectory snapshot into turn summaries and REQUESTâ†’RESPONSEâ†’TOOL
- * pipeline rows for the è½¨è¿¹å›¾ view.
+ * pipeline rows for the è½¨è¿¹å›?view.
  */
 import type {
   AssistantMessageNode,
@@ -61,6 +61,9 @@ export interface TraceGraphResponseCard {
   readonly status: 'ok' | 'error' | 'running'
 }
 
+/** Risk severity for a tool invocation. */
+export type TraceGraphToolRisk = 'safe' | 'caution' | 'dangerous'
+
 /** TOOL card facts. */
 export interface TraceGraphToolCard {
   readonly callId: string
@@ -69,9 +72,16 @@ export interface TraceGraphToolCard {
   readonly resultPreview: string
   readonly isError: boolean
   readonly durationMs: number | null
+  readonly risk: TraceGraphToolRisk
+  /** Command-line / primary payload text when the tool accepts one. */
+  readonly command: string | undefined
+  /** Absolute or user-supplied paths the call references, when extractable. */
+  readonly targetPaths: readonly string[]
+  /** Short labels that triggered the risk classification. */
+  readonly riskReasons: readonly string[]
 }
 
-/** One model-call row: request â†’ response â†’ tools. */
+/** One model-call row: request â†?response â†?tools. */
 export interface TraceGraphPipelineStep {
   readonly key: string
   readonly turn: number
@@ -84,7 +94,7 @@ export interface TraceGraphPipelineStep {
   readonly tools: readonly TraceGraphToolCard[]
 }
 
-/** Orchestration run excerpt for the è½¨è¿¹å›¾ header. */
+/** Orchestration run excerpt for the è½¨è¿¹å›?header. */
 export interface TraceGraphOrchestrationRun {
   readonly key: string
   readonly name: string
@@ -160,10 +170,12 @@ function toolCardsFromAssistant(
   for (const block of node.blocks) {
     if (block.kind !== 'tool-call') continue
     const result = results.get(block.callId)
+    const argsRaw = block.argsRaw
+    const classification = classifyToolRisk(block.name, argsRaw)
     cards.push({
       callId: block.callId,
       name: block.name,
-      argsPreview: truncate(block.argsRaw),
+      argsPreview: truncate(argsRaw),
       resultPreview: result === undefined
         ? ''
         : truncate(result.content.map(part =>
@@ -172,9 +184,184 @@ function toolCardsFromAssistant(
       durationMs: result !== undefined && result.callTime !== null
         ? Math.max(0, result.time - result.callTime)
         : null,
+      risk: classification.risk,
+      command: classification.command,
+      targetPaths: classification.targetPaths,
+      riskReasons: classification.reasons,
     })
   }
   return cards
+}
+
+/** Patterns that, when matched against a tool name or argument text, raise
+ * the risk level for the call. Keys are risk level, values are RegExp sets
+ * compiled from string literals so the bundler can inline them. */
+const TOOL_RISK_PATTERNS: Record<TraceGraphToolRisk, readonly RegExp[]> = {
+  // Destructive: file deletion, disk formatting, version-control writes,
+  // elevated privilege escalation, environment mutation. These warrant an
+  // explicit user confirmation prompt in the UI.
+  dangerous: [
+    /\brm\s+-rf?\b/i,
+    /\brmdir\b/i,
+    /\brd\s+\/s\b/i,
+    /\bdel\s+\/[sq]\b/i,
+    /\berase\b/i,
+    /\bmkfs(?:\.[a-z0-9]+)?\b/i,
+    /\bformat\s+[a-z]:/i,
+    /\bshred\b/i,
+    /\bdd\s+if=/i,
+    /\bkill\s+-9\b/i,
+    /\bpkill\s+-9\b/i,
+    /\bsudo\b/i,
+    /\bgit\s+push\s+(?:--force|-f)\b/i,
+    /\bgit\s+reset\s+--hard\b/i,
+    /\bgit\s+clean\s+-fd\b/i,
+    /\bchmod\s+(-R\s+)?0?[67][67][67]\b/i,
+    /\bchown\s+-R\b/i,
+    /\bmove-item\s+-force\b/i,
+    /\bremove-item\s+-recurse\b/i,
+    /\bdel\s+/i,
+  ],
+  // Read-only but mass-mutating or externally observable. Worth flagging so the
+  // operator can spot a runaway script at a glance.
+  caution: [
+    /\bcurl\b/i,
+    /\bwget\b/i,
+    /\bnpm\s+(?:install|i|add|publish|uninstall|rm)\b/i,
+    /\bpnpm\s+(?:install|i|add|publish|remove|rm)\b/i,
+    /\byarn\s+(?:install|add|remove)\b/i,
+    /\bpip\s+(?:install|uninstall)\b/i,
+    /\bgit\s+(?:commit|push|pull|merge|rebase|checkout)\b/i,
+    /\bchmod\b/i,
+    /\bchown\b/i,
+    /\bcp\s+-r\b/i,
+    /\bmv\s+/i,
+    /\bset-content\b/i,
+    /\bnew-item\b/i,
+    /\bstart-process\b/i,
+    /\binvoke-webrequest\b/i,
+    /\bhttp\.post\b/i,
+    /\bhttp\.put\b/i,
+    /\bhttp\.delete\b/i,
+    /\bwrite\b/i,
+    /\bfile\.write\b/i,
+    /\bfs\.writefile\b/i,
+  ],
+  // No risky keyword matched. We default everything else to safe; nothing in
+  // the current tool catalogue is auto-elevated.
+  safe: [],
+}
+
+/** Names that always elevate the call to dangerous regardless of args â€? * intentionally conservative until tool contracts document their own risk
+ * metadata. */
+const ALWAYS_DANGEROUS_TOOLS: ReadonlySet<string> = new Set([
+  'bash_dangerous',
+  'delete_file',
+  'force_remove',
+  'rm_rf',
+])
+
+/** Extract a command-line string from raw tool argument JSON. We tolerate
+ * missing fields, arrays, or pre-stringified JSON. The returned string is
+ * trimmed and may be empty when the tool does not accept a command. */
+function extractCommand(name: string, argsRaw: string): string | undefined {
+  if (argsRaw.trim() === '') return undefined
+  try {
+    const parsed: unknown = JSON.parse(argsRaw)
+    if (typeof parsed === 'object' && parsed !== null) {
+      const record = parsed as Record<string, unknown>
+      const candidates = ['command', 'cmd', 'shellCommand', 'script']
+      for (const key of candidates) {
+        const value = record[key]
+        if (typeof value === 'string' && value.trim() !== '') return value.trim()
+      }
+    }
+  } catch {
+    // Tool args are not always valid JSON; fall back to treating the raw
+    // payload as command text â€?covers the common `tool_call(command="â€?)`
+    // shape we see from bash-style tools.
+  }
+  if (/bash|shell|cmd|exec/i.test(name)) return argsRaw.trim()
+  return undefined
+}
+
+/** Pull a list of file paths out of a tool arg payload. We look in the
+ * conventional `path`/`paths`/`files`/`targets` keys first, then sweep the
+ * whole arg text for absolute or home-relative path-looking strings so the
+ * UI can show what is at stake even when the tool contract is loose. */
+function extractTargetPaths(argsRaw: string): string[] {
+  const out = new Set<string>()
+  try {
+    const parsed: unknown = JSON.parse(argsRaw)
+    if (typeof parsed === 'object' && parsed !== null) {
+      const record = parsed as Record<string, unknown>
+      const keys = ['path', 'paths', 'file', 'files', 'target', 'targets']
+      for (const key of keys) {
+        const value = record[key]
+        if (typeof value === 'string' && looksLikePath(value)) out.add(value)
+        if (Array.isArray(value)) {
+          for (const entry of value) {
+            if (typeof entry === 'string' && looksLikePath(entry)) out.add(entry)
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore â€?fall through to text sweep below
+  }
+  const textMatches = argsRaw.match(/(?:[a-zA-Z]:\\[^\s"'`]+|\/(?:home|root|usr|tmp|var|etc|opt|Users|Volumes|mnt)\/[^\s"'`]+)/g)
+  if (textMatches !== null) {
+    for (const match of textMatches) out.add(match)
+  }
+  return [...out]
+}
+
+function looksLikePath(value: string): boolean {
+  if (value.length === 0) return false
+  if (value.includes('\\') || value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value)) return true
+  if (value.startsWith('~')) return true
+  return false
+}
+
+/**
+ * Classify the risk a tool invocation carries. The classifier is best-effort:
+ * it inspects the tool name and the raw argument payload for destructive
+ * keywords and surface the operator-relevant excerpts so the UI can show
+ * *why* a call is flagged.
+ */
+export function classifyToolRisk(
+  name: string,
+  argsRaw: string,
+): { risk: TraceGraphToolRisk; command: string | undefined; targetPaths: readonly string[]; reasons: readonly string[] } {
+  const reasons = new Set<string>()
+  const command = extractCommand(name, argsRaw)
+  const haystack = `${name}\n${argsRaw}\n${command ?? ''}`
+  const targetPaths = extractTargetPaths(argsRaw)
+
+  let risk: TraceGraphToolRisk = 'safe'
+  if (ALWAYS_DANGEROUS_TOOLS.has(name)) {
+    risk = 'dangerous'
+    reasons.add(name)
+  }
+  for (const pattern of TOOL_RISK_PATTERNS.dangerous) {
+    const match = pattern.exec(haystack)
+    if (match !== null) {
+      risk = 'dangerous'
+      reasons.add(match[0].trim())
+    }
+  }
+  if (risk === 'safe') {
+    for (const pattern of TOOL_RISK_PATTERNS.caution) {
+      const match = pattern.exec(haystack)
+      if (match !== null) {
+        risk = 'caution'
+        reasons.add(match[0].trim())
+        break
+      }
+    }
+  }
+
+  return { risk, command, targetPaths, reasons: [...reasons] }
 }
 
 function turnStatus(
@@ -224,7 +411,7 @@ function turnBounds(
  * Build left-rail turn summaries from a Trajectory snapshot and turn timings.
  * @param trajectory - assembled trajectory target.
  * @param turnTimings - in-window turn start/end times.
- * @param turnEnds - completed turn â†’ end seq map (presence = closed).
+ * @param turnEnds - completed turn â†?end seq map (presence = closed).
  * @param running - whether the session still has an active turn.
  * @returns ordered turn summaries.
  */
@@ -361,12 +548,12 @@ export function deriveTraceGraphPipeline(
           ?? request?.prompt?.config.model
           ?? node.provenance?.model
           ?? request?.provenance?.model
-          ?? 'â€”',
+          ?? 'â€?,
         provider: node.requestConfig?.provider
           ?? request?.prompt?.config.provider
           ?? node.provenance?.provider
           ?? request?.provenance?.provider
-          ?? 'â€”',
+          ?? 'â€?,
         systemCount: request?.prompt?.system ? (request.prompt.system.trim() === '' ? 0 : 1) : 0,
         userCount: 0,
         toolCount: request?.prompt?.tools.length ?? 0,
@@ -392,8 +579,8 @@ export function deriveTraceGraphPipeline(
         : Math.max(0, request.completedAt - request.startedAt),
       usage: usageOf(request.usage),
       request: {
-        model: request.prompt?.config.model ?? request.provenance?.model ?? 'â€”',
-        provider: request.prompt?.config.provider ?? request.provenance?.provider ?? 'â€”',
+        model: request.prompt?.config.model ?? request.provenance?.model ?? 'â€?,
+        provider: request.prompt?.config.provider ?? request.provenance?.provider ?? 'â€?,
         systemCount: request.prompt?.system ? (request.prompt.system.trim() === '' ? 0 : 1) : 0,
         userCount: 0,
         toolCount: request.prompt?.tools.length ?? 0,
