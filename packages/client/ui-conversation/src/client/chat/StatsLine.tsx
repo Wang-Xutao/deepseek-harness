@@ -21,6 +21,8 @@ interface WindowStats {
   llmMs: number
   /** Summed tool wall time (tool/call → tool/result); 0 when no pair is in-window. */
   toolMs: number
+  /** Dispatched tool results in the window (approximation of whole-log toolCalls). */
+  toolCalls: number
   /** Summed first-token latency over `ttftSteps`; 0 when no step records it. */
   ttftMs: number
   /** Steps carrying a recorded TTFT. */
@@ -48,12 +50,14 @@ export function deriveStats(nodes: ConversationSnapshot['nodes']): WindowStats {
   let steps = 0
   let llmMs = 0
   let toolMs = 0
+  let toolCalls = 0
   let ttftMs = 0
   let ttftSteps = 0
   let decodeMs = 0
   let decodeTokens = 0
   for (const node of nodes) {
     if (node.kind === 'tool-result') {
+      toolCalls += 1
       if (node.callTime !== null) toolMs += Math.max(0, node.time - node.callTime)
       continue
     }
@@ -73,7 +77,7 @@ export function deriveStats(nodes: ConversationSnapshot['nodes']): WindowStats {
       decodeTokens += reading.outputTokens
     }
   }
-  return { turns: turns.size, steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens }
+  return { turns: turns.size, steps, llmMs, toolMs, toolCalls, ttftMs, ttftSteps, decodeMs, decodeTokens }
 }
 
 /**

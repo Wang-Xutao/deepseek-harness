@@ -292,6 +292,11 @@
     - id: ui-baf-desktop
       name: '@deepseek-ai/dsh-client-ui-baf-desktop'
 
+    # baf-dsh 轨迹图: turn navigator + REQUEST/RESPONSE/TOOL pipeline + inline child traces.
+    # Tab visibility follows the baf-workflow.showTraceGraph switch.
+    - id: ui-baf-tracegraph
+      name: '@deepseek-ai/dsh-client-ui-baf-tracegraph'
+
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
       name: '@deepseek-ai/dsh-client-ui-plan'

@@ -374,6 +374,21 @@ export class SessionRuntime implements ISessions {
   }
 
   /**
+   * Open a listed (or already scoped) session's history window without making
+   * it the current selection. Retains the scope while the session stays
+   * list-eligible so inline child surfaces can read its trajectory snapshot.
+   * @param id - session id.
+   * @returns completion of the history open.
+   */
+  ensureOpen(id: SessionId): Promise<void> {
+    const record = this.resolve(id)
+    if (record === undefined) {
+      throw new Error(`sessions.ensureOpen: unknown or ineligible session ${id}`)
+    }
+    return record.session.open()
+  }
+
+  /**
    * Open a healthy catalog child through its direct-parent address.
    * @param address - catalog-derived parent and child ids.
    */

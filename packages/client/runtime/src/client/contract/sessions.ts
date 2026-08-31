@@ -40,6 +40,14 @@ export interface ISessions {
    */
   open(id: SessionId): void
   /**
+   * Open a listed (or already scoped) session's history window without making
+   * it the current selection. Multi-session surfaces use this for inline
+   * child traces while the parent stays selected.
+   * @param id - session id (must be list-eligible or already scoped).
+   * @returns completion of the history open (idempotent when already open).
+   */
+  ensureOpen(id: SessionId): Promise<void>
+  /**
    * Open a healthy catalog child through its exact direct-parent address.
    * @param address - catalog-derived parent and child ids.
    */

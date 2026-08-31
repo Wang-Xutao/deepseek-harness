@@ -87,6 +87,7 @@
     { "path": "./packages/client/ui-settings-plugins" },
     { "path": "./packages/client/ui-settings-updates" },
     { "path": "./packages/client/ui-baf-desktop" },
+    { "path": "./packages/client/ui-baf-tracegraph" },
     { "path": "./packages/client/ui-user-questions" },
     { "path": "./packages/client/ui-trajectory" },
     { "path": "./packages/session-query/session-log-export" },

@@ -104,7 +104,7 @@ describe('deriveStats', () => {
     // tokenUsage projection); decodeTokens is a throughput input, not a
     // billed total.
     expect(Object.keys(stats).sort()).toEqual(
-      ['decodeMs', 'decodeTokens', 'llmMs', 'steps', 'toolMs', 'ttftMs', 'ttftSteps', 'turns'],
+      ['decodeMs', 'decodeTokens', 'llmMs', 'steps', 'toolCalls', 'toolMs', 'ttftMs', 'ttftSteps', 'turns'],
     )
   })
 
@@ -174,7 +174,7 @@ describe('StatsLine', () => {
   /** A whole-log sessionStats value: zeros plus overrides. */
   function sessionStats(overrides: Record<string, number>): Record<string, number> {
     return {
-      turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
+      turns: 0, steps: 0, llmMs: 0, toolMs: 0, toolCalls: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
       ...overrides,
     }
   }

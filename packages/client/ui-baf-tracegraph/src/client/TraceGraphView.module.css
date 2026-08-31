@@ -1,0 +1,918 @@
+/*
+ * 轨迹图 view styles.
+ *
+ * Layout (top → bottom):
+ *   .stats      — horizontal row of metric cards
+ *   .body       — three-column grid
+ *      .turns   — left column (own scroll), turn list + orchestration
+ *      .pipeline— middle column (own scroll), REQUEST → RESPONSE → TOOL cards
+ *      .detail  — right column, sticky rail (does not scroll with pipeline)
+ *
+ * Stats cards no longer use a cursor-tracked spotlight; they keep a flat
+ * hover treatment. Pipeline flow uses soft pipe connectors in place of the
+ * earlier arrow triangles so REQUEST / RESPONSE / TOOL read as one run.
+ */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background:
+    radial-gradient(120% 80% at 0% 0%, var(--dsw-alias-bg-module-platform, transparent) 0%, transparent 60%),
+    radial-gradient(120% 80% at 100% 100%, var(--dsw-alias-bg-module-platform, transparent) 0%, transparent 60%),
+    var(--dsw-alias-bg-canvas);
+  color: var(--dsw-alias-text-primary);
+  overflow: hidden;
+}
+
+@keyframes traceGraphFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes traceGraphPulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.45)); }
+  50% { box-shadow: 0 0 0 6px transparent; }
+}
+
+@keyframes traceGraphSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ------------------------------------------------------------------ stats */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--dsw-alias-border-subtle);
+  flex: none;
+}
+
+.statCard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px 14px 16px;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)), var(--dsw-alias-bg-module-platform));
+  border: 1px solid var(--dsw-alias-border-subtle);
+  box-shadow: 0 1px 2px var(--dsw-alias-shadow-subtle, rgba(0, 0, 0, 0.06));
+  transition:
+    border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  animation: traceGraphFadeUp 320ms ease-out both;
+  min-height: 64px;
+}
+
+.statCard:hover {
+  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  box-shadow:
+    0 8px 24px -12px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.4)),
+    0 1px 2px var(--dsw-alias-shadow-subtle, rgba(0, 0, 0, 0.06));
+  transform: translateY(-2px);
+}
+
+.statCard-turns { animation-delay: 0ms; }
+.statCard-steps { animation-delay: 60ms; }
+.statCard-toolCalls { animation-delay: 120ms; }
+.statCard-duration { animation-delay: 180ms; }
+
+/* Color-coded icon tile per metric kind. The accent strip is dropped —
+ * the icon tile alone is enough color hint at this size. */
+.statCard-turns     { color: var(--dsw-alias-text-info,    #0969da); }
+.statCard-steps     { color: var(--dsw-alias-text-brand,   #8250df); }
+.statCard-toolCalls { color: var(--dsw-alias-text-warning, #9a6700); }
+.statCard-duration  { color: var(--dsw-alias-text-success, #1a7f37); }
+
+.statIcon {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, currentColor 14%, var(--dsw-alias-bg-canvas));
+  color: currentColor;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  flex: none;
+}
+
+.statIcon svg { width: 22px; height: 22px; }
+
+.statText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.statLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-text-secondary);
+}
+
+.statValue {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-text-primary);
+  text-shadow: 0 0 18px color-mix(in srgb, currentColor 22%, transparent);
+}
+
+/* -------------------------------------------------------------------- body */
+
+.body {
+  display: grid;
+  /* turns | pipeline | detail. The detail column is a real grid track so it
+     can stay anchored to the right edge without floating overlays. */
+  grid-template-columns: 300px minmax(0, 1fr) 360px;
+  min-height: 0;
+  flex: 1;
+}
+
+.turns {
+  border-right: 1px solid var(--dsw-alias-border-subtle);
+  padding: 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.pipeline {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Right rail. The detail column is a normal grid track so it does not
+   scroll with the pipeline column. We give it position: sticky inside the
+   column to keep its content visible when the user scrolls the page itself,
+   and `align-self: start` so the rail hugs the top of the column. */
+.detail {
+  border-left: 1px solid var(--dsw-alias-border-subtle);
+  padding: 16px;
+  overflow-y: auto;
+  min-height: 0;
+  background:
+    linear-gradient(180deg, var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)), var(--dsw-alias-bg-module-platform));
+}
+
+.detailSticky {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-text-secondary);
+}
+
+.empty {
+  padding: 28px 12px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--dsw-alias-text-tertiary);
+  border: 1px dashed var(--dsw-alias-border-subtle);
+  border-radius: 10px;
+}
+
+/* -------------------------------------------------------------------- turns */
+
+.turnList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.turnItem {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.turnConnector {
+  position: relative;
+  flex: none;
+  width: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18px;
+}
+
+.turnConnector::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--dsw-alias-border-subtle);
+  transform: translateX(-0.5px);
+}
+
+.turnItem:first-child .turnConnector::before { top: 18px; }
+.turnItem:last-child .turnConnector::before { bottom: calc(100% - 30px); }
+
+.turnConnectorNode {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  border: 2px solid var(--dsw-alias-text-tertiary);
+  box-shadow: 0 0 0 3px var(--dsw-alias-bg-canvas);
+}
+
+.turnConnectorNode[data-status="running"] {
+  border-color: var(--dsw-alias-text-warning, #9a6700);
+  animation: traceGraphPulse 1.6s ease-in-out infinite;
+}
+.turnConnectorNode[data-status="completed"] {
+  border-color: var(--dsw-alias-text-success, #1a7f37);
+}
+.turnConnectorNode[data-status="failed"] {
+  border-color: var(--dsw-alias-text-danger, #cf222e);
+}
+
+.turnButton {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header chevron"
+    "preview chevron"
+    "meta meta";
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  color: inherit;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition:
+    border-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 160ms cubic-bezier(0.4, 0, 0.2, 1);
+  animation: traceGraphFadeUp 240ms ease-out both;
+}
+
+.turnButton:hover {
+  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  box-shadow: 0 6px 18px -10px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.35));
+  transform: translateY(-1px);
+}
+
+.turnButton:active {
+  transform: translateY(0);
+}
+
+.turnButtonSelected {
+  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  background: linear-gradient(135deg,
+    var(--dsw-alias-bg-module-platform),
+    var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)));
+  box-shadow:
+    0 0 0 1px var(--dsw-alias-border-brand, var(--dsw-alias-border-strong)),
+    0 8px 22px -12px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.5));
+}
+
+.turnButtonSelected::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 12px 0 0 12px;
+  background: var(--dsw-alias-text-brand, var(--dsw-alias-text-primary));
+}
+
+.turnHeader {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.turnIndex {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.turnStatusPill {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+}
+
+.statusCompleted { color: var(--dsw-alias-text-success, #1a7f37); }
+.statusFailed    { color: var(--dsw-alias-text-danger, #cf222e); }
+.statusRunning   { color: var(--dsw-alias-text-warning, #9a6700); }
+
+.turnPreview {
+  grid-area: preview;
+  font-size: 12px;
+  color: var(--dsw-alias-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turnMeta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.turnChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-text-secondary);
+  border: 1px solid var(--dsw-alias-border-subtle);
+}
+
+.turnChip[data-kind="model"] { color: var(--dsw-alias-text-brand, #8250df); }
+.turnChip[data-kind="tool"] { color: var(--dsw-alias-text-warning, #9a6700); }
+.turnChip[data-kind="tokens"] { color: var(--dsw-alias-text-info, #0969da); }
+.turnChip[data-kind="duration"] { color: var(--dsw-alias-text-success, #1a7f37); }
+
+.turnChevron {
+  grid-area: chevron;
+  display: flex;
+  align-items: center;
+  align-self: center;
+  color: var(--dsw-alias-text-tertiary);
+  transition: transform 180ms ease;
+}
+
+.turnButton:hover .turnChevron,
+.turnButtonSelected .turnChevron {
+  transform: translateX(2px);
+  color: var(--dsw-alias-text-brand, var(--dsw-alias-text-primary));
+}
+
+/* --------------------------------------------------------------- orchestration */
+
+.orch {
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 14px;
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+.orchRun { margin-bottom: 8px; }
+.orchRun:last-child { margin-bottom: 0; }
+
+.orchRunName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.orchRunDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-text-tertiary);
+}
+
+.orchRunDot[data-status="running"] { background: var(--dsw-alias-text-warning, #9a6700); animation: traceGraphPulse 1.4s ease-in-out infinite; }
+.orchRunDot[data-status="completed"] { background: var(--dsw-alias-text-success, #1a7f37); }
+.orchRunDot[data-status="failed"] { background: var(--dsw-alias-text-danger, #cf222e); }
+
+.orchPhase {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 1px dashed var(--dsw-alias-border-subtle);
+}
+
+.orchPhaseTitle {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--dsw-alias-text-secondary);
+}
+
+.memberButton {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 8px;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.memberButton:hover {
+  border-color: var(--dsw-alias-border-subtle);
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  transform: translateX(2px);
+}
+
+.memberButton:active { transform: translateX(1px); }
+
+.memberButtonSelected {
+  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  font-weight: 600;
+}
+
+.memberStatus {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-text-tertiary);
+}
+
+.memberStatus[data-status="running"] { color: var(--dsw-alias-text-warning, #9a6700); }
+.memberStatus[data-status="completed"] { color: var(--dsw-alias-text-success, #1a7f37); }
+.memberStatus[data-status="failed"] { color: var(--dsw-alias-text-danger, #cf222e); }
+
+.childBanner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-module-platform);
+  border: 1px solid var(--dsw-alias-border-subtle);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.childBanner[data-state="loading"] { border-color: var(--dsw-alias-border-info, var(--dsw-alias-border-subtle)); }
+.childBanner[data-state="error"] { border-color: var(--dsw-alias-border-danger, #cf222e); }
+
+.childBanner[data-state="loading"] .childBannerText::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border-radius: 50%;
+  border: 2px solid var(--dsw-alias-border-info, var(--dsw-alias-border-strong));
+  border-top-color: transparent;
+  animation: traceGraphSpin 0.9s linear infinite;
+  vertical-align: -2px;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.backButton:hover {
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+}
+
+/* ----------------------------------------------------------- pipeline cards */
+
+.stepCard {
+  position: relative;
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg,
+    var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)),
+    var(--dsw-alias-bg-module-platform));
+  cursor: pointer;
+  transition:
+    border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  animation: traceGraphFadeUp 280ms ease-out both;
+}
+
+.stepCard:hover {
+  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  box-shadow: 0 14px 32px -18px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.4));
+  transform: translateY(-1px);
+}
+
+.stepCardSelected {
+  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  box-shadow:
+    0 0 0 1px var(--dsw-alias-border-brand, var(--dsw-alias-border-strong)),
+    0 14px 32px -16px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.5));
+}
+
+.stepHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--dsw-alias-text-secondary);
+}
+
+.stepOrdinal {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-text-brand, #8250df) 12%, var(--dsw-alias-bg-canvas));
+  color: var(--dsw-alias-text-brand, #8250df);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-text-brand, #8250df) 30%, var(--dsw-alias-border-subtle));
+}
+
+.stepOrdinalSep {
+  margin: 0 1px;
+  color: var(--dsw-alias-text-tertiary);
+  font-weight: 500;
+}
+
+.stepTitle {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--dsw-alias-text-primary);
+}
+
+.stepClock,
+.stepDuration {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.stepUsageChip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-module-platform);
+  border: 1px solid var(--dsw-alias-border-subtle);
+}
+
+.stepUsageChip[data-kind="input"]   { color: var(--dsw-alias-text-info, #0969da); }
+.stepUsageChip[data-kind="cached"]  { color: var(--dsw-alias-text-secondary); }
+.stepUsageChip[data-kind="output"]  { color: var(--dsw-alias-text-brand, #8250df); }
+
+/* Pipeline row: REQUEST → RESPONSE → TOOL cards separated by soft pipes.
+   The pipes are 2px wide pill shapes tinted by the destination card so the
+   three sections read as one cohesive run, not three stranded boxes. */
+.flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  align-items: stretch;
+}
+
+.card {
+  flex: 1 1 200px;
+  min-width: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  border: 1px solid var(--dsw-alias-border-subtle);
+  background: var(--dsw-alias-bg-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.card:hover {
+  transform: translateY(-1px);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.cardBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 10%, var(--dsw-alias-bg-canvas));
+}
+
+.cardBadgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.cardRequest { color: var(--dsw-alias-text-info, #0969da); }
+.cardResponse { color: var(--dsw-alias-text-brand, #8250df); }
+.cardTool { color: var(--dsw-alias-text-warning, #9a6700); }
+
+.cardRequest,
+.cardResponse,
+.cardTool {
+  background: color-mix(in srgb, currentColor 8%, var(--dsw-alias-bg-canvas));
+}
+
+.cardToolError {
+  color: var(--dsw-alias-text-danger, #cf222e);
+  background: color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 10%, var(--dsw-alias-bg-canvas));
+}
+
+.cardLine {
+  margin: 0;
+  color: var(--dsw-alias-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The pipe between cards. Renders as a vertical bar that visually fuses the
+   previous and next cards, with a tiny connector "shoulder" that catches
+   the border-radius of the adjacent cards. No arrow — direction is implied
+   by ordering. */
+.connector {
+  flex: none;
+  align-self: stretch;
+  width: 4px;
+  margin: 0 -1px;
+  position: relative;
+  background: var(--dsw-alias-border-subtle);
+  z-index: 0;
+}
+
+.connector::before,
+.connector::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: inherit;
+}
+
+.connector::before { top: -3px; border-radius: 6px 6px 0 0; }
+.connector::after  { bottom: -3px; border-radius: 0 0 6px 6px; }
+
+/* Tinted to match the destination card so the run visually flows left → right. */
+.connectorRequest {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--dsw-alias-text-info,    #0969da) 22%, var(--dsw-alias-bg-canvas)),
+    color-mix(in srgb, var(--dsw-alias-text-brand,   #8250df) 22%, var(--dsw-alias-bg-canvas)));
+}
+
+.connectorResponse {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--dsw-alias-text-brand,   #8250df) 22%, var(--dsw-alias-bg-canvas)),
+    color-mix(in srgb, var(--dsw-alias-text-warning, #9a6700) 22%, var(--dsw-alias-bg-canvas)));
+}
+
+.toolsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  flex: 1 1 200px;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.toolsGrid .card {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------- detail */
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--dsw-alias-border-subtle);
+}
+
+.detailTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-text-secondary);
+}
+
+.detailStep {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-text-brand, var(--dsw-alias-text-primary));
+  font-weight: 600;
+}
+
+.detailBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detailList {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.detailKey {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-text-tertiary);
+  align-self: center;
+}
+
+.detailVal {
+  margin: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-text-primary);
+  word-break: break-word;
+  text-align: right;
+  max-width: 65%;
+}
+
+.detailPre {
+  margin: 0;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-text-secondary);
+  max-height: 320px;
+  overflow: auto;
+}
+
+/* ----------------------------------------------------------- responsive */
+
+/* Narrower windows still keep all three columns but shrink them; the detail
+   rail stays present (no JS restructure). When the viewport drops below the
+   compact breakpoint the pipeline cards stack vertically inside the
+   middle column so the pipeline content remains fully visible without
+   horizontal overflow. */
+@media (max-width: 1440px) {
+  .body { grid-template-columns: 260px minmax(0, 1fr) 320px; }
+  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1280px) {
+  .body { grid-template-columns: 240px minmax(0, 1fr) 300px; }
+  .pipeline { padding: 14px 16px; }
+}
+
+@media (max-width: 1080px) {
+  .body { grid-template-columns: 220px minmax(0, 1fr) 280px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Stack REQUEST → RESPONSE → TOOL vertically with vertical pipes so the
+     middle column does not require horizontal scrolling. */
+  .flow { flex-direction: column; gap: 10px; }
+  .connector {
+    width: auto;
+    height: 4px;
+    margin: -1px 0;
+  }
+  .connector::before,
+  .connector::after {
+    left: -3px;
+    right: -3px;
+    top: 0;
+    bottom: 0;
+    height: auto;
+    width: 6px;
+  }
+  .connector::before { border-radius: 6px 0 0 6px; }
+  .connector::after  { border-radius: 0 6px 6px 0; }
+  .connectorRequest,
+  .connectorResponse {
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--dsw-alias-text-info,    #0969da) 22%, var(--dsw-alias-bg-canvas)),
+      color-mix(in srgb, var(--dsw-alias-text-brand,   #8250df) 22%, var(--dsw-alias-bg-canvas)));
+  }
+
+  .toolsGrid { flex-direction: column; gap: 10px; }
+  .toolsGrid .card { flex: 1 1 auto; }
+}
+
+@media (max-width: 860px) {
+  /* Below 860px the page no longer hosts three columns side by side: the
+     detail rail moves under the pipeline so the layout never overflows. The
+     rail still owns its scroll region, so a long detail block does not push
+     the conversation view. */
+  .body { grid-template-columns: 1fr; grid-auto-rows: minmax(0, auto); }
+  .turns,
+  .pipeline,
+  .detail {
+    overflow-y: visible;
+    border: none;
+    border-bottom: 1px solid var(--dsw-alias-border-subtle);
+  }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statCard,
+  .turnButton,
+  .stepCard,
+  .turnConnectorNode[data-status="running"],
+  .orchRunDot[data-status="running"] {
+    animation: none !important;
+    transition: none !important;
+  }
+}

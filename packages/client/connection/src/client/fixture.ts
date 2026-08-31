@@ -894,12 +894,15 @@ function sessionStatsOf(log: readonly SessionEvent[]): {
   steps: number
   llmMs: number
   toolMs: number
+  toolCalls: number
   ttftMs: number
   ttftSteps: number
   decodeMs: number
   decodeTokens: number
 } {
-  const value = { turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0 }
+  const value = {
+    turns: 0, steps: 0, llmMs: 0, toolMs: 0, toolCalls: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
+  }
   let lastTurn: number | null = null
   let openStep: { turn: number; step: number; startTime: number; firstTokenTime: number | null } | null = null
   const pendingCalls = new Map<string, number>()
@@ -930,6 +933,7 @@ function sessionStatsOf(log: readonly SessionEvent[]): {
         break
       }
       case 'tool/call':
+        value.toolCalls += 1
         pendingCalls.set(event.data.callId, event.time)
         break
       case 'tool/result': {

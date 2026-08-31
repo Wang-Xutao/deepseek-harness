@@ -28,6 +28,8 @@ export interface SessionStatsProjection {
   llmMs: number
   /** Summed tool wall time over `tool/call` → `tool/result` pairs matched by callId. */
   toolMs: number
+  /** Dispatched tool calls (`tool/call` events), including unresolved or failed calls. */
+  toolCalls: number
   /** Summed first-token latency (`step/start` → first non-empty delta chunk) over `ttftSteps`. */
   ttftMs: number
   /** Steps carrying a recorded first token. */

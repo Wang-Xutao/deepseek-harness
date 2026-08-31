@@ -323,6 +323,7 @@ const FORCE_PACKAGES = [
   'packages/client/ui-settings-general',
   'packages/client/ui-settings-updates',
   'packages/client/ui-baf-desktop',
+  'packages/client/ui-baf-tracegraph',
   'packages/boot/app-boot',
   'packages/boot/cmdline',
   'packages/runtime-diagnostics/invariants',

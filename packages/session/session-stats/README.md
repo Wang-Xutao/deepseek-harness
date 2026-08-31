@@ -12,6 +12,7 @@ Function plugin registering the `sessionStats` projection unit: whole-log conver
 - `ttftMs`/`ttftSteps` sum and count `step/start` → first non-empty delta chunk; the first attempt's boundary survives an in-step `llm/retry` (window `resetForRetry` parity).
 - `decodeMs`/`decodeTokens` sum first token → assembled message and the provider-reported output tokens, only over steps carrying both.
 - `toolMs` sums `tool/call` → `tool/result` pairs matched by callId; unresolved calls are dropped at `turn/end` (results land within their turn).
+- `toolCalls` counts every `tool/call` event, including calls that never receive a result.
 - Every field is 0 until its first contributing event. A composed registry always serves the key, so clients read the value, never key presence.
 
 ## Composition

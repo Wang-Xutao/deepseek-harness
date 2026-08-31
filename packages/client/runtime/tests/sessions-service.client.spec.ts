@@ -186,6 +186,17 @@ describe('current selection (migrated from ui-layout, arbitrated into the list s
     expect(b.svc.list.getSnapshot().current).toBe('s1') // failed open leaves the selection alone
   })
 
+  it('ensureOpen() loads a listed session window without changing current', async () => {
+    const b = bench()
+    await feedList(b, [{ id: 's1' }, { id: 's2' }])
+    b.svc.open(sid('s1'))
+    expect(b.svc.list.getSnapshot().current).toBe('s1')
+    await b.svc.ensureOpen(sid('s2'))
+    expect(b.svc.list.getSnapshot().current).toBe('s1')
+    expect(b.svc.binding(sid('s2'))?.session).toBeDefined()
+    expect(() => { void b.svc.ensureOpen(sid('ghost')) }).toThrow(/ensureOpen/)
+  })
+
   it('clear() blanks list.current and the persisted selection', async () => {
     const storage = new Map<string, string>()
     vi.stubGlobal('localStorage', {
