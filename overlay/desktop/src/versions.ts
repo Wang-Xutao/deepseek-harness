@@ -10,7 +10,7 @@ export type AppVersions = {
 
 export const DEFAULT_VERSIONS: AppVersions = {
   bafDsh: '0.0.5',
-  dsh: '0.1.0-rc.8',
+  dsh: '0.1.2-alpha.3',
   bafPlugin: '0.0.1',
 }
 
@@ -38,6 +38,7 @@ export function versionsPath(userData: string): string {
 
 /**
  * Load versions from disk, or seed from packaged defaults when missing.
+ * dsh version is always re-seeded from source to avoid stale cache.
  * @param userData - userData directory.
  * @param seed - values written on first launch (from package embeds).
  */
@@ -48,7 +49,9 @@ export function loadVersions(userData: string, seed: AppVersions = DEFAULT_VERSI
       saveVersions(userData, seed)
       return { ...seed }
     }
-    return parseVersions(JSON.parse(readFileSync(path, 'utf8')) as unknown)
+    const parsed = parseVersions(JSON.parse(readFileSync(path, 'utf8')) as unknown)
+    // Always trust the seed (source) dsh version over stale persisted cache.
+    return { ...parsed, dsh: seed.dsh }
   } catch {
     return { ...seed }
   }
