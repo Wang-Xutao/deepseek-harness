@@ -24,4 +24,4 @@ Electron **只做窗口**。harness 仍由系统（或安装器装上的）Node 
 
 ## 打包
 
-命令与产物见 [docs/engineering/build.md](docs/engineering/build.md)。产物在 `desktop/dist/`。用户帮助：`docs/help/` → `npm run docs:build` → `site/`（并同步到 `apps/web/dist/help/`）。
+命令与产物见 [docs/engineering/build.md](docs/engineering/build.md)。产物在 `desktop/dist/`。用户帮助：`docs/help/` → `npm run docs:build` → `site/`（并同步到 `apps/web/dist/help/`）。**`npm run dist` / `npm run dist:dir` 已内置 `docs:build` + `verify-help-build` 守卫**——`apps/web/dist/help/` 缺失或不是本次 `docs:build` 产物时直接报错，避免打出没有 `/help/` 的安装包。

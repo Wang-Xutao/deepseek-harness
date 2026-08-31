@@ -45,6 +45,15 @@ npm run dist:dir
 
 产物为 `overlay/desktop/dist/win-unpacked/baf-dsh.exe`（保留展开的 `resources/dsh/node_modules`，可直接双击）。本机仍需符合要求的 Node 以启动内嵌 `dsh web`。
 
+#### 帮助页守卫
+
+`npm run dist` 与 `npm run dist:dir` 都已内置 `npm run docs:build && npm run verify-help-build` 守卫：
+
+1. `docs:build` 先跑 MkDocs，把 `overlay/docs/help/` 编译到 `apps/web/dist/help/`。
+2. `verify-help-build` 校验 `apps/web/dist/help/index.html` 存在且 `<title>` 含 `baf-dsh`；不满足则直接非零退出，避免打包产物里出现空 `/help/` iframe。
+
+仅在手动跳过守卫（例如只重打安装包而 `apps/web/dist/help/` 已就绪）时省略；常规打包请直接用 `npm run dist` / `npm run dist:dir`。
+
 版本对照：改 `desktop/package.json` 的 `version` 时同步更新 [../release/version-map.md](../release/version-map.md)。
 
 用户帮助站（MkDocs）：
