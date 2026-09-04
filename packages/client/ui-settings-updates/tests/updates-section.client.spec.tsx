@@ -10,7 +10,12 @@ function t(key: string): string {
 }
 
 const unusedHook = (() => { throw new Error('unused') }) as never
-const kit = { useSessions: unusedHook, useWorkspaces: unusedHook, close: vi.fn() }
+const kit = {
+  useSessions: unusedHook,
+  useSessionPendingInteraction: unusedHook,
+  useWorkspaces: unusedHook,
+  close: vi.fn(),
+}
 
 describe('readBridge', () => {
   it('returns undefined without desktop bridge', () => {

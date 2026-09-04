@@ -10,7 +10,12 @@ afterEach(() => {
 })
 
 const unusedHook = (() => { throw new Error('unused') }) as never
-const kit = { useSessions: unusedHook, useWorkspaces: unusedHook, close: vi.fn() }
+const kit = {
+  useSessions: unusedHook,
+  useSessionPendingInteraction: unusedHook,
+  useWorkspaces: unusedHook,
+  close: vi.fn(),
+}
 const t = (key: string) => (en as Record<string, string>)[key] ?? key
 
 describe('DesktopClosePrefs', () => {

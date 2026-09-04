@@ -443,6 +443,15 @@ export class TestSessions implements ISessions {
     })
   }
 
+  /**
+   * Open a historical session without selecting it as current (BAF trace-graph).
+   * @param id - session id.
+   */
+  async ensureOpen(id: SessionId): Promise<void> {
+    this.calls.push({ method: 'open', args: [id, 'ensureOpen'] })
+    this.require(id)
+  }
+
   /** Open an existing fixture through its catalog address. */
   openSubagent(address: SubagentAddress): void {
     this.calls.push({ method: 'openSubagent', args: [address] })

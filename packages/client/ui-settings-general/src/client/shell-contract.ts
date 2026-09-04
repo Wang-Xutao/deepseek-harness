@@ -1,12 +1,15 @@
 /**
- * Settings shell contract â€?the types of the `sidebar.settings` occupant this
+ * Settings shell contract â€” the types of the `sidebar.settings` occupant this
  * package renders. They live here rather than in ui-settings because they
  * reference the sidebar's own slot type: ui-settings is the settings domain's
  * base layer and must not depend on any `ui-*` presentation package, or the
- * reference graph closes a cycle through ui-sidebar â†?ui-layout â†?ui-theme.
+ * reference graph closes a cycle through ui-sidebar â†’ ui-layout â†’ ui-theme.
  * The settings SLOT types (what registrants contribute) stay in ui-settings.
  */
-import type { HostObservable, InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ConnectionState } from '@deepseek-ai/dsh-client-connection/client'
+import type {
+  HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime,
+} from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls ui-sidebar's SlotMap merge (the 'sidebar.settings' entry)
 // into every program that sees this contract.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -18,13 +21,6 @@ export interface SettingsSectionRow {
   id: string
   order: number
   label: string
-  /**
-   * Optional sidebar glyph contributed by the registrant via the list-slot
-   * `icon` option. Opaque (whatever the registrant declared â€?a React
-   * component, a ref, etc.); the shell never inspects the value, only paints
-   * it when present and falls back to its id-keyed glyph when absent.
-   */
-  Icon?: unknown
 }
 
 /** One ordered onboarding step projected from a slot registration. */
@@ -35,10 +31,15 @@ export interface SettingsOnboardingStep {
 
 /**
  * Registrant-private injected share of the settings shell (assembled in
- * apply): the ledger's nav-row projection as a hooks-compartment source â€? * the shell reads no locale state and subscribes through the bound hook.
+ * apply): connection state and ledger projections arrive as hook-compartment
+ * sources, while the reconnect command remains a plain callback.
  */
 export type SettingsRootInjected = {
+  /** Request a fresh logical generation and physical WebSocket immediately. */
+  reconnect: () => void
   hooks: {
+    /** Connection-owned state for the current Host connection. */
+    connectionState: HostObservable<ConnectionState | undefined>
     /** settings.section ledger projected into ordered nav rows. */
     sections: HostObservable<readonly SettingsSectionRow[]>
     /** settings.onboarding ledger projected into coordinator order. */
@@ -49,7 +50,7 @@ export type SettingsRootInjected = {
 /**
  * Full component props of the settings shell root: the sidebar owner share
  * (wide/rail state) plus the declared render shares and the injected face
- * (hooks compartment bound to useSections). No store is registered â€?modal
+ * (hooks compartment bound to useSections). No store is registered â€” modal
  * open state and active section id are component-local viewing state.
  */
 export type SettingsRootComponentProps =
@@ -63,3 +64,4 @@ export type SettingsRootComponentProps =
     | 'settings.onboarding'
   >
   & InjectFace<SettingsRootInjected>
+  & PropsLocale<'settings'>

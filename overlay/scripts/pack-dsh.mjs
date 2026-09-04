@@ -265,9 +265,17 @@ const staging = mkdtempSync(join(tmpdir(), 'baf-dsh-pack-'))
 const pnpm = resolvePnpm()
 
 try {
+  // Skip lifecycle scripts: native deps such as fs-ext need a local C++
+  // toolchain that packaging hosts often lack, and the deployed tree only
+  // needs already-built JS artifacts from the monorepo build.
   const result = spawnSync(
     pnpm.command,
-    [...pnpm.argsPrefix, '--filter', '@deepseek-ai/dsh', 'deploy', '--prod', '--legacy', staging],
+    [
+      ...pnpm.argsPrefix,
+      '--filter', '@deepseek-ai/dsh',
+      'deploy', '--prod', '--legacy', '--ignore-scripts',
+      staging,
+    ],
     {
       cwd: repoRoot,
       stdio: 'inherit',

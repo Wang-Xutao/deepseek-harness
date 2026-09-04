@@ -38,10 +38,14 @@ npm run dist
 
 ```powershell
 cd overlay
+$env:CI = 'true'
+$env:npm_config_production = 'false'
 $env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
 $env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
 npm run dist:dir
 ```
+
+本机若缺 Visual C++ / `fs-ext` 原生编译环境，仓库根请用 `pnpm install --ignore-scripts`；`pack-dsh` 已对 `pnpm deploy` 使用 `--ignore-scripts`。
 
 产物为 `overlay/desktop/dist/win-unpacked/baf-dsh.exe`（保留展开的 `resources/dsh/node_modules`，可直接双击）。本机仍需符合要求的 Node 以启动内嵌 `dsh web`。
 

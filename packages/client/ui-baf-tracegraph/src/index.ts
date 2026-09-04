@@ -5,7 +5,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import {
   BAF_WORKFLOW_SETTINGS_NAMESPACE, DEFAULT_SHOW_TRACE_GRAPH, SHOW_TRACE_GRAPH_FIELD,
   type BafWorkflowSettings,
@@ -28,7 +28,7 @@ const BafWorkflowSettingsSchema: z<BafWorkflowSettings> = z.object({
 export function apply(ctx: Context): void {
   ctx.inject(['settings'], (settingsCtx) => {
     settingsCtx.settings.register(
-      settingsNamespace(BAF_WORKFLOW_SETTINGS_NAMESPACE),
+      BAF_WORKFLOW_SETTINGS_NAMESPACE,
       BafWorkflowSettingsSchema,
     )
   })

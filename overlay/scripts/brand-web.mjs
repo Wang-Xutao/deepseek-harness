@@ -40,6 +40,10 @@ function shortCommit() {
 const pnpm = resolvePnpm()
 const env = {
   ...process.env,
+  // Avoid interactive module-purge prompts and accidental production-only
+  // reinstalls when pnpm rechecks deps while bundling branded client assets.
+  CI: 'true',
+  npm_config_production: 'false',
   DSH_CLIENT_TITLE: 'BAF DSH',
   DSH_CLIENT_BUILD_LABEL: `v${version}`,
   DSH_CLIENT_COMMIT_HASH: shortCommit(),

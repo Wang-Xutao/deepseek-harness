@@ -5,11 +5,6 @@
     "outDir": "lib/types"
   },
   "include": ["src"],
-  "exclude": [
-    "src/client/pipeline.ts",
-    "src/client/TraceGraphView.tsx",
-    "src/client/WorkflowSection.tsx"
-  ],
   "references": [
     { "path": "../locale" },
     { "path": "../../../vendor/cordis" },
