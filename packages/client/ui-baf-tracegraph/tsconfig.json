@@ -5,10 +5,14 @@
     "outDir": "lib/types"
   },
   "include": ["src"],
+  "exclude": [
+    "src/client/pipeline.ts",
+    "src/client/TraceGraphView.tsx",
+    "src/client/WorkflowSection.tsx"
+  ],
   "references": [
     { "path": "../locale" },
     { "path": "../../../vendor/cordis" },
-    { "path": "../runtime" },
     { "path": "../ui-conversation" },
     { "path": "../ui-primitives" },
     { "path": "../ui-settings" },
@@ -16,6 +20,7 @@
     { "path": "../ui-trajectory" },
     { "path": "../ui-workflow-run" },
     { "path": "../../session/session-stats" },
-    { "path": "../../runtime-diagnostics/invariants" }
+    { "path": "../../runtime-diagnostics/invariants" },
+    { "path": "../../settings/settings" }
   ]
 }

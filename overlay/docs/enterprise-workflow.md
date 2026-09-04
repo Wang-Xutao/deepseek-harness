@@ -3,7 +3,7 @@
 > **读者**：BAF 实现工程师、企业落地负责人、dsh 维护者。
 > **目标**：把旧版「Claude Code + Comet + Superpowers + vibe + marketplace + hooks」的工作流指南，重构为 dsh 原生、可随桌面应用分发、可签名升级回滚的企业级 Agent 实施方案；工程师按本文档落地，不再做关键架构决策。
 > **用法**：第 0 章是导航；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
-> **对照基准**：仓库现状 2026-09-04（分支 `baf`；dsh `0.1.2-alpha.3`；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 已存在但仅品牌/IDE/帮助；`overlay/plugin` 当前仍把 preset **同步到 `~/.dsh/.agent-presets`（user trust）**——与第 4 章 system trust 目标冲突，属必须迁移的现状债）。
+> **对照基准**：仓库现状 2026-09-04（分支 `baf` 已合并 `upstream/master` 至 dsh `0.1.3-alpha.1`；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 已存在但仅品牌/IDE/帮助；`overlay/plugin` 当前仍把 preset **同步到 `~/.dsh/.agent-presets`（user trust）**——与第 4 章 system trust 目标冲突，属必须迁移的现状债）。
 > **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，并把 MVP 裁到「可发现 system preset + intake/projection + full-go 主链 + ToolGuard」，签名三 scope 更新可并行但不应挡主链。
 > **本文档完全取代**旧版面向 Claude Code 的建设指南：Comet、Superpowers、vibe workflow、Claude Code marketplace、`enabledPlugins`、Claude Code hooks 不再是新架构的组成部分。
 
