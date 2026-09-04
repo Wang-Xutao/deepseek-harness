@@ -48,3 +48,12 @@
 - splash 检测 PATH（及 Windows 常见安装目录）中 `code`（VS Code）与 `cursor` CLI；若可用，主界面右上角显示对应品牌图标（含空会话 Hero 态）；点击后以当前工作区路径打开该 IDE（无工作区则提示）。
 - 侧栏「设置」上方增加「帮助」；点击后在右侧加宽面板内嵌 MkDocs 站点（`/help/`），顶部可「在浏览器中打开」，可关闭回到对话。
 - 用户帮助源文档在 `overlay/docs/help/`；构建产物 `overlay/site/`，打包时同步到 Web 静态目录 `apps/web/dist/help/`。
+
+## 需求 4：企业级 BAF 模式（preset + go 工作流 + baseline + 受控分发）
+
+状态：设计已定稿于 [enterprise-workflow.md](../enterprise-workflow.md)；实现按该文档第 12 章分 Phase，第 17 章 MVP 裁剪。
+
+- 官方 BAF 必须以 system trust 发现，禁止长期依赖同步到 `~/.dsh/.agent-presets`。
+- BAF `go` 是 domain 状态机，不是 dsh `workflow`/`ralph` 脚本编排。
+- `baf` CLI 经 `dsh --profile …`（或 thin wrapper），不新增独立 Node 应用 bin。
+- 第一期：C + OpenSpec + intake/full-go/fast-path + ToolGuard + 签名更新；不接 GitLab/Jira/Python/知识库。
