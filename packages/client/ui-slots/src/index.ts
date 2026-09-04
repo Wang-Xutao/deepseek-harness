@@ -14,8 +14,10 @@
  * consumer merges keys in and the intersection is what keeps them string-typed.
  * The rule fires on the empty-map view, not on real redundancy. */
 import type { ReactNode } from 'react'
-import type { HostObservable } from './renderer.ts'
-import type { BoundActions, HandleOf, PropsStore, SnapshotSelectorHook, StoreDecl } from './store.ts'
+import type {
+  BoundActions, HandleOf, PropsStore, SnapshotSelectorHook, StoreDecl,
+} from '@deepseek-ai/dsh-client-store'
+import type { HostObservable, KeyedStandardSource } from './renderer.ts'
 
 export * from './store.ts'
 export * from './renderer.ts'
@@ -57,7 +59,7 @@ export type LocaleKeysOf<N extends keyof LocaleNamespaceMap & string> =
   (LocaleNamespaceMap[N] & string) | CommonKeyOf
 
 /**
- * Namespace-addressed translate â€?the developer-facing alias over
+ * Namespace-addressed translate â€” the developer-facing alias over
  * {@link Translate}: `TranslateNS<'model'>` is the translate function of the
  * `model` namespace (key domain = its dictionary union plus the shared
  * common vocabulary), the exact type of the framework-injected `t` seat and
@@ -67,7 +69,7 @@ export type TranslateNS<N extends keyof LocaleNamespaceMap & string> = Translate
 
 /**
  * Dictionary shape for a declared namespace: exactly the keys the namespace
- * merged into {@link LocaleNamespaceMap} â€?a missing or extra key at a typed
+ * merged into {@link LocaleNamespaceMap} â€” a missing or extra key at a typed
  * registration site is a compile error.
  */
 export type LocaleDictOf<N extends keyof LocaleNamespaceMap & string> =
@@ -94,7 +96,7 @@ export type SlotScope = 'root' | 'session-maybe' | 'session'
  * One SlotMap entry: kind/scope axes plus the optional owner-supplied props
  * share (`owner` is what the parent passes at its renderSlot call site; the
  * framework standard kit and the registrant's injected share never enter this
- * table â€?full component props compose at the component as the four-share
+ * table â€” full component props compose at the component as the four-share
  * intersection, see {@link ComposedProps}).
  */
 export interface SlotEntryDef {
@@ -177,28 +179,29 @@ export type ScopeOf<K extends keyof SlotMap & string> = SlotMap[K]['scope']
 
 /**
  * Framework standard kit delivered to every session-scope slot component.
- * Declared EMPTY here (zero-dependency layer): the runtime package merges the
- * real members (`useSession` bound to the conversation snapshot and the
- * framework-supplied `sessionId`) exactly as consumers merge SlotMap keys.
+ * Declared empty here (zero-dependency layer): `ui-session` merges the
+ * Session lifecycle hook, projection hook, and Session identity; domain UI
+ * adapters merge their own standard hooks exactly as consumers merge SlotMap keys.
  */
 export interface SessionStandardProps {}
 
 /**
  * Framework standard kit delivered to current-session-optional slots. Its
  * hooks stay callable while no session is selected and return `undefined`
- * until one becomes current; concrete members merge in at runtime packages.
+ * until one becomes current; `ui-session` and domain UI adapters merge the
+ * concrete members.
  */
 export interface SessionMaybeStandardProps {}
 
 /**
  * Framework standard kit delivered to EVERY slot component (the global seat).
- * Declared empty here; the runtime package merges the global object-layer
- * selector hooks that shared page composition consumes.
+ * Declared empty here; each owning UI adapter merges the global selector hooks
+ * that shared page composition consumes.
  */
 export interface GlobalStandardProps {}
 
 /**
- * The session id type as the runtime's SessionStandardProps merge declares it
+ * The session id type as `ui-session`'s SessionStandardProps merge declares it
  * (branded); falls back to `string` in programs without the merge (this
  * package's own tests).
  */
@@ -233,12 +236,14 @@ export interface RenderOpts<EntryKey extends string = string> {
 export interface ChainRenderOpts {
   /** The owner's fallback body, rendered when every entry's selector declines. */
   fallback?: ReactNode
+  /** Render only the owner fallback without resolving or dispatching the chain's scope. */
+  fallbackOnly?: boolean
   /**
    * Keep the fallback permanently mounted: an election hides it (wrapped,
    * display:none) instead of unmounting it, and the all-decline case shows it
-   * as-is â€?fallback-held state (composer drafts, DOM state) survives a
-   * takeover. Chain kind only. Sole consumer today: the
-   * 'conversation.composer' chain.
+   * as-is â€” fallback-held state (composer drafts, DOM state) survives a
+   * takeover. Chain kind only; the sole consumer is the
+   * `conversation.composer` chain.
    */
   overlay?: boolean
 }
@@ -250,7 +255,7 @@ export interface ChainRenderOpts {
  * return elects its entry
  * and becomes the component's `matched` prop; `null` passes to the next
  * entry; all-null falls to the owner's {@link ChainRenderOpts} fallback.
- * MUST be pure â€?a function of the owner props only, no external mutable
+ * MUST be pure â€” a function of the owner props only, no external mutable
  * reads, no side effects (the decline decision lives here, never in a
  * mounted component probing its own props).
  */
@@ -302,25 +307,18 @@ type RenderSlotFn<S extends keyof SlotMap & string> =
 export type MatchedShare<E extends SlotEntryDef, M> =
   E['kind'] extends 'chain' ? { matched: M } : object
 
-/**
- * Conversation-session selector hook alias for props contracts. Wide by
- * default at this dependency-inverted layer; the runtime narrows at its
- * export outlet (`UseSession<ConversationSnapshot>`).
- */
-export type UseSession<Snap extends object = object> = SnapshotSelectorHook<Snap>
-
-/** Props of the standard-kit SessionProvider seat (render-prop form). */
+/** Props of the standard-kit SessionProvider seat. */
 export interface SessionAreaProps {
   /** No-session body (also covers a current id whose session cannot be resolved). */
   empty?: (() => ReactNode) | undefined
-  /** Session body; the framework remounts it per session (key=sessionId). */
-  children: (sessionId: SessionIdOf) => ReactNode
+  /** Session body; the framework remounts it per session identity. */
+  children: ReactNode
 }
 
 /**
- * Framework-wired session area component. It subscribes to runtime-owned
- * session selection and is injected into entries that declare session-scoped
- * children; business code does not import it directly.
+ * Framework-wired session area component. `ui-session` supplies the current
+ * Controller binding through the renderer scope adapter; entries that declare
+ * session-scoped children receive this component without importing it.
  */
 export type SessionProviderComponent = (props: SessionAreaProps) => ReactNode
 
@@ -330,12 +328,13 @@ export type SessionProviderComponent = (props: SessionAreaProps) => ReactNode
  * `props.renderSlot` down); the authorizing identity stays the registering
  * entry. `__renders` is a phantom variance anchor (never materialized):
  * generic method signatures compare loosely across differing key unions, so
- * this contravariant marker is what actually enforces "component key set âŠ? * children declaration" at the register call site.
+ * this contravariant marker is what actually enforces "component key set âŠ†
+ * children declaration" at the register call site.
  */
 export type PropsRenderSlots<S extends keyof SlotMap & string> = {
   /**
    * Render a declared non-chain child slot (chain keys dispatch through
-   * `renderSlotChain` â€?their routing lives in entry selectors).
+   * `renderSlotChain` â€” their routing lives in entry selectors).
    * @param key - declared child key.
    * @param owner - owner props share for that key (decided at the render site).
    * @param opts - kind dispatch options.
@@ -375,6 +374,26 @@ export type SlotComponent<P> = (props: P) => ReactNode
  * not participate in render-occurrence context.
  */
 export type HooksSources = Record<string, HostObservable<unknown>>
+
+/** Registrant keyed-hooks compartment: stable key-to-observable resolvers. */
+export type KeyedHooksSources = Record<string, KeyedStandardSource>
+
+/** Selector Hook over an open family of keyed observable sources. */
+export type KeyedSnapshotSelectorHook<Snapshot> = {
+  /** @param key - source key. @returns the current value, or absence when the source is unavailable. */
+  (key: string): Snapshot | undefined
+  /**
+   * @param key - source key.
+   * @param selector - projection over the current keyed value.
+   * @param equal - optional selected-value equality.
+   * @returns the selected value.
+   */
+  <Selected>(
+    key: string,
+    selector: (value: Snapshot | undefined) => Selected,
+    equal?: (left: Selected, right: Selected) => boolean,
+  ): Selected
+}
 
 /** Framework-owned props visible while a slot-level contextual Hook is bound. */
 export type StandardPropsOf<K extends keyof SlotMap & string> =
@@ -422,13 +441,26 @@ export type PropsHooks<HS extends HooksSources> = {
   SnapshotSelectorHook<HS[N] extends HostObservable<infer T> ? T : never>
 }
 
+/** Selector-hook share synthesized from an entry inject keyed-hooks compartment. */
+export type PropsKeyedHooks<HS extends KeyedHooksSources> = {
+  [N in keyof HS & string as `use${Capitalize<N>}`]: KeyedSnapshotSelectorHook<
+    HS[N] extends (key: string) => HostObservable<infer T> | undefined ? T : never
+  >
+}
+
 /**
  * The component-side view of an inject face: the reserved `hooks`
  * compartment (when declared) arrives as bound `use<Name>` selector hooks;
  * every other member passes through verbatim.
  */
 export type InjectFace<I extends object> =
-  I extends { hooks: infer HS extends HooksSources } ? Omit<I, 'hooks'> & PropsHooks<HS> : I
+  I extends { hooks: infer HS extends HooksSources }
+    ? I extends { keyedHooks: infer KS extends KeyedHooksSources }
+      ? Omit<I, 'hooks' | 'keyedHooks'> & PropsHooks<HS> & PropsKeyedHooks<KS>
+      : Omit<I, 'hooks'> & PropsHooks<HS>
+    : I extends { keyedHooks: infer KS extends KeyedHooksSources }
+      ? Omit<I, 'keyedHooks'> & PropsKeyedHooks<KS>
+      : I
 
 /**
  * The composed component props intersection: runtime share (SlotMap) +
@@ -453,7 +485,7 @@ export type ComposedProps<
  * strict session slots receive a definite framework-resolved `sessionId`;
  * session-maybe slots receive the current id or `undefined`; a declared store
  * appends the baked `actions` (the same callbacks the component receives).
- * Business data access happens through the apply closure's ctx â€?no binding
+ * Business data access happens through the apply closure's ctx â€” no binding
  * object parameter exists.
  */
 export type InjectParams<K extends keyof SlotMap & string, H> =
@@ -483,22 +515,14 @@ export type KindOptions<
 > =
   SlotMap[K]['kind'] extends 'keyed' ? {
     key: EntryKey
-    /** Cell shadowing rank (ascending, default 0, lowest renders; same key + same priority throws â€?see {@link SlotCore.register}). */
+    /** Cell shadowing rank (ascending, default 0, lowest renders; same key + same priority throws â€” see {@link SlotCore.register}). */
     priority?: number
   }
     : SlotMap[K]['kind'] extends 'list' ? {
       id: string
       order?: number
       label?: SlotLabel
-      /**
-       * Optional sidebar/ledger glyph the registrant contributes for this
-       * cell (a React component, ref, or any taggable render target). Owners
-       * projecting rows decide how to render it; the registry stores it
-       * opaque so unrelated slot kinds do not have to thread an icon type
-       * they never consume.
-       */
-      icon?: unknown
-      /** Cell shadowing rank (ascending, default 0, lowest renders; same id + same priority throws â€?see {@link SlotCore.register}). */
+      /** Cell shadowing rank (ascending, default 0, lowest renders; same id + same priority throws â€” see {@link SlotCore.register}). */
       priority?: number
     }
       : SlotMap[K]['kind'] extends 'chain' ? {
@@ -510,7 +534,7 @@ export type KindOptions<
         : {
           /**
            * Cell shadowing rank (ascending, default 0, lowest renders; a
-           * same-priority second registration throws â€?see {@link SlotCore.register}).
+           * same-priority second registration throws â€” see {@link SlotCore.register}).
            */
           priority?: number
         }
@@ -518,7 +542,7 @@ export type KindOptions<
 /**
  * Compile-time presence check: an entry declaring children MUST consume
  * `renderSlot` (or `renderSlotChain` when its only children are chain slots)
- * â€?declaring is claiming; an entry that does not render its children should
+ * â€” declaring is claiming; an entry that does not render its children should
  * not declare them. Evaluates to an unsatisfiable intersection member naming
  * the declared keys when violated.
  */
@@ -549,7 +573,7 @@ type BaseOptions<
    * Dictionary namespace of this entry's copy. Declaring it puts the
    * framework-synthesized `t` seat (typed to the namespace's dictionary
    * union) on the component props; rendering requires an installed locale
-   * face â€?fails loud otherwise.
+   * face â€” fails loud otherwise.
    */
   locale?: N
   /** Registrant identity label for diagnostics (the runtime Service wrapper stamps the caller's fiber name). */
@@ -563,7 +587,7 @@ type BaseOptions<
  */
 export interface StoredEntry {
   component: unknown
-  options: { key?: string; id?: string; order?: number; label?: SlotLabel; priority?: number; icon?: unknown }
+  options: { key?: string; id?: string; order?: number; label?: SlotLabel; priority?: number }
   /** Chain routing selector (type-erased like `inject`; present exactly on chain-slot entries). */
   select?: ((owner: never) => unknown) | undefined
   /** Registrant business face; positional params derive from the declaration (sessionId?, actions?). */
@@ -612,7 +636,6 @@ interface ErasedOptions {
    * against the per-declaration InjectParams tuples. */
   inject?: ((...args: any) => Record<string, unknown>) | undefined
   registrant?: string | undefined
-  icon?: unknown | undefined
 }
 
 /**
@@ -672,7 +695,7 @@ export interface LiveSlotNode {
  * live in the runtime Service wrapper).
  *
  * The 'root' slot is the one a-priori declaration, seeded at construction
- * (single/root, declared by the framework) â€?the render tree's root hole.
+ * (single/root, declared by the framework) â€” the render tree's root hole.
  *
  * Change propagation contract: versions bump and {@link SlotCore.onMutate}
  * fires synchronously per mutation (registry state is consistent when they
@@ -686,7 +709,7 @@ export interface LiveSlotNode {
 export class SlotCore {
   private records = new Map<string, SlotRecord>()
   private mutateListeners = new Set<(key: string) => void>()
-  /** Shared-handle scope ledger: handle â†?the scope it first mounted under + live mount count. */
+  /** Shared-handle scope ledger: handle â†’ the scope it first mounted under + live mount count. */
   private handleScopes = new Map<object, { scope: SlotScope; count: number }>()
   // Dirty records, not keys: records are never removed, so holding the
   // reference skips a lookup (and an unreachable missing-record branch) at flush.
@@ -717,14 +740,14 @@ export class SlotCore {
    *
    * Load-time validation (misconfiguration fails loud; the render hot path
    * re-checks nothing): registering into an undeclared slot throws; declaring
-   * an already-declared child key throws (one declarer per slot â€?the message
+   * an already-declared child key throws (one declarer per slot â€” the message
    * names the first declarer); mounting one shared store handle under slots
-   * of different scopes throws. Kind constraints: keyed â€?missing `key`
-   * throws; list â€?missing `id` throws; chain â€?missing `select` throws (the
+   * of different scopes throws. Kind constraints: keyed â€” missing `key`
+   * throws; list â€” missing `id` throws; chain â€” missing `select` throws (the
    * selector is the entry's routing seat, see {@link ChainSelect}).
    *
-   * Shadowing (single/keyed/list): entries sharing one cell (single â€?the
-   * slot itself; keyed â€?same `key`; list â€?same `id`) coexist at distinct
+   * Shadowing (single/keyed/list): entries sharing one cell (single â€” the
+   * slot itself; keyed â€” same `key`; list â€” same `id`) coexist at distinct
    * priorities, sorted ascending with ties keeping registration order; the
    * cell's lowest live entry renders ({@link SlotCore.entriesOfSlot}). A
    * second registration at an occupied cell's exact priority (default 0)
@@ -733,7 +756,7 @@ export class SlotCore {
    *
    * Lifecycle: the disposer removes the contribution AND collapses every
    * declared child slot (child entries clear recursively; their stale
-   * disposers become no-ops) â€?one lifecycle axis, no dangling state.
+   * disposers become no-ops) â€” one lifecycle axis, no dangling state.
    *
    * @param options - registration options: target `name`, `children`
    * declaration table, `store` seat, `inject` business-face factory, kind
@@ -765,7 +788,7 @@ export class SlotCore {
   ): () => void
   /**
    * Inject-bearing overload: identical semantics to the overload above, plus
-   * the registrant's business face â€?`I` is inferred from the inject
+   * the registrant's business face â€” `I` is inferred from the inject
    * factory's return and joins the component's composed-props constraint
    * (factory parameters derive from the declaration, {@link InjectParams}).
    * @param options - registration options plus the `inject` business-face factory.
@@ -803,7 +826,7 @@ export class SlotCore {
     // clashes only at the exact priority: a different priority shadows.
     const priority = options.priority ?? 0
     const occupantHint = (occupant: StoredEntry) =>
-      `at priority ${priority}${occupant.registrant !== undefined ? ` (registered by ${occupant.registrant})` : ''} â€?register at a different priority to shadow it (lowest renders)`
+      `at priority ${priority}${occupant.registrant !== undefined ? ` (registered by ${occupant.registrant})` : ''} â€” register at a different priority to shadow it (lowest renders)`
     switch (spec.kind) {
       case 'single': {
         const occupant = rec.entries.find(e => (e.options.priority ?? 0) === priority)
@@ -844,7 +867,7 @@ export class SlotCore {
       const pinned = this.handleScopes.get(options.store)
       if (pinned && pinned.scope !== spec.scope) {
         throw new Error(
-          `store handle mounted under "${options.name}" (scope "${spec.scope}") is already mounted under scope "${pinned.scope}" â€?one handle, one scope`)
+          `store handle mounted under "${options.name}" (scope "${spec.scope}") is already mounted under scope "${pinned.scope}" â€” one handle, one scope`)
       }
       if (pinned) pinned.count += 1
       else this.handleScopes.set(options.store, { scope: spec.scope, count: 1 })
@@ -858,7 +881,6 @@ export class SlotCore {
         ...(options.order !== undefined ? { order: options.order } : {}),
         ...(options.label !== undefined ? { label: options.label } : {}),
         ...(options.priority !== undefined ? { priority: options.priority } : {}),
-        ...(options.icon !== undefined ? { icon: options.icon } : {}),
       },
       ...(options.select !== undefined ? { select: options.select } : {}),
       ...(options.inject !== undefined ? { inject: options.inject } : {}),
@@ -869,7 +891,7 @@ export class SlotCore {
     }
     const next = [...rec.entries, entry]
     // Stable sorts: priority ascending for every kind, ties keep registration
-    // sequence â€?a cell's winner is its first occurrence, chain tries lower
+    // sequence â€” a cell's winner is its first occurrence, chain tries lower
     // priority first. List refines equal priorities by explicit `order` so the
     // raw ledger keeps its display sequence for priority-less compositions.
     next.sort(spec.kind === 'list'
@@ -920,7 +942,7 @@ export class SlotCore {
 
   /**
    * Snapshot the registered entries for a key. Returns the cached array
-   * reference (stable between mutations â€?safe as a uSES getSnapshot source);
+   * reference (stable between mutations â€” safe as a uSES getSnapshot source);
    * empty for keys not (or no longer) declared, so renderers may probe ahead
    * of plugin load order.
    * @param key - slot key (dynamic: the render machinery holds keys as strings).
@@ -932,12 +954,12 @@ export class SlotCore {
 
   /**
    * Project a key's entries to its shadowing winners: the first live
-   * (non-abdicated) entry of each cell in priority order â€?single: the slot
+   * (non-abdicated) entry of each cell in priority order â€” single: the slot
    * is one cell; keyed: one cell per `key`; list: one cell per `id` (winners
    * keep ledger sequence; list renderers still refine display by `order`).
    * Chain keys return the raw entries unchanged: election consumes every
    * entry, shadowing does not apply. The raw {@link SlotCore.entries} view
-   * stays the inspection surface. Builds a fresh array per call â€?a render
+   * stays the inspection surface. Builds a fresh array per call â€” a render
    * body read, not a uSES getSnapshot source.
    * @param key - slot key (dynamic: the render machinery holds keys as strings).
    * @returns the winning entry per occupied cell (empty while undeclared).
@@ -970,7 +992,7 @@ export class SlotCore {
   }
 
   /**
-   * Dynamic-key escape hatch for spec lookup â€?renderers resolving keys they
+   * Dynamic-key escape hatch for spec lookup â€” renderers resolving keys they
    * only hold as strings (generic dispatch) use this wide form; statically
    * keyed callers use {@link SlotCore.spec}.
    * @param key - candidate slot key.
@@ -1078,7 +1100,7 @@ export class SlotCore {
 
   /**
    * Hook every mutation (the runtime Service wrapper bridges this to ctx.emit).
-   * Fires synchronously per mutation, unbatched â€?event semantics need one
+   * Fires synchronously per mutation, unbatched â€” event semantics need one
    * emission per change.
    * @param fn - called with the mutated key.
    * @returns unsubscribe.
@@ -1091,13 +1113,13 @@ export class SlotCore {
   /**
    * Renderer crash report from an entry boundary. Always notifies
    * {@link SlotCore.onEntryError} listeners; with `info.abdicate` set (the
-   * shadowing kinds â€?single/keyed/list) it first retires the entry from its
+   * shadowing kinds â€” single/keyed/list) it first retires the entry from its
    * cell, one-shot: the record's version bumps through the ordinary mutation
    * channel so outlets re-project onto the cell's next survivor, and a
    * repeat abdicating report no-ops entirely. Chain crashes report with
-   * `abdicate: false` â€?election alternatives resolve at select time, so the
+   * `abdicate: false` â€” election alternatives resolve at select time, so the
    * entry keeps its cell and only the notification fires. The registration
-   * itself stays on the ledger either way â€?raw {@link SlotCore.entries}
+   * itself stays on the ledger either way â€” raw {@link SlotCore.entries}
    * still lists the entry and its disposer keeps working.
    * @param key - slot key the entry rendered under.
    * @param entry - the crashed entry.
@@ -1116,7 +1138,7 @@ export class SlotCore {
 
   /**
    * Observe entry boundary crashes (every render-time entry failure the
-   * boundaries contain, abdicating or not) â€?the supervision seam for hosts
+   * boundaries contain, abdicating or not) â€” the supervision seam for hosts
    * mirroring contribution health. Fires synchronously per report, after the
    * registry mutated for abdicating crashes (same listener discipline as
    * {@link SlotCore.onMutate}).
@@ -1131,7 +1153,7 @@ export class SlotCore {
 
   /**
    * Cascade for a removed entry: release its store mount and collapse every
-   * child slot it declared â€?specs clear, contributions empty (their stale
+   * child slot it declared â€” specs clear, contributions empty (their stale
    * disposers no-op), recursively down the declaration tree. One lifecycle
    * axis: ledger rows, slots, contributions, and store mounts die together.
    */
