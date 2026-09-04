@@ -24,14 +24,14 @@
  * materializing session, and the surviving file keeps the stable inode later
  * lockers verify against. The browser worker deployment stubs fs-ext to
  * immediate success: it is single-process, so the in-process write claim
- * already excludes every writer.
+ * already excludes every writer. Windows never loads `fs-ext` (koffi owns the
+ * lock), so packaging hosts that skip the native addon build still boot.
  * @module @deepseek-ai/dsh-session-persistence-jsonl/lease
  */
 
 import { mkdir, open, stat } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import { join } from 'node:path'
-import { flock } from 'fs-ext'
 import { SessionAlreadyOwnedError } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { acquireLockHandleWin32, releaseLockHandleWin32 } from './win32.ts'
@@ -44,8 +44,28 @@ type HeldLock =
   | { readonly kind: 'posix'; readonly handle: FileHandle }
   | { readonly kind: 'win32'; readonly handle: number }
 
+/**
+ * POSIX-only flock from `fs-ext`. Loaded on demand so Windows (and any
+ * packaged tree that skipped the native build) never evaluates the addon.
+ */
+type FlockFn = (
+  fd: number,
+  flags: 'exnb' | 'un',
+  callback: (error: NodeJS.ErrnoException | null) => void,
+) => void
+
+let flockImpl: FlockFn | undefined
+
+async function loadFlock(): Promise<FlockFn> {
+  if (flockImpl !== undefined) return flockImpl
+  const { flock } = await import('fs-ext')
+  flockImpl = flock as FlockFn
+  return flockImpl
+}
+
 /** Promise face over fs-ext's callback flock, pinned to its string-flag overload. */
-function flockAsync(fd: number, flags: 'exnb' | 'un'): Promise<void> {
+async function flockAsync(fd: number, flags: 'exnb' | 'un'): Promise<void> {
+  const flock = await loadFlock()
   return new Promise((resolve, reject) => {
     flock(fd, flags, (error) => {
       if (error) reject(error)

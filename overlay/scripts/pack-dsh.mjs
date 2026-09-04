@@ -338,6 +338,8 @@ const FORCE_PACKAGES = [
   'packages/util/home-paths',
   'packages/util/launch-environment',
   'packages/core/system-prompt',
+  // Windows packaging skips fs-ext native builds; the lease loads fs-ext only on POSIX.
+  'packages/session/session-persistence-jsonl',
 ]
 for (const rel of FORCE_PACKAGES) {
   copyWorkspacePackage(join(repoRoot, rel), nodeModulesRoot, true)

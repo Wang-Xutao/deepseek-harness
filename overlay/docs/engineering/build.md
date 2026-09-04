@@ -45,7 +45,7 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-
 npm run dist:dir
 ```
 
-本机若缺 Visual C++ / `fs-ext` 原生编译环境，仓库根请用 `pnpm install --ignore-scripts`；`pack-dsh` 已对 `pnpm deploy` 使用 `--ignore-scripts`。
+本机若缺 Visual C++ / `fs-ext` 原生编译环境，仓库根请用 `pnpm install --ignore-scripts`；`pack-dsh` 已对 `pnpm deploy` 使用 `--ignore-scripts`。Windows 上 session lease 不加载 `fs-ext`（用 koffi 信号量），因此跳过原生编译仍可启动。
 
 产物为 `overlay/desktop/dist/win-unpacked/baf-dsh.exe`（保留展开的 `resources/dsh/node_modules`，可直接双击）。本机仍需符合要求的 Node 以启动内嵌 `dsh web`。
 
