@@ -50,8 +50,6 @@ describe('trace-graph pipeline fold', () => {
           callTime: 1_050,
           content: [{ type: 'text', text: 'ok' }],
           isError: true,
-          callView: null,
-          resultView: null,
           subCalls: [],
         },
         {
@@ -135,8 +133,6 @@ describe('trace-graph pipeline fold', () => {
           callTime: 2_010,
           content: [{ type: 'text', text: 'file' }],
           isError: false,
-          callView: null,
-          resultView: null,
           subCalls: [],
         },
       ],
