@@ -9,7 +9,7 @@
 | `packages/client/ui-settings-general/` | 在「通用设置」末尾增加桌面关闭偏好（仅 Electron `window.bafDesktop` 时显示）。改源码后须 `bundle`，再 `pack-dsh` 打进安装包。 |
 | `packages/client/ui-settings-updates/` | 设置「版本与更新」页（order 25）；经 `window.bafDesktop` 调用桌面 UpdateService。ClientContext 取自 `@deepseek-ai/cordis`（上游已移除 `dsh-client-runtime`）。 |
 | `packages/client/ui-baf-desktop/` | Hero 尾标、IDE 打开按钮、帮助面板（iframe `/help/` + 浏览器打开）；依赖桌面 `window.bafDesktop`。ClientContext 取自 cordis。 |
-| `packages/client/ui-baf-tracegraph/` | 会话「轨迹图」Tab（**暂时从 `web-app` cordis.patch 卸下**）：client 半边在上游移除 `dsh-client-runtime` 后待重写（源码仍留在包内但 tsconfig exclude + client apply stub）；Host `baf-workflow` settings 命名空间仍注册。 |
+| `packages/client/ui-baf-tracegraph/` | 会话「轨迹图」Tab + 设置「工作流」开关：client 半边已迁到 `useChat`/`useTrajectory` + `LegacyConversationSlice`；Host 注册 `baf-workflow` settings 命名空间。 |
 | `packages/client/ui-conversation/` | Hero 文案与 `conversation.hero.brand.trailing` 槽位；空会话时仍浮显 `header.utilities`（IDE 打开按钮）。 |
 | `packages/client/ui-sidebar/src/client/SidebarRoot.tsx` | 侧栏品牌回退读取 `DSH_CLIENT_TITLE` / `DSH_CLIENT_BUILD_LABEL`（未设置时仍为「DSH Local Build」+ commit 徽标）。打包时由 `overlay/scripts/brand-web.mjs` 注入「BAF DSH」与 `v<version>`。 |
 | `packages/api/session-controller/` | `sessions.ensureOpen(id)`：打开历史窗口但不切换 `current`（轨迹图 inline 子 Session）。 |

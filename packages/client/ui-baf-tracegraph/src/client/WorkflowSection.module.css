@@ -151,7 +151,7 @@
 }
 
 .toggleThumb::before {
-  content: 'Ã—';
+  content: '\2713';
 }
 
 .toggle[data-state='on'] {
@@ -174,7 +174,7 @@
 }
 
 .toggle[data-state='on'] .toggleThumb::before {
-  content: 'âœ?;
+  content: '\2713';
 }
 
 .toggleLabel {
