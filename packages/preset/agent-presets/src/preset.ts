@@ -38,6 +38,11 @@ export interface AgentPreset {
    * up front with this reason instead of failing deep inside the loader.
    */
   readonly broken?: string
+  /**
+   * Whether authoring may copy this preset into a user root. Absent means
+   * allowed when the deployment is authorable. Official BAF sets `false`.
+   */
+  readonly copyable?: boolean
 }
 
 /** One directory scanned for preset subdirectories. */

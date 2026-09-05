@@ -347,10 +347,12 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                       <button
                         type="button"
                         className={css.iconButton}
-                        disabled={!state.authorable || row.broken !== undefined}
+                        disabled={!state.authorable || row.broken !== undefined || row.copyable === false}
                         data-tip={row.broken !== undefined
                           ? t('brokenNoCopy')
-                          : state.authorable ? t('duplicate') : t('duplicateUnavailable')}
+                          : row.copyable === false
+                            ? t('officialNoCopy')
+                            : state.authorable ? t('duplicate') : t('duplicateUnavailable')}
                         aria-label={`${t('duplicate')}: ${text.name}`}
                         onClick={() => { props.beginCopy(row.id) }}
                       >

@@ -1,0 +1,105 @@
+{
+  "$id": "https://deepseek-ai.local/dsh/baf/route-profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BafRouteProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["default", "allowed", "phases", "fallbackPolicy"],
+  "properties": {
+    "default": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 }
+      }
+    },
+    "allowed": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider", "model", "capabilities", "fallbackGroup"],
+        "properties": {
+          "provider": { "type": "string", "minLength": 1 },
+          "model": { "type": "string", "minLength": 1 },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "reasoning",
+                "coding",
+                "structured-output",
+                "long-context",
+                "tool-use",
+                "low-latency"
+              ]
+            }
+          },
+          "fallbackGroup": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "phases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intake",
+        "open",
+        "clarify",
+        "design",
+        "plan",
+        "implement",
+        "verify",
+        "archive"
+      ],
+      "properties": {
+        "intake": { "$ref": "#/$defs/phaseRoute" },
+        "open": { "$ref": "#/$defs/phaseRoute" },
+        "clarify": { "$ref": "#/$defs/phaseRoute" },
+        "design": { "$ref": "#/$defs/phaseRoute" },
+        "plan": { "$ref": "#/$defs/phaseRoute" },
+        "implement": { "$ref": "#/$defs/phaseRoute" },
+        "verify": { "$ref": "#/$defs/phaseRoute" },
+        "archive": { "$ref": "#/$defs/phaseRoute" }
+      }
+    },
+    "fallbackPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "groups"],
+      "properties": {
+        "mode": { "type": "string", "const": "approved-only" },
+        "groups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["provider", "model"],
+              "properties": {
+                "provider": { "type": "string", "minLength": 1 },
+                "model": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "phaseRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

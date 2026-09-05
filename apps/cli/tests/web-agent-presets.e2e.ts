@@ -222,9 +222,39 @@ describe('the shipped Web composition', () => {
   it('supplies both shipped presets, and only those, from the system root', async () => {
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id).sort()).toEqual(['cordis', 'minimal', 'ptc', 'standard'])
+    expect(listed.map(preset => preset.id).sort()).toEqual(['baf', 'cordis', 'minimal', 'ptc', 'standard'])
     expect(listed.every(preset => preset.trust === 'system')).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
+  })
+
+  it('composes `baf` like `standard` and exposes BAF skills', async () => {
+    const handle = await ctx.agents.create({
+      sessionId: SessionId(`preset-baf-${randomUUID()}`),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'baf').then(() => undefined),
+    })
+    try {
+      const tools = toolNames(ctx, handle.agent).filter(name => name !== 'glob' && name !== 'grep')
+      const expected = [
+        'ask_user_question', 'bash', 'create_goal', 'edit', 'exit_plan_mode',
+        'get_goal', 'interrupt_agent', 'job_kill', 'job_list', 'job_output', 'list_agents', 'ralph', 'read', 'read_image', 'send_message', 'skill',
+        'subagent', 'subagent_fork', 'todo_write', 'update_goal', 'web_fetch', 'web_search',
+        'workflow', 'write',
+      ].map(name => name === 'bash' && process.platform === 'win32' ? 'pwsh' : name)
+        .toSorted((left, right) => left.localeCompare(right))
+      expect([...tools].toSorted((left, right) => left.localeCompare(right))).toEqual(expected)
+      const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+      expect(assembly.sections.some(section =>
+        section.name.includes('persona')
+        && section.text.includes('BAF 企业编码 Agent')
+        && section.text.includes('You are the BAF enterprise coding agent'))).toBe(true)
+      const scoped = (await ctx.skills.list({ scope: handle.agent })).map(skill => skill.name)
+      expect(scoped).toEqual(expect.arrayContaining(['baf-go', 'baf-c-guidance', 'baf-verification']))
+      expect((await ctx.skills.list()).map(skill => skill.name)).not.toEqual(
+        expect.arrayContaining(['baf-go', 'baf-c-guidance', 'baf-verification']),
+      )
+    } finally {
+      await handle.dispose()
+    }
   })
 
   it('composes the full agent from `standard`', async () => {

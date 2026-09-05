@@ -42,6 +42,11 @@ export interface PresetRow {
    * is where both of those live.
    */
   broken?: string
+  /**
+   * Whether the page may offer copy from this row. Absent means allowed when
+   * the deployment is authorable. Official BAF sets false.
+   */
+  copyable?: boolean
 }
 
 /** The copy dialog: a new id and optional display name over a fixed source. */
@@ -223,6 +228,7 @@ export class AgentPresetSectionController {
    */
   beginCopy(from: string): void {
     const row = this.store.getSnapshot().rows.find(candidate => candidate.id === from)
+    if (row?.copyable === false) return
     this.set({
       error: null,
       copy: { from, fromTitle: row?.name ?? from, id: '', name: '', saving: false, error: null },

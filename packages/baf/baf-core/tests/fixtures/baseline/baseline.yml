@@ -1,0 +1,65 @@
+# Fixture baseline for Phase 0–5. All enterprise-owned values are placeholders.
+# Do not treat this file as a production enterprise baseline.
+schema: 1
+baselineId: baf-baseline-c-2026.1
+bafCompatibility:
+  min: 0.1.0
+  max: 0.x
+workflow:
+  default: go
+  requireOpenSpec: true
+  bugFastPath:
+    allowed: true
+    maxScope: small-local
+    requireRegressionTest: true
+routeProfile:
+  default:
+    provider: <enterprise-tbd>
+    model: <enterprise-tbd>
+  allowed:
+    - provider: <enterprise-tbd>
+      model: <enterprise-tbd>
+      capabilities: [reasoning, coding, structured-output, long-context, tool-use, low-latency]
+      fallbackGroup: fixture-primary
+  phases:
+    intake: { provider: <enterprise-tbd>, model: <enterprise-tbd> }
+    open: { provider: <enterprise-tbd>, model: <enterprise-tbd> }
+    clarify: { provider: <enterprise-tbd>, model: <enterprise-tbd> }
+    design: { provider: <enterprise-tbd>, model: <enterprise-tbd> }
+    plan: { provider: <enterprise-tbd>, model: <enterprise-tbd> }
+    implement: { provider: <enterprise-tbd>, model: <enterprise-tbd> }
+    verify: { provider: <enterprise-tbd>, model: <enterprise-tbd> }
+    archive: { provider: <enterprise-tbd>, model: <enterprise-tbd> }
+  fallbackPolicy:
+    mode: approved-only
+    groups:
+      fixture-primary:
+        - provider: <enterprise-tbd>
+          model: <enterprise-tbd>
+openspec:
+  cli: <enterprise-tbd>
+  version: latest
+  root: openspec
+  changeRoot: openspec/changes
+  validate:
+    args: [<enterprise-tbd>]
+standard:
+  mattPocockRulesRef: <enterprise-tbd>
+stack:
+  language: c
+  compiler: gcc
+  build: <enterprise-tbd>
+  test: <enterprise-tbd>
+  coverage:
+    required: true
+    minimum: project-config
+  analyzers:
+    - <enterprise-tbd>
+guard:
+  secretScan: required
+  protectedPaths:
+    - <enterprise-tbd>
+  requireHumanConfirmation:
+    - scaffold
+    - archive
+    - abandon

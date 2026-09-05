@@ -21,6 +21,11 @@ export interface AgentPresetRow {
   readonly description?: string
   /** Why this preset cannot compose a session; absent when it can. */
   readonly broken?: string
+  /**
+   * Whether a client may offer copy-authoring from this row. Absent means
+   * copyable when the deployment is authorable. Official BAF sets `false`.
+   */
+  readonly copyable?: boolean
 }
 
 /** The roster one deployment currently supplies, with its authoring capability. */

@@ -172,6 +172,19 @@ describe('the preset list', () => {
     expect(duplicate.getAttribute('data-tip')).toBe(en.duplicateUnavailable)
   })
 
+  it('disables duplication for official BAF even when the deployment is authorable', () => {
+    renderSection({
+      rows: [
+        { id: 'standard', trust: 'system', isDefault: true, name: '标准模式' },
+        { id: 'baf', trust: 'system', isDefault: false, name: 'BAF 模式', copyable: false },
+      ],
+    })
+
+    const duplicate = within(rowFor('baf')).getByRole('button', { name: `${en.duplicate}: ${en.presetBafName}` })
+    expect(duplicate).toHaveProperty('disabled', true)
+    expect(duplicate.getAttribute('data-tip')).toBe(en.officialNoCopy)
+  })
+
   it('marks a broken custom preset: unselectable, uncopyable, still deletable', () => {
     const actions = renderSection({
       rows: [

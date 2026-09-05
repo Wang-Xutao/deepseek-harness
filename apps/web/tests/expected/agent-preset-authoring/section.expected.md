@@ -32,6 +32,16 @@
         - img
         - text: 复制
     - listitem:
+      - 'button "设为默认: BAF 模式"':
+        - text: BAF 模式 内置 企业级受控编码 Agent：intake 分类 + go 工作流 + OpenSpec + C 质量门禁 + 安全 guard。
+        - code: baf
+      - 'button "查看: BAF 模式"':
+        - img
+        - text: 查看
+      - 'button "复制: BAF 模式"':
+        - img
+        - text: 复制
+    - listitem:
       - 'button "设为默认: PTC 模式"':
         - text: PTC 模式 内置 功能完整的编码 Agent，但默认不提供 workflow 工具；其他工具通过 PTC 模式 SDK 呈现，让模型用一个 TypeScript 程序组合多步操作。
         - code: ptc

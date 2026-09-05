@@ -146,24 +146,21 @@ function showLaunchError(technical: string): void {
   dialog.showErrorBox(APP_NAME, userFacingLaunchError(technical))
 }
 
-/** Sync BAF plugin packs into ~/.dsh. Pack entries should use baf-prefixed ids to avoid clobbering user presets. */
+/** Sync optional plugin skills into ~/.dsh/skills. Official BAF presets are
+ * shipped inside dsh-agent-presets (system trust) and must NEVER be copied into
+ * ~/.dsh/.agent-presets (user trust). */
 function syncPluginIntoDshHome(): void {
   const root = pluginDir()
   const dshHome = join(homedir(), '.dsh')
-  const pairs: Array<[string, string]> = [
-    [join(root, 'agent-presets'), join(dshHome, '.agent-presets')],
-    [join(root, 'skills'), join(dshHome, 'skills')],
-  ]
-  for (const [from, to] of pairs) {
-    if (!existsSync(from)) continue
-    mkdirSync(to, { recursive: true })
-    // Copy each child so pack layout matches discovery (one child = one preset/skill).
-    for (const name of readdirSync(from)) {
-      if (name === '.gitkeep' || name === '.DS_Store') continue
-      const src = join(from, name)
-      const dest = join(to, name)
-      cpSync(src, dest, { recursive: true, force: true })
-    }
+  const from = join(root, 'skills')
+  const to = join(dshHome, 'skills')
+  if (!existsSync(from)) return
+  mkdirSync(to, { recursive: true })
+  for (const name of readdirSync(from)) {
+    if (name === '.gitkeep' || name === '.DS_Store') continue
+    const src = join(from, name)
+    const dest = join(to, name)
+    cpSync(src, dest, { recursive: true, force: true })
   }
 }
 

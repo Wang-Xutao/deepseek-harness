@@ -1,0 +1,151 @@
+# BAF baseline manifest schema (Phase 0 freeze).
+# Concrete tool names and thresholds use <enterprise-tbd> / fixture placeholders.
+# Runtime validation in Phase 2 uses zod derived from this contract.
+
+$id: https://deepseek-ai.local/dsh/baf/baseline.schema.yaml
+$schema: https://json-schema.org/draft/2020-12/schema
+title: BafBaselineManifest
+type: object
+additionalProperties: false
+required:
+  - schema
+  - baselineId
+  - bafCompatibility
+  - workflow
+  - routeProfile
+  - openspec
+  - standard
+  - stack
+  - guard
+properties:
+  schema:
+    type: integer
+    const: 1
+  baselineId:
+    type: string
+    minLength: 1
+    pattern: ^[a-z0-9][a-z0-9.-]*$
+  bafCompatibility:
+    type: object
+    additionalProperties: false
+    required: [min, max]
+    properties:
+      min:
+        type: string
+        minLength: 1
+      max:
+        type: string
+        minLength: 1
+  workflow:
+    type: object
+    additionalProperties: false
+    required: [default, requireOpenSpec, bugFastPath]
+    properties:
+      default:
+        type: string
+        const: go
+      requireOpenSpec:
+        type: boolean
+      bugFastPath:
+        type: object
+        additionalProperties: false
+        required: [allowed, maxScope, requireRegressionTest]
+        properties:
+          allowed:
+            type: boolean
+          maxScope:
+            type: string
+            enum: [single-file, small-local, cross-module, public-api]
+          requireRegressionTest:
+            type: boolean
+  routeProfile:
+    $ref: ./route-profile.schema.json
+  openspec:
+    type: object
+    additionalProperties: false
+    required: [cli, version, root, changeRoot, validate]
+    properties:
+      cli:
+        type: string
+        minLength: 1
+      version:
+        type: string
+        minLength: 1
+      root:
+        type: string
+        minLength: 1
+      changeRoot:
+        type: string
+        minLength: 1
+      validate:
+        type: object
+        additionalProperties: false
+        required: [args]
+        properties:
+          args:
+            type: array
+            items:
+              type: string
+  standard:
+    type: object
+    additionalProperties: false
+    required: [mattPocockRulesRef]
+    properties:
+      mattPocockRulesRef:
+        type: string
+        minLength: 1
+  stack:
+    type: object
+    additionalProperties: false
+    required: [language, compiler, build, test, coverage, analyzers]
+    properties:
+      language:
+        type: string
+        const: c
+      compiler:
+        type: string
+        minLength: 1
+      build:
+        type: string
+        minLength: 1
+      test:
+        type: string
+        minLength: 1
+      coverage:
+        type: object
+        additionalProperties: false
+        required: [required, minimum]
+        properties:
+          required:
+            type: boolean
+          minimum:
+            description: Numeric threshold or enterprise placeholder string.
+            oneOf:
+              - type: number
+                minimum: 0
+                maximum: 100
+              - type: string
+                minLength: 1
+      analyzers:
+        type: array
+        items:
+          type: string
+          minLength: 1
+  guard:
+    type: object
+    additionalProperties: false
+    required: [secretScan, protectedPaths, requireHumanConfirmation]
+    properties:
+      secretScan:
+        type: string
+        enum: [required, optional, off]
+      protectedPaths:
+        type: array
+        items:
+          type: string
+          minLength: 1
+      requireHumanConfirmation:
+        type: array
+        items:
+          type: string
+          enum: [scaffold, archive, abandon]

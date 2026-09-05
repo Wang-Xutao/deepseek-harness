@@ -38,7 +38,7 @@ import type SettingsService from '@deepseek-ai/dsh-settings'
 import type { SettingsScope } from '@deepseek-ai/dsh-settings'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { discoverPresets, SHIPPED_PRESET_ROOT, USER_PRESET_DIR } from './discovery.ts'
-import { copyComposition, deleteComposition, presetExists, readComposition } from './authoring.ts'
+import { copyComposition, deleteComposition, isPresetCopyable, presetExists, readComposition } from './authoring.ts'
 import { livePresetMounts, mountPreset, serviceForAgent, standingMountFor } from './mount.ts'
 import {
   fileComposition, mountedCompositionRows,
@@ -80,7 +80,7 @@ export {
   inactiveRows, leakedServices, livePresetMounts, mountPreset, serviceForAgent, standingMountFor,
   type JoinedPresetMount, type PresetMount,
 } from './mount.ts'
-export { copyComposition, deleteComposition, readComposition, writableRoot } from './authoring.ts'
+export { copyComposition, deleteComposition, isPresetCopyable, readComposition, writableRoot } from './authoring.ts'
 export { agentPresetProjectionDefinition } from './session.ts'
 export type { AgentPreset, Config, PresetRoot, PresetTrust } from './preset.ts'
 
@@ -246,7 +246,8 @@ export class AgentPresets extends TypertRemoteService {
    * @returns the presets, first-root-wins per id.
    */
   async list(): Promise<AgentPreset[]> {
-    return await discoverPresets(this.resolvedRoots, this.harnessBase)
+    return (await discoverPresets(this.resolvedRoots, this.harnessBase)).map(preset =>
+      isPresetCopyable(preset.id) ? preset : { ...preset, copyable: false as const })
   }
 
   /**
@@ -268,6 +269,7 @@ export class AgentPresets extends TypertRemoteService {
         ...preset.name === undefined ? {} : { name: preset.name },
         ...preset.description === undefined ? {} : { description: preset.description },
         ...preset.broken === undefined ? {} : { broken: preset.broken },
+        ...preset.copyable === false ? { copyable: false as const } : {},
       })),
       authorable: this.authorable,
     }

@@ -14,6 +14,10 @@ describe('presetDisplayText', () => {
       name: 't:presetStandardName',
       description: 't:presetStandardDescription',
     })
+    expect(presetDisplayText({ id: 'baf', trust: 'system', name: 'BAF 模式' }, t)).toEqual({
+      name: 't:presetBafName',
+      description: 't:presetBafDescription',
+    })
   })
 
   it('keeps user-authored metadata untranslated', () => {

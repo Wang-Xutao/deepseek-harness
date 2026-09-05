@@ -2,10 +2,88 @@
 
 > **读者**：BAF 实现工程师、企业落地负责人、dsh 维护者。
 > **目标**：把旧版「Claude Code + Comet + Superpowers + vibe + marketplace + hooks」的工作流指南，重构为 dsh 原生、可随桌面应用分发、可签名升级回滚的企业级 Agent 实施方案；工程师按本文档落地，不再做关键架构决策。
-> **用法**：第 0 章是导航；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
-> **对照基准**：仓库现状 2026-09-04（分支 `baf` 已合并 `upstream/master` 至 dsh `0.1.3-alpha.1`；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 已存在但仅品牌/IDE/帮助；`overlay/plugin` 当前仍把 preset **同步到 `~/.dsh/.agent-presets`（user trust）**——与第 4 章 system trust 目标冲突，属必须迁移的现状债）。
+> **用法**：第 0 章是导航；**文首「实现进度」是仓库实况（已完成 / 未完成）**；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
+> **对照基准**：仓库现状 2026-09-06（分支 `baf`；dsh `0.1.3-alpha.1`；桌面 **baf-dsh 0.0.6**）。**Phase 0–1 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 已存在但仅品牌/IDE/帮助；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**。
 > **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，并把 MVP 裁到「可发现 system preset + intake/projection + full-go 主链 + ToolGuard」，签名三 scope 更新可并行但不应挡主链。
 > **本文档完全取代**旧版面向 Claude Code 的建设指南：Comet、Superpowers、vibe workflow、Claude Code marketplace、`enabledPlugins`、Claude Code hooks 不再是新架构的组成部分。
+
+---
+
+## 实现进度（仓库实况 · 2026-09-06）
+
+> 本表是**当前仓库事实**，不是计划。设计正文（第 1–11、12 章步骤）仍描述目标态；实现时以本表为准判断「已做完什么」。
+
+### 总览
+
+| Phase | 目标 | 状态 |
+| --- | --- | --- |
+| **0** | 企业输入登记、错误码、兼容矩阵、route 核查、baseline schema/fixture、projection/change id 冻结 | **已完成** |
+| **1** | shipped `presets/baf`、`trust: system`、skills、locale、roster/authoring 测试与金标 | **已完成** |
+| 2 | `baf-core` 骨架 + baseline loader + adapter stub | **未开始** |
+| 3 | route resolver + 审计 | **未开始** |
+| 4 | intake + projection + transition | **未开始** |
+| 5 | full-go 各阶段 | **未开始** |
+| 6 | bug-fast-path / 升级 | **未开始** |
+| 7 | quality / standard / guard / scaffold | **未开始** |
+| 8 | slash / CLI profile / desktop bridge / 工作流 Tab | **未开始** |
+| 9 | 三 scope 更新、签名、managed system root（热更） | **未开始** |
+| 10 | release 门禁 | **未开始** |
+
+MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；当前仅到「roster 可发现官方 BAF」。
+
+### Phase 0 — 已完成明细
+
+| 项 | 状态 | 落点 |
+| --- | --- | --- |
+| `enterprise-inputs.md` | 已完成 | `overlay/docs/baf/enterprise-inputs.md`（OpenSpec/gcc/覆盖率已确认；其余多为 `unavailable`） |
+| `error-codes.md` | 已完成 | `overlay/docs/baf/error-codes.md` |
+| `compatibility-matrix.md` | 已完成 | `overlay/docs/baf/compatibility-matrix.md`（模板 + fixture 行） |
+| `route-notes.md` | 已完成 | `overlay/docs/baf/route-notes.md`（只读核查；缺口进 Phase 3） |
+| baseline / routeProfile schema | 已完成 | `packages/baf/baf-core/schema/*` |
+| fixture baseline | 已完成 | `overlay/plugin/standards/baf-baseline-c/` + `packages/baf/baf-core/tests/fixtures/baseline/` |
+| projection / change id 规则冻结 | 已完成 | 记入 `enterprise-inputs.md` §8 |
+| 包落点冻结 `packages/baf/` | 已完成 | 同上 |
+| InstalledVersions schema 2 字段映射登记 | 已完成 | `enterprise-inputs.md` §7（**实现代码仍属 Phase 9**） |
+| fixture 校验脚本 | 已完成 | `overlay/scripts/verify-baf-baseline-fixture.mjs`（`npm run verify-baf-baseline`） |
+
+### Phase 1 — 已完成明细
+
+| 项 | 状态 | 落点 |
+| --- | --- | --- |
+| `presets/baf/preset.yml` | 已完成 | `order: 2`；与 `ptc` 并列时按 id 排在 `standard` 后 |
+| `agent.cordis.yml` | 已完成 | 自 `standard` 复制；BAF persona **先中后英**；domain group **仅注释占位** |
+| skills `baf-go` / `baf-c-guidance` / `baf-verification` | 已完成 | preset skills 树；`skill-filesystem.customSkillDirs` 指向 `skills/` |
+| display / UI locale 键 | 已完成 | `presetBafName` / `presetBafDescription` |
+| `baf-roster.spec.ts` + shipped-root / display / locales | 已完成 | unit 已绿；**拒绝 copy 官方 baf** |
+| CLI e2e 列表 + **挂载冒烟**（工具目录 + BAF skills + persona） | 已完成 | `apps/cli/tests/web-agent-presets.e2e.ts` |
+| Web authoring/selection 金标 | 已手改 | `apps/web/tests/expected/agent-preset-*`；验收以设置页为准 |
+| 桌面不同步官方 preset 到 user root | 已完成 | `overlay/desktop/src/main.ts` 仅同步 `skills/` |
+| 官方 BAF 不可复制（API + UI） | 已完成 | `isPresetCopyable` / `copyable: false` / `officialNoCopy` |
+| 本地 `dist:dir` 产物 | 已打出 | `overlay/desktop/dist/win-unpacked/baf-dsh.exe`（含 shipped `presets/baf`） |
+| Agent Note | 已完成 | `.agents/notes/implemented/feature/2026-09-05-baf-system-preset`；内置-only 见同日后续 note |
+| `pack-dsh` 打包后复检注释 | 已完成 | `overlay/scripts/pack-dsh.mjs` |
+
+### 明确尚未完成（Phase 0/1 范围外或债）
+
+| 项 | 说明 |
+| --- | --- |
+| `packages/baf/baf-core` 运行时包 | 仅有 schema/fixture；无 `package.json` / zod loader（Phase 2） |
+| composition 启用 `baf-core` 等 rows | 仍为注释（Phase 2+） |
+| go 状态机 / intake / projection | 未实现（Phase 4–5） |
+| ToolGuard / quality / OpenSpec adapter | 未实现（Phase 5/7） |
+| slash / `baf` CLI profile / 工作流 Tab | 未实现（Phase 8） |
+| `overlay/plugin` → `~/.dsh/.agent-presets` 官方同步 | **已关闭**（桌面不同步 `agent-presets`；官方 BAF 仅 shipped） |
+| 更新签名强制 / InstalledVersions schema 2 代码 | 未实现（Phase 9） |
+| 企业输入真值（模型清单/公钥等） | 部分已填：OpenSpec=`latest`、编译器=`gcc`、覆盖率=`project-config`；其余仍 `unavailable` |
+
+### Phase 0/1 确认结论（2026-09-05）
+
+1. **`order: 2` 与 `ptc` 并列**：同意；roster 保持 `standard → baf → ptc → minimal → cordis`。
+2. **BAF persona**：中英双语，**先中后英**（已写入 `agent.cordis.yml`）。
+3. **企业输入**：OpenSpec 用 **latest**；C 编译器用 **gcc**；覆盖率阈值 **可在工程配置中配置**（baseline fixture 已登记）。
+4. **官方 BAF 交付**：**只能使用内置 BAF**；禁止同步到用户目录；**用户不允许修改**，亦**不允许复制**官方 BAF 成 user 快照（需求变更，已落地 API/UI）。
+5. **验收**：以「设置 → Agent 预设 → 见 BAF 模式（内置）」为准。
+6. **Ed25519**：正式密钥由企业另发；开发仅本地生成，不提交私钥。
 
 ---
 
@@ -13,9 +91,10 @@
 
 | 问题 | 看哪章 |
 | --- | --- |
+| **哪些已实现、哪些没有、有何待确认** | **文首「实现进度」与「确认结论」** |
 | 要做什么、给谁用、不做什么 | 第 1、2 章 |
 | 架构分几层、每层谁负责、复用哪些现有代码 | 第 3 章 |
-| 官方资源和用户复制品怎么隔离 | 第 4 章 |
+| 官方资源如何隔离（内置-only，不可复制） | 第 4 章 |
 | **工作流怎么走、每个节点做什么** | **第 5 章（核心）** |
 | 不同阶段怎么用不同模型 | 第 6 章 |
 | 企业规则和工具从哪里来 | 第 7 章 |
@@ -36,7 +115,7 @@
 
 1. **BAF `go` 工作流 ≠ dsh `workflow` 工具**：后者是模型编写编排脚本、扇出子代理的能力；前者是企业固定状态机，由 `baf-workflow` domain service 执行，禁止用 `tool-workflow`/`ralph` 脚本“实现”阶段转换。
 2. **独立 `baf` Node 应用入口违规**：dsh 只允许经 `dsh --profile …` 启动 Node 应用；`baf` CLI 必须是 profile/patch 或 thin wrapper，不能新增绕过 launcher 的 package bin。
-3. **现状债**：`overlay/plugin` 今日同步到 `~/.dsh/.agent-presets`（user trust）。企业版必须以 managed system root + shipped discovery 取代该路径，否则第 4/11/16 章全部落空。
+3. **官方 BAF 内置-only**：不得同步或复制到 `~/.dsh/.agent-presets`；用户不可修改、不可复制官方 `baf`（见第 4 章与文首确认结论）。
 
 ---
 
@@ -58,12 +137,11 @@
 BAF 面向企业同事。普通用户可以：
 
 - 选择和使用官方 BAF；
-- 查看官方 BAF 摘要；
-- 复制官方 BAF 形成自己的 user preset（独立快照，不跟随官方更新）；
-- 修改和删除自己的复制品。
+- 查看官方 BAF 摘要。
 
 普通用户不能：
 
+- 复制官方 BAF 到 user root（官方 BAF 为内置-only）；
 - 修改、删除、替换或覆盖官方 BAF；
 - 通过 user root 同名目录 shadow 官方 BAF；
 - 关闭企业硬门禁、签名校验、兼容性检查、审计或 rollback；
@@ -87,8 +165,9 @@ BAF 面向企业同事。普通用户可以：
 - 不再使用 Superpowers 这类重型外部编排框架；
 - 不保留 vibe workflow；BAF 选中后直接采用 `go`；
 - 不以 Claude Code marketplace、`enabledPlugins` 或 Claude Code hooks 作为运行时架构；
-- 不把官方 BAF 仅复制到 `~/.dsh/.agent-presets`；
-- 不在 workflow 代码中写死某个 OpenSpec 版本、某个 C 工具或某个覆盖率数字；
+- 不把官方 BAF 同步或复制到 `~/.dsh/.agent-presets`；
+- 不允许用户复制或修改官方 BAF；
+- 不在 workflow 代码中写死某个 OpenSpec 次版本号、某个覆盖率数字（OpenSpec 跟 latest；覆盖率读工程配置；编译器固定 gcc）；
 - 第一期不接 GitLab、Jira、远程知识库和 Python；
 - 第一期不自动 push、不提供强制 reset、不允许普通用户关闭官方安全门禁；
 - 第一期工作流 Tab 只做固定流程图展示和受控操作，不做拖拽式自定义编排。
@@ -124,7 +203,6 @@ BAF 不是：单独的一段 system prompt、单独的 `baf` 命令、单独的 
 | enterprise baseline | 提供规则、模板、工具路径、版本、阈值和 route profile | 是 |
 | workflow projection | 保存当前项目的可恢复阶段状态 | 可写，但必须由 domain service 维护 |
 | change intake 结果 | 每个 change 的分类、模式、理由和用户确认记录 | 可写，同上 |
-| user copy | 用户复制官方 preset 后产生的独立副本 | 用户可修改 |
 | update manifest | 描述可验证的升级内容、版本、hash 和签名 | 官方签名 |
 
 ### 2.3 与 dsh 原生「workflow」能力的边界（必读）
@@ -242,7 +320,7 @@ workflow tab   ─┘
 
 **推荐冻结**：domain 插件进 `packages/baf/`（pnpm workspace 已 glob `packages/*/*`）；若上游合入冲突面过大，再迁 `packages/experimental/` 并在 release 打包时显式纳入。`overlay/AGENTS.md`「优先 overlay」适用于桌面壳与安装器，**不**适用于必须进入 shipped preset root 与 Cordis composition 的 Agent 能力。
 
-**现状债（必须在 Phase 1/9 关闭）**：`overlay/plugin/README.md` 与桌面同步逻辑今日把 `agent-presets/*` 同步到 `~/.dsh/.agent-presets/`。企业方案改为：installer/plugin 更新写入 **managed system root**（只读挂载进 discovery），user 目录仅保留用户复制品。同步改 `overlay/docs/engineering/architecture.md` 与 `overlay/plugin/README.md`，避免两套事实。
+**现状（已关闭官方 user-root 同步）**：桌面启动只同步 `overlay/plugin/skills` → `~/.dsh/skills`；**不同步** `agent-presets`。官方 BAF 仅存在于 dsh shipped preset root。`overlay/plugin/README.md` 与 `overlay/docs/engineering/architecture.md` 与此一致。Phase 9 仍负责 managed system root 热更与签名，但不把官方 BAF 写入 user root。
 
 ---
 
@@ -252,23 +330,23 @@ workflow tab   ─┘
 
 | 层 | 来源 | dsh trust | 用户权限 |
 | --- | --- | --- | --- |
-| system/shipped | 桌面安装包或企业签名更新 | `system` | 可使用、查看摘要、复制；不可编辑、删除、覆盖 |
-| user | 用户复制、用户目录或允许的扩展 | `user` | 可按 dsh 规则编辑、删除、运行 |
+| system/shipped | 桌面安装包或企业签名更新 | `system` | 可使用、查看摘要；**不可复制、编辑、删除、覆盖** |
+| user | 用户自建或其他允许的扩展（**不含**官方 BAF） | `user` | 可按 dsh 规则编辑、删除、运行 |
 
-官方 BAF 必须在 shipped/managed system root 被发现为 `trust: system`。不能只同步到 `~/.dsh/.agent-presets`（该目录按现有语义属于 user root）。
+官方 BAF 必须在 shipped/managed system root 被发现为 `trust: system`。禁止同步到 `~/.dsh/.agent-presets`（user root）。官方 `baf` 的 `copyable` 为 `false`。
 
 ### 4.2 必须实现的边界规则
 
 1. user root 中与官方 `baf` 同名的目录不能 shadow 官方 BAF（现有 shipped-root-first 语义已保证，测试固化）；
 2. user plugin 不能覆盖官方 preset、插件、baseline 或 system resource；
-3. 复制 BAF 使用现有 copy-only authoring API（`packages/preset/agent-presets/src/authoring.ts`），写入 user root；
-4. 复制后 metadata 清除官方 name/order，UI 显示 user/custom；
-5. 官方更新不修改用户复制品；
+3. **禁止**通过 authoring API 复制官方 `baf`（`isPresetCopyable('baf') === false`）；UI 禁用复制并提示「仅内置」；
+4. 桌面不同步官方 `agent-presets` 到 user root；
+5. 官方更新不依赖、不触碰用户目录中的假冒 `baf`；
 6. system payload 和 user payload 使用不同目标目录和写入权限；
 7. zip 路径拒绝 `..`、绝对路径、符号链接逃逸和目录外写入；
 8. system resource 更新后重新执行 discovery、trust、composition health check；
 9. 官方资源缺失或损坏显示 broken system row，不静默隐藏；
-10. UI 不向普通用户提供编辑或打开官方 canonical 目录的入口。
+10. UI 不向普通用户提供编辑、打开官方 canonical 目录或复制官方 BAF 的入口。
 
 ### 4.3 host-plane 与 agent-plane
 
@@ -786,8 +864,7 @@ composition 从 standard 完整复制，替换 persona 为 BAF persona，追加 
 ### 10.2 preset roster UI（`packages/client/ui-agent-preset`）
 
 - BAF 显示为“内置”；standard 继续显示默认；
-- BAF 可选择、查看摘要和复制；不可删除、不显示打开官方目录；
-- 复制后显示 user/custom trust 和用户路径；
+- BAF 可选择、查看摘要；**不可复制、不可删除**、不显示打开官方目录；
 - broken system BAF 保留在列表并显示修复/升级提示；
 - default 改变只影响新 session；session 创建后 composition 固定；
 - 创造模式在企业发行版默认隐藏（是否显示由发行配置决定，不删 dsh 通用实现）。
@@ -1044,7 +1121,7 @@ order: 2
 
 - 新建 `packages/preset/agent-presets/tests/baf-roster.spec.ts`：断言 shipped roster 含 `baf`、`trust === 'system'`、`standard` 仍是 default、`baf` 排序在 standard 后、composition health 通过；
 - 检查并更新 `tests/{display,shipped-root,composition-inventory}.spec.ts` 中按 preset 枚举的快照/断言；
-- 新增 authoring 用例：复制 `baf` 写入 user root、复制后删除 user 副本允许、删除 system `baf` 抛 `agent-preset/read-only`、user 目录名 `baf` 不 shadow shipped。
+- 新增 authoring 用例：**拒绝**复制官方 `baf`、删除 system `baf` 抛 `agent-preset/read-only`、user 目录名 `baf` 不 shadow shipped；roster 对 `baf` 输出 `copyable: false`。
 
 #### 1.5 roster UI
 
@@ -1336,7 +1413,7 @@ export function resolveRoute(
 
 ### 14.1 Preset 和信任
 
-shipped roster 有 BAF 且 `trust === system`；standard 仍是 default；BAF 可选、可复制、不可删除；复制品写 user root 显示 user trust、修改不影响官方；user 同名不 shadow；broken system BAF 不隐藏；session 创建后 composition 固定、child 继承。
+shipped roster 有 BAF 且 `trust === system`、`copyable === false`；standard 仍是 default；BAF 可选、**不可复制**、不可删除；桌面不同步官方 preset 到 user root；user 同名不 shadow；broken system BAF 不隐藏；session 创建后 composition 固定、child 继承。
 
 ### 14.2 Workflow 和分类
 
@@ -1356,7 +1433,7 @@ protected path、workspace escape、路径穿越、危险命令、强制 Git、s
 
 ### 14.6 Command/UI/desktop
 
-slash、CLI、desktop、Tab 同输入同状态；`baf status/doctor/version/classify/update` 输出稳定；launcher flags 不被 BAF 污染；打包后真实应用能发现挂载 BAF；UI 区分 system BAF 与 user copy。
+slash、CLI、desktop、Tab 同输入同状态；`baf status/doctor/version/classify/update` 输出稳定；launcher flags 不被 BAF 污染；打包后真实应用能发现挂载 BAF；UI 将官方 BAF 标为内置且禁用复制。
 
 ### 14.7 Update/release
 
@@ -1387,9 +1464,9 @@ slash、CLI、desktop、Tab 同输入同状态；`baf status/doctor/version/clas
 
 同时满足以下条件才算企业可分发版本：
 
-- 官方 BAF 位于 shipped/managed system root，`trust: system`；
+- 官方 BAF 位于 shipped/managed system root，`trust: system`，**仅内置、不可复制、不可由用户修改**；
 - standard 仍是默认 preset；
-- 用户可复制 BAF，复制品是独立 user snapshot；
+- 桌面不把官方 BAF 同步到 `~/.dsh/.agent-presets`；
 - intake 分类、full-go、bug-fast-path、风险升级、转换表、resume、drift 全部按第 5 章可验证；
 - 工作流 Tab 流程图与 domain 状态一致，四个交互面共享同一 projection；
 - OpenSpec、企业 baseline、C quality 和 guard 通过统一 adapter 工作；

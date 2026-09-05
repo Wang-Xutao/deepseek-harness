@@ -12,7 +12,7 @@ import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { AgentPresetSectionController, draftBlocker } from '../src/client/section-store.ts'
 import type { CopyDraft, PresetRow } from '../src/client/section-store.ts'
 
-interface FakePreset { trust: 'system' | 'user'; content: string; name?: string }
+interface FakePreset { trust: 'system' | 'user'; content: string; name?: string; copyable?: boolean }
 interface Recorded { method: string; payload: unknown }
 
 interface FakeOptions {
@@ -68,6 +68,7 @@ function fakeCtx(
             presets: [...presets].map(([id, preset]) => ({
               id, trust: preset.trust, isDefault: id === defaultId.id,
               ...preset.name === undefined ? {} : { name: preset.name },
+              ...preset.copyable === false ? { copyable: false as const } : {},
             })),
             authorable: options.authorable ?? true,
           })
@@ -275,6 +276,18 @@ describe('the copy dialog', () => {
     expect(copyOf(controller)).toMatchObject({
       from: 'standard', fromTitle: '标准模式', id: '', name: '', saving: false,
     })
+  })
+
+  it('refuses to open the dialog for a non-copyable official row', async () => {
+    const { controller, presets } = harness()
+    presets.set('baf', {
+      trust: 'system', content: '- id: baf\n', name: 'BAF 模式', copyable: false,
+    })
+    await controller.load()
+
+    controller.beginCopy('baf')
+
+    expect(controller.store.getSnapshot().copy).toBeNull()
   })
 
   it('falls back to the source id when it published no name', async () => {

@@ -20,6 +20,18 @@ import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { METADATA_FILE, renderPresetMetadata } from './metadata.ts'
 import { PRESET_ID, type AgentPreset, type PresetRoot } from './preset.ts'
 
+/** Shipped presets that must stay built-in only — never copied into a user root. */
+const NON_COPYABLE_PRESET_IDS = new Set(['baf'])
+
+/**
+ * Whether a roster row may be offered as a copy source.
+ * @param presetId - stable preset id.
+ * @returns false for official BAF; true otherwise.
+ */
+export function isPresetCopyable(presetId: string): boolean {
+  return !NON_COPYABLE_PRESET_IDS.has(presetId)
+}
+
 /**
  * Refuse one authoring request the deployment does not allow.
  * @param presetId - what the caller tried to change, for the diagnostic.
@@ -130,6 +142,12 @@ export async function copyComposition(
   id: string,
   name?: string,
 ): Promise<string> {
+  if (!isPresetCopyable(source.id)) {
+    throw notWritable(
+      source.id,
+      'official BAF is built-in only and cannot be copied into a user preset',
+    )
+  }
   if (!PRESET_ID.test(id)) {
     const reason = `preset id ${JSON.stringify(id)} must match ${String(PRESET_ID)} — `
       + 'the id is a directory name, so anything else could escape the preset root'

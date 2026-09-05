@@ -5,10 +5,11 @@ export type AgentPresetSettingsKey =
   | 'error' | 'userTrust' | 'seatHint' | 'headerHint'
   | 'nav' | 'sectionIntro' | 'builtIn' | 'setDefault' | 'view'
   | 'presetStandardName' | 'presetStandardDescription'
+  | 'presetBafName' | 'presetBafDescription'
   | 'presetPtcName' | 'presetPtcDescription'
   | 'presetMinimalName' | 'presetMinimalDescription'
   | 'presetCordisName' | 'presetCordisDescription'
-  | 'duplicate' | 'duplicateUnavailable' | 'delete' | 'presetId' | 'presetIdPlaceholder' | 'copyOf'
+  | 'duplicate' | 'duplicateUnavailable' | 'officialNoCopy' | 'delete' | 'presetId' | 'presetIdPlaceholder' | 'copyOf'
   | 'displayName' | 'displayNamePlaceholder'
   | 'inUse' | 'noDescription' | 'builtInGroup' | 'customGroup'
   | 'brokenBadge' | 'brokenNoCopy' | 'switchRefused'
@@ -34,6 +35,9 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetStandardName: 'Standard mode',
   presetStandardDescription:
     'Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.',
+  presetBafName: 'BAF mode',
+  presetBafDescription:
+    'Enterprise controlled coding agent: intake classification, go workflow, OpenSpec, C quality gates, and security guard.',
   presetPtcName: 'PTC mode',
   presetPtcDescription:
     'Full coding agent without the workflow tool; other tools are exposed through the PTC mode SDK so the model can combine multi-step operations in one TypeScript program.',
@@ -45,6 +49,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
     'Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance.',
   duplicate: 'Duplicate',
   duplicateUnavailable: 'This deployment has no writable preset directory',
+  officialNoCopy: 'Official BAF is built-in only and cannot be duplicated',
   delete: 'Delete',
   presetId: 'Identifier',
   presetIdPlaceholder: 'my-agent',
@@ -95,6 +100,8 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   view: '查看',
   presetStandardName: '标准模式',
   presetStandardDescription: '功能完整的编码 Agent，支持文件编辑、Shell、文件与网页检索、Skills、计划、目标、子代理和工作流。',
+  presetBafName: 'BAF 模式',
+  presetBafDescription: '企业级受控编码 Agent：intake 分类 + go 工作流 + OpenSpec + C 质量门禁 + 安全 guard。',
   presetPtcName: 'PTC 模式',
   presetPtcDescription: '功能完整的编码 Agent，但默认不提供 workflow 工具；其他工具通过 PTC 模式 SDK 呈现，让模型用一个 TypeScript 程序组合多步操作。',
   presetMinimalName: '极简模式',
@@ -103,6 +110,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetCordisDescription: '用于创建自定义 Agent preset：具备标准模式的全部能力，并提供运行时检查、插件实验和 preset 创作指导。',
   duplicate: '复制',
   duplicateUnavailable: '此部署未配置可写的预设目录',
+  officialNoCopy: '官方 BAF 仅内置提供，不可复制',
   delete: '删除',
   presetId: '标识符',
   presetIdPlaceholder: 'my-agent',

@@ -22,7 +22,7 @@ baf-dsh.exe（原生标题栏，无系统菜单）
 ## 版本与更新
 
 - 本地版本：`%APPDATA%/baf-dsh/versions.json`（`bafDsh` / `dsh` / `bafPlugin`）。
-- 插件包：`%APPDATA%/baf-dsh/plugin/`（首次从安装包 `resources/plugin` 种子拷贝）；将 `agent-presets/*` / `skills/*` 同步到 `~/.dsh/.agent-presets/` 与 `~/.dsh/skills/`（建议使用 `baf-` 前缀 id）。
+- 插件包：`%APPDATA%/baf-dsh/plugin/`（首次从安装包 `resources/plugin` 种子拷贝）；仅将 `skills/*` 同步到 `~/.dsh/skills/`。官方 BAF preset **不**经此路径安装，也不写入 `~/.dsh/.agent-presets/`（仅内置于 dsh shipped root）。
 - 热更 runtime：`%APPDATA%/baf-dsh/runtime/`（若存在则优先于安装目录 `resources/dsh`）。
 - 通道：GitHub Release tag `baf-channel-stable` 的 `manifest.json`；版本资产挂在 `baf-dsh-v*` Release。公开仓无需 Token / 验签。
 - 设置页：`@deepseek-ai/dsh-client-ui-settings-updates`（「版本与更新」）。
