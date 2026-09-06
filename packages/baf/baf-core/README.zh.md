@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 摘要
 
-`dsh-baf-core` 是 BAF 企业模式的共享词汇与注册点。它加载并校验企业 baseline，暴露 adapter 合同（OpenSpec、C 工具链、guard、workflow），并提供 Phase 2 的 unavailable stub，让后续阶段在无真实工具时也能结构化失败。仅在官方 BAF preset 的 `bafCore` isolate 下挂载。
+`dsh-baf-core` 是 BAF 企业模式的共享词汇与注册点。它加载并校验企业 baseline，暴露 adapter 合同（OpenSpec、C 工具链、guard、workflow），提供 Phase 2 的 unavailable stub，并拥有 Phase 3 路由用的 `EnterpriseRoutePolicy` / `RouteStatusView` 类型。仅在官方 BAF preset 的 `bafCore` isolate 下挂载。
 
 ## 目录
 
@@ -27,8 +27,9 @@ kind: "package-reference"
 <a id="understand-the-implementation"></a>
 ## 实现说明
 
-- 类型：intake、workflow 节点/转换、projection 事件、domain result、错误码。
+- 类型：intake、workflow 节点/转换、projection 事件、domain result、错误码、`EnterpriseRoutePolicy`、`RouteStatusView`。
 - `baseline.ts`：zod schema + 语义检查（allowed 路由、fallback 组、BAF 版本范围）。
+- `route-policy.ts`：企业策略加载/解析与状态视图构建。
 - `adapters.ts`：稳定接口 + unavailable stub。
 - 服务键：`bafCore`。
 
@@ -37,4 +38,4 @@ kind: "package-reference"
 <a id="dev-note"></a>
 ## 开发备注
 
-工作流状态机、OpenSpec 执行与 ToolGuard 由后续 BAF 包实现。本包不执行外部工具，不写 projection 事件。
+工作流 projection 与 ToolGuard 由后续 BAF 包实现。路由解析/审计在 `dsh-baf-workflow`。本包不执行外部工具，不写 projection 事件。

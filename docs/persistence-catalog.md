@@ -247,6 +247,32 @@ Types: [TokenUsage](subsystems/llm-streaming.md)
 
 Source: [`packages/core/session/src/types.ts:299`](../packages/core/session/src/types.ts)
 
+### `baf/*`
+
+<a id="bafroute-resolved--log-only"></a>
+
+#### `baf/route-resolved` — log-only
+
+```ts persistence-catalog
+/**
+ * BAF route resolution identity for one phase turn.
+ * Required to rebuild which provider/model served model-visible requests
+ * under enterprise policy; not itself model-visible content.
+ * @param provider Resolved or attempted provider id.
+ * @param model Resolved or attempted model id.
+ * @param source Resolution source, or `failed` when the turn was blocked.
+ * @param phase Workflow node that requested the route.
+ * @param fallbackFrom Prior preferred route when fallback engaged.
+ * @param at ISO-8601 timestamp.
+ * @param sessionId Owning session id string.
+ * @param changeId Optional active change id.
+ * @param failureReason Stable failure summary when source is `failed`.
+ */
+'baf/route-resolved': RouteAuditEntry
+```
+
+Source: [`packages/baf/baf-workflow/src/route-audit.ts:45`](../packages/baf/baf-workflow/src/route-audit.ts)
+
 ### `command/*`
 
 <a id="commanddone--log-only"></a>

@@ -157,6 +157,9 @@ importers:
       '@deepseek-ai/dsh-baf-core':
         specifier: workspace:^
         version: link:../../packages/baf/baf-core
+      '@deepseek-ai/dsh-baf-workflow':
+        specifier: workspace:^
+        version: link:../../packages/baf/baf-workflow
       '@deepseek-ai/dsh-base':
         specifier: workspace:^
         version: link:../../packages/bundle/base
@@ -999,6 +1002,34 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
 
+  packages/baf/baf-workflow:
+    dependencies:
+      '@deepseek-ai/dsh-baf-core':
+        specifier: workspace:^
+        version: link:../baf-core
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-group':
+        specifier: workspace:^
+        version: link:../../../vendor/group
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: workspace:^
+        version: link:../../../vendor/include
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:^
+        version: link:../../../vendor/loader
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+
   packages/boot/app-boot:
     dependencies:
       '@deepseek-ai/dsh-atomic-write':
@@ -1514,6 +1545,9 @@ importers:
       '@deepseek-ai/dsh-baf-core':
         specifier: workspace:^
         version: link:../../baf/baf-core
+      '@deepseek-ai/dsh-baf-workflow':
+        specifier: workspace:^
+        version: link:../../baf/baf-workflow
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:^
         version: link:../../client/connection

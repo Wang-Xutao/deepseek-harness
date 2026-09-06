@@ -258,12 +258,13 @@
   group: true
   isolate:
     bafCore: true
+    bafWorkflow: true
   config:
     - id: baf-core
       name: '@deepseek-ai/dsh-baf-core'
-# Phase 3+ 启用：
-#     - id: baf-workflow
-#       name: '@deepseek-ai/dsh-baf-workflow'
+    - id: baf-workflow
+      name: '@deepseek-ai/dsh-baf-workflow'
+# Phase 4+ 启用：
 #     - id: baf-openspec
 #       name: '@deepseek-ai/dsh-baf-openspec'
 #     - id: baf-standard

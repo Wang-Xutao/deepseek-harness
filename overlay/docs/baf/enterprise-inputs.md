@@ -45,12 +45,12 @@
 
 | 字段 | 消费者 | 当前值 | 决定人 | 冻结版本 |
 | --- | --- | --- | --- | --- |
-| allowed provider/model 清单 | baf-workflow route | unavailable | | |
-| 能力标签（reasoning / coding / structured-output 等） | route resolver | unavailable | | |
-| fallback group 定义 | route resolver / baseline `routeProfile.fallbackPolicy` | unavailable | | |
-| route policy 版本号 | RouteStatusView / 审计 | unavailable | | |
-| session override 是否允许（仅 allowed 内） | route resolver | unavailable | | |
-| 发行配置注入入口（settings / deployment） | Phase 3 接线 | 见 [route-notes.md](route-notes.md) | | |
+| allowed provider/model 清单 | baf-workflow route | unavailable（企业另发；fixture 见测试） | 企业 | Phase 3 合同已冻结 |
+| 能力标签（reasoning / coding / structured-output 等） | route resolver | 同 schema enum | 企业 | Phase 3 |
+| fallback group 定义 | route resolver / baseline `routeProfile.fallbackPolicy` | unavailable（企业另发） | 企业 | Phase 3 |
+| route policy 版本号 | RouteStatusView / 审计 | 字段 `version`（独立于 baseline） | 企业 | Phase 3 |
+| session override 是否允许（仅 allowed 内） | route resolver | 字段 `allowSessionOverride` | 企业 | Phase 3 |
+| 发行配置注入入口（settings / deployment） | Phase 3 接线 | **独立 policy 文件路径**（部署配置注入；session 创建冻结；非 baseline 内嵌） | 已冻结 | Phase 3 |
 
 ## 5. Baseline 与兼容
 

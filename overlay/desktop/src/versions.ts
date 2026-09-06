@@ -9,7 +9,7 @@ export type AppVersions = {
 }
 
 export const DEFAULT_VERSIONS: AppVersions = {
-  bafDsh: '0.0.7',
+  bafDsh: '0.0.8',
   dsh: '0.1.3-alpha.1',
   bafPlugin: '0.0.2',
 }

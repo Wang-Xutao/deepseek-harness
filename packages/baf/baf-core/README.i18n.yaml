@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/baf/baf-core/README.md
-README.md: b1aef2eb8c34e61e933e959bfd67669d8b10ce4c
-README.zh.md: 0b90c9daa8a69251f8241cc12bd1d6d2e583475c
+README.md: 253b9f055ae3959acfef1ae172b4b4aea257a122
+README.zh.md: 001883a6d3d8bf4c31bc3720421a23350eb09b0a

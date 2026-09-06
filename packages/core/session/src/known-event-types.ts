@@ -27,6 +27,7 @@ export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'approval/policy',
   'assistant/attempt',
   'assistant/message',
+  'baf/route-resolved',
   'command/done',
   'command/run',
   'compaction/end',

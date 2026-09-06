@@ -3,7 +3,7 @@
 > **读者**：BAF 实现工程师、企业落地负责人、dsh 维护者。
 > **目标**：把旧版「Claude Code + Comet + Superpowers + vibe + marketplace + hooks」的工作流指南，重构为 dsh 原生、可随桌面应用分发、可签名升级回滚的企业级 Agent 实施方案；工程师按本文档落地，不再做关键架构决策。
 > **用法**：第 0 章是导航；**文首「实现进度」是仓库实况（已完成 / 未完成）**；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
-> **对照基准**：仓库现状 2026-09-06（分支 `baf`；dsh `0.1.3-alpha.1`；桌面 **baf-dsh 0.0.7**）。**Phase 0–2 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 已存在但仅品牌/IDE/帮助；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader 与 adapter stub。
+> **对照基准**：仓库现状 2026-09-06（分支 `baf`；dsh `0.1.3-alpha.1`；桌面 **baf-dsh 0.0.8**）。**Phase 0–3 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 已存在但仅品牌/IDE/帮助；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader 与 adapter stub；`baf-workflow` 已提供 `resolveRoute` 与 `baf/route-resolved` 审计。
 > **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，并把 MVP 裁到「可发现 system preset + intake/projection + full-go 主链 + ToolGuard」，签名三 scope 更新可并行但不应挡主链。
 > **本文档完全取代**旧版面向 Claude Code 的建设指南：Comet、Superpowers、vibe workflow、Claude Code marketplace、`enabledPlugins`、Claude Code hooks 不再是新架构的组成部分。
 
@@ -20,8 +20,8 @@
 | **0** | 企业输入登记、错误码、兼容矩阵、route 核查、baseline schema/fixture、projection/change id 冻结 | **已完成** |
 | **1** | shipped `presets/baf`、`trust: system`、skills、locale、roster/authoring 测试与金标 | **已完成** |
 | **2** | `baf-core` 骨架 + baseline loader + adapter stub | **已完成** |
-| 3 | route resolver + 审计 | **未开始** |
-| 4 | intake + projection + transition | **未开始** |
+| **3** | route resolver + 审计 | **已完成** |
+| 4 | intake + projection + transition（含工作流 Tab 可视化） | **未开始** |
 | 5 | full-go 各阶段 | **未开始** |
 | 6 | bug-fast-path / 升级 | **未开始** |
 | 7 | quality / standard / guard / scaffold | **未开始** |
@@ -29,7 +29,20 @@
 | 9 | 三 scope 更新、签名、managed system root（热更） | **未开始** |
 | 10 | release 门禁 | **未开始** |
 
-MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；当前仅到「roster 可发现官方 BAF」。
+MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；当前到「roster 可发现官方 BAF + baf-core + route resolver」。
+
+### Phase 3 — 已完成明细
+
+| 项 | 状态 | 落点 |
+| --- | --- | --- |
+| `EnterpriseRoutePolicy` 类型/schema/加载 | 已完成 | `baf-core` `route-policy.ts` + `schema/enterprise-route-policy.schema.json` |
+| 加载入口冻结 | 已完成 | **发行/部署配置路径**（独立文件，session 创建冻结）；登记见 `enterprise-inputs.md` / `route-notes.md` |
+| `resolveRoute()` | 已完成 | `packages/baf/baf-workflow/src/route.ts`；§6.2 边界测试 `tests/route.spec.ts` |
+| `baf/route-resolved` 审计 | 已完成 | `route-audit.ts`；session log 权威 |
+| `RouteStatusView` | 已完成 | `baf-core` `buildRouteStatusView`；`BafWorkflow.routeStatus()` |
+| 阶段 route → agent ModelSelection | 已完成 | `phase-route.ts`（主路径）；workflow `agent()` 仅扇出 |
+| composition 挂载 `baf-workflow` | 已完成 | `presets/baf/agent.cordis.yml`（`isolate.bafWorkflow`） |
+| 工作流 Tab UI | **延后** | 用户确认改到 Phase 4/8 与 projection 一并做 |
 
 ### Phase 0 — 已完成明细
 
@@ -38,7 +51,7 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；�
 | `enterprise-inputs.md` | 已完成 | `overlay/docs/baf/enterprise-inputs.md`（OpenSpec/gcc/覆盖率已确认；其余多为 `unavailable`） |
 | `error-codes.md` | 已完成 | `overlay/docs/baf/error-codes.md` |
 | `compatibility-matrix.md` | 已完成 | `overlay/docs/baf/compatibility-matrix.md`（模板 + fixture 行） |
-| `route-notes.md` | 已完成 | `overlay/docs/baf/route-notes.md`（只读核查；缺口进 Phase 3） |
+| `route-notes.md` | 已完成 | `overlay/docs/baf/route-notes.md`（Phase 0 核查 + Phase 3 接线） |
 | baseline / routeProfile schema | 已完成 | `packages/baf/baf-core/schema/*` |
 | fixture baseline | 已完成 | `overlay/plugin/standards/baf-baseline-c/` + `packages/baf/baf-core/tests/fixtures/baseline/` |
 | projection / change id 规则冻结 | 已完成 | 记入 `enterprise-inputs.md` §8 |
@@ -51,7 +64,7 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；�
 | 项 | 状态 | 落点 |
 | --- | --- | --- |
 | `presets/baf/preset.yml` | 已完成 | `order: 2`；与 `ptc` 并列时按 id 排在 `standard` 后 |
-| `agent.cordis.yml` | 已完成 | 自 `standard` 复制；BAF persona **先中后英**；domain group **仅注释占位** |
+| `agent.cordis.yml` | 已完成 | 自 `standard` 复制；BAF persona **先中后英**；domain group 挂载 `baf-core` + `baf-workflow` |
 | skills `baf-go` / `baf-c-guidance` / `baf-verification` | 已完成 | preset skills 树；`skill-filesystem.customSkillDirs` 指向 `skills/` |
 | display / UI locale 键 | 已完成 | `presetBafName` / `presetBafDescription` |
 | `baf-roster.spec.ts` + shipped-root / display / locales | 已完成 | unit 已绿；**拒绝 copy 官方 baf** |
@@ -67,11 +80,11 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；�
 
 | 项 | 说明 |
 | --- | --- |
-| `packages/baf/baf-core` 运行时包 | **已完成**（`@deepseek-ai/dsh-baf-core`；baseline loader + unavailable adapters） |
-| composition 启用 `baf-core` row | **已完成**（`isolate.bafCore`；其余 domain 仍注释） |
-| go 状态机 / intake / projection | 未实现（Phase 4–5） |
+| `packages/baf/baf-core` 运行时包 | **已完成**（`@deepseek-ai/dsh-baf-core`；baseline loader + unavailable adapters + RouteStatusView） |
+| composition 启用 `baf-core` / `baf-workflow` row | **已完成**（`isolate.bafCore` + `isolate.bafWorkflow`） |
+| go 状态机 / intake / projection | 未实现（Phase 4–5）；工作流 Tab 随 Phase 4/8 |
 | ToolGuard / quality / OpenSpec adapter | 未实现（Phase 5/7） |
-| slash / `baf` CLI profile / 工作流 Tab | 未实现（Phase 8） |
+| slash / `baf` CLI profile / desktop bridge | 未实现（Phase 8） |
 | `overlay/plugin` → `~/.dsh/.agent-presets` 官方同步 | **已关闭**（桌面不同步 `agent-presets`；官方 BAF 仅 shipped） |
 | 更新签名强制 / InstalledVersions schema 2 代码 | 未实现（Phase 9） |
 | 企业输入真值（模型清单/公钥等） | 部分已填：OpenSpec=`latest`、编译器=`gcc`、覆盖率=`project-config`；其余仍 `unavailable` |
@@ -887,7 +900,7 @@ locked / available / in-progress / completed / failed / blocked / drifted / skip
 
 **数据和刷新**：通过 desktop bridge/session projection 读取统一 `WorkflowStatus`；transition、分类确认、重试、resume、archive 均调同一 domain service；projection 更新后经现有事件/lifecycle 或受控轮询刷新，处理 session 重连、旧事件、取消和窗口重开；页面显示 `sourceRevision`、baseline lock、projection version 和最后更新时间；无 active change、多 change 未选、baseline 缺失或 projection 损坏时显示明确空态/阻断态。
 
-**实施边界**：UI 组件只做展示和交互适配；阶段判定、分类、OpenSpec 要求、前置条件、裁剪许可、drift、门禁和模型路由全部由 `baf-workflow`/`baf-core` 负责。第一期固定流程图，不做拖拽编排。`ui-baf-desktop` 负责 tab 容器、流程图、详情面板、更新/route/baseline 状态入口。
+**实施边界**：UI 组件只做展示和交互适配；阶段判定、分类、OpenSpec 要求、前置条件、裁剪许可、drift、门禁和模型路由全部由 `baf-workflow`/`baf-core` 负责。第一期固定流程图，不做拖拽编排。落地包：`packages/client/ui-baf-workflow/`（与 `ui-baf-desktop` 同层）；Phase 4 起与 projection 一并实现（用户确认工作流 Tab 不进 Phase 3）。
 
 ---
 

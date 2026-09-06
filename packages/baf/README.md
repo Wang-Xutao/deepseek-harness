@@ -12,5 +12,6 @@ BAF (enterprise coding agent) domain packages. Official preset composition lives
 | Package | Role |
 | --- | --- |
 | [`baf-core`](baf-core/README.md) | Shared types, baseline loader, adapter contracts, `bafCore` service |
+| [`baf-workflow`](baf-workflow/README.md) | Route resolver, route audit, `bafWorkflow` service (projection in Phase 4+) |
 
-Later phases add `baf-workflow`, `baf-openspec`, `baf-quality`, `baf-guard`, and related packages under this group.
+Later phases add `baf-openspec`, `baf-quality`, `baf-guard`, and related packages under this group.

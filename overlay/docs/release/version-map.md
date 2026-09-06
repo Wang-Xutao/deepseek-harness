@@ -12,3 +12,4 @@
 | 0.0.5（开发同步） | 0.1.3-alpha.1 | 0.0.1 | `baf` 合并 upstream 至 0.1.3-alpha.1；适配移除 `dsh-client-runtime`；企业工作流设计已定稿，尚未发桌面版号 |
 | 0.0.6 | 0.1.3-alpha.1 | 0.0.2 | Phase 0/1：官方 BAF shipped preset（仅内置、不可复制）；企业输入 OpenSpec latest / gcc / 覆盖率工程可配；桌面不同步 agent-presets 到 user root |
 | 0.0.7 | 0.1.3-alpha.1 | 0.0.2 | Phase 2：`@deepseek-ai/dsh-baf-core`（baseline loader、adapter stub、`bafCore` isolate 挂载） |
+| 0.0.8 | 0.1.3-alpha.1 | 0.0.2 | Phase 3：`@deepseek-ai/dsh-baf-workflow`（`resolveRoute`、`baf/route-resolved`、`RouteStatusView`） |

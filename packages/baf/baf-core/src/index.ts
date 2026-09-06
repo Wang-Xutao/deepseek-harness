@@ -22,6 +22,7 @@ export * from './events.ts'
 export * from './identity.ts'
 export * from './intake.ts'
 export * from './result.ts'
+export * from './route-policy.ts'
 export * from './workflow.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -87,7 +88,7 @@ export class BafCore extends Service {
    * @returns help summary.
    */
   help(): string {
-    return 'BAF core: baseline loader and adapter contracts. Use BAF mode for the go workflow (Phase 4+).'
+    return 'BAF core: baseline loader, adapter contracts, and RouteStatusView types. Use baf-workflow for resolveRoute.'
   }
 
   /**

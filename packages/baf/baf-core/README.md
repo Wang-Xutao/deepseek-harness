@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-baf-core` is the shared vocabulary and registration point for BAF enterprise mode. It loads and validates enterprise baselines, exposes adapter contracts (OpenSpec, C stack, guard, workflow), and ships Phase 2 unavailable stubs so later phases can fail loudly without real tools. Mount it only under the `bafCore` isolate in the official BAF preset.
+`dsh-baf-core` is the shared vocabulary and registration point for BAF enterprise mode. It loads and validates enterprise baselines, exposes adapter contracts (OpenSpec, C stack, guard, workflow), ships Phase 2 unavailable stubs, and owns `EnterpriseRoutePolicy` / `RouteStatusView` types for Phase 3 routing. Mount it only under the `bafCore` isolate in the official BAF preset.
 
 ## Table of Contents
 
@@ -27,8 +27,9 @@ Compose `@deepseek-ai/dsh-baf-core` inside an entry-local `cordis:group` with `i
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
-- Types: intake, workflow nodes/transitions, projection events, domain results, errors.
+- Types: intake, workflow nodes/transitions, projection events, domain results, errors, `EnterpriseRoutePolicy`, `RouteStatusView`.
 - `baseline.ts`: zod schema + semantic checks (allowed routes, fallback groups, BAF version range).
+- `route-policy.ts`: enterprise policy load/parse and status view builder.
 - `adapters.ts`: stable interfaces + unavailable stubs.
 - Service key: `bafCore`.
 
@@ -37,4 +38,4 @@ Frozen schemas live under `schema/`. Fixture baseline: `tests/fixtures/baseline/
 <a id="dev-note"></a>
 ## Dev Note
 
-Workflow state machine, OpenSpec execution, and ToolGuard land in later BAF packages. This package must not execute external tools or write projection events.
+Workflow state machine projection and ToolGuard land in later BAF packages. Route resolve/audit live in `dsh-baf-workflow`. This package must not execute external tools or write projection events.

@@ -77,7 +77,7 @@ describe('shipped BAF roster', () => {
       .filter(reason => reason !== undefined && !reason.includes('cannot be resolved'))).toEqual([])
   })
 
-  it('keeps a parseable composition with BAF persona and deferred domain comments', async () => {
+  it('keeps a parseable composition with BAF persona and Phase 3 domain services', async () => {
     const source = await readFile(join(SHIPPED_PRESET_ROOT, 'baf', 'agent.cordis.yml'), 'utf8')
     const entries: unknown = yaml.load(source, { schema: entryListSchema })
     expect(Array.isArray(entries)).toBe(true)
@@ -85,8 +85,11 @@ describe('shipped BAF roster', () => {
     expect(source).toContain('You are the BAF enterprise coding agent')
     expect(source).toContain("name: '@deepseek-ai/dsh-baf-core'")
     expect(source).toMatch(/^\s*- id: baf-core\s*$/m)
-    expect(source).toContain('Phase 3+ 启用')
-    expect(source).not.toMatch(/^\s*- id: baf-workflow\s*$/m)
+    expect(source).toContain("name: '@deepseek-ai/dsh-baf-workflow'")
+    expect(source).toMatch(/^\s*- id: baf-workflow\s*$/m)
+    expect(source).toContain('bafWorkflow: true')
+    expect(source).toContain('Phase 4+ 启用')
+    expect(source).not.toMatch(/^\s*- id: baf-openspec\s*$/m)
   })
 
   it('resolves built-in display keys for baf', () => {
