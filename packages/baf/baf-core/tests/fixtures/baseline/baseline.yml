@@ -1,4 +1,4 @@
-# Fixture baseline for Phase 0–5. All enterprise-owned values are placeholders.
+# Fixture baseline for Phase 0–5. Enterprise-owned route/tool values may be placeholders.
 # Do not treat this file as a production enterprise baseline.
 schema: 1
 baselineId: baf-baseline-c-2026.1

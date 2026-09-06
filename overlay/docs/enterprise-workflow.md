@@ -3,7 +3,7 @@
 > **读者**：BAF 实现工程师、企业落地负责人、dsh 维护者。
 > **目标**：把旧版「Claude Code + Comet + Superpowers + vibe + marketplace + hooks」的工作流指南，重构为 dsh 原生、可随桌面应用分发、可签名升级回滚的企业级 Agent 实施方案；工程师按本文档落地，不再做关键架构决策。
 > **用法**：第 0 章是导航；**文首「实现进度」是仓库实况（已完成 / 未完成）**；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
-> **对照基准**：仓库现状 2026-09-06（分支 `baf`；dsh `0.1.3-alpha.1`；桌面 **baf-dsh 0.0.6**）。**Phase 0–1 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 已存在但仅品牌/IDE/帮助；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**。
+> **对照基准**：仓库现状 2026-09-06（分支 `baf`；dsh `0.1.3-alpha.1`；桌面 **baf-dsh 0.0.7**）。**Phase 0–2 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 已存在但仅品牌/IDE/帮助；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader 与 adapter stub。
 > **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，并把 MVP 裁到「可发现 system preset + intake/projection + full-go 主链 + ToolGuard」，签名三 scope 更新可并行但不应挡主链。
 > **本文档完全取代**旧版面向 Claude Code 的建设指南：Comet、Superpowers、vibe workflow、Claude Code marketplace、`enabledPlugins`、Claude Code hooks 不再是新架构的组成部分。
 
@@ -19,7 +19,7 @@
 | --- | --- | --- |
 | **0** | 企业输入登记、错误码、兼容矩阵、route 核查、baseline schema/fixture、projection/change id 冻结 | **已完成** |
 | **1** | shipped `presets/baf`、`trust: system`、skills、locale、roster/authoring 测试与金标 | **已完成** |
-| 2 | `baf-core` 骨架 + baseline loader + adapter stub | **未开始** |
+| **2** | `baf-core` 骨架 + baseline loader + adapter stub | **已完成** |
 | 3 | route resolver + 审计 | **未开始** |
 | 4 | intake + projection + transition | **未开始** |
 | 5 | full-go 各阶段 | **未开始** |
@@ -67,8 +67,8 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；�
 
 | 项 | 说明 |
 | --- | --- |
-| `packages/baf/baf-core` 运行时包 | 仅有 schema/fixture；无 `package.json` / zod loader（Phase 2） |
-| composition 启用 `baf-core` 等 rows | 仍为注释（Phase 2+） |
+| `packages/baf/baf-core` 运行时包 | **已完成**（`@deepseek-ai/dsh-baf-core`；baseline loader + unavailable adapters） |
+| composition 启用 `baf-core` row | **已完成**（`isolate.bafCore`；其余 domain 仍注释） |
 | go 状态机 / intake / projection | 未实现（Phase 4–5） |
 | ToolGuard / quality / OpenSpec adapter | 未实现（Phase 5/7） |
 | slash / `baf` CLI profile / 工作流 Tab | 未实现（Phase 8） |
@@ -1093,7 +1093,7 @@ order: 2
 #   name: cordis:group
 #   group: true
 #   isolate:
-#     bafDomain: true
+#     bafCore: true
 #   config:
 #     - id: baf-core
 #       name: '@deepseek-ai/dsh-baf-core'

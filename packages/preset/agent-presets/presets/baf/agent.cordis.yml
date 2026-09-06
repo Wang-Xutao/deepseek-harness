@@ -253,15 +253,15 @@
     searchTimeoutMs: 60000
 
 # ── BAF domain（entry-local realm；桌面/CLI 经 session projection 读取状态）──
-# Phase 2 起启用：
-# - id: baf-domain
-#   name: cordis:group
-#   group: true
-#   isolate:
-#     bafDomain: true
-#   config:
-#     - id: baf-core
-#       name: '@deepseek-ai/dsh-baf-core'
+- id: baf-domain
+  name: cordis:group
+  group: true
+  isolate:
+    bafCore: true
+  config:
+    - id: baf-core
+      name: '@deepseek-ai/dsh-baf-core'
+# Phase 3+ 启用：
 #     - id: baf-workflow
 #       name: '@deepseek-ai/dsh-baf-workflow'
 #     - id: baf-openspec

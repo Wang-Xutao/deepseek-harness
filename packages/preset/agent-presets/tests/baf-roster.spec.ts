@@ -83,8 +83,10 @@ describe('shipped BAF roster', () => {
     expect(Array.isArray(entries)).toBe(true)
     expect(source).toContain('BAF 企业编码 Agent')
     expect(source).toContain('You are the BAF enterprise coding agent')
-    expect(source).toContain('Phase 2 起启用')
-    expect(source).not.toMatch(/^\s*- id: baf-core\s*$/m)
+    expect(source).toContain("name: '@deepseek-ai/dsh-baf-core'")
+    expect(source).toMatch(/^\s*- id: baf-core\s*$/m)
+    expect(source).toContain('Phase 3+ 启用')
+    expect(source).not.toMatch(/^\s*- id: baf-workflow\s*$/m)
   })
 
   it('resolves built-in display keys for baf', () => {
