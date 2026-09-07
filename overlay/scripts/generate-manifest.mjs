@@ -11,16 +11,20 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const overlayRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const desktopVersionPath = join(overlayRoot, 'desktop', 'VERSION')
 const desktopPkg = JSON.parse(readFileSync(join(overlayRoot, 'desktop', 'package.json'), 'utf8'))
 const repoRoot = join(overlayRoot, '..')
 const rootPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
 const pluginManifest = JSON.parse(
   readFileSync(join(overlayRoot, 'plugin', 'plugin-manifest.json'), 'utf8'),
 )
+const notes = JSON.parse(readFileSync(join(overlayRoot, 'desktop', 'version-notes.json'), 'utf8'))
 const outDir = join(overlayRoot, 'desktop', 'dist', 'update')
 mkdirSync(outDir, { recursive: true })
 
-const bafDsh = desktopPkg.version
+const bafDsh = existsSync(desktopVersionPath)
+  ? readFileSync(desktopVersionPath, 'utf8').trim()
+  : desktopPkg.version
 const dsh = rootPkg.version
 const bafPlugin = pluginManifest.version
 const tag = `baf-dsh-v${bafDsh}`
@@ -64,7 +68,7 @@ const manifest = {
   bafPlugin,
   minShell: bafDsh,
   force: false,
-  notesZh: process.env.BAF_RELEASE_NOTES_ZH ?? `baf-dsh ${bafDsh}`,
+  notesZh: process.env.BAF_RELEASE_NOTES_ZH ?? notes.desktop?.notesZh ?? `BAF DSH DESKTOP ${bafDsh}`,
   artifacts,
 }
 

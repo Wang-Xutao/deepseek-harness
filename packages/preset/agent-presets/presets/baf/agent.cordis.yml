@@ -252,6 +252,12 @@
     fetch: true
     searchTimeoutMs: 60000
 
+# Slash commands must sit outside the baf-domain isolate (same pattern as
+# command-goal): they register into the host `commands` service for this
+# standing mount. Handlers read the file-backed projection store by cwd.
+- id: baf-commands
+  name: '@deepseek-ai/dsh-baf-workflow/commands'
+
 # ── BAF domain（entry-local realm；桌面/CLI 经 session projection 读取状态）──
 - id: baf-domain
   name: cordis:group

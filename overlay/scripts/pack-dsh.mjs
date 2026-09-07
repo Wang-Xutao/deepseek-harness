@@ -196,6 +196,19 @@ function copyPackageFlat(packageDir, targetDir) {
   }
 }
 
+/**
+ * True when the package's package.json `main` entry is missing under target.
+ * Incomplete pnpm-deploy copies (e.g. types-only) must be overwritten from the workspace.
+ * @param {string} target
+ * @param {{ main?: unknown }} manifest
+ */
+function packageMainMissing(target, manifest) {
+  const main = typeof manifest.main === 'string' && manifest.main.length > 0
+    ? manifest.main
+    : 'index.js'
+  return !existsSync(join(target, main))
+}
+
 /** Copy one built workspace package into the deploy node_modules tree (no symlinks). */
 function copyWorkspacePackage(packageDir, nodeModulesRoot, force = false) {
   const manifestPath = join(packageDir, 'package.json')
@@ -205,10 +218,11 @@ function copyWorkspacePackage(packageDir, nodeModulesRoot, force = false) {
   if (typeof name !== 'string' || !name.startsWith('@deepseek-ai/')) return
 
   const target = join(nodeModulesRoot, ...name.split('/'))
-  if (existsSync(target) && !force) return
+  const incomplete = existsSync(target) && packageMainMissing(target, manifest)
+  if (existsSync(target) && !force && !incomplete) return
 
   copyPackageFlat(packageDir, target)
-  console.log(`+ peer/vendor ${name}`)
+  console.log(`+ peer/vendor ${name}${force || incomplete ? ' (force)' : ''}`)
 }
 
 /**
@@ -328,10 +342,14 @@ for (const app of readdirSync(join(repoRoot, 'apps'))) {
 
 const FORCE_PACKAGES = [
   'apps/web',
+  'packages/api/remotes',
   'packages/client/ui-settings-general',
   'packages/client/ui-settings-updates',
   'packages/client/ui-baf-desktop',
   'packages/client/ui-baf-tracegraph',
+  'packages/client/ui-baf-workflow',
+  'packages/baf/baf-core',
+  'packages/baf/baf-workflow',
   'packages/boot/app-boot',
   'packages/boot/cmdline',
   'packages/runtime-diagnostics/invariants',
@@ -354,6 +372,9 @@ const mustResolve = [
   '@deepseek-ai/dsh-web-app',
   '@deepseek-ai/dsh-web-frontend/dist/index.html',
   '@deepseek-ai/dsh-client-ui-trajectory',
+  '@deepseek-ai/dsh-client-ui-baf-workflow',
+  '@deepseek-ai/dsh-baf-core',
+  '@deepseek-ai/dsh-baf-workflow',
   '@deepseek-ai/dsh-agent-presets',
   '@deepseek-ai/dsh-scope',
   '@deepseek-ai/dsh-shell',
@@ -375,4 +396,34 @@ for (const pkg of mustResolve) {
 // Automated coverage lives in packages/preset/agent-presets/tests/baf-roster.spec.ts.
 
 writeFileSync(join(dest, '.baf-dsh-pack-ok'), new Date().toISOString())
+
+// Embed Settings「版本与更新」+ `/baf-version` fields. Desktop shell version
+// comes from desktop/VERSION (bump script source of truth).
+const desktopVersionPath = join(overlayRoot, 'desktop/VERSION')
+const desktopVersion = existsSync(desktopVersionPath)
+  ? readFileSync(desktopVersionPath, 'utf8').trim()
+  : JSON.parse(readFileSync(join(overlayRoot, 'desktop/package.json'), 'utf8')).version
+const notes = JSON.parse(readFileSync(join(overlayRoot, 'desktop/version-notes.json'), 'utf8'))
+const pluginManifest = JSON.parse(readFileSync(join(overlayRoot, 'plugin/plugin-manifest.json'), 'utf8'))
+const rootPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
+const bafCorePkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-core/package.json'), 'utf8'))
+const bafWorkflowPkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-workflow/package.json'), 'utf8'))
+writeFileSync(
+  join(dest, 'baf-product-versions.json'),
+  `${JSON.stringify({
+    bafDsh: desktopVersion,
+    dsh: rootPkg.version,
+    bafPlugin: pluginManifest.version,
+    bafCore: bafCorePkg.version,
+    bafWorkflow: bafWorkflowPkg.version,
+    bafDshNotes: notes.desktop?.notesZh ?? '',
+    dshNotes: notes.dsh?.notesZh ?? '',
+    bafCoreNotes: bafCorePkg.bafNotesZh ?? notes.packages?.['@deepseek-ai/dsh-baf-core']?.notesZh ?? '',
+    bafWorkflowNotes: bafWorkflowPkg.bafNotesZh
+      ?? notes.packages?.['@deepseek-ai/dsh-baf-workflow']?.notesZh
+      ?? '',
+    writtenAt: new Date().toISOString(),
+  }, null, 2)}\n`,
+)
+
 console.log(`packed dsh -> ${dest}`)

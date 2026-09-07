@@ -462,7 +462,7 @@ export function TraceGraphView({
   const detailStyle = { width: `${detailWidth}px` } as CSSProperties
 
   return (
-    <div className={css.root} data-trace-graph-view>
+    <div className={css.root} data-trace-graph-view data-conversation-composer-overlay="">
       <div className={css.stats} data-trace-graph-stats>
         <StatsCard
           accent="turns"

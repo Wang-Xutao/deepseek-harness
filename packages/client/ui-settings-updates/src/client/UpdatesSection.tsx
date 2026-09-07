@@ -1,7 +1,7 @@
 /**
  * Version and update settings section (desktop Electron only for actions).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   readBridge,
@@ -19,6 +19,25 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     'settings.updates': UpdatesSettingsKey
   }
+}
+
+function VersionRow(props: {
+  label: string
+  version: string | undefined
+  notes: string | undefined
+}): ReactElement {
+  const { label, version, notes } = props
+  return (
+    <li className={css.row}>
+      <div className={css.rowMain}>
+        <span className={css.label}>{label}</span>
+        <span className={css.value}>{version ?? '—'}</span>
+      </div>
+      {notes !== undefined && notes.length > 0 ? (
+        <p className={css.notes}>{notes}</p>
+      ) : null}
+    </li>
+  )
 }
 
 /**
@@ -95,25 +114,51 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
     }
   }
 
-  const canUpdate = check?.status === 'available' && busy === null
+  const updateAvailable = check?.status === 'available'
+  const canUpdate = updateAvailable && busy === null
+  const availablePlan = updateAvailable ? check.plan : undefined
+  const planRecord = availablePlan as (typeof availablePlan & {
+    manifest?: { bafDsh?: string; notesZh?: string }
+  }) | undefined
+  const targetVersion = planRecord === undefined
+    ? undefined
+    : (planRecord.targetBafDsh
+      ?? planRecord.manifest?.bafDsh
+      ?? planRecord.summaryZh)
+  const updateNotes = planRecord === undefined
+    ? undefined
+    : (planRecord.notesZh
+      || planRecord.manifest?.notesZh
+      || planRecord.summaryZh)
 
   return (
     <div className={css.section} data-testid="updates-section">
       <h2 className={css.title}>{t('title')}</h2>
       <p className={css.intro}>{t('intro')}</p>
       <ul className={css.rows}>
-        <li className={css.row}>
-          <span className={css.label}>{t('labelBaf')}</span>
-          <span className={css.value}>{versions?.bafDsh ?? '—'}</span>
-        </li>
-        <li className={css.row}>
-          <span className={css.label}>{t('labelDsh')}</span>
-          <span className={css.value}>{versions?.dsh ?? '—'}</span>
-        </li>
-        <li className={css.row}>
-          <span className={css.label}>{t('labelPlugin')}</span>
-          <span className={css.value}>{versions?.bafPlugin ?? '—'}</span>
-        </li>
+        <VersionRow
+          label={t('labelBaf')}
+          version={versions?.bafDsh}
+          notes={versions?.bafDshNotes}
+        />
+        <VersionRow
+          label={t('labelDsh')}
+          version={versions?.dsh}
+          notes={versions?.dshNotes}
+        />
+      </ul>
+      <h3 className={css.subtitle}>{t('packagesHeading')}</h3>
+      <ul className={css.rows}>
+        <VersionRow
+          label={t('labelBafCore')}
+          version={versions?.bafCore}
+          notes={versions?.bafCoreNotes}
+        />
+        <VersionRow
+          label={t('labelBafWorkflow')}
+          version={versions?.bafWorkflow}
+          notes={versions?.bafWorkflowNotes}
+        />
       </ul>
       <div className={css.actions}>
         <button
@@ -124,15 +169,31 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
         >
           {busy === 'check' ? t('checking') : t('check')}
         </button>
-        <button
-          type="button"
-          className={css.btnPrimary}
-          disabled={!canUpdate}
-          onClick={() => { void onUpdate() }}
-        >
-          {busy === 'update' ? t('updating') : t('update')}
-        </button>
+        {updateAvailable ? (
+          <button
+            type="button"
+            className={css.btnPrimary}
+            disabled={!canUpdate}
+            onClick={() => { void onUpdate() }}
+          >
+            {busy === 'update' ? t('updating') : t('update')}
+          </button>
+        ) : null}
       </div>
+      {updateAvailable ? (
+        <div className={css.updateCard} data-testid="update-available-card">
+          <p className={css.updateLine}>
+            <span className={css.updateLabel}>{t('updateTarget')}</span>
+            <span className={css.updateValue}>{targetVersion}</span>
+          </p>
+          {updateNotes !== undefined && updateNotes.length > 0 ? (
+            <p className={css.updateLine}>
+              <span className={css.updateLabel}>{t('updateNotes')}</span>
+              <span className={css.updateValue}>{updateNotes}</span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {progress ? <p className={css.status}>{t('progress')}：{progress}</p> : null}
       {message ? (
         <p className={check?.status === 'error' ? css.statusError : css.status}>{message}</p>

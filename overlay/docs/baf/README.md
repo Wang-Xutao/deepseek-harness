@@ -7,7 +7,7 @@
 | [enterprise-inputs.md](enterprise-inputs.md) | 企业待定值登记 + InstalledVersions 映射 + projection/change id 冻结 |
 | [error-codes.md](error-codes.md) | 稳定错误码与载荷 |
 | [compatibility-matrix.md](compatibility-matrix.md) | dsh / plugin / baseline 兼容矩阵模板 |
-| [route-notes.md](route-notes.md) | dsh 原生 route 边界只读核查（复用点 / Phase 3 缺口） |
+| [checklist-phase0-4.md](checklist-phase0-4.md) | Phase 0–4 人工验收清单（开发用，不进用户帮助 site） |
 
 Schema 与 fixture（仓库路径）：
 

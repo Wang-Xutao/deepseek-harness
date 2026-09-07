@@ -4,16 +4,37 @@
  */
 
 import type { ChangeIntake } from './intake.ts'
-import type { WorkflowNode } from './workflow.ts'
+import type { TerminalState, WorkflowNode } from './workflow.ts'
+
+/** Common envelope fields on every projection event. */
+export interface ProjectionEventBase {
+  /** Stable event id for idempotent append. */
+  readonly eventId: string
+  /** Monotonic sequence within one change log. */
+  readonly seq: number
+  /** ISO-8601 timestamp. */
+  readonly at: string
+}
 
 /** One projection log event. */
 export type ProjectionEvent =
-  | { type: 'intake-classified'; intake: ChangeIntake; at: string; seq: number }
-  | { type: 'intake-confirmed'; by: 'user' | 'rule'; at: string; seq: number }
-  | { type: 'stage-entered'; node: WorkflowNode; at: string; seq: number }
-  | { type: 'stage-completed'; node: WorkflowNode; artifacts: string[]; at: string; seq: number }
-  | { type: 'stage-failed'; node: WorkflowNode; reason: string; at: string; seq: number }
-  | { type: 'drift-detected'; node: WorkflowNode; cause: string; at: string; seq: number }
-  | { type: 'mode-upgraded'; from: 'bug-fast-path'; to: 'full-go'; cause: string; at: string; seq: number }
-  | { type: 'change-archived'; at: string; seq: number }
-  | { type: 'change-abandoned'; at: string; seq: number }
+  | (ProjectionEventBase & { type: 'intake-classified'; intake: ChangeIntake })
+  | (ProjectionEventBase & { type: 'intake-confirmed'; by: 'user' | 'rule' })
+  | (ProjectionEventBase & { type: 'stage-entered'; node: WorkflowNode })
+  | (ProjectionEventBase & { type: 'stage-completed'; node: WorkflowNode; artifacts: string[] })
+  | (ProjectionEventBase & { type: 'stage-failed'; node: WorkflowNode; reason: string })
+  | (ProjectionEventBase & { type: 'drift-detected'; node: WorkflowNode; cause: string })
+  | (ProjectionEventBase & {
+    type: 'mode-upgraded'
+    from: 'bug-fast-path'
+    to: 'full-go'
+    cause: string
+  })
+  | (ProjectionEventBase & { type: 'change-archived' })
+  | (ProjectionEventBase & { type: 'change-abandoned' })
+  | (ProjectionEventBase & {
+    type: 'transition-rejected'
+    from: WorkflowNode | null
+    to: WorkflowNode | TerminalState
+    reason: string
+  })

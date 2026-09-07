@@ -1,8 +1,12 @@
 /**
- * BAF workflow Cordis service (Phase 3: route resolve + audit; Phase 4+: projection).
+ * BAF workflow Cordis services.
+ *
+ * - {@link BafWorkflow}: agent-isolate domain (route + projection helpers).
+ * - Host Tab Remote lives in `@deepseek-ai/dsh-client-ui-baf-workflow`.
  *
  * Agent Note:
  * - .agents/notes/implemented/feature/2026-09-06-baf-workflow-phase3-route.md
+ * - .agents/notes/implemented/feature/2026-09-07-baf-workflow-phase4-projection-tab.md
  *
  * @module @deepseek-ai/dsh-baf-workflow
  */
@@ -20,6 +24,7 @@ import {
   type RouteResolution,
   type RouteStatusView,
   type WorkflowNode,
+  type WorkflowService,
 } from '@deepseek-ai/dsh-baf-core'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { resolveRoute } from './route.ts'
@@ -30,10 +35,18 @@ import {
   type RouteAuditEntry,
 } from './route-audit.ts'
 import { toModelSelection, toWorkflowAgentOptions } from './phase-route.ts'
+import { ProjectionStore } from './projection.ts'
+import { createWorkflowService, confirmIntake, rejectIntake } from './workflow-service.ts'
 
 export * from './route.ts'
 export * from './route-audit.ts'
 export * from './phase-route.ts'
+export * from './projection.ts'
+export * from './transition.ts'
+export * from './intake.ts'
+export * from './workflow-service.ts'
+export * from './tab-view.ts'
+export * from './metrics.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -42,12 +55,16 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Composition config for {@link BafWorkflow} (no tunables in Phase 3). */
+/** Composition config for {@link BafWorkflow}. */
 export interface Config {}
 
 /**
- * Owns frozen enterprise/profile route state and resolve+audit helpers.
- * Projection / transitions arrive in Phase 4.
+ * Owns frozen enterprise/profile route state, resolve+audit helpers, and a
+ * file-backed {@link WorkflowService} when a workspace root is known.
+ *
+ * Agent Note:
+ * - .agents/notes/implemented/feature/2026-09-06-baf-workflow-phase3-route.md
+ * - .agents/notes/implemented/feature/2026-09-07-baf-workflow-phase4-projection-tab.md
  */
 export class BafWorkflow extends Service {
   static Config: z<Config> = z.object({})
@@ -56,9 +73,56 @@ export class BafWorkflow extends Service {
   private routeProfile: RouteProfile | undefined
   private dshDefault: ModelRef | undefined
   private lastByPhase: Partial<Record<WorkflowNode, RouteResolution>> = {}
+  private store: ProjectionStore | undefined
+  private workflow: WorkflowService | undefined
 
   constructor(ctx: Context, _config: Config) {
     super(ctx, 'bafWorkflow')
+  }
+
+  /**
+   * Bind (or rebind) the projection store to a workspace root.
+   * @param workspaceRoot - absolute workspace path.
+   */
+  bindWorkspace(workspaceRoot: string): void {
+    this.store = new ProjectionStore({ workspaceRoot })
+    this.workflow = createWorkflowService({ store: this.store })
+  }
+
+  /**
+   * File-backed workflow service, or undefined when no workspace is bound.
+   * @returns service.
+   */
+  workflowService(): WorkflowService | undefined {
+    return this.workflow
+  }
+
+  /**
+   * Projection store, or undefined when no workspace is bound.
+   * @returns store.
+   */
+  projectionStore(): ProjectionStore | undefined {
+    return this.store
+  }
+
+  /**
+   * Confirm pending intake for a change.
+   * @param changeId - change id.
+   * @returns updated status.
+   */
+  async confirmIntake(changeId: string) {
+    const store = this.requireStore()
+    return confirmIntake(store, changeId, 'user')
+  }
+
+  /**
+   * Reject pending intake for a change.
+   * @param changeId - change id.
+   * @returns updated status.
+   */
+  async rejectIntake(changeId: string) {
+    const store = this.requireStore()
+    return rejectIntake(store, changeId)
   }
 
   /**
@@ -79,10 +143,11 @@ export class BafWorkflow extends Service {
   }
 
   /**
-   * Load enterprise policy from {@link Config.enterpriseRoutePolicyPath} then freeze with profile.
+   * Load enterprise policy from a file then freeze with profile.
    * @param profile - baseline route profile.
-   * @param path - override path; defaults to config path.
+   * @param path - policy file path.
    * @param dshDefault - optional catalog default.
+   * @returns loaded policy.
    */
   async freezeFromPolicyFile(
     profile: RouteProfile,
@@ -113,7 +178,7 @@ export class BafWorkflow extends Service {
       phase,
       sessionOverride,
       availability,
-      { dshDefault: this.dshDefault },
+      this.dshDefault === undefined ? {} : { dshDefault: this.dshDefault },
     )
     this.lastByPhase[phase] = resolution
     return resolution
@@ -121,7 +186,6 @@ export class BafWorkflow extends Service {
 
   /**
    * Resolve, append `baf/route-resolved`, and return the resolution.
-   * On failure, still appends a failed audit entry then rethrows.
    * @param session - session log writer.
    * @param phase - workflow node.
    * @param availability - catalog probe.
@@ -144,7 +208,7 @@ export class BafWorkflow extends Service {
         routeAuditFromResolution({
           resolution,
           sessionId: String(session.id),
-          changeId,
+          ...(changeId === undefined ? {} : { changeId }),
         }),
       )
       return resolution
@@ -161,7 +225,7 @@ export class BafWorkflow extends Service {
           phase,
           sessionId: String(session.id),
           failureReason,
-          changeId,
+          ...(changeId === undefined ? {} : { changeId }),
         }),
       )
       throw error
@@ -187,7 +251,7 @@ export class BafWorkflow extends Service {
   }
 
   /**
-   * Map resolution to agent ModelSelection (Phase 3.2 primary path).
+   * Map resolution to agent ModelSelection.
    * @param resolution - resolveRoute result.
    * @returns model selection.
    */
@@ -209,7 +273,7 @@ export class BafWorkflow extends Service {
    * @returns summary.
    */
   help(): string {
-    return 'BAF workflow: resolveRoute + route audit (Phase 3). Projection/transitions in Phase 4.'
+    return 'BAF workflow: resolveRoute, projection, intake, transition, and WorkflowTabView Remote.'
   }
 
   private requireFrozen(): { policy: EnterpriseRoutePolicy; profile: RouteProfile } {
@@ -220,6 +284,16 @@ export class BafWorkflow extends Service {
       })
     }
     return { policy: this.enterprisePolicy, profile: this.routeProfile }
+  }
+
+  private requireStore(): ProjectionStore {
+    if (this.store === undefined) {
+      throw new BafError('policy_missing', 'workspace root is not bound for projection', {
+        field: 'workspaceRoot',
+        consumer: 'BafWorkflow',
+      })
+    }
+    return this.store
   }
 }
 

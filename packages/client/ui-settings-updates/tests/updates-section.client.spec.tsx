@@ -32,20 +32,45 @@ describe('UpdatesSection', () => {
     expect(screen.getByText('desktopOnly')).toBeTruthy()
   })
 
-  it('loads versions and checks for updates on desktop', async () => {
+  it('hides Update until a check finds an available plan', async () => {
     const bridge: BafDesktopBridge = {
       isDesktop: true,
       getPrefs: async () => ({ closeAction: 'ask' }),
       setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
-      getVersions: async () => ({ bafDsh: '0.0.3', dsh: '0.1.0-rc.8', bafPlugin: '0.0.1' }),
+      getVersions: async () => ({
+        bafDsh: '0.0.8',
+        dsh: '0.1.3-alpha.1',
+        bafCore: '0.1.0',
+        bafWorkflow: '0.1.0',
+        bafDshNotes: 'desktop notes',
+        dshNotes: 'dsh notes',
+        bafCoreNotes: 'core notes',
+        bafWorkflowNotes: 'workflow notes',
+      }),
       checkForUpdate: async () => ({
-        status: 'up-to-date',
-        versions: { bafDsh: '0.0.3', dsh: '0.1.0-rc.8', bafPlugin: '0.0.1' },
+        status: 'available',
+        versions: {
+          bafDsh: '0.0.8',
+          dsh: '0.1.3-alpha.1',
+          bafCore: '0.1.0',
+          bafWorkflow: '0.1.0',
+        },
+        plan: {
+          summaryZh: '壳 0.0.8 → 0.0.9',
+          force: false,
+          targetBafDsh: '0.0.9',
+          notesZh: 'bug fixes',
+        },
         checkedAt: '2026-01-01T00:00:00.000Z',
       }),
       startUpdate: async () => ({
         ok: true,
-        versions: { bafDsh: '0.0.3', dsh: '0.1.0-rc.8', bafPlugin: '0.0.1' },
+        versions: {
+          bafDsh: '0.0.9',
+          dsh: '0.1.3-alpha.1',
+          bafCore: '0.1.0',
+          bafWorkflow: '0.1.0',
+        },
       }),
       getLastCheckResult: async () => null,
       onUpdateProgress: () => () => {},
@@ -53,11 +78,18 @@ describe('UpdatesSection', () => {
     window.bafDesktop = bridge
     render(<UpdatesSection {...kit} t={t as never} />)
     await waitFor(() => {
-      expect(screen.getByText('0.0.3')).toBeTruthy()
+      expect(screen.getByText('0.0.8')).toBeTruthy()
+      expect(screen.getByText('desktop notes')).toBeTruthy()
+      expect(screen.getByText('packagesHeading')).toBeTruthy()
     })
+    expect(screen.queryByRole('button', { name: 'update' })).toBeNull()
+
     fireEvent.click(screen.getByRole('button', { name: 'check' }))
     await waitFor(() => {
-      expect(screen.getByText('upToDate')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'update' })).toBeTruthy()
+      expect(screen.getByTestId('update-available-card')).toBeTruthy()
+      expect(screen.getByText('0.0.9')).toBeTruthy()
+      expect(screen.getByText('bug fixes')).toBeTruthy()
     })
   })
 })

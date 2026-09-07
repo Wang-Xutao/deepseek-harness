@@ -43,10 +43,11 @@
 | 复用点 | 用量归因不重做。 |
 | **Phase 3** | 每次 `resolveRoute()` 经 `resolveAndAudit` 追加 typed session 事件 `baf/route-resolved`；`.baf/audit/route.jsonl` 仍仅可选派生索引（未实现）。 |
 
-## 6. Phase 3 任务状态
+## 7. Phase 4 暴露选型（2026-09-07）
 
-1. ~~冻结 `EnterpriseRoutePolicy` 加载入口~~ → **部署配置路径 + 独立文件**（已登记）。
-2. ~~实现 `resolveRoute()`~~ → `packages/baf/baf-workflow/src/route.ts`。
-3. ~~阶段 turn 优先走 session/agent 请求级 API~~ → `phase-route.ts`；扇出可选 `toWorkflowAgentOptions`。
-4. ~~注册 `baf/route-resolved`；暴露 `RouteStatusView`~~ → 已完成。
-5. ~~测试覆盖 §6.2 边界~~ → `tests/route.spec.ts`。
+| 项 | 结论 |
+| --- | --- |
+| Domain | `ProjectionStore` + `WorkflowService` 在 `baf-workflow`；agent isolate 的 `BafWorkflow` 可 `bindWorkspace`。 |
+| Web UI | `packages/client/ui-baf-workflow` Host `bafWorkflowView` Typert Remote（按 session `cwd` 读写 projection）；**不进 root realm 的 go 状态机逻辑仍在 isolate / 文件投影**。 |
+| Electron IPC | 仍属 Phase 8。 |
+| 空态 | `buildEmptyTabView()` 渲染完整模板图。 |

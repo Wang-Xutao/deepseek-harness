@@ -4,6 +4,12 @@ export type DesktopVersions = {
   bafDsh: string
   dsh: string
   bafPlugin: string
+  bafCore?: string
+  bafWorkflow?: string
+  bafDshNotes?: string
+  dshNotes?: string
+  bafCoreNotes?: string
+  bafWorkflowNotes?: string
 }
 
 contextBridge.exposeInMainWorld('bafDesktop', {

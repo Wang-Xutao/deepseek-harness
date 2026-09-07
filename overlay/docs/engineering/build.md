@@ -49,6 +49,8 @@ npm run dist:dir
 
 产物为 `overlay/desktop/dist/win-unpacked/baf-dsh.exe`（保留展开的 `resources/dsh/node_modules`，可直接双击）。本机仍需符合要求的 Node 以启动内嵌 `dsh web`。
 
+`npm run dist:dir` 末尾会跑 `verify-desktop-dir-launch`：校验关键包 `lib/index.js` 已打入、从 `win-unpacked` 启动打包后的 `dsh web` 直至打印就绪 URL，并冒烟拉起 exe（`launch-error.log` 不得新增失败记录）。未通过则整次打包失败，不应把 exe 交给用户。
+
 #### 帮助页守卫
 
 `npm run dist` 与 `npm run dist:dir` 都已内置 `npm run docs:build && npm run verify-help-build` 守卫：
@@ -58,7 +60,7 @@ npm run dist:dir
 
 仅在手动跳过守卫（例如只重打安装包而 `apps/web/dist/help/` 已就绪）时省略；常规打包请直接用 `npm run dist` / `npm run dist:dir`。
 
-版本对照：改 `desktop/package.json` 的 `version` 时同步更新 [../release/version-map.md](../release/version-map.md)。
+版本对照：桌面版号以 `desktop/VERSION` 为准；发布前先执行 `npm run bump-desktop -- <X.Y.Z>`（同步 `package.json` / `version-notes.json`），再更新 [../release/version-map.md](../release/version-map.md)。
 
 用户帮助站（MkDocs）：
 
@@ -100,7 +102,7 @@ npm run release
 
 **方式 B — GitHub Actions（需账号 Actions 可用）**
 
-1. 在 `baf` 对齐三层版本与 version-map；`desktop/package.json` 的 version = 即将打的 tag 号。
+1. 在 `baf` 执行 `npm run bump-desktop -- <X.Y.Z>`，对齐 `desktop/VERSION` / package.json / version-notes / version-map；即将打的 tag = `baf-dsh-vX.Y.Z`。
 2. `git tag baf-dsh-vX.Y.Z && git push origin baf-dsh-vX.Y.Z`。
 3. Actions [baf-dsh-release.yml](../../.github/workflows/baf-dsh-release.yml) 构建并上传 Release，并刷新 `baf-channel-stable`。
 4. 可选 Secret：`BAF_UPDATE_PRIVATE_KEY_PEM`；公钥写入 `desktop/src/update/public-key.ts`（`node overlay/scripts/gen-update-keypair.mjs`）。

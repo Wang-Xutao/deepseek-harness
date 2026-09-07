@@ -24,7 +24,8 @@ export interface GenericCommandCardProps extends CommandRowOwnerProps {
 }
 
 export function GenericCommandCard({ node, t, runningSummary }: GenericCommandCardProps) {
-  const [expanded, setExpanded] = useState(false)
+  const isBafCommand = (node.name ?? '').startsWith('baf-')
+  const [expanded, setExpanded] = useState(isBafCommand)
   const text = node.outcome?.text
   const summary = node.outcome === null
     ? runningSummary ?? t('command.running')
@@ -34,7 +35,9 @@ export function GenericCommandCard({ node, t, runningSummary }: GenericCommandCa
   const title = node.name ?? t('command.title')
   const state = stateOf(node.outcome)
   const body = text !== undefined && text.includes('\n') ? text : null
-  const open = expanded && body !== null
+  // BAF slash reports are multi-line by design: default-expanded so users see
+  // the full formatted body (still collapsible via the row chevron).
+  const open = body !== null && expanded
   return (
     <div className={css.root} data-variant="others" data-state={state}>
       {state === 'running' && <span className={a11yCss.visuallyHidden}>{t('row.running')}</span>}
@@ -54,7 +57,9 @@ export function GenericCommandCard({ node, t, runningSummary }: GenericCommandCa
         collapsedContent={(
           <>
             <span className={css.separator} aria-hidden />
-            <span className={css.summary} data-error={state === 'error' || undefined}>{summary}</span>
+            <span className={css.summary} data-error={state === 'error' || undefined}>
+              {isBafCommand && body !== null ? (text?.split('\n', 1)[0] ?? summary) : summary}
+            </span>
           </>
         )}
       >

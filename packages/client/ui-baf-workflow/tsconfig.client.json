@@ -1,0 +1,31 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "files": [
+    "src/client/index.ts",
+    "src/client/locales.ts",
+    "src/client/remote-types.ts",
+    "src/client/tab-types.ts",
+    "src/client/graph-template.ts",
+    "src/client/catalog-i18n.ts",
+    "src/client/icons.tsx",
+    "src/client/WorkflowView.tsx",
+    "src/css-modules.d.ts"
+  ],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../locale" },
+    { "path": "../ui-conversation" },
+    { "path": "../ui-primitives" },
+    { "path": "../ui-session" },
+    { "path": "../ui-slots" },
+    { "path": "../../util/brand" },
+    { "path": "../../core/session" },
+    { "path": "../../preset/agent-presets" },
+    { "path": "../../typert/protocol" }
+  ]
+}

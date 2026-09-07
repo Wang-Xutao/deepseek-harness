@@ -13,6 +13,14 @@
   font-weight: 500;
 }
 
+.subtitle {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .intro {
   margin: 0;
   font-size: 14px;
@@ -31,11 +39,54 @@
 
 .row {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
+}
+
+.rowMain {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notes {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.updateCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.updateLine {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.updateLabel {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.updateValue {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
 }
 
 .label {

@@ -1,0 +1,20 @@
+{
+  "desktop": {
+    "notesZh": "Phase 3–4：route 解析、工作流 Tab、intake/projection、BAF 斜杠指令",
+    "notesEn": "Phase 3–4: route resolve, workflow tab, intake/projection, BAF slash commands"
+  },
+  "dsh": {
+    "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
+    "notesEn": "Upstream DeepSeek Harness runtime (session, tools, Web GUI)"
+  },
+  "packages": {
+    "@deepseek-ai/dsh-baf-core": {
+      "notesZh": "baseline loader、adapter stub、bafCore isolate 挂载",
+      "notesEn": "Baseline loader, adapter stubs, bafCore isolate mount"
+    },
+    "@deepseek-ai/dsh-baf-workflow": {
+      "notesZh": "projection、intake、transition、工作流 Tab Remote",
+      "notesEn": "Projection, intake, transition, workflow tab Remote"
+    }
+  }
+}

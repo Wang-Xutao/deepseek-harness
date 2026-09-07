@@ -54,6 +54,11 @@ export type WorkflowKey =
   | 'traceGraph.description'
   | 'traceGraph.on'
   | 'traceGraph.off'
+  | 'placeholder.badge'
+  | 'placeholder.stage.title'
+  | 'placeholder.stage.description'
+  | 'placeholder.intake.title'
+  | 'placeholder.intake.description'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -149,19 +154,29 @@ export const en: Record<TraceGraphKey, string> = {
 /** Simplified Chinese dictionary (workflow namespace). */
 export const zhWorkflow: Record<WorkflowKey, string> = {
   'section.title': '工作流',
-  'section.intro': '控制会话 Tab 中的轨迹图等可视化功能。',
+  'section.intro': 'BAF 企业工作流相关选项。具体配置将按阶段陆续开放。',
   'traceGraph.title': '轨迹图',
   'traceGraph.description': '关闭后，对话 Tab 不再显示「轨迹图」。',
   'traceGraph.on': '已开启',
   'traceGraph.off': '已关闭',
+  'placeholder.badge': '即将推出',
+  'placeholder.stage.title': '阶段执行策略',
+  'placeholder.stage.description': '占位：后续可配置各阶段默认推进与确认行为。',
+  'placeholder.intake.title': '默认 intake 行为',
+  'placeholder.intake.description': '占位：后续可配置分类建议与确认偏好。',
 }
 
 /** English dictionary (workflow namespace). */
 export const enWorkflow: Record<WorkflowKey, string> = {
   'section.title': 'Workflow',
-  'section.intro': 'Toggle the agent-execution visualisations shown on the conversation tab.',
+  'section.intro': 'BAF enterprise workflow preferences. More options will ship by phase.',
   'traceGraph.title': 'Trace Graph',
   'traceGraph.description': 'Hide the Trace Graph tab on the conversation view.',
   'traceGraph.on': 'Enabled',
   'traceGraph.off': 'Disabled',
+  'placeholder.badge': 'Coming soon',
+  'placeholder.stage.title': 'Stage execution policy',
+  'placeholder.stage.description': 'Placeholder for default stage advance and confirmation behavior.',
+  'placeholder.intake.title': 'Default intake behavior',
+  'placeholder.intake.description': 'Placeholder for classification suggestions and confirmation preferences.',
 }

@@ -13,6 +13,7 @@
     { "path": "../../../vendor/group" },
     { "path": "../baf-core" },
     { "path": "../../core/session" },
-    { "path": "../../core/agent" }
+    { "path": "../../core/agent" },
+    { "path": "../../interaction/commands" }
   ]
 }

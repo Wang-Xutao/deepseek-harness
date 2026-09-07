@@ -29,7 +29,7 @@ import { DEFAULT_CHANNEL_TAG, DEFAULT_UPDATE_OWNER, DEFAULT_UPDATE_REPO } from '
 import { UpdateService, type CheckUpdateResult } from './update/service.ts'
 import { detectIdeTools, openFolderInIde, type IdeAvailability } from './ide-tools.ts'
 import { userFacingLaunchError } from './user-errors.ts'
-import { DEFAULT_VERSIONS, type AppVersions } from './versions.ts'
+import { DEFAULT_VERSIONS, parseVersions, readDesktopVersionFile, type AppVersions } from './versions.ts'
 
 const APP_USER_MODEL_ID = 'com.baf.dsh.desktop'
 const APP_NAME = 'baf-dsh'
@@ -98,15 +98,47 @@ function packagedPluginRoot(): string {
 }
 
 function seedVersions(): AppVersions {
-  const bafDsh = readJsonVersion(join(desktopRoot(), 'package.json')) ?? DEFAULT_VERSIONS.bafDsh
-  const dsh = readJsonVersion(join(repoRoot(), 'package.json'))
+  const embeddedPath = app.isPackaged
+    ? join(process.resourcesPath, 'dsh', 'baf-product-versions.json')
+    : join(overlayRoot(), 'desktop', 'resources', 'dsh', 'baf-product-versions.json')
+  const embedded = readProductVersionsFile(embeddedPath)
+  const versionFile = app.isPackaged
+    ? join(process.resourcesPath, 'VERSION')
+    : join(desktopRoot(), 'VERSION')
+
+  const bafDsh = embedded?.bafDsh
+    ?? readDesktopVersionFile(versionFile)
+    ?? readJsonVersion(join(desktopRoot(), 'package.json'))
+    ?? DEFAULT_VERSIONS.bafDsh
+  const dsh = embedded?.dsh
+    ?? readJsonVersion(join(repoRoot(), 'package.json'))
     ?? readJsonVersion(join(process.resourcesPath, 'dsh', 'package.json'))
     ?? DEFAULT_VERSIONS.dsh
   const pluginManifest = join(pluginDir(), 'plugin-manifest.json')
-  const bafPlugin = readJsonVersion(pluginManifest)
+  const bafPlugin = embedded?.bafPlugin
+    ?? readJsonVersion(pluginManifest)
     ?? readJsonVersion(join(packagedPluginRoot(), 'plugin-manifest.json'))
     ?? DEFAULT_VERSIONS.bafPlugin
-  return { bafDsh, dsh, bafPlugin }
+  return {
+    bafDsh,
+    dsh,
+    bafPlugin,
+    bafCore: embedded?.bafCore ?? DEFAULT_VERSIONS.bafCore,
+    bafWorkflow: embedded?.bafWorkflow ?? DEFAULT_VERSIONS.bafWorkflow,
+    bafDshNotes: embedded?.bafDshNotes ?? DEFAULT_VERSIONS.bafDshNotes,
+    dshNotes: embedded?.dshNotes ?? DEFAULT_VERSIONS.dshNotes,
+    bafCoreNotes: embedded?.bafCoreNotes ?? DEFAULT_VERSIONS.bafCoreNotes,
+    bafWorkflowNotes: embedded?.bafWorkflowNotes ?? DEFAULT_VERSIONS.bafWorkflowNotes,
+  }
+}
+
+function readProductVersionsFile(path: string): AppVersions | undefined {
+  try {
+    if (!existsSync(path)) return undefined
+    return parseVersions(JSON.parse(readFileSync(path, 'utf8')) as unknown)
+  } catch {
+    return undefined
+  }
 }
 
 function pluginDir(): string {

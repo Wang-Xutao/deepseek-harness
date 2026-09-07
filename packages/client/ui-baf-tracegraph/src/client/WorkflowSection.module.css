@@ -56,6 +56,23 @@
   border-color: var(--dsw-alias-border-l3);
 }
 
+.row[data-placeholder='true'] {
+  opacity: 0.72;
+}
+
+.row[data-placeholder='true']:hover {
+  border-color: var(--dsw-alias-border-l2);
+}
+
+.comingSoon {
+  flex: none;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
 .rowText {
   display: flex;
   flex-direction: column;

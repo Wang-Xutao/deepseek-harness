@@ -1,40 +1,19 @@
 ---
-description: "BAF workflow domain: route resolver, audit, and future projection/transitions."
-kind: "package-reference"
+description: "BAF go-workflow domain: route, projection, intake, transitions."
 ---
 
 # @deepseek-ai/dsh-baf-workflow
 
-English | [中文](README.zh.md)
+Owns the BAF go-workflow domain. Phase 3: `resolveRoute()`, session `baf/route-resolved` audit, request-level `ModelSelection`. Phase 4: append-only workspace projection, transition executor, intake classifier, and `WorkflowService`. The Web Tab Remote lives in `@deepseek-ai/dsh-client-ui-baf-workflow`.
 
-## Summary
+Mount the Cordis service only under the `bafWorkflow` isolate beside `baf-core` in the official BAF preset.
 
-`dsh-baf-workflow` owns the BAF go-workflow domain service. Phase 3 ships `resolveRoute()`, session `baf/route-resolved` audit, and request-level `ModelSelection` mapping. Projection, transitions, and intake land in Phase 4. Mount it only under the `bafWorkflow` isolate beside `baf-core` in the official BAF preset.
+## Model Experience
 
-## Table of Contents
+Route resolution can change the provider/model of later turns; projection events are workspace-local and not model-visible until session events are appended by callers.
 
-- [Use this package](#use-this-package)
-- [Understand the implementation](#understand-the-implementation)
-- [Dev Note](#dev-note)
+## Known Limitations and Deferred Work
 
------
-
-<a id="use-this-package"></a>
-## Use this package
-
-Compose `@deepseek-ai/dsh-baf-workflow` in the same `cordis:group` as `baf-core` with `isolate.bafWorkflow: true`. Call `freezeRouteContext(policy, profile)` (or `freezeFromPolicyFile`) when the session freezes enterprise policy and baseline. Before each model turn, `resolveAndAudit(session, phase, availability)` then `selectionForTurn(resolution)` to set the agent request model. Route failure throws stable `BafError` codes and still appends a failed audit event.
-
-<a id="understand-the-implementation"></a>
-## Understand the implementation
-
-- `route.ts`: enterprise ceiling → profile phase → session override → dsh default; approved-only fallback.
-- `route-audit.ts`: typed `baf/route-resolved` session events (authoritative audit).
-- `phase-route.ts`: map resolution to agent `ModelSelection` or workflow worker fan-out options.
-- Service key: `bafWorkflow`.
-
-Enterprise policy files use `baf-core` `EnterpriseRoutePolicy` schema; path comes from deployment config, not from baseline alone.
-
-<a id="dev-note"></a>
-## Dev Note
-
-Do not drive go transitions through dsh `tool-workflow`/`ralph`. Phase 4 adds projection append/replay and `WorkflowService.transition`.
+- Stage handlers (open…archive) land in Phase 5.
+- LLM-backed intake `suggest()` is heuristic in Phase 4; rule engine remains authoritative.
+- Electron IPC bridge is Phase 8.

@@ -10,15 +10,17 @@
     "pack-runtime": "node scripts/pack-runtime.mjs",
     "generate-manifest": "node scripts/generate-manifest.mjs",
     "prepare-branding": "node scripts/prepare-nsis-branding.mjs",
+    "bump-desktop": "node scripts/bump-desktop.mjs",
     "docs:build": "node scripts/build-docs.mjs",
     "verify-help-build": "node scripts/verify-help-build.mjs",
+    "verify-desktop-dir-launch": "node scripts/verify-desktop-dir-launch.mjs",
     "verify-baf-baseline": "node scripts/verify-baf-baseline-fixture.mjs",
     "build-release": "node scripts/build-release.mjs",
     "publish-release": "node scripts/publish-release.mjs",
     "release": "node scripts/build-release.mjs && node scripts/publish-release.mjs",
     "test": "npm --prefix desktop test",
     "dist": "npm run fetch-node && npm run docs:build && npm run brand-web && npm run verify-help-build && npm run pack-dsh && npm run prepare-branding && npm --prefix desktop run dist",
-    "dist:dir": "npm run docs:build && npm run brand-web && npm run verify-help-build && npm run pack-dsh && npm --prefix desktop run dist:dir"
+    "dist:dir": "npm run docs:build && npm run brand-web && npm run verify-help-build && npm run pack-dsh && npm --prefix desktop run dist:dir && npm run verify-desktop-dir-launch"
   },
   "devDependencies": {
     "png-to-ico": "^3.0.1"

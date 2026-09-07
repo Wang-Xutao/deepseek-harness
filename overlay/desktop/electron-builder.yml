@@ -11,6 +11,8 @@ files:
   - ui/**/*
   - package.json
 extraResources:
+  - from: VERSION
+    to: VERSION
   - from: resources/dsh
     to: dsh
     filter:

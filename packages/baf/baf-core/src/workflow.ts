@@ -90,16 +90,35 @@ export interface BaselineLock {
   readonly lockedAt: string
 }
 
+/** Per-node skip / block annotation for Tab and diagnostics. */
+export interface NodeAnnotation {
+  /** Skip / block reason codes (e.g. fast-path cut, guard deny). */
+  readonly reasonCodes?: readonly string[]
+  /** Artifact paths recorded when the stage completed. */
+  readonly artifacts?: readonly string[]
+  /** Human-readable block / failure summary. */
+  readonly detail?: string
+}
+
 /** Recoverable workflow status for one change. */
 export interface WorkflowStatus {
   readonly changeId: string
   readonly mode: WorkflowMode
   readonly current: WorkflowNode | TerminalState
   readonly nodes: Readonly<Partial<Record<WorkflowNode, NodeStatus>>>
+  /** Optional per-node annotations (skip reasons, artifacts, failures). */
+  readonly annotations?: Readonly<Partial<Record<WorkflowNode, NodeAnnotation>>>
   readonly intake?: ChangeIntake
   readonly route?: RouteSummary
   readonly baseline?: BaselineLock
   readonly sourceRevision?: string
   readonly projectionVersion: number
   readonly terminal?: TerminalState
+  /** ISO timestamp of the last projection event. */
+  readonly updatedAt?: string
+  /** Whether OpenSpec stages were skipped on the active mode. */
+  readonly openspecSkipped?: {
+    readonly skipped: boolean
+    readonly reasonCodes: readonly string[]
+  }
 }

@@ -16,13 +16,16 @@ import { BafError } from './errors.ts'
 
 export * from './adapters.ts'
 export * from './baseline.ts'
+export * from './catalog.ts'
 export * from './compatibility.ts'
 export * from './errors.ts'
 export * from './events.ts'
+export * from './graph.ts'
 export * from './identity.ts'
 export * from './intake.ts'
 export * from './result.ts'
 export * from './route-policy.ts'
+export * from './tab-view.ts'
 export * from './workflow.ts'
 
 declare module '@deepseek-ai/cordis' {

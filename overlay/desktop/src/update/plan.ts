@@ -27,9 +27,9 @@ export function buildUpdatePlan(local: AppVersions, manifest: UpdateManifest): U
   const hasUpdate = updatePlugin || updateRuntime || updateShell || shellRequired
 
   const parts: string[] = []
-  if (updatePlugin) parts.push(`插件包 ${local.bafPlugin} → ${manifest.bafPlugin}`)
-  if (updateRuntime) parts.push(`运行时 ${local.dsh} → ${manifest.dsh}`)
-  if (updateShell || shellRequired) parts.push(`壳 ${local.bafDsh} → ${manifest.bafDsh}`)
+  if (updatePlugin) parts.push(`插件工件 ${local.bafPlugin} → ${manifest.bafPlugin}`)
+  if (updateRuntime) parts.push(`DeepSeek Harness ${local.dsh} → ${manifest.dsh}`)
+  if (updateShell || shellRequired) parts.push(`BAF DSH DESKTOP ${local.bafDsh} → ${manifest.bafDsh}`)
   const summaryZh = hasUpdate
     ? (parts.length > 0 ? parts.join('；') : `需要升级到 ${manifest.bafDsh}`)
     : '已是最新版本'

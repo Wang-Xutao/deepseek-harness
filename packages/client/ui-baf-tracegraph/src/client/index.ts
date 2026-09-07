@@ -1,12 +1,11 @@
 /**
- * Browser 轨迹图 plugin: conversation view tab + 工作流 settings section.
+ * Browser 轨迹图 plugin: conversation view tab + settings contributions.
  *
  * - The conversation view tab is gated on the durable
  *   `BafWorkflowSettings.showTraceGraph` switch — when it is `false` the
- *   plugin never registers a `conversation.view` entry, so the tab is
- *   absent from the assembled UI without touching the upstream view ledger.
- * - The settings section is always mounted (so the user can re-enable the
- *   tab), and reads the same scope through a HostObservable selector.
+ *   plugin never registers a `conversation.view` entry.
+ * - The toggle lives under General settings; the dedicated 工作流 section
+ *   keeps placeholders for future BAF workflow preferences.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -30,7 +29,8 @@ import {
 import {
   EMPTY_TRAJECTORY, TraceGraphView, type TraceGraphViewInjected,
 } from './TraceGraphView.tsx'
-import { WorkflowSection, type WorkflowSectionInjected } from './WorkflowSection.tsx'
+import { TraceGraphRow, type TraceGraphRowInjected } from './TraceGraphRow.tsx'
+import { WorkflowSection } from './WorkflowSection.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -47,8 +47,7 @@ export const inject = [
 ] as const
 
 /**
- * Project one settings namespace scope into a `HostObservable<BafWorkflowSettings | undefined>`
- * view consumed by the settings section renderer.
+ * Project one settings namespace scope into a HostObservable view.
  * @param scope - the baf-workflow namespace scope.
  * @returns an observable returning the current decoded section.
  */
@@ -62,8 +61,7 @@ function observeBafWorkflowSettings(
 }
 
 /**
- * Register the 工作流 settings section and conditionally the 轨迹图
- * conversation view tab.
+ * Register General 轨迹图 toggle, 工作流 settings section, and conditional tab.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -76,15 +74,21 @@ export function apply(ctx: ClientContext): void {
   const tView = ctx.locale.bind(NS)
   const tSection = ctx.locale.bind(WORKFLOW_NS)
 
-  // Durable namespace scope — observes the baf-workflow section and writes
-  // through it. Bind on the calling fiber so the disposer follows the plugin.
   const settings = ctx.settingsScope.bind<BafWorkflowSettings>({ namespace: 'baf-workflow' })
 
-  // ---- 工作流 settings section (always mounted so the user can re-enable).
-  const settingsSectionInject = (): WorkflowSectionInjected => ({
+  const settingsInject = (): TraceGraphRowInjected => ({
     hooks: { settings: observeBafWorkflowSettings(settings) },
     setShowTraceGraph: value => settings.set(SHOW_TRACE_GRAPH_FIELD, value),
   })
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'trace-graph',
+    order: 20,
+    locale: WORKFLOW_NS,
+    inject: settingsInject,
+  }, TraceGraphRow))
+
   // Nav glyph for id `workflow` is owned by ui-settings-general SettingsRoot.
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -92,10 +96,8 @@ export function apply(ctx: ClientContext): void {
     order: 20,
     label: () => tSection('section.title'),
     locale: WORKFLOW_NS,
-    inject: settingsSectionInject,
   }, WorkflowSection))
 
-  // ---- 轨迹图 conversation view tab — only when the switch is on.
   const viewInject = (): TraceGraphViewInjected => ({
     ensureOpen: id => ctx.sessions.ensureOpen(id),
     childSource: (id: SessionId) => {
@@ -129,9 +131,6 @@ export function apply(ctx: ClientContext): void {
     inject: viewInject,
   }, TraceGraphView)
 
-  // Re-evaluate the registration whenever the settings scope publishes. While
-  // the scope is still `loading` we default to ON — pre-release stance prefers
-  // shipping the tab over silently hiding it on first paint.
   ctx.effect(() => {
     let current: (() => void) | undefined
     const adopt = (): void => {

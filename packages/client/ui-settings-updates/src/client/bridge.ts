@@ -3,11 +3,25 @@
 export type DesktopVersions = {
   bafDsh: string
   dsh: string
-  bafPlugin: string
+  /** Internal plugin-zip epoch for the update channel (not shown in Settings). */
+  bafPlugin?: string
+  bafCore?: string
+  bafWorkflow?: string
+  bafDshNotes?: string
+  dshNotes?: string
+  bafCoreNotes?: string
+  bafWorkflowNotes?: string
 }
 
 export type DesktopPrefs = {
   closeAction: 'ask' | 'tray' | 'quit'
+}
+
+export type UpdatePlanSummary = {
+  summaryZh: string
+  force: boolean
+  targetBafDsh?: string
+  notesZh?: string
 }
 
 export type CheckUpdateResult =
@@ -15,7 +29,7 @@ export type CheckUpdateResult =
   | {
     status: 'available'
     versions: DesktopVersions
-    plan: { summaryZh: string; force: boolean }
+    plan: UpdatePlanSummary
     checkedAt: string
   }
   | { status: 'error'; versions: DesktopVersions; error: string; checkedAt: string }

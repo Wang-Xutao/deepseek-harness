@@ -41,6 +41,8 @@ export interface ChangeIntake {
   readonly confidence: number
   /** Reason codes from the rule engine. */
   readonly reasonCodes: readonly string[]
+  /** Whether OpenSpec artifacts are required for this change. */
+  readonly openspecRequired: boolean
   /** Whether a human must confirm before implement. */
   readonly requiresUserConfirmation: boolean
   /** Confirmation state. */
