@@ -14,7 +14,7 @@ describe('semver', () => {
 
 describe('parseVersions', () => {
   it('fills defaults', () => {
-    expect(parseVersions({})).toMatchObject({ bafDsh: '0.0.8', bafPlugin: '0.0.2' })
+    expect(parseVersions({})).toMatchObject({ bafDsh: '0.0.9', bafPlugin: '0.0.2' })
   })
 })
 

@@ -15,3 +15,4 @@ BAF 各插件包（`baf-core` / `baf-workflow` 等）在各自 `package.json` �
 | 0.0.6 | 0.1.3-alpha.1 | Phase 0/1：官方 BAF shipped preset（仅内置、不可复制）；企业输入 OpenSpec latest / gcc / 覆盖率工程可配；桌面不同步 agent-presets 到 user root |
 | 0.0.7 | 0.1.3-alpha.1 | Phase 2：`@deepseek-ai/dsh-baf-core`（baseline loader、adapter stub、`bafCore` isolate 挂载） |
 | 0.0.8 | 0.1.3-alpha.1 | Phase 3–4：`baf-workflow` route/projection/intake + 工作流 Tab；版本页改为展示各 BAF 包独立 semver |
+| 0.0.9 | 0.1.3-alpha.1 | Phase 4 工作流 Tab 半交互；设置版本明细与独立 VERSION bump；splash/通用设置打磨 |

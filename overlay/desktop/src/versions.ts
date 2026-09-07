@@ -19,12 +19,12 @@ export type AppVersions = {
 }
 
 export const DEFAULT_VERSIONS: AppVersions = {
-  bafDsh: '0.0.8',
+  bafDsh: '0.0.9',
   dsh: '0.1.3-alpha.1',
   bafPlugin: '0.0.2',
   bafCore: '0.1.0',
   bafWorkflow: '0.1.0',
-  bafDshNotes: 'Phase 3–4：route 解析、工作流 Tab、intake/projection、BAF 斜杠指令',
+  bafDshNotes: 'Phase 4 工作流 Tab 半交互；设置版本明细与独立 bump；splash/通用设置打磨',
   dshNotes: '上游 DeepSeek Harness 运行时（会话、工具、Web GUI）',
   bafCoreNotes: 'baseline loader、adapter stub、bafCore isolate 挂载',
   bafWorkflowNotes: 'projection、intake、transition、工作流 Tab Remote',
