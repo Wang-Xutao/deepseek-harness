@@ -1,0 +1,38 @@
+{
+  "name": "@deepseek-ai/dsh-baf-openspec",
+  "description": "BAF local file-mode OpenSpec adapter: change skeleton, read, validate, and atomic archive",
+  "version": "0.1.0",
+  "bafNotesZh": "OpenSpec 本地文件适配器：变更骨架、读取、校验、原子归档",
+  "bafNotesEn": "Local file-mode OpenSpec adapter: skeleton, read, validate, atomic archive",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/baf/baf-openspec"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/dsh-baf-core": "workspace:^"
+  }
+}

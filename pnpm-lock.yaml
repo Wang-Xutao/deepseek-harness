@@ -1005,11 +1005,20 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
 
+  packages/baf/baf-openspec:
+    dependencies:
+      '@deepseek-ai/dsh-baf-core':
+        specifier: workspace:^
+        version: link:../baf-core
+
   packages/baf/baf-workflow:
     dependencies:
       '@deepseek-ai/dsh-baf-core':
         specifier: workspace:^
         version: link:../baf-core
+      '@deepseek-ai/dsh-baf-openspec':
+        specifier: workspace:^
+        version: link:../baf-openspec
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
