@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "Phase 4 工作流 Tab 半交互；设置版本明细与独立 bump；splash/通用设置打磨",
-    "notesEn": "Phase 4 workflow tab; version details and desktop VERSION bump; splash/general settings polish"
+    "notesZh": "Phase 5 full-go：open/clarify/design/plan/implement/verify/archive 全阶段流水线与门禁；baf-openspec 独立包并入桌面产物",
+    "notesEn": "Phase 5 full-go: open/clarify/design/plan/implement/verify/archive pipeline and gates; baf-openspec packaged into desktop"
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
@@ -15,6 +15,10 @@
     "@deepseek-ai/dsh-baf-workflow": {
       "notesZh": "projection、intake、transition、工作流 Tab Remote",
       "notesEn": "Projection, intake, transition, workflow tab Remote"
+    },
+    "@deepseek-ai/dsh-baf-openspec": {
+      "notesZh": "OpenSpec 本地文件适配器：骨架、校验、原子归档",
+      "notesEn": "Local file-mode OpenSpec adapter: skeleton, validate, atomic archive"
     }
   }
 }
