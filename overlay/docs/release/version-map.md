@@ -16,3 +16,5 @@ BAF 各插件包（`baf-core` / `baf-workflow` 等）在各自 `package.json` �
 | 0.0.7 | 0.1.3-alpha.1 | Phase 2：`@deepseek-ai/dsh-baf-core`（baseline loader、adapter stub、`bafCore` isolate 挂载） |
 | 0.0.8 | 0.1.3-alpha.1 | Phase 3–4：`baf-workflow` route/projection/intake + 工作流 Tab；版本页改为展示各 BAF 包独立 semver |
 | 0.0.9 | 0.1.3-alpha.1 | Phase 4 工作流 Tab 半交互；设置版本明细与独立 VERSION bump；splash/通用设置打磨 |
+| 0.0.10 | 0.1.3-alpha.1 | Phase 5 full-go 七阶段（open/clarify/design/plan/implement/verify/archive）与门禁；baf-openspec 独立包并入桌面产物 |
+| 0.0.11 | 0.1.3-alpha.1 | Phase 5.8：drift 检测（git revision / baseline id / baseline 内容 / verify-report 过期 / 已完成产物删除）+ abandon（T16）+ T11 修复回环；baseline-locked 投影锚点 |

@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "Phase 5 full-go：open/clarify/design/plan/implement/verify/archive 全阶段流水线与门禁；baf-openspec 独立包并入桌面产物",
-    "notesEn": "Phase 5 full-go: open/clarify/design/plan/implement/verify/archive pipeline and gates; baf-openspec packaged into desktop"
+    "notesZh": "Phase 5 全量：open/clarify/design/plan/implement/verify/archive 全阶段流水线与门禁；5.8 drift 检测（git revision/baseline id/baseline 内容/verify-report 过期/已完成产物删除）+ abandon（T16）+ T11 修复回环；baseline-locked 投影锚点",
+    "notesEn": "Phase 5 complete: open/clarify/design/plan/implement/verify/archive stage pipeline and gates; 5.8 drift detection (git revision, baseline id, baseline content, verify-report staleness, completed-artifact deletion) + abandon (T16) + T11 repair loop; baseline-locked projection anchor"
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
@@ -13,8 +13,8 @@
       "notesEn": "Baseline loader, adapter stubs, bafCore isolate mount"
     },
     "@deepseek-ai/dsh-baf-workflow": {
-      "notesZh": "projection、intake、transition、工作流 Tab Remote",
-      "notesEn": "Projection, intake, transition, workflow tab Remote"
+      "notesZh": "projection、intake、transition、工作流 Tab Remote；5.8 drift 检测、abandon、T11 修复回环、baseline-locked 锚点",
+      "notesEn": "Projection, intake, transition, workflow tab Remote; 5.8 drift detection, abandon, T11 repair loop, baseline-locked anchor"
     },
     "@deepseek-ai/dsh-baf-openspec": {
       "notesZh": "OpenSpec 本地文件适配器：骨架、校验、原子归档",
