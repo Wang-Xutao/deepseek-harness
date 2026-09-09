@@ -13,6 +13,7 @@ import {
   PROJECTION_DIR,
   PROJECTION_INDEX_PATH,
   projectionLogPath,
+  type BaselineLock,
   type ChangeIntake,
   type NodeAnnotation,
   type NodeStatus,
@@ -49,6 +50,7 @@ interface FoldState {
   terminal?: TerminalState
   updatedAt?: string
   openspecSkipped?: { skipped: boolean; reasonCodes: readonly string[] }
+  baseline?: BaselineLock
 }
 
 /**
@@ -91,6 +93,7 @@ export function replay(changeId: string, events: readonly ProjectionEvent[]): Wo
     ...(state.terminal === undefined ? {} : { terminal: state.terminal }),
     ...(state.updatedAt === undefined ? {} : { updatedAt: state.updatedAt }),
     ...(state.openspecSkipped === undefined ? {} : { openspecSkipped: state.openspecSkipped }),
+    ...(state.baseline === undefined ? {} : { baseline: state.baseline }),
   }
 }
 
@@ -128,6 +131,9 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
     case 'stage-entered':
       state.current = event.node
       state.nodes[event.node] = 'in-progress'
+      break
+    case 'baseline-locked':
+      state.baseline = event.lock
       break
     case 'stage-completed':
       state.nodes[event.node] = 'completed'

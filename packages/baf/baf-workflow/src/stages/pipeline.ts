@@ -29,6 +29,12 @@ import {
 } from './implement.ts'
 import { driveVerify, type VerifyStageResult } from './verify.ts'
 import { driveArchive, type ArchiveStageResult } from './archive.ts'
+import { detectAndRecord, type DriftObservation, type DriftSignal } from './drift.ts'
+import {
+  driveAbandon,
+  type AbandonOptions,
+  type AbandonStageResult,
+} from './abandon.ts'
 
 /** Options for {@link StagePipeline}. */
 export interface StagePipelineOptions {
@@ -41,12 +47,20 @@ export interface StagePipelineOptions {
   readonly baseline?: BaselineManifest
 }
 
+/** Result of {@link StagePipeline.driveDriftStage}. */
+export interface DriftStageResult {
+  readonly signals: readonly DriftSignal[]
+  readonly recorded: boolean
+}
+
 /** Discriminated drive results per node. */
 export type DriveResult =
   | { readonly node: 'open'; readonly result: OpenStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'clarify'; readonly result: ClarifyStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'design'; readonly result: DesignStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'plan'; readonly result: PlanStageResult; readonly status: WorkflowStatus }
+  | { readonly node: 'drift'; readonly result: DriftStageResult; readonly status: WorkflowStatus }
+  | { readonly node: 'abandon'; readonly result: AbandonStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'implement'; readonly result: ImplementStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'verify'; readonly result: VerifyStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'archive'; readonly result: ArchiveStageResult; readonly status: WorkflowStatus }
@@ -111,6 +125,21 @@ export class StagePipeline {
     }
     const status = await this.enterStage(changeId, 'open')
     const result = await driveOpen(this.ctx, changeId, title)
+    // Lock the baseline + source revision the moment open succeeds so drift
+    // detection can compare against immutable anchors for the rest of the chain.
+    const baseline = this.ctx.baseline
+    const revision = this.ctx.workspace.git?.revision
+    if (baseline !== undefined && revision !== undefined) {
+      await this.store.append(changeId, status.projectionVersion, meta => ({
+        type: 'baseline-locked',
+        lock: {
+          baselineId: baseline.baselineId,
+          sourceRevision: revision,
+          lockedAt: meta.at,
+        },
+        ...meta,
+      }))
+    }
     await this.completeStage(changeId, 'open', [result.changeDir])
     return { node: 'open', result, status }
   }
@@ -195,7 +224,21 @@ export class StagePipeline {
     const result = await driveVerify(this.ctx, changeId, signal)
     if (result.backToImplement) {
       await this.failStage(changeId, 'verify', 'required checks failed')
-      return { node: 'verify', result, status }
+      // T11: required check failed → re-enter implement for the fix loop.
+      const statusAfterFail = await this.store.readStatus(changeId)
+      const decision = decideTransition({
+        status: statusAfterFail,
+        to: 'implement',
+      })
+      if (decision.accepted) {
+        const { status: returned } = await this.store.append(
+          changeId,
+          statusAfterFail.projectionVersion,
+          meta => ({ type: 'stage-entered', node: 'implement', ...meta }),
+        )
+        return { node: 'verify', result, status: returned }
+      }
+      return { node: 'verify', result, status: statusAfterFail }
     }
     await this.completeStage(changeId, 'verify', [result.reportPath])
     return { node: 'verify', result, status }
@@ -216,6 +259,46 @@ export class StagePipeline {
       ...meta,
     }))
     return { node: 'archive', result, status: final }
+  }
+
+  /**
+   * Detect drift against the projection's locked evidence and record a
+   * `drift-detected` event when any signal fires (Phase 5.8).
+   *
+   * Pure detection: T13 (drift → earliest affected node) is the caller's
+   * decision through {@link driveResumeStage}; this method only records
+   * the drift signal set.
+   * @param changeId - change id.
+   * @param observation - optional override for current Git/baseline facts.
+   * @returns drive result with detected signals.
+   */
+  async driveDriftStage(
+    changeId: string,
+    observation?: DriftObservation,
+  ): Promise<DriveResult> {
+    const status = await this.store.readStatus(changeId)
+    const observed: DriftObservation = observation ?? {
+      ...(this.ctx.workspace.git?.revision === undefined
+        ? {}
+        : { gitRevision: this.ctx.workspace.git.revision }),
+      ...(this.ctx.baseline === undefined ? {} : { baseline: this.ctx.baseline }),
+    }
+    const signals = await detectAndRecord(this.ctx, status, observed, { record: true })
+    const recorded = signals.length > 0
+    const next = recorded ? await this.store.readStatus(changeId) : status
+    const result: DriftStageResult = { signals, recorded }
+    return { node: 'drift', result, status: next }
+  }
+
+  /**
+   * Drive abandon (T16): explicit user confirmation → `change-abandoned`.
+   * Refuses without confirmation; idempotent when already terminal.
+   * @param options - change id and human confirmation.
+   * @returns drive result.
+   */
+  async driveAbandonStage(options: AbandonOptions): Promise<DriveResult> {
+    const result = await driveAbandon(this.ctx, options)
+    return { node: 'abandon', result, status: result.status }
   }
 
   /**

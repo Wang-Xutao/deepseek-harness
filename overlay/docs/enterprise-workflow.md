@@ -65,7 +65,10 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**差 ToolGuard 与 s
 | N6 `verify` 检查聚合                          | 已完成 | `stages/verify.ts`；`CheckRunner` 接 OpenSpec validate + `verify-report.json`                       |
 | N7 `archive` 人工确认 + 原子归档                  | 已完成 | `stages/archive.ts`；verify 报告作为 T10 证据 + OpenSpec 原子归档 + `change-archived`                  |
 | `StagePipeline` 编排                        | 已完成 | `stages/pipeline.ts`；绑定 `WorkflowService.transition`，进入/完成/拒绝事件全程入 projection            |
-| 阶段测试（happy path + 门禁失败 + 非法进入 + 全链路）      | 已完成 | `baf-workflow` `tests/stages.spec.ts`                                                            |
+| N8 `drift` 检测 + `baseline-locked` 锚点       | 已完成 | `stages/drift.ts`；Git revision / baseline id / baseline 内容 / verify-report 过期 / 已完成产物删除五个触发器；`pipeline.driveDriftStage` 写入 `drift-detected`，T13 由调用方经 `decideTransition` 走回最早受影响节点；open-stage 落 `baseline-locked` 事件锁定 baseline + sourceRevision |
+| T11 verify 失败回 implement（修复回环）        | 已完成 | `stages/pipeline.ts` `driveVerifyStage`；必需检查失败 → `stage-failed` + `verify → implement` 重新进入 |
+| `abandon` 入口（T16）                          | 已完成 | `stages/abandon.ts`；`driveAbandon` 需显式确认 → `change-abandoned`；幂等保留产物，保留全部审计             |
+| 阶段测试（happy path + 门禁失败 + 非法进入 + 全链路 + T11 + drift + abandon） | 已完成 | `baf-workflow` `tests/stages.spec.ts`                                                          |
 | 桌面分发                                      | 已完成 | `pack-dsh.mjs` force 打包 `baf-openspec`；`baf-product-versions.json` 嵌入 `bafOpenspec` 字段          |
 
 
@@ -1557,7 +1560,7 @@ export function resolveRoute(
 - 打开 composition 中 `baf-openspec` row。
 - **验收**：happy path `open → … → archive` 全链路（fixture 仓库）跑通；verify 失败回 implement；drift 标记正确；模型声明不推动转换。
 
-> **Phase 5 完成记录（2026-09-09）**：5.1–5.7 已按计划落地（落点见文首「Phase 5 — 已完成明细」）；5.8 的 drift 检测（`src/drift.ts`）与 abandon（`src/abandon.ts`）尚未实现，作为 Phase 6 起步项补齐；`tests/stages.spec.ts` 覆盖 happy path 全链路、verify 失败回 implement、非法进入拒绝与门禁失败。验收中「模型声明不推动转换」由 `WorkflowService.transition` 裁决保证。
+> **Phase 5 完成记录（2026-09-09）**：5.1–5.8 全部落地（落点见文首「Phase 5 — 已完成明细」）；5.8 新增 `stages/drift.ts` 检测 5 类触发器（git revision 变化 / baseline id 变化 / baseline 内容变化 / verify-report 过期 / 已完成产物删除），`stages/abandon.ts` 提供 T16 `driveAbandon` 入口（显式确认 + 幂等）；`pipeline.driveVerifyStage` 落 T11（必需检查失败回 implement），`pipeline.driveDriftStage` 落 T12（写入 `drift-detected`），T13 由调用方经 `decideTransition` 裁决；新增 `baseline-locked` 投影事件 + fold 字段，让 drift 检测有不可变锚点。`tests/stages.spec.ts` 在原覆盖基础上新增 T11（openspec validate 失败回 implement）、drift（artifact 删除触发 + record=false）、abandon（无确认拒绝 + 幂等）三类用例。验收中「模型声明不推动转换」由 `WorkflowService.transition` 裁决保证。
 
 
 

@@ -19,6 +19,6 @@ Route resolution can change the provider/model of later turns; projection events
 
 ## Known Limitations and Deferred Work
 
-- Drift detection (`drift.ts`) and abandon (`abandon.ts`) are Phase 6.
 - LLM-backed intake `suggest()` is heuristic in Phase 4; rule engine remains authoritative.
 - Electron IPC bridge is Phase 8.
+- `quality` / `guard` / `secret-scan` CheckRunner rows stay placeholder stubs until Phase 7 wires the real checks.

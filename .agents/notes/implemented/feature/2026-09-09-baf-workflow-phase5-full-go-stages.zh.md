@@ -41,3 +41,11 @@ full-go 主链以阶段 handler + 基于 `WorkflowService.transition` 的流水�
 - 桌面 0.0.10 嵌入 full-go 主链；`baf-product-versions.json` 含 `bafOpenspec`。
 - `tests/stages.spec.ts` 覆盖 happy path `open → … → archive`、verify 失败回 implement、门禁失败与非法进入拒绝。
 - Phase 6 以 drift/abandon 检测器起步；quality/guard 检查仍是 `CheckRunner` 之后的 Phase 7 stub。
+
+## 5.8 补齐（2026-09-09 同批次）
+
+- `stages/drift.ts` 落地：5 类触发器（`git-revision-changed` / `baseline-id-changed` / `baseline-content-changed` / `verify-report-stale` / `artifact-missing`），`detectAndRecord(ctx, status, observation, {record})` 写入 `drift-detected`；`earliestAffectedNode` 决定 T13 目标（产物缺失映射所属阶段，否则回当前阶段）。
+- `stages/abandon.ts` 落地：`driveAbandon({changeId, humanConfirmed})` 需显式确认 → `change-abandoned`；幂等保留产物，保留全部审计。
+- `pipeline.driveDriftStage` / `driveAbandonStage` 接入；`pipeline.driveVerifyStage` 走 T11（必需检查失败回 implement）。
+- `baseline-locked` 投影事件 + fold 字段：open-stage 落 baseline id + sourceRevision 锚点，让 drift 检测有不可变对比。
+- `tests/stages.spec.ts` 新增 T11（openspec validate 失败回 implement）、drift（artifact 删除触发 + record=false）、abandon（无确认拒绝 + 幂等）三类用例。

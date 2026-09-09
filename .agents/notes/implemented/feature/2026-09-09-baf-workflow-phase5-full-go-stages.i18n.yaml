@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-09-baf-workflow-phase5-full-go-stages.md
-2026-09-09-baf-workflow-phase5-full-go-stages.md: e1eda6bc8c820dda4021699249fb00b69c0418c1
-2026-09-09-baf-workflow-phase5-full-go-stages.zh.md: 60f62871d682624c8bd118a89c8b08a1cc3ccd7b
+2026-09-09-baf-workflow-phase5-full-go-stages.md: 1c9a269e3b7ed5cbc17f965e46440a6ab17c490a
+2026-09-09-baf-workflow-phase5-full-go-stages.zh.md: 18fdbee32711b8f8c2f7d9c6deebf16bbafe535e

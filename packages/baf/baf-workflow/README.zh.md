@@ -14,6 +14,6 @@ description: "BAF go 工作流域：路由、projection、intake、转换。"
 
 ## Known Limitations and Deferred Work
 
-- 各阶段 handler（open…archive）属 Phase 5。
 - Phase 4 的 intake `suggest()` 为启发式；规则引擎仍是权威。
 - Electron IPC 属 Phase 8。
+- `quality` / `guard` / `secret-scan` 检查桩在 `CheckRunner` 中保留直到 Phase 7 接真实实现。

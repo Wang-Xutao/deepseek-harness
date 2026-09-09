@@ -4,6 +4,7 @@
  */
 
 import type { ChangeIntake } from './intake.ts'
+import type { BaselineLock } from './workflow.ts'
 import type { TerminalState, WorkflowNode } from './workflow.ts'
 
 /** Common envelope fields on every projection event. */
@@ -20,6 +21,7 @@ export interface ProjectionEventBase {
 export type ProjectionEvent =
   | (ProjectionEventBase & { type: 'intake-classified'; intake: ChangeIntake })
   | (ProjectionEventBase & { type: 'intake-confirmed'; by: 'user' | 'rule' })
+  | (ProjectionEventBase & { type: 'baseline-locked'; lock: BaselineLock })
   | (ProjectionEventBase & { type: 'stage-entered'; node: WorkflowNode })
   | (ProjectionEventBase & { type: 'stage-completed'; node: WorkflowNode; artifacts: string[] })
   | (ProjectionEventBase & { type: 'stage-failed'; node: WorkflowNode; reason: string })

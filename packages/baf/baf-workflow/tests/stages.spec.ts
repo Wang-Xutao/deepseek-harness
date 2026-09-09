@@ -3,16 +3,18 @@
  * illegal entry (§12 Phase 5.8 acceptance).
  */
 
-import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, readFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { BafError, loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
+import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { confirmIntake, createWorkflowService } from '../src/workflow-service.ts'
 import { ProjectionStore } from '../src/projection.ts'
 import { StagePipeline } from '../src/stages/pipeline.ts'
 import { recordTouched, completeTask } from '../src/stages/implement.ts'
+import { detectAndRecord, type DriftObservation } from '../src/stages/drift.ts'
 
 const FIXTURE_BASELINE = fileURLToPath(
   new URL('../../baf-core/tests/fixtures/baseline/baseline.yml', import.meta.url),
@@ -208,6 +210,151 @@ describe('illegal entry', () => {
         .rejects.toMatchObject({ code: 'invalid_transition' })
       const status = await pipeline.context().store.readStatus(changeId)
       expect(status.current).toBe('intake')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('verify T11', () => {
+  it('failing openspec-validate sends verify → implement with a stage-failed record', async () => {
+    const { root, pipeline, store, changeId } = await setup()
+    try {
+      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveClarifyStage({
+        changeId,
+        questions: [{ question: 'Format?', answer: 'CSV (user call 2026-09-08)', status: 'decided' }],
+        acceptanceCriteria: ['npm test exports CSV'],
+      })
+      await pipeline.driveDesignStage({
+        changeId,
+        approach: 'Approach',
+        references: [await touchReference(root, 'src/x.ts')],
+      })
+      const allowlistFile = 'src/x.ts'
+      await pipeline.drivePlanStage({
+        changeId,
+        tasks: [{
+          id: 't1',
+          title: 'Task',
+          files: [allowlistFile],
+          verify: ['npm test'],
+          rollback: 'git revert HEAD',
+        }],
+        allowlist: [allowlistFile],
+      })
+      const changeDirAbs = join(root, 'openspec', 'changes', changeId)
+      await writeFile(
+        join(changeDirAbs, ARTIFACT_FILES.proposal),
+        '# Add report export API\n\n## Why\n\nUsers need CSV export.\n',
+        'utf8',
+      )
+      await writeFile(
+        join(changeDirAbs, ARTIFACT_FILES.tasks),
+        '# Tasks\n\n- [x] t1 Task\n',
+        'utf8',
+      )
+
+      await pipeline.enterImplementStage(changeId)
+      await recordTouched(root, { changeId, file: allowlistFile })
+      await completeTask(root, changeId, 't1')
+      await pipeline.driveImplementStage(changeId)
+
+      // Force verify to fail by emptying proposal.md (adapter validate then
+      // flags the missing "## Why" section as an unfilled template).
+      await writeFile(
+        join(changeDirAbs, ARTIFACT_FILES.proposal),
+        '# Add report export API\n',
+        'utf8',
+      )
+      const verify = await pipeline.driveVerifyStage(changeId)
+      expect(verify.node).toBe('verify')
+      expect(verify.result.backToImplement).toBe(true)
+      const status = await store.readStatus(changeId)
+      expect(status.nodes.verify).toBe('failed')
+      expect(status.current).toBe('implement')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('drift detection (Phase 5.8)', () => {
+  it('writes drift-detected when an artifact owned by a completed stage is deleted', async () => {
+    const { root, pipeline, store, changeId } = await setup()
+    try {
+      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveClarifyStage({
+        changeId,
+        questions: [{ question: 'Format?', answer: 'CSV (user call 2026-09-08)', status: 'decided' }],
+        acceptanceCriteria: ['npm test exports CSV'],
+      })
+      await pipeline.driveDesignStage({
+        changeId,
+        approach: 'Approach',
+        references: [await touchReference(root, 'src/d.ts')],
+      })
+
+      const designPath = join(root, 'openspec', 'changes', changeId, ARTIFACT_FILES.design)
+      await unlink(designPath)
+
+      const drift = await pipeline.driveDriftStage(changeId)
+      if (drift.node !== 'drift') throw new Error('expected drift node')
+      expect(drift.result.signals.length).toBeGreaterThan(0)
+      expect(drift.result.signals.some(s => s.trigger === 'artifact-missing')).toBe(true)
+
+      const events = await store.readEvents(changeId)
+      expect(events.events.some(e => e.type === 'drift-detected')).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('detects baseline id change without recording when record=false', async () => {
+    const { root, pipeline, changeId, baseline } = await setup()
+    try {
+      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      const status = await pipeline.context().store.readStatus(changeId)
+      const observation: DriftObservation = {
+        baseline: { ...baseline, baselineId: 'replacement-baseline' },
+      }
+      const signals = await detectAndRecord(pipeline.context(), status, observation, { record: false })
+      expect(signals.some(s => s.trigger === 'baseline-id-changed')).toBe(true)
+      const events = await pipeline.context().store.readEvents(changeId)
+      expect(events.events.some(e => e.type === 'drift-detected')).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('abandon (Phase 5.8)', () => {
+  it('refuses without human confirmation', async () => {
+    const { root, pipeline, changeId } = await setup()
+    try {
+      await expect(pipeline.driveAbandonStage({ changeId, humanConfirmed: false }))
+        .rejects.toMatchObject({ code: 'invalid_transition' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('records change-abandoned after confirmation and stays idempotent on retry', async () => {
+    const { root, pipeline, store, changeId } = await setup()
+    try {
+      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      const first = await pipeline.driveAbandonStage({ changeId, humanConfirmed: true })
+      if (first.node !== 'abandon') throw new Error('expected abandon node')
+      expect(first.result.recorded).toBe(true)
+      expect(first.result.status.terminal === 'abandoned').toBe(true)
+
+      const events = await store.readEvents(changeId)
+      expect(events.events.some(e => e.type === 'change-abandoned')).toBe(true)
+
+      const second = await pipeline.driveAbandonStage({ changeId, humanConfirmed: true })
+      if (second.node !== 'abandon') throw new Error('expected abandon node')
+      expect(second.result.recorded).toBe(false)
+      expect(second.result.status.terminal === 'abandoned').toBe(true)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

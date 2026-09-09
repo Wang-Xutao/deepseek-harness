@@ -61,6 +61,8 @@ export * from './stages/plan.ts'
 export * from './stages/implement.ts'
 export * from './stages/verify.ts'
 export * from './stages/archive.ts'
+export * from './stages/drift.ts'
+export * from './stages/abandon.ts'
 export * from './stages/pipeline.ts'
 
 declare module '@deepseek-ai/cordis' {
