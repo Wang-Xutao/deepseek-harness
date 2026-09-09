@@ -11,6 +11,7 @@ afterEach(() => {
 
 const unusedHook = (() => { throw new Error('unused') }) as never
 const kit = {
+  useResource: unusedHook,
   useSessions: unusedHook,
   useSessionPendingInteraction: unusedHook,
   useWorkspaces: unusedHook,

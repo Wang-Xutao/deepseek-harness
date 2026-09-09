@@ -125,9 +125,11 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
               fallback: <FishLogo size={34} className={css.fish} />,
             })}
           </span>
-          <span className={css.headlineText}>{t('hero.headline')}</span>
-          {renderSlot('conversation.hero.brand.trailing', { size: 28, className: css.trailingMark })}
-          <span className={css.previewBadge}>{t('hero.preview')}</span>
+          <span className={css.titleGroup}>
+            {/* Own element: keeps the headline text addressable apart from the badge. */}
+            <span>{t('hero.headline')}</span>
+            <span className={css.previewBadge}>{t('hero.preview')}</span>
+          </span>
         </div>
         <div className={css.body}>
           {/* The resident composer (ConversationRoot's root-owned scrollport;

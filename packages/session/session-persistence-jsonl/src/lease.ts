@@ -1,7 +1,7 @@
 /**
  * Cross-process write-ownership lock for one session's artifact directory,
  * held for the whole life of a write handle. The arbiter is the kernel:
- * POSIX takes a non-blocking `flock(2)` (through fs-ext) on `session.lock`
+ * POSIX takes a non-blocking `flock(2)` via native system support on `session.lock`
  * beside the log, and Windows holds a named kernel semaphore derived from
  * that path — never a file lock or handle, so readers, searches, and
  * directory removal proceed freely while the lock is held. Contention maps
@@ -22,16 +22,18 @@
  * unmaterialized session has no filesystem footprint. Release never removes
  * the POSIX lock file: every acquired lock belongs to a materialized or
  * materializing session, and the surviving file keeps the stable inode later
- * lockers verify against. The browser worker deployment stubs fs-ext to
+ * lockers verify against. The browser worker stubs the native flock entry to
  * immediate success: it is single-process, so the in-process write claim
- * already excludes every writer. Windows never loads `fs-ext` (koffi owns the
- * lock), so packaging hosts that skip the native addon build still boot.
+ * already excludes every writer. Windows never loads the native flock addon
+ * (koffi owns the lock), so packaging hosts that skip the native addon build
+ * still boot.
  * @module @deepseek-ai/dsh-session-persistence-jsonl/lease
  */
 
 import { mkdir, open, stat } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import { join } from 'node:path'
+import { tryLockExclusive } from '@deepseek-ai/node-addon-system/flock'
 import { SessionAlreadyOwnedError } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { acquireLockHandleWin32, releaseLockHandleWin32 } from './win32.ts'
@@ -43,36 +45,6 @@ export const LEASE_FILENAME = 'session.lock'
 type HeldLock =
   | { readonly kind: 'posix'; readonly handle: FileHandle }
   | { readonly kind: 'win32'; readonly handle: number }
-
-/**
- * POSIX-only flock from `fs-ext`. Loaded on demand so Windows (and any
- * packaged tree that skipped the native build) never evaluates the addon.
- */
-type FlockFn = (
-  fd: number,
-  flags: 'exnb' | 'un',
-  callback: (error: NodeJS.ErrnoException | null) => void,
-) => void
-
-let flockImpl: FlockFn | undefined
-
-async function loadFlock(): Promise<FlockFn> {
-  if (flockImpl !== undefined) return flockImpl
-  const { flock } = await import('fs-ext')
-  flockImpl = flock as FlockFn
-  return flockImpl
-}
-
-/** Promise face over fs-ext's callback flock, pinned to its string-flag overload. */
-async function flockAsync(fd: number, flags: 'exnb' | 'un'): Promise<void> {
-  const flock = await loadFlock()
-  return new Promise((resolve, reject) => {
-    flock(fd, flags, (error) => {
-      if (error) reject(error)
-      else resolve()
-    })
-  })
-}
 
 /** Whether a flock failure means another descriptor holds the lock. */
 function isLockContention(error: unknown): boolean {
@@ -121,7 +93,7 @@ export class SessionWriteLease {
       const handle = await open(path, 'w')
       try {
         try {
-          await flockAsync(handle.fd, 'exnb')
+          await tryLockExclusive(handle.fd)
         } catch (error: unknown) {
           if (isLockContention(error)) throw new SessionAlreadyOwnedError(id)
           throw error

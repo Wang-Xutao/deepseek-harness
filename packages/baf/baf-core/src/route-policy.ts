@@ -4,10 +4,7 @@
  * @module @deepseek-ai/dsh-baf-core/route-policy
  */
 
-import { readFile } from 'node:fs/promises'
-import { load as loadYaml } from 'js-yaml'
 import { z } from 'zod'
-import type { BaselineManifest } from './baseline.ts'
 import { BafError } from './errors.ts'
 import type { WorkflowNode } from './workflow.ts'
 
@@ -36,8 +33,30 @@ export interface AllowedModel extends ModelRef {
   readonly fallbackGroup: string
 }
 
-/** Baseline-embedded route profile (preference layer under enterprise policy). */
-export type RouteProfile = BaselineManifest['routeProfile']
+/**
+ * Baseline-embedded route profile (preference layer under enterprise policy).
+ * Declared explicitly (not derived from the zod manifest inference) so callers
+ * may hold frozen or `as const` data: every field is readonly and mutable
+ * sources remain assignable.
+ */
+export interface RouteProfile {
+  readonly default: ModelRef
+  readonly allowed: readonly AllowedModel[]
+  readonly phases: Readonly<{
+    intake: ModelRef
+    open: ModelRef
+    clarify: ModelRef
+    design: ModelRef
+    plan: ModelRef
+    implement: ModelRef
+    verify: ModelRef
+    archive: ModelRef
+  }>
+  readonly fallbackPolicy: {
+    readonly mode: 'approved-only'
+    readonly groups: Readonly<Record<string, readonly ModelRef[]>>
+  }
+}
 
 /**
  * Independent enterprise route ceiling (session-create freeze).
@@ -220,37 +239,6 @@ export function parseEnterpriseRoutePolicy(raw: unknown, path?: string): Enterpr
   }
   assertEnterpriseRoutePolicySemantics(parsed.data)
   return parsed.data
-}
-
-/**
- * Load an enterprise route policy YAML file.
- * @param path - filesystem path from deployment config.
- * @returns validated policy.
- */
-export async function loadEnterpriseRoutePolicyFile(path: string): Promise<EnterpriseRoutePolicy> {
-  let text: string
-  try {
-    text = await readFile(path, 'utf8')
-  } catch (error) {
-    throw new BafError('policy_missing', `enterprise route policy unreadable at ${path}`, {
-      field: 'enterpriseRoutePolicyPath',
-      consumer: 'loadEnterpriseRoutePolicyFile',
-      path,
-      cause: error instanceof Error ? error.message : String(error),
-    })
-  }
-  let raw: unknown
-  try {
-    raw = loadYaml(text)
-  } catch (error) {
-    throw new BafError('policy_missing', `enterprise route policy YAML parse failed at ${path}`, {
-      field: 'enterpriseRoutePolicyPath',
-      consumer: 'loadEnterpriseRoutePolicyFile',
-      path,
-      cause: error instanceof Error ? error.message : String(error),
-    })
-  }
-  return parseEnterpriseRoutePolicy(raw, path)
 }
 
 /**

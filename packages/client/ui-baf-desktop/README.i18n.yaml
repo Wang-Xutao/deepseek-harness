@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-baf-desktop/README.md
-README.md: f93caac5875d5e70a431c3d384e23b721a278647
+README.md: 0a1424df9b072d7f78221394055a2faa3a1e54b1
 README.zh.md: 5532af2f5b0601f672fd034df8506cb4e285e293

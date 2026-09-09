@@ -25,8 +25,12 @@ export * from './identity.ts'
 export * from './intake.ts'
 export * from './result.ts'
 export * from './route-policy.ts'
+export * from './route-policy-loader.ts'
 export * from './tab-view.ts'
 export * from './workflow.ts'
+// Pull the Remote-boundary re-export hub into every importing program so the
+// typert analyzer can resolve `@deepseek-ai/dsh-baf-core/types` candidates.
+export type * from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

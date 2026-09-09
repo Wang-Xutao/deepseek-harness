@@ -4,6 +4,8 @@ description: "BAF go 工作流域：路由、projection、intake、转换。"
 
 # @deepseek-ai/dsh-baf-workflow
 
+[English](README.md) | 中文
+
 拥有 BAF go 工作流域。Phase 3：`resolveRoute()`、session `baf/route-resolved` 审计、请求级 `ModelSelection`。Phase 4：append-only 工作区 projection、转换裁决、intake 分类与 `WorkflowService`。Web Tab Remote 在 `@deepseek-ai/dsh-client-ui-baf-workflow`。
 
 仅在官方 BAF preset 中与 `baf-core` 同组、`isolate.bafWorkflow: true` 下挂载。
