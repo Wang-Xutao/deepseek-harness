@@ -6,6 +6,8 @@ import { globSync } from 'node:fs'
  * Return repository-relative Cordis Loader YAML paths under `root`.
  *
  * Translation consistency records are YAML sidecars, never Loader inputs.
+ * Desktop packaging outputs (`overlay/desktop/dist`, `overlay/desktop/resources`)
+ * are build artifacts, not source compositions.
  *
  * @param root Repository root to scan.
  * @returns Sorted repository-relative Loader configuration paths.
@@ -13,6 +15,13 @@ import { globSync } from 'node:fs'
 export function cordisConfigFiles(root: string): string[] {
   return globSync(['**/*cordis*.yml', '**/*cordis*.yaml'], {
     cwd: root,
-    exclude: ['.claude/**', 'node_modules/**', 'vendor/**', '**/*.i18n.yaml'],
+    exclude: [
+      '.claude/**',
+      'node_modules/**',
+      'vendor/**',
+      '**/*.i18n.yaml',
+      'overlay/desktop/dist/**',
+      'overlay/desktop/resources/**',
+    ],
   }).sort()
 }

@@ -265,14 +265,16 @@
   isolate:
     bafCore: true
     bafWorkflow: true
+    bafOpenspec: true
   config:
     - id: baf-core
       name: '@deepseek-ai/dsh-baf-core'
     - id: baf-workflow
       name: '@deepseek-ai/dsh-baf-workflow'
-# Phase 4+ 启用：
-#     - id: baf-openspec
-#       name: '@deepseek-ai/dsh-baf-openspec'
+# Phase 5 起启用（OpenSpecAdapter 本地文件模式）：
+    - id: baf-openspec
+      name: '@deepseek-ai/dsh-baf-openspec'
+# Phase 7+ 启用：
 #     - id: baf-standard
 #       name: '@deepseek-ai/dsh-baf-standard'
 #     - id: baf-quality

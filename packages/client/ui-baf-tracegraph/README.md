@@ -12,6 +12,8 @@ gates the tab behind `baf-workflow.showTraceGraph`.
 Consumes the existing Trajectory snapshot and Chat `workflow-run` nodes; does
 not replace the Trajectory tab.
 
+No runtime invariant companion is published because the overlay derives its whole view from the existing Trajectory snapshot and Chat nodes; it owns no diverging runtime observations.
+
 ## Settings
 
 The plugin registers a `settings.section` entry `workflow` (nav order 20) and

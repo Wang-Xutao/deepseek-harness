@@ -37,10 +37,8 @@
     },
     {
       "path": "../../settings/settings"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
-    },
+    }
+    ,
     {
       "path": "../../api/remotes/tsconfig.client.json"
     },

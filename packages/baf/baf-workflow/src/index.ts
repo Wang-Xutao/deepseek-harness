@@ -37,6 +37,8 @@ import {
 import { toModelSelection, toWorkflowAgentOptions } from './phase-route.ts'
 import { ProjectionStore } from './projection.ts'
 import { createWorkflowService, confirmIntake, rejectIntake } from './workflow-service.ts'
+import { StagePipeline } from './stages/pipeline.ts'
+import type { BaselineManifest } from '@deepseek-ai/dsh-baf-core'
 
 export * from './route.ts'
 export * from './route-audit.ts'
@@ -47,6 +49,19 @@ export * from './intake.ts'
 export * from './workflow-service.ts'
 export * from './tab-view.ts'
 export * from './metrics.ts'
+export * from './stages/context.ts'
+export * from './stages/artifacts.ts'
+export * from './stages/gates.ts'
+export * from './stages/check-runner.ts'
+export * from './stages/write.ts'
+export * from './stages/open.ts'
+export * from './stages/clarify.ts'
+export * from './stages/design.ts'
+export * from './stages/plan.ts'
+export * from './stages/implement.ts'
+export * from './stages/verify.ts'
+export * from './stages/archive.ts'
+export * from './stages/pipeline.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -87,6 +102,23 @@ export class BafWorkflow extends Service {
   bindWorkspace(workspaceRoot: string): void {
     this.store = new ProjectionStore({ workspaceRoot })
     this.workflow = createWorkflowService({ store: this.store })
+  }
+
+  /**
+   * Stage pipeline bound to the current workspace (Phase 5 full-go chain).
+   * @param options - optional git revision and baseline for the chain.
+   * @returns pipeline, or throws when no workspace is bound.
+   */
+  stagePipeline(options: {
+    readonly gitRevision?: string
+    readonly baseline?: BaselineManifest
+  } = {}): StagePipeline {
+    const store = this.requireStore()
+    return new StagePipeline({
+      store,
+      workspaceRoot: store.workspaceRoot(),
+      ...options,
+    })
   }
 
   /**

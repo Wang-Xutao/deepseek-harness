@@ -4,6 +4,8 @@ English | [中文](README.zh.md)
 
 Desktop chrome for baf-dsh: monochrome Sora mark after the empty-hero headline, optional VS Code / Cursor open buttons in the session header, and a Help footer panel that embeds the MkDocs site at `/help/` (with an open-in-browser action).
 
+No runtime invariant companion is published because this package is presentation-only chrome over desktop IPC; it owns no diverging runtime observations.
+
 ## Model Experience
 
 None. This package contributes browser UI only and never reaches a model request.

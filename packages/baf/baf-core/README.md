@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 `dsh-baf-core` is the shared vocabulary and registration point for BAF enterprise mode. It loads and validates enterprise baselines, exposes adapter contracts (OpenSpec, C stack, guard, workflow), ships Phase 2 unavailable stubs, and owns `EnterpriseRoutePolicy` / `RouteStatusView` types for Phase 3 routing. Mount it only under the `bafCore` isolate in the official BAF preset.
 
+No runtime invariant companion is published because this package declares contracts and loads data; independent observations cannot diverge from the files it validates.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

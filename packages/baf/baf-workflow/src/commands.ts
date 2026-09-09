@@ -89,6 +89,8 @@ export function apply(ctx: Context): void {
                 ...(v.bafCoreNotes ? [`  · ${v.bafCoreNotes}`] : []),
                 `@deepseek-ai/dsh-baf-workflow: ${v.bafWorkflow}`,
                 ...(v.bafWorkflowNotes ? [`  · ${v.bafWorkflowNotes}`] : []),
+                `@deepseek-ai/dsh-baf-openspec: ${v.bafOpenspec}`,
+                ...(v.bafOpenspecNotes ? [`  · ${v.bafOpenspecNotes}`] : []),
               ],
             },
             {

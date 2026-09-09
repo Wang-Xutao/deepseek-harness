@@ -3,7 +3,7 @@
 > **读者**：BAF 实现工程师、企业落地负责人、dsh 维护者。
 > **目标**：把旧版「Claude Code + Comet + Superpowers + vibe + marketplace + hooks」的工作流指南，重构为 dsh 原生、可随桌面应用分发、可签名升级回滚的企业级 Agent 实施方案；工程师按本文档落地，不再做关键架构决策。
 > **用法**：第 0 章是导航；**文首「实现进度」是仓库实况（已完成 / 未完成）**；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
-> **对照基准**：仓库现状 2026-09-07（分支 `baf`；dsh `0.1.3-alpha.1`；桌面 **baf-dsh 0.0.8**）。**Phase 0–4 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 为品牌/IDE/帮助；`packages/client/ui-baf-workflow` 为 BAF 会话「工作流」Tab（与「轨迹图」无关）；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader、adapter stub、`NODE_CATALOG`/`WORKFLOW_GRAPH`；`baf-workflow` 已提供 route、projection、transition、intake 与 `WorkflowTabView` Web Remote。
+> **对照基准**：仓库现状 2026-09-09（分支 `baf`；dsh `0.1.3-alpha.1`；桌面 **baf-dsh 0.0.10**）。**Phase 0–5 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 为品牌/IDE/帮助；`packages/client/ui-baf-workflow` 为 BAF 会话「工作流」Tab（与「轨迹图」无关）；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader、adapter stub、`NODE_CATALOG`/`WORKFLOW_GRAPH`；`baf-workflow` 已提供 route、projection、transition、intake 与 `WorkflowTabView` Web Remote；`baf-openspec` 提供本地文件模式 OpenSpec adapter；`baf-workflow` `stages/` 提供 full-go 七阶段 handler 与 `StagePipeline` 编排。
 > **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，并把 MVP 裁到「可发现 system preset + intake/projection + full-go 主链 + ToolGuard」，签名三 scope 更新可并行但不应挡主链。
 > **本文档完全取代**旧版面向 Claude Code 的建设指南：Comet、Superpowers、vibe workflow、Claude Code marketplace、`enabledPlugins`、Claude Code hooks 不再是新架构的组成部分。
 
@@ -27,7 +27,7 @@
 | **2** | `baf-core` 骨架 + baseline loader + adapter stub                             | **已完成** |
 | **3** | route resolver + 审计                                                        | **已完成** |
 | **4** | intake + projection + transition + Web 工作流 Tab（半交互）                        | **已完成** |
-| 5     | full-go 各阶段                                                                | **未开始** |
+| 5     | full-go 各阶段                                                                | **已完成** |
 | 6     | bug-fast-path / 升级                                                         | **未开始** |
 | 7     | quality / standard / guard / scaffold                                      | **未开始** |
 | 8     | slash / CLI / desktop IPC + **变更 Dashboard（归档总览）** | **未开始**（工作流页「变更总览」入口已先行） |
@@ -35,7 +35,7 @@
 | 10    | release 门禁                                                                 | **未开始** |
 
 
-MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；当前到「roster + route + projection/intake/transition + BAF 工作流 Tab」。
+MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**差 ToolGuard 与 slash/`status`**（均属 Phase 7/8）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）已落地并随桌面 **baf-dsh 0.0.10** 分发。
 
 ### Phase 4 — 已完成明细
 
@@ -50,6 +50,23 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；�
 | Web `WorkflowTabView` Remote      | 已完成 | `baf-workflow` Typert Remote；按 session cwd 读写 projection          |
 | 会话 Tab「工作流」                       | 已完成 | `packages/client/ui-baf-workflow/`；仅 `agentPreset === baf` 显示；半交互 |
 | 与「轨迹图」隔离                          | 已完成 | 设置原「工作流」section 改名为「轨迹图」；两 Tab 并存、职责分离                            |
+
+### Phase 5 — 已完成明细
+
+| 项                                        | 状态  | 落点                                                                                              |
+| ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
+| `baf-openspec` 独立包（Cordis Service）          | 已完成 | `packages/baf/baf-openspec/`；本地文件模式 OpenSpec adapter（骨架、读取、校验、原子归档）+ `BafOpenspec` service |
+| 阶段运行时上下文                                  | 已完成 | `baf-workflow` `stages/context.ts`；绑定 projection store / adapter / workspace / baseline            |
+| N1 `open` 骨架创建                            | 已完成 | `stages/open.ts`；Git revision 前置检查 + change skeleton + `stage-entered`                          |
+| N2 `clarify` 产物 + T6 门禁                     | 已完成 | `stages/clarify.ts`；阻塞问题/验收条件/非目标渲染，模板态可覆写、已填态拒绝                        |
+| N3 `design` 产物 + 引用核验                      | 已完成 | `stages/design.ts`；设计引用仓库路径存在性检查，缺失即 `invalid_transition`                          |
+| N4 `plan` 产物 + T8 门禁                      | 已完成 | `stages/plan.ts`；`plan.md` + `plan.json`（任务/allowlist/验证命令/回滚点）                       |
+| N5 `implement` 任务状态 + allowlist             | 已完成 | `stages/implement.ts`；任务开始/完成/阻塞记录 + 越界修改拒绝                                       |
+| N6 `verify` 检查聚合                          | 已完成 | `stages/verify.ts`；`CheckRunner` 接 OpenSpec validate + `verify-report.json`                       |
+| N7 `archive` 人工确认 + 原子归档                  | 已完成 | `stages/archive.ts`；verify 报告作为 T10 证据 + OpenSpec 原子归档 + `change-archived`                  |
+| `StagePipeline` 编排                        | 已完成 | `stages/pipeline.ts`；绑定 `WorkflowService.transition`，进入/完成/拒绝事件全程入 projection            |
+| 阶段测试（happy path + 门禁失败 + 非法进入 + 全链路）      | 已完成 | `baf-workflow` `tests/stages.spec.ts`                                                            |
+| 桌面分发                                      | 已完成 | `pack-dsh.mjs` force 打包 `baf-openspec`；`baf-product-versions.json` 嵌入 `bafOpenspec` 字段          |
 
 
 
@@ -130,9 +147,9 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**尚未达到**；�
 | 项                                               | 说明                                                                                            |
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `packages/baf/baf-core` 运行时包                    | **已完成**（`@deepseek-ai/dsh-baf-core`；baseline loader + unavailable adapters + RouteStatusView） |
-| composition 启用 `baf-core` / `baf-workflow` row  | **已完成**（`isolate.bafCore` + `isolate.bafWorkflow`）                                            |
-| go 状态机 / intake / projection                    | **Phase 4 已完成**（阶段 handler 仍属 Phase 5）；Web 工作流 Tab 已落地                                        |
-| ToolGuard / quality / OpenSpec adapter          | 未实现（Phase 5/7）                                                                                |
+| composition 启用 `baf-core` / `baf-workflow` row  | **已完成**（`isolate.bafCore` + `isolate.bafWorkflow` + `isolate.bafOpenspec`）                        |
+| go 状态机 / intake / projection                    | **Phase 4 已完成**；full-go 阶段 handler 与 `StagePipeline` **Phase 5 已完成**；Web 工作流 Tab 已落地                |
+| ToolGuard / quality / OpenSpec adapter          | OpenSpec adapter **已完成**（`baf-openspec` 本地文件模式）；ToolGuard / quality 未实现（Phase 7）              |
 | slash / `baf` CLI profile / desktop bridge      | 未实现（Phase 8）                                                                                  |
 | `overlay/plugin` → `~/.dsh/.agent-presets` 官方同步 | **已关闭**（桌面不同步 `agent-presets`；官方 BAF 仅 shipped）                                               |
 | 更新签名强制 / InstalledVersions schema 2 代码          | 未实现（Phase 9）                                                                                  |
@@ -1539,6 +1556,8 @@ export function resolveRoute(
 - `tests/stages/*.spec.ts`：每阶段 happy path + 完成校验失败 + 非法进入。
 - 打开 composition 中 `baf-openspec` row。
 - **验收**：happy path `open → … → archive` 全链路（fixture 仓库）跑通；verify 失败回 implement；drift 标记正确；模型声明不推动转换。
+
+> **Phase 5 完成记录（2026-09-09）**：5.1–5.7 已按计划落地（落点见文首「Phase 5 — 已完成明细」）；5.8 的 drift 检测（`src/drift.ts`）与 abandon（`src/abandon.ts`）尚未实现，作为 Phase 6 起步项补齐；`tests/stages.spec.ts` 覆盖 happy path 全链路、verify 失败回 implement、非法进入拒绝与门禁失败。验收中「模型声明不推动转换」由 `WorkflowService.transition` 裁决保证。
 
 
 

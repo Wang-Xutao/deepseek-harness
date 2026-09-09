@@ -27,7 +27,7 @@ describe('resolveRoute (§6.2)', () => {
   })
 
   it('2. enterprise ceiling rejects profile-only widening (outsider never selected)', () => {
-    const widened = {
+    const widened: typeof PROFILE = {
       ...PROFILE,
       phases: {
         ...PROFILE.phases,
@@ -35,7 +35,11 @@ describe('resolveRoute (§6.2)', () => {
       },
       allowed: [
         ...PROFILE.allowed,
-        { ...OUTSIDER, capabilities: ['coding', 'tool-use'], fallbackGroup: 'primary-group' },
+        {
+          ...OUTSIDER,
+          capabilities: ['coding', 'tool-use'],
+          fallbackGroup: 'primary-group',
+        },
       ],
     }
     const all = new Set([key(PRIMARY), key(FALLBACK), key(LIGHT), key(OUTSIDER)])
@@ -96,7 +100,10 @@ describe('resolveRoute (§6.2)', () => {
     const lightProfile: typeof PROFILE = {
       ...PROFILE,
       default: LIGHT,
-      allowed: lightOnlyEnterprise.allowed,
+      allowed: lightOnlyEnterprise.allowed.map(entry => ({
+        ...entry,
+        capabilities: [...entry.capabilities],
+      })),
       phases: {
         intake: LIGHT,
         open: LIGHT,
@@ -107,7 +114,10 @@ describe('resolveRoute (§6.2)', () => {
         verify: LIGHT,
         archive: LIGHT,
       },
-      fallbackPolicy: lightOnlyEnterprise.fallbackPolicy,
+      fallbackPolicy: {
+        mode: 'approved-only',
+        groups: { 'light-group': [LIGHT] },
+      },
     }
     try {
       resolveRoute(lightOnlyEnterprise, lightProfile, 'design', undefined, availabilityOf(new Set([key(LIGHT)])))

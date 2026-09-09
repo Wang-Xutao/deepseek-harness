@@ -1,5 +1,6 @@
 ---
 description: "BAF local file-mode OpenSpec adapter: change skeleton, read, validate, and atomic archive."
+kind: "package-reference"
 ---
 
 # @deepseek-ai/dsh-baf-openspec
@@ -9,6 +10,8 @@ English | [中文](README.zh.md)
 ## Summary
 
 `dsh-baf-openspec` implements the `OpenSpecAdapter` contract from `@deepseek-ai/dsh-baf-core` against a workspace-local OpenSpec directory (`openspec/changes/<changeId>/`). Phase 5 uses it for the `open` skeleton, stage artifact read/write, `validate` checks, and the atomic `archive` move. It never shells out: the enterprise OpenSpec CLI integration is a later phase; today's `detect()` reports the local layout as the mode.
+
+No runtime invariant companion is published because the adapter owns no diverging observations: every caller shares the same workspace files it reads and writes.
 
 ## Table of Contents
 

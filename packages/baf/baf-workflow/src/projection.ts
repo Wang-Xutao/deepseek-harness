@@ -240,6 +240,14 @@ export class ProjectionStore {
   }
 
   /**
+   * Absolute workspace root this store writes under.
+   * @returns workspace root.
+   */
+  workspaceRoot(): string {
+    return this.root
+  }
+
+  /**
    * Absolute path to a change log.
    * @param changeId - change id.
    * @returns absolute path.

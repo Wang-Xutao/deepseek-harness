@@ -110,7 +110,7 @@ function previewText(content: readonly { type: string; text?: string }[]): strin
   for (const block of content) {
     if (block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') {
       const text = block.text.trim().replace(/\s+/g, ' ')
-      return text.length > 80 ? `${text.slice(0, 77)}â¦` : text
+      return text.length > 80 ? `${text.slice(0, 77)}…` : text
     }
   }
   return ''

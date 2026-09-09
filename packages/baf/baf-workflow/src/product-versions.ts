@@ -16,10 +16,12 @@ export interface BafProductVersions {
   readonly dsh: string
   readonly bafCore: string
   readonly bafWorkflow: string
+  readonly bafOpenspec: string
   readonly bafDshNotes: string
   readonly dshNotes: string
   readonly bafCoreNotes: string
   readonly bafWorkflowNotes: string
+  readonly bafOpenspecNotes: string
   readonly source: string
 }
 
@@ -60,10 +62,12 @@ type EmbeddedProduct = {
   dsh: string
   bafCore?: string
   bafWorkflow?: string
+  bafOpenspec?: string
   bafDshNotes?: string
   dshNotes?: string
   bafCoreNotes?: string
   bafWorkflowNotes?: string
+  bafOpenspecNotes?: string
 }
 
 /**
@@ -84,10 +88,12 @@ function readEmbeddedProductFile(start: string): EmbeddedProduct | undefined {
           const out: EmbeddedProduct = { bafDsh, dsh }
           if (typeof raw.bafCore === 'string') out.bafCore = raw.bafCore
           if (typeof raw.bafWorkflow === 'string') out.bafWorkflow = raw.bafWorkflow
+          if (typeof raw.bafOpenspec === 'string') out.bafOpenspec = raw.bafOpenspec
           if (typeof raw.bafDshNotes === 'string') out.bafDshNotes = raw.bafDshNotes
           if (typeof raw.dshNotes === 'string') out.dshNotes = raw.dshNotes
           if (typeof raw.bafCoreNotes === 'string') out.bafCoreNotes = raw.bafCoreNotes
           if (typeof raw.bafWorkflowNotes === 'string') out.bafWorkflowNotes = raw.bafWorkflowNotes
+          if (typeof raw.bafOpenspecNotes === 'string') out.bafOpenspecNotes = raw.bafOpenspecNotes
           return out
         }
       } catch {
@@ -108,6 +114,7 @@ function readEmbeddedProductFile(start: string): EmbeddedProduct | undefined {
 export function resolveBafProductVersions(): BafProductVersions {
   const bafCoreResolved = pkgVersion('@deepseek-ai/dsh-baf-core')
   const bafWorkflowResolved = pkgVersion('@deepseek-ai/dsh-baf-workflow')
+  const bafOpenspecResolved = pkgVersion('@deepseek-ai/dsh-baf-openspec')
   const dshPkg = pkgVersion('@deepseek-ai/dsh')
 
   const here = dirname(fileURLToPath(import.meta.url))
@@ -120,10 +127,12 @@ export function resolveBafProductVersions(): BafProductVersions {
       dsh: embedded.dsh,
       bafCore: embedded.bafCore ?? bafCoreResolved,
       bafWorkflow: embedded.bafWorkflow ?? bafWorkflowResolved,
+      bafOpenspec: embedded.bafOpenspec ?? bafOpenspecResolved,
       bafDshNotes: embedded.bafDshNotes ?? '',
       dshNotes: embedded.dshNotes ?? '',
       bafCoreNotes: embedded.bafCoreNotes ?? pkgNotes('@deepseek-ai/dsh-baf-core'),
       bafWorkflowNotes: embedded.bafWorkflowNotes ?? pkgNotes('@deepseek-ai/dsh-baf-workflow'),
+      bafOpenspecNotes: embedded.bafOpenspecNotes ?? pkgNotes('@deepseek-ai/dsh-baf-openspec'),
       source: 'baf-product-versions.json（与设置「版本与更新」同源字段）',
     }
   }
@@ -133,10 +142,12 @@ export function resolveBafProductVersions(): BafProductVersions {
     dsh: dshPkg === '（未知）' ? '（未知）' : dshPkg,
     bafCore: bafCoreResolved,
     bafWorkflow: bafWorkflowResolved,
+    bafOpenspec: bafOpenspecResolved,
     bafDshNotes: '',
     dshNotes: '',
     bafCoreNotes: pkgNotes('@deepseek-ai/dsh-baf-core'),
     bafWorkflowNotes: pkgNotes('@deepseek-ai/dsh-baf-workflow'),
+    bafOpenspecNotes: pkgNotes('@deepseek-ai/dsh-baf-openspec'),
     source: 'npm 包解析（未找到打包嵌入的 baf-product-versions.json）',
   }
 }

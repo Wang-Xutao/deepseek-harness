@@ -13,7 +13,7 @@ const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'basel
 describe('BafCore service', () => {
   it('registers on the context and loads a baseline', async () => {
     const ctx = new Context()
-    await ctx.plugin(BafCore, {})
+    await ctx.plugin(BafCore, { bafVersion: BAF_VERSION })
     expect(ctx.bafCore.version()).toBe(BAF_VERSION)
     expect(ctx.bafCore.doctor().adapters.openspec).toBe('unavailable')
     expect(ctx.bafCore.help().length).toBeGreaterThan(0)

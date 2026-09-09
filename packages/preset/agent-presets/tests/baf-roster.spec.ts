@@ -88,8 +88,8 @@ describe('shipped BAF roster', () => {
     expect(source).toContain("name: '@deepseek-ai/dsh-baf-workflow'")
     expect(source).toMatch(/^\s*- id: baf-workflow\s*$/m)
     expect(source).toContain('bafWorkflow: true')
-    expect(source).toContain('Phase 4+ 启用')
-    expect(source).not.toMatch(/^\s*- id: baf-openspec\s*$/m)
+    expect(source).toContain('Phase 5 起启用')
+    expect(source).toMatch(/^\s*- id: baf-openspec\s*$/m)
   })
 
   it('resolves built-in display keys for baf', () => {

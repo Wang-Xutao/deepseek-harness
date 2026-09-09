@@ -36,6 +36,7 @@ const COPY_NAME = /(?:^|_)(?:aria|copy|description|empty|heading|label|message|p
 const COPY_SUFFIX = /(?:aria|copy|description|empty|heading|label|labels|message|placeholder|summary|text|title|tooltip|tabs)$/i
 const IMMUTABLE_LANGUAGE_TOKENS = new Set([
   'B',
+  'BAF',
   'Function',
   'GB',
   'K',
@@ -183,6 +184,7 @@ export function findUiI18nViolations(file: string, sourceText: string): UiI18nVi
         || node.operatorToken.kind === ts.SyntaxKind.BarBarToken
         || node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
       ) {
+        if (node.operatorToken.kind === ts.SyntaxKind.BarBarToken && isBuildEnvironmentFallback(node)) return
         collectExpression(node.left, reason, naturalOnly)
         collectExpression(node.right, reason, naturalOnly)
       }
@@ -233,6 +235,21 @@ export function findUiI18nViolations(file: string, sourceText: string): UiI18nVi
       current = current.parent
     }
     return false
+  }
+
+  // `process.env.DSH_CLIENT_*` reads are build-environment values: a literal
+  // fallback beside one names the unconfigured build, not translatable copy,
+  // so the build step that injects the real title owns the visible string.
+  const isBuildEnvironmentFallback = (node: ts.Node): boolean => {
+    if (!ts.isBinaryExpression(node) || node.operatorToken.kind !== ts.SyntaxKind.BarBarToken) return false
+    const left = node.left
+    // Shape: `process.env.DSH_CLIENT_*` as a nested property access.
+    return ts.isPropertyAccessExpression(left)
+      && /^DSH_CLIENT_[A-Z0-9_]+$/.test(left.name.text)
+      && ts.isPropertyAccessExpression(left.expression)
+      && left.expression.name.text === 'env'
+      && ts.isIdentifier(left.expression.expression)
+      && left.expression.expression.text === 'process'
   }
 
   const visit = (node: ts.Node): void => {

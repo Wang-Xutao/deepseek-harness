@@ -11,7 +11,6 @@
     { "path": "../../test-support/client-runtime" },
     { "path": "../ui-primitives" },
     { "path": "../ui-settings" },
-    { "path": "../ui-slots" },
-    { "path": "../../runtime-diagnostics/invariants" }
+    { "path": "../ui-slots" }
   ]
 }

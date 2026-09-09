@@ -38,7 +38,7 @@ const POLICY: EnterpriseRoutePolicy = {
 
 const PROFILE: RouteProfile = {
   default: PRIMARY,
-  allowed: POLICY.allowed,
+  allowed: POLICY.allowed.map(entry => ({ ...entry, capabilities: [...entry.capabilities] })),
   phases: {
     intake: PRIMARY,
     open: PRIMARY,
@@ -49,7 +49,10 @@ const PROFILE: RouteProfile = {
     verify: PRIMARY,
     archive: PRIMARY,
   },
-  fallbackPolicy: POLICY.fallbackPolicy,
+  fallbackPolicy: {
+    mode: 'approved-only',
+    groups: { 'primary-group': [PRIMARY] },
+  },
 }
 
 describe('EnterpriseRoutePolicy', () => {

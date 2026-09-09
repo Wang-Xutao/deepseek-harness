@@ -141,6 +141,13 @@ function workspaceManifests(): WorkspaceManifest[] {
 }
 
 const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
+  // The preset mounts the slash-command Cordis plugin as an independent
+  // composition row beside the isolated domain entry, so it ships as its own
+  // bundle next to the lib.
+  '@deepseek-ai/dsh-baf-workflow': ['lib/commands.js'],
+  // Baseline JSON Schemas are published data the loader validates against at
+  // runtime; they are not compiled artifacts.
+  '@deepseek-ai/dsh-baf-core': ['schema/**'],
   // Statically linked client libraries keep their stylesheets next to the emitted
   // JavaScript, which imports them by relative path: the compile shell runs
   // them through its own CSS pipeline, so the sheets are published artifacts.

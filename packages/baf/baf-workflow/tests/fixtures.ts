@@ -2,7 +2,7 @@
  * Shared fixtures for route resolver tests.
  */
 
-import type { EnterpriseRoutePolicy, RouteProfile } from '@deepseek-ai/dsh-baf-core'
+import type { EnterpriseRoutePolicy, ModelRef, RouteProfile } from '@deepseek-ai/dsh-baf-core'
 
 const ALL_CAPS = [
   'reasoning',
@@ -14,13 +14,13 @@ const ALL_CAPS = [
 ] as const
 
 /** Full-capability primary model. */
-export const PRIMARY = { provider: 'fixture', model: 'primary' } as const
+export const PRIMARY: ModelRef = { provider: 'fixture', model: 'primary' }
 /** Approved fallback with full capabilities. */
-export const FALLBACK = { provider: 'fixture', model: 'fallback' } as const
+export const FALLBACK: ModelRef = { provider: 'fixture', model: 'fallback' }
 /** Light model for intake (no reasoning). */
-export const LIGHT = { provider: 'fixture', model: 'light' } as const
+export const LIGHT: ModelRef = { provider: 'fixture', model: 'light' }
 /** Outside enterprise allowed. */
-export const OUTSIDER = { provider: 'other', model: 'x' } as const
+export const OUTSIDER: ModelRef = { provider: 'other', model: 'x' }
 
 /** Enterprise policy used by most route tests. */
 export const ENTERPRISE: EnterpriseRoutePolicy = {

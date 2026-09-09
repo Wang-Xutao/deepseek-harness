@@ -204,69 +204,75 @@ interface RequestCardModel {
   toolCount: number
 }
 
-function RequestCard({ request }: { request: RequestCardModel }) {
+/** Locale translate function shared by cards and panels below. */
+type T = (key: TraceGraphKey, params?: Record<string, string | number>) => string
+
+function RequestCard({ request, t }: { request: RequestCardModel; t: T }) {
   return (
     <div className={clsx(css.card, css.cardRequest)}>
       <div className={css.cardHeader}>
         <span className={css.cardHeaderLeading}>
           <span className={css.cardBadge} data-kind="request">
             <span className={css.cardBadgeDot} />
-            REQUEST
+            {t('pipeline.request')}
           </span>
         </span>
       </div>
       <div className={css.cardKey}>
-        <span className={css.cardKeyLabel}>model</span>
+        <span className={css.cardKeyLabel}>{t('card.model')}</span>
         <span className={css.cardKeyValue}>{request.model}</span>
       </div>
       <div className={css.cardKey}>
-        <span className={css.cardKeyLabel}>provider</span>
+        <span className={css.cardKeyLabel}>{t('card.provider')}</span>
         <span className={css.cardKeyValue}>{request.provider}</span>
       </div>
       <div className={css.cardKey}>
-        <span className={css.cardKeyLabel}>system</span>
+        <span className={css.cardKeyLabel}>{t('card.system')}</span>
         <span className={css.cardKeyValue}>{request.systemCount}</span>
       </div>
       <div className={css.cardKey}>
-        <span className={css.cardKeyLabel}>user</span>
+        <span className={css.cardKeyLabel}>{t('card.user')}</span>
         <span className={css.cardKeyValue}>{request.userCount}</span>
       </div>
       <div className={css.cardKey}>
-        <span className={css.cardKeyLabel}>tools</span>
+        <span className={css.cardKeyLabel}>{t('card.toolsCount')}</span>
         <span className={css.cardKeyValue}>{request.toolCount}</span>
       </div>
     </div>
   )
 }
 
-function ResponseCard({ response }: { response: TraceGraphPipelineStep['response'] }) {
+function ResponseCard({
+  response,
+  t,
+}: { response: TraceGraphPipelineStep['response']; t: T }) {
   return (
     <div className={clsx(css.card, css.cardResponse)}>
       <div className={css.cardHeader}>
         <span className={css.cardHeaderLeading}>
           <span className={css.cardBadge} data-kind="response">
             <span className={css.cardBadgeDot} />
-            RESPONSE
+            {t('pipeline.response')}
           </span>
         </span>
       </div>
       <div className={css.cardKey}>
-        <span className={css.cardKeyLabel}>status</span>
+        <span className={css.cardKeyLabel}>{t('card.status')}</span>
         <span className={css.cardKeyValue}>{response.status}</span>
       </div>
       <div className={css.cardKey}>
-        <span className={css.cardKeyLabel}>tool calls</span>
+        <span className={css.cardKeyLabel}>{t('card.toolCallsCount')}</span>
         <span className={css.cardKeyValue}>{response.toolCallCount}</span>
       </div>
       {response.reasoningPreview !== '' && (
         <div className={css.cardKey}>
-          <span className={css.cardKeyLabel}>reasoning</span>
+          <span className={css.cardKeyLabel}>{t('card.reasoning')}</span>
           <span className={css.cardKeyValue}>{response.reasoningPreview}</span>
         </div>
       )}
       {response.contentPreview !== '' && (
         <div className={css.cardKey}>
-          <span className={css.cardKeyLabel}>content</span>
+          <span className={css.cardKeyLabel}>{t('card.content')}</span>
           <span className={css.cardKeyValue}>{response.contentPreview}</span>
         </div>
       )}
@@ -274,7 +280,7 @@ function ResponseCard({ response }: { response: TraceGraphPipelineStep['response
   )
 }
 
-function ToolCard({ tool }: { tool: TraceGraphPipelineStep['tools'][number] }) {
+function ToolCard({ tool, t }: { tool: TraceGraphPipelineStep['tools'][number]; t: T }) {
   const riskClass = tool.risk === 'dangerous'
     ? css.toolRiskDangerous
     : tool.risk === 'caution' ? css.toolRiskCaution : css.toolRiskSafe
@@ -292,45 +298,48 @@ function ToolCard({ tool }: { tool: TraceGraphPipelineStep['tools'][number] }) {
         <span className={css.cardHeaderLeading}>
           <span className={css.cardBadge} data-kind="tool">
             <span className={css.cardBadgeDot} />
-            TOOL · {tool.name}
+            {t('pipeline.tool')} · {tool.name}
           </span>
         </span>
         <span
           className={clsx(css.toolRiskBadge, riskClass)}
           title={tool.riskReasons.join(', ') || tool.risk}
         >
-          {tool.risk === 'safe' ? 'safe' : tool.risk.toUpperCase()}
+          {tool.risk === 'safe' ? t('card.riskSafe') : tool.risk.toUpperCase()}
         </span>
       </div>
       {tool.command !== undefined && (
         <pre className={css.detailToolCommand}>{tool.command}</pre>
       )}
       {tool.targetPaths.length > 0 && (
-        <ul className={css.detailPathList}>
-          {tool.targetPaths.map(p => (
-            <li key={p} className={css.detailPath}>{p}</li>
-          ))}
-        </ul>
+        <div>
+          <div className={css.detailToolCommandLabel}>{t('card.targetPaths')}</div>
+          <ul className={css.detailPathList}>
+            {tool.targetPaths.map(p => (
+              <li key={p} className={css.detailPath}>{p}</li>
+            ))}
+          </ul>
+        </div>
       )}
       {tool.riskReasons.length > 0 && (
         <div className={css.detailRiskReasons}>
-          matched: {tool.riskReasons.join(', ')}
+          {t('card.riskMatched')}{tool.riskReasons.join(', ')}
         </div>
       )}
       {tool.argsPreview !== '' && (
         <div className={css.cardKey}>
-          <span className={css.cardKeyLabel}>args</span>
+          <span className={css.cardKeyLabel}>{t('card.args')}</span>
           <span className={css.cardKeyValue}>{tool.argsPreview}</span>
         </div>
       )}
       {tool.resultPreview !== '' && (
         <div className={css.cardKey}>
-          <span className={css.cardKeyLabel}>result</span>
+          <span className={css.cardKeyLabel}>{t('card.result')}</span>
           <span className={css.cardKeyValue}>{tool.resultPreview}</span>
         </div>
       )}
       <div className={css.cardKey}>
-        <span className={css.cardKeyLabel}>duration</span>
+        <span className={css.cardKeyLabel}>{t('card.duration')}</span>
         <span className={css.cardKeyValue}>{formatDurationMs(tool.durationMs)}</span>
       </div>
     </div>
@@ -598,7 +607,7 @@ export function TraceGraphView({
             {selectedStep === null ? (
               <div className={css.empty}>{t('detail.empty')}</div>
             ) : (
-              <DetailPanel step={selectedStep} />
+              <DetailPanel step={selectedStep} t={t} />
             )}
           </div>
         </aside>
@@ -721,14 +730,14 @@ function PipelineStepCard({
         )}
       </header>
       <div className={css.flow}>
-        <RequestCard request={step.request} />
+        <RequestCard request={step.request} t={t} />
         <div className={clsx(css.connector, css.connectorRequest)} aria-hidden="true" />
-        <ResponseCard response={step.response} />
+        <ResponseCard response={step.response} t={t} />
         {step.tools.length > 0 && (
           <>
             <div className={clsx(css.connector, css.connectorResponse)} aria-hidden="true" />
             <div className={css.toolsGrid}>
-              {step.tools.map(tool => <ToolCard key={tool.callId} tool={tool} />)}
+              {step.tools.map(tool => <ToolCard key={tool.callId} tool={tool} t={t} />)}
             </div>
           </>
         )}
@@ -739,21 +748,22 @@ function PipelineStepCard({
 
 interface DetailPanelProps {
   step: TraceGraphPipelineStep
+  t: T
 }
 
-function DetailPanel({ step }: DetailPanelProps) {
+function DetailPanel({ step, t }: DetailPanelProps) {
   const fields: ReadonlyArray<readonly [string, string]> = [
-    ['turn', String(step.turn)],
-    ['step', String(step.step)],
-    ['model', step.request.model],
-    ['provider', step.request.provider],
-    ['duration', formatDurationMs(step.durationMs)],
+    [t('detail.turn'), String(step.turn)],
+    [t('detail.step'), String(step.step)],
+    [t('detail.model'), step.request.model],
+    [t('detail.provider'), step.request.provider],
+    [t('detail.duration'), formatDurationMs(step.durationMs)],
   ]
   const usage = step.usage
   return (
     <div className={css.detailBody}>
       <header className={css.detailHeader}>
-        <span className={css.detailTitle}>step</span>
+        <span className={css.detailTitle}>{t('detail.step')}</span>
         <span className={css.detailStep}>#{step.step}</span>
       </header>
       <dl className={css.detailList}>
@@ -767,19 +777,19 @@ function DetailPanel({ step }: DetailPanelProps) {
           <>
             {usage.input !== undefined && (
               <div className={css.detailRow}>
-                <dt className={css.detailKey}>input tokens</dt>
+                <dt className={css.detailKey}>{t('detail.inputTokens')}</dt>
                 <dd className={css.detailVal}>{usage.input}</dd>
               </div>
             )}
             {usage.output !== undefined && (
               <div className={css.detailRow}>
-                <dt className={css.detailKey}>output tokens</dt>
+                <dt className={css.detailKey}>{t('detail.outputTokens')}</dt>
                 <dd className={css.detailVal}>{usage.output}</dd>
               </div>
             )}
             {usage.cacheRead !== undefined && (
               <div className={css.detailRow}>
-                <dt className={css.detailKey}>cached tokens</dt>
+                <dt className={css.detailKey}>{t('detail.cachedTokens')}</dt>
                 <dd className={css.detailVal}>{usage.cacheRead}</dd>
               </div>
             )}
@@ -797,7 +807,7 @@ function DetailPanel({ step }: DetailPanelProps) {
       {step.tools.length > 0 && (
         <section className={css.detailTools}>
           <header className={css.detailHeader}>
-            <span className={css.detailTitle}>tool calls</span>
+            <span className={css.detailTitle}>{t('detail.toolCalls')}</span>
             <span className={css.detailStep}>{step.tools.length}</span>
           </header>
           {step.tools.map(tool => (
@@ -820,20 +830,20 @@ function DetailPanel({ step }: DetailPanelProps) {
                     tool.risk === 'safe' && css.toolRiskSafe,
                   )}
                 >
-                  {tool.risk === 'safe' ? 'safe' : tool.risk.toUpperCase()}
+                  {tool.risk === 'safe' ? t('card.riskSafe') : tool.risk.toUpperCase()}
                 </span>
               </div>
               {tool.command !== undefined && (
                 <div>
                   <div className={css.detailToolCommandLabel}>
-                    {tool.risk === 'dangerous' ? '? command (dangerous)' : tool.risk === 'caution' ? '? command' : 'command'}
+                    {tool.risk === 'dangerous' ? t('detail.commandDangerous') : tool.risk === 'caution' ? t('detail.commandCaution') : t('detail.command')}
                   </div>
                   <pre className={css.detailToolCommand}>{tool.command}</pre>
                 </div>
               )}
               {tool.targetPaths.length > 0 && (
                 <div>
-                  <div className={css.detailToolCommandLabel}>target paths</div>
+                  <div className={css.detailToolCommandLabel}>{t('card.targetPaths')}</div>
                   <ul className={css.detailPathList}>
                     {tool.targetPaths.map(p => (
                       <li key={p} className={css.detailPath}>{p}</li>
@@ -843,7 +853,7 @@ function DetailPanel({ step }: DetailPanelProps) {
               )}
               {tool.riskReasons.length > 0 && (
                 <div className={css.detailRiskReasons}>
-                  risk reasons: {tool.riskReasons.join(', ')}
+                  {t('detail.riskReasons')}{tool.riskReasons.join(', ')}
                 </div>
               )}
             </article>

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-baf-workflow",
   "description": "BAF go-workflow domain: route, projection, intake, transitions, and WorkflowTabView Remote",
-  "version": "0.1.0",
+  "version": "0.1.3-alpha.1",
   "bafNotesZh": "projection、intake、transition、工作流 Tab Remote",
   "bafNotesEn": "Projection, intake, transition, workflow tab Remote",
   "publishConfig": {
@@ -39,6 +39,7 @@
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/dsh-baf-core": "workspace:^",
+    "@deepseek-ai/dsh-baf-openspec": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^"
   },

@@ -14,8 +14,8 @@
     { "path": "../ui-slots" },
     { "path": "../ui-trajectory" },
     { "path": "../ui-workflow-run" },
-    { "path": "../../session/session-stats" },
-    { "path": "../../runtime-diagnostics/invariants" },
+    { "path": "../../session/session-stats" }
+    ,
     { "path": "../../settings/settings" }
   ]
 }

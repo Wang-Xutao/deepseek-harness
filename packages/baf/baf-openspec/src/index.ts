@@ -6,3 +6,6 @@
 export * from './layout.ts'
 export * from './templates.ts'
 export * from './adapter.ts'
+export { BafOpenspec } from './service.ts'
+import { BafOpenspec } from './service.ts'
+export default BafOpenspec

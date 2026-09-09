@@ -37,6 +37,34 @@ export type TraceGraphKey =
   | 'pipeline.inputTokens'
   | 'pipeline.cachedTokens'
   | 'pipeline.outputTokens'
+  | 'card.model'
+  | 'card.provider'
+  | 'card.system'
+  | 'card.user'
+  | 'card.toolsCount'
+  | 'card.status'
+  | 'card.toolCallsCount'
+  | 'card.reasoning'
+  | 'card.content'
+  | 'card.args'
+  | 'card.result'
+  | 'card.duration'
+  | 'card.riskSafe'
+  | 'card.riskMatched'
+  | 'card.targetPaths'
+  | 'detail.step'
+  | 'detail.turn'
+  | 'detail.model'
+  | 'detail.provider'
+  | 'detail.duration'
+  | 'detail.inputTokens'
+  | 'detail.outputTokens'
+  | 'detail.cachedTokens'
+  | 'detail.toolCalls'
+  | 'detail.command'
+  | 'detail.commandDangerous'
+  | 'detail.commandCaution'
+  | 'detail.riskReasons'
   | 'orch.title'
   | 'orch.empty'
   | 'orch.member'
@@ -100,6 +128,34 @@ export const zh: Record<TraceGraphKey, string> = {
   'pipeline.inputTokens': '输入 {n}',
   'pipeline.cachedTokens': '缓存 {n}',
   'pipeline.outputTokens': '输出 {n}',
+  'card.model': '模型',
+  'card.provider': '提供方',
+  'card.system': 'System',
+  'card.user': 'User',
+  'card.toolsCount': '工具',
+  'card.status': '状态',
+  'card.toolCallsCount': '工具调用',
+  'card.reasoning': '推理',
+  'card.content': '内容',
+  'card.args': '参数',
+  'card.result': '结果',
+  'card.duration': '耗时',
+  'card.riskSafe': '安全',
+  'card.riskMatched': '命中规则：',
+  'card.targetPaths': '目标路径',
+  'detail.step': '步骤',
+  'detail.turn': '轮次',
+  'detail.model': '模型',
+  'detail.provider': '提供方',
+  'detail.duration': '耗时',
+  'detail.inputTokens': '输入 tokens',
+  'detail.outputTokens': '输出 tokens',
+  'detail.cachedTokens': '缓存 tokens',
+  'detail.toolCalls': '工具调用',
+  'detail.command': '命令',
+  'detail.commandDangerous': '命令（危险）',
+  'detail.commandCaution': '命令（谨慎）',
+  'detail.riskReasons': '风险原因：',
   'orch.title': '编排',
   'orch.empty': '本会话无编排运行',
   'orch.member': '成员',
@@ -141,6 +197,34 @@ export const en: Record<TraceGraphKey, string> = {
   'pipeline.inputTokens': 'Input {n}',
   'pipeline.cachedTokens': 'Cached {n}',
   'pipeline.outputTokens': 'Output {n}',
+  'card.model': 'Model',
+  'card.provider': 'Provider',
+  'card.system': 'System',
+  'card.user': 'User',
+  'card.toolsCount': 'Tools',
+  'card.status': 'Status',
+  'card.toolCallsCount': 'Tool calls',
+  'card.reasoning': 'Reasoning',
+  'card.content': 'Content',
+  'card.args': 'Args',
+  'card.result': 'Result',
+  'card.duration': 'Duration',
+  'card.riskSafe': 'Safe',
+  'card.riskMatched': 'Matched: ',
+  'card.targetPaths': 'Target paths',
+  'detail.step': 'Step',
+  'detail.turn': 'Turn',
+  'detail.model': 'Model',
+  'detail.provider': 'Provider',
+  'detail.duration': 'Duration',
+  'detail.inputTokens': 'input tokens',
+  'detail.outputTokens': 'output tokens',
+  'detail.cachedTokens': 'cached tokens',
+  'detail.toolCalls': 'Tool calls',
+  'detail.command': 'command',
+  'detail.commandDangerous': 'command (dangerous)',
+  'detail.commandCaution': 'command (caution)',
+  'detail.riskReasons': 'risk reasons: ',
   'orch.title': 'Orchestration',
   'orch.empty': 'No orchestration runs in this session',
   'orch.member': 'Members',
