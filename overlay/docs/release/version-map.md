@@ -18,3 +18,4 @@ BAF 各插件包（`baf-core` / `baf-workflow` 等）在各自 `package.json` �
 | 0.0.9 | 0.1.3-alpha.1 | Phase 4 工作流 Tab 半交互；设置版本明细与独立 VERSION bump；splash/通用设置打磨 |
 | 0.0.10 | 0.1.3-alpha.1 | Phase 5 full-go 七阶段（open/clarify/design/plan/implement/verify/archive）与门禁；baf-openspec 独立包并入桌面产物 |
 | 0.0.11 | 0.1.3-alpha.1 | Phase 5.8：drift 检测（git revision / baseline id / baseline 内容 / verify-report 过期 / 已完成产物删除）+ abandon（T16）+ T11 修复回环；baseline-locked 投影锚点 |
+| 0.0.12 | 0.1.3-alpha.1 | Phase 6：bug 快路径（T3 最小 bug-record / T5 根因证据 / 回归测试先行）+ T15 风险升级（自动/显式升级 full-go、fastpath-ledger 审计保留、OpenSpec 补建）；verify 按 mode 交换检查集 |

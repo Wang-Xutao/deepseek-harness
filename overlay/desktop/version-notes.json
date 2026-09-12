@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "Phase 5 全量：open/clarify/design/plan/implement/verify/archive 全阶段流水线与门禁；5.8 drift 检测（git revision/baseline id/baseline 内容/verify-report 过期/已完成产物删除）+ abandon（T16）+ T11 修复回环；baseline-locked 投影锚点",
-    "notesEn": "Phase 5 complete: open/clarify/design/plan/implement/verify/archive stage pipeline and gates; 5.8 drift detection (git revision, baseline id, baseline content, verify-report staleness, completed-artifact deletion) + abandon (T16) + T11 repair loop; baseline-locked projection anchor"
+    "notesZh": "Phase 6：bug 快路径（最小 bug-record、T5 根因证据读回、回归测试先行强制）+ T15 风险升级（范围扩大自动/语义显式升级为 full-go，fastpath-ledger 审计保留，OpenSpec 补建后回到 clarify 补走）；verify 检查集按 mode 交换并标注「未走 OpenSpec：reason codes」",
+    "notesEn": "Phase 6: bug fast path (minimal bug record, T5 root-cause evidence read back, regression-test-first enforcement) + T15 risk escalation (auto on scope growth or explicit semantic upgrade to full-go, fast-path ledger preserved for audit, OpenSpec backfill re-entering at clarify); verify swaps its check set by mode and annotates \"OpenSpec skipped: reason codes\""
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
@@ -13,8 +13,8 @@
       "notesEn": "Baseline loader, adapter stubs, bafCore isolate mount"
     },
     "@deepseek-ai/dsh-baf-workflow": {
-      "notesZh": "projection、intake、transition、工作流 Tab Remote；5.8 drift 检测、abandon、T11 修复回环、baseline-locked 锚点",
-      "notesEn": "Projection, intake, transition, workflow tab Remote; 5.8 drift detection, abandon, T11 repair loop, baseline-locked anchor"
+      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级",
+      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation"
     },
     "@deepseek-ai/dsh-baf-openspec": {
       "notesZh": "OpenSpec 本地文件适配器：骨架、校验、原子归档",
