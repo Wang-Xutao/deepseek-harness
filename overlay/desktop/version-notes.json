@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "Phase 6：bug 快路径（最小 bug-record、T5 根因证据读回、回归测试先行强制）+ T15 风险升级（范围扩大自动/语义显式升级为 full-go，fastpath-ledger 审计保留，OpenSpec 补建后回到 clarify 补走）；verify 检查集按 mode 交换并标注「未走 OpenSpec：reason codes」",
-    "notesEn": "Phase 6: bug fast path (minimal bug record, T5 root-cause evidence read back, regression-test-first enforcement) + T15 risk escalation (auto on scope growth or explicit semantic upgrade to full-go, fast-path ledger preserved for audit, OpenSpec backfill re-entering at clarify); verify swaps its check set by mode and annotates \"OpenSpec skipped: reason codes\""
+    "notesZh": "Phase 7：baseline 驱动的质量门（StackAdapter/QualityReport 占位）+ 工具调用硬门禁（baf-guard：结构路径裁决 + 同步 projection 读 + 密钥扫描，按 mode/adjudicate 拦截）+ 工作区脚手架（baf-scaffold：基线模板 + openspec 目录，人工确认与备份语义）",
+    "notesEn": "Phase 7: baseline-driven quality gate (StackAdapter / QualityReport placeholders) + tool-call hard gate (baf-guard: structural path adjudication + sync projection reads + secret scan, per-mode/adjudicate denial) + workspace scaffold (baf-scaffold: baseline template + openspec layout with human confirmation and backup semantics)"
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
@@ -13,12 +13,28 @@
       "notesEn": "Baseline loader, adapter stubs, bafCore isolate mount"
     },
     "@deepseek-ai/dsh-baf-workflow": {
-      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级",
-      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation"
+      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级；Phase 7 verify CheckRunner 接入 stack/guard adapter",
+      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation; Phase 7 verify CheckRunner wires stack/guard adapters"
     },
     "@deepseek-ai/dsh-baf-openspec": {
       "notesZh": "OpenSpec 本地文件适配器：骨架、校验、原子归档",
       "notesEn": "Local file-mode OpenSpec adapter: skeleton, validate, atomic archive"
+    },
+    "@deepseek-ai/dsh-baf-standard": {
+      "notesZh": "baseline 摘要 + 提示词渲染：占位态返回 policy_missing，给出 sourceRef#anchor 指引",
+      "notesEn": "Baseline summary + prompt render: placeholder state returns policy_missing with sourceRef#anchor guidance"
+    },
+    "@deepseek-ai/dsh-baf-quality": {
+      "notesZh": "C 栈质量执行器：build/test/coverage/analyzer 命令注入；占位态返回 policy_missing 与工具版本",
+      "notesEn": "C stack quality executor: build/test/coverage/analyzer command injection; placeholder state returns policy_missing and tool versions"
+    },
+    "@deepseek-ai/dsh-baf-guard": {
+      "notesZh": "工具调用硬门禁：fs/shell 同步裁决 + projection 重读 + 密钥扫描 + 危险/间接 shell 模式识别；install row 注入每个 agent 的 tools.guard",
+      "notesEn": "Tool-call hard gate: synchronous fs/shell adjudication + projection re-read + secret scan + dangerous/indirect shell pattern detection; install row hooks tools.guard for every agent"
+    },
+    "@deepseek-ai/dsh-baf-scaffold": {
+      "notesZh": "工作区 init 骨架：基线模板 + openspec 目录；人工确认才落盘，差异文件走 .baf-backup-<时间戳> 备份",
+      "notesEn": "Workspace init skeleton: baseline template + openspec layout; requires human confirmation, divergent files moved to .baf-backup-<timestamp>"
     }
   }
 }

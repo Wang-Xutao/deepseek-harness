@@ -6,7 +6,13 @@
  * @module @deepseek-ai/dsh-baf-workflow/stages/context
  */
 
-import type { BaselineManifest, OpenSpecAdapter, WorkspaceIdentity } from '@deepseek-ai/dsh-baf-core'
+import type {
+  BaselineManifest,
+  GuardPolicy,
+  OpenSpecAdapter,
+  StackAdapter,
+  WorkspaceIdentity,
+} from '@deepseek-ai/dsh-baf-core'
 import { ProjectionStore } from '../projection.ts'
 
 /** Options for {@link createStageContext}. */
@@ -16,6 +22,10 @@ export interface StageContextOptions {
   readonly workspace: WorkspaceIdentity
   /** Baseline governing this change chain; open() requires it. */
   readonly baseline?: BaselineManifest
+  /** Phase 7 quality adapter; unwired contexts annotate quality as unavailable. */
+  readonly stack?: StackAdapter
+  /** Phase 7 guard policy; unwired contexts annotate guard/secret-scan as unavailable. */
+  readonly guard?: GuardPolicy
 }
 
 /**
@@ -29,6 +39,8 @@ export interface StageContext {
   readonly adapter: OpenSpecAdapter
   readonly workspace: WorkspaceIdentity
   readonly baseline?: BaselineManifest
+  readonly stack?: StackAdapter
+  readonly guard?: GuardPolicy
 }
 
 /**

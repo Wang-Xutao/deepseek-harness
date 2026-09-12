@@ -269,6 +269,13 @@
 - id: baf-commands
   name: '@deepseek-ai/dsh-baf-workflow/commands'
 
+# Per-agent tool guard install row. Like baf-commands, this sits outside the
+# baf-domain isolate: it reaches the host `agents` service so each new agent
+# gets a workspace-bound ToolGuard installed (entry workspace decided by
+# agent.session.header.cwd).
+- id: baf-guard-install
+  name: '@deepseek-ai/dsh-baf-guard/install'
+
 # ── BAF domain（entry-local realm；桌面/CLI 经 session projection 读取状态）──
 - id: baf-domain
   name: cordis:group
@@ -277,6 +284,10 @@
     bafCore: true
     bafWorkflow: true
     bafOpenspec: true
+    bafStandard: true
+    bafQuality: true
+    bafGuard: true
+    bafScaffold: true
   config:
     - id: baf-core
       name: '@deepseek-ai/dsh-baf-core'
@@ -286,11 +297,11 @@
     - id: baf-openspec
       name: '@deepseek-ai/dsh-baf-openspec'
 # Phase 7+ 启用：
-#     - id: baf-standard
-#       name: '@deepseek-ai/dsh-baf-standard'
-#     - id: baf-quality
-#       name: '@deepseek-ai/dsh-baf-quality'
-#     - id: baf-guard
-#       name: '@deepseek-ai/dsh-baf-guard'
-#     - id: baf-scaffold
-#       name: '@deepseek-ai/dsh-baf-scaffold'
+    - id: baf-standard
+      name: '@deepseek-ai/dsh-baf-standard'
+    - id: baf-quality
+      name: '@deepseek-ai/dsh-baf-quality'
+    - id: baf-guard
+      name: '@deepseek-ai/dsh-baf-guard'
+    - id: baf-scaffold
+      name: '@deepseek-ai/dsh-baf-scaffold'

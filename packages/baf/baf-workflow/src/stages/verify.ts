@@ -1,7 +1,7 @@
 /**
- * N6 verify stage handler (§12 Phase 5.6): run the CheckRunner over
- * openspec-validate (quality/guard/secret stay placeholder interfaces until
- * Phase 7) and write `verify-report.json` bound to revision/baseline.
+ * N6 verify stage handler (§12 Phase 5.6, Phase 7 wiring): run the
+ * CheckRunner over openspec-validate plus the wired quality/guard/secret-scan
+ * adapters and write `verify-report.json` bound to revision/baseline.
  * @module @deepseek-ai/dsh-baf-workflow/stages/verify
  */
 
@@ -24,21 +24,30 @@ export interface VerifyStageResult {
   readonly backToImplement: boolean
 }
 
+/** Options for {@link buildVerifyRunner}. */
+export interface VerifyRunnerOptions {
+  /** Mutable tool-version sink merged into the aggregated report (Phase 7). */
+  readonly toolVersions?: Record<string, string>
+}
+
 /**
  * Build the mode-scoped check set. Full-go: openspec-validate required and
  * live. Bug fast-path (§12 Phase 6): `regression-test` over the durable
  * ledger is the required check and openspec-validate degrades to an
- * explicit skipped annotation (required: false). Phase 7 checks stay
- * `tool_unavailable` placeholders that annotate but do not gate.
+ * explicit skipped annotation (required: false). Phase 7 quality/guard/
+ * secret-scan gate only when their adapters are wired into the stage
+ * context; otherwise they annotate `tool_unavailable` without gating.
  * @param ctx - stage context.
  * @param changeId - change id.
  * @param mode - workflow mode of the change.
+ * @param options - tool-version sink for the quality adapter.
  * @returns initialized runner.
  */
 export function buildVerifyRunner(
   ctx: StageContext,
   changeId: string,
   mode: 'full-go' | 'bug-fast-path' = 'full-go',
+  options: VerifyRunnerOptions = {},
 ): CheckRunner {
   const runner = new CheckRunner()
   if (mode === 'bug-fast-path') {
@@ -76,16 +85,84 @@ export function buildVerifyRunner(
       },
     })
   }
-  for (const name of ['quality', 'guard', 'secret-scan'] as const) {
-    runner.register({
-      name,
-      required: false,
-      run: async () => ({
-        ok: false,
-        diagnostics: ['tool_unavailable: Phase 7 wires this check'],
-      }),
-    })
+  // Phase 7: quality/guard/secret-scan go live when the corresponding adapter
+  // is wired into the stage context; wired rows gate T10 (any gate failure
+  // blocks archive, §14.4), unwired rows annotate tool_unavailable only.
+  const qualityWired = ctx.stack !== undefined && ctx.baseline !== undefined
+  runner.register({
+    name: 'quality',
+    required: qualityWired,
+    run: async (signal) => {
+      if (ctx.stack === undefined || ctx.baseline === undefined) {
+        return { ok: false, diagnostics: ['tool_unavailable: stack adapter not wired'] }
+      }
+      const report = await ctx.stack.runQuality(
+        { workspace: ctx.workspace, baseline: ctx.baseline, changeId },
+        signal,
+      )
+      if (options.toolVersions !== undefined) Object.assign(options.toolVersions, report.toolVersions)
+      const failed = report.checks.filter(check => !(check as { readonly passed?: boolean }).passed)
+      return {
+        ok: report.passed,
+        diagnostics: failed.length === 0
+          ? ['all quality checks passed']
+          : failed.map((check) => {
+            const entry = check as { readonly id?: string; readonly reasonCode?: string }
+            return `${entry.id ?? 'check'}:${entry.reasonCode ?? 'failed'}`
+          }),
+      }
+    },
+  })
+
+  const guardWired = ctx.guard !== undefined && ctx.baseline !== undefined
+  const touchedPaths = async (): Promise<readonly string[]> => {
+    // plan.json is optional at verify time (docs-only changes); a missing
+    // ledger means no recorded touched files, not a crash.
+    try {
+      return (await readLedger(ctx.workspace.root, changeId)).touched
+    } catch {
+      return []
+    }
   }
+  runner.register({
+    name: 'guard',
+    required: guardWired,
+    run: async (signal) => {
+      if (ctx.guard === undefined || ctx.baseline === undefined) {
+        return { ok: false, diagnostics: ['tool_unavailable: guard policy not wired'] }
+      }
+      const paths = await touchedPaths()
+      const report = await ctx.guard.check(
+        { workspace: ctx.workspace, baseline: ctx.baseline, paths, action: 'verify' },
+        signal,
+      )
+      return {
+        ok: report.allowed,
+        diagnostics: report.reasonCodes.length === 0 ? ['within policy'] : [...report.reasonCodes],
+      }
+    },
+  })
+  runner.register({
+    name: 'secret-scan',
+    required: guardWired,
+    run: async (signal) => {
+      if (ctx.guard === undefined || ctx.baseline === undefined) {
+        return { ok: false, diagnostics: ['tool_unavailable: guard policy not wired'] }
+      }
+      if (ctx.baseline.guard.secretScan === 'off') {
+        return { ok: true, diagnostics: ['skipped: secret scan off (baseline)'] }
+      }
+      const paths = await touchedPaths()
+      const report = await ctx.guard.check(
+        { workspace: ctx.workspace, baseline: ctx.baseline, paths, action: 'secret-scan' },
+        signal,
+      )
+      return {
+        ok: report.allowed,
+        diagnostics: report.reasonCodes.length === 0 ? ['no secrets detected'] : [...report.reasonCodes],
+      }
+    },
+  })
   return runner
 }
 
@@ -104,13 +181,14 @@ export async function driveVerify(
   // The projection's mode — not the caller's claim — selects the check set.
   const status = await ctx.store.readStatus(changeId)
   const mode = status.mode === 'bug-fast-path' ? 'bug-fast-path' : 'full-go'
-  const runner = buildVerifyRunner(ctx, changeId, mode)
+  const toolVersions: Record<string, string> = { openspec: 'local-file-1' }
+  const runner = buildVerifyRunner(ctx, changeId, mode, { toolVersions })
   const rows = await runner.runAll(signal)
   const report = runner.aggregate(changeId, rows, {
     mode,
     ...(ctx.workspace.git?.revision === undefined ? {} : { sourceRevision: ctx.workspace.git.revision }),
     ...(ctx.baseline === undefined ? {} : { baselineId: ctx.baseline.baselineId }),
-    toolVersions: { openspec: 'local-file-1' },
+    toolVersions,
   })
   const reportPath = await persistVerifyReport(ctx.workspace.root, changeId, report)
 

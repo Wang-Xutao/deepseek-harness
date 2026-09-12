@@ -18,11 +18,13 @@ import {
   buildRouteStatusView,
   loadEnterpriseRoutePolicyFile,
   type EnterpriseRoutePolicy,
+  type GuardPolicy,
   type ModelRef,
   type ProviderAvailability,
   type RouteProfile,
   type RouteResolution,
   type RouteStatusView,
+  type StackAdapter,
   type WorkflowNode,
   type WorkflowService,
 } from '@deepseek-ai/dsh-baf-core'
@@ -110,12 +112,15 @@ export class BafWorkflow extends Service {
 
   /**
    * Stage pipeline bound to the current workspace (Phase 5 full-go chain).
-   * @param options - optional git revision and baseline for the chain.
+   * @param options - optional git revision, baseline, and Phase 7 adapters
+   * (stack/guard) for the chain.
    * @returns pipeline, or throws when no workspace is bound.
    */
   stagePipeline(options: {
     readonly gitRevision?: string
     readonly baseline?: BaselineManifest
+    readonly stack?: StackAdapter
+    readonly guard?: GuardPolicy
   } = {}): StagePipeline {
     const store = this.requireStore()
     return new StagePipeline({

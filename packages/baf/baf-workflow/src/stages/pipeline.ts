@@ -9,6 +9,8 @@ import { join } from 'node:path'
 import {
   BafError,
   type BaselineManifest,
+  type GuardPolicy,
+  type StackAdapter,
   type WorkflowStatus,
   type WorkflowNode,
 } from '@deepseek-ai/dsh-baf-core'
@@ -58,6 +60,10 @@ export interface StagePipelineOptions {
   readonly gitRevision?: string
   /** Baseline governing the chain; full-go open requires it. */
   readonly baseline?: BaselineManifest
+  /** Phase 7 quality adapter (wired rows gate verify). */
+  readonly stack?: StackAdapter
+  /** Phase 7 guard policy (wired rows gate verify). */
+  readonly guard?: GuardPolicy
 }
 
 /** Result of {@link StagePipeline.driveDriftStage}. */
@@ -100,6 +106,8 @@ export class StagePipeline {
           : { git: { revision: options.gitRevision } }),
       },
       ...(options.baseline === undefined ? {} : { baseline: options.baseline }),
+      ...(options.stack === undefined ? {} : { stack: options.stack }),
+      ...(options.guard === undefined ? {} : { guard: options.guard }),
     })
   }
 

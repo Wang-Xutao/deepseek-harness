@@ -32,6 +32,17 @@ const BAF_CORE_SRC = join(
   'index.ts',
 ).replaceAll('\\', '/')
 
+const BAF_STANDARD_SRC = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'baf',
+  'baf-standard',
+  'src',
+  'index.ts',
+).replaceAll('\\', '/')
+
 const roots: string[] = []
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true })
@@ -104,5 +115,66 @@ describe('BAF baf-core isolate mount', () => {
     expect(theirs === undefined).toBe(false)
     expect(mine!.version()).toBe(theirs!.version())
     expect(mine!.version()).toMatch(/^\d+\.\d+\.\d+/)
+  })
+
+  it('mounts Phase 7 services under the baf-domain isolate (bafStandard shared across sessions)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-baf-mount-p7-'))
+    roots.push(root)
+    const presetDir = join(root, 'baf-phase7')
+    await mkdir(presetDir)
+    await writeFile(join(presetDir, COMPOSITION_FILE), `
+- id: baf-domain
+  name: cordis:group
+  group: true
+  isolate:
+    bafCore: true
+    bafStandard: true
+  config:
+    - id: baf-core
+      name: ${BAF_CORE_SRC}
+    - id: baf-standard
+      name: ${BAF_STANDARD_SRC}
+`.trimStart())
+
+    const ctx = new Context()
+    ctx.baseUrl = pathToFileURL(root).href + '/'
+    await ctx.plugin(Loader)
+    ctx.loader.builtins.include = Include
+    ctx.loader.builtins.group = Group
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt, { personaPrefix: '' })
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(AgentPresets, {
+      default: 'baf-phase7',
+      roots: [{ path: root, trust: 'user' }],
+      includeShippedRoot: false,
+      includeUserRoot: false,
+    })
+
+    const first = await ctx.agents.create({
+      sessionId: SessionId('baf-p7-a'),
+      setup: async (agentCtx: Context) => void await ctx.agentPresets.mount(agentCtx, 'baf-phase7'),
+    })
+    const second = await ctx.agents.create({
+      sessionId: SessionId('baf-p7-b'),
+      setup: async (agentCtx: Context) => void await ctx.agentPresets.mount(agentCtx, 'baf-phase7'),
+    })
+
+    expect(providedServiceNames(ctx)).toContain('bafStandard')
+    expect(rootResolves(ctx, 'bafStandard')).toBe(false)
+    expect((ctx as { bafStandard?: unknown }).bafStandard).toBeUndefined()
+
+    const mine = ctx.agentPresets.serviceFor(first.agent as Agent, 'bafStandard') as { help: () => string } | undefined
+    const theirs = ctx.agentPresets.serviceFor(second.agent as Agent, 'bafStandard') as { help: () => string } | undefined
+    expect(mine).toBeDefined()
+    expect(theirs).toBeDefined()
+    // isolate shares one underlying service instance across agents; identity is
+    // observed via consistent observable behavior (matching the baf-core check).
+    expect(mine!.help()).toBe(theirs!.help())
+    expect(mine!.help()).toMatch(/standard/i)
   })
 })

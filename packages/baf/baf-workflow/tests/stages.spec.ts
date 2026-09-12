@@ -21,7 +21,14 @@ const FIXTURE_BASELINE = fileURLToPath(
 )
 
 /** Create a temp workspace with a store, pipeline, and fresh change. */
-async function setup(options: { readonly gitRevision?: string; readonly withGit?: boolean } = {}) {
+async function setup(
+  options: {
+    readonly gitRevision?: string
+    readonly withGit?: boolean
+    readonly stack?: import('@deepseek-ai/dsh-baf-core').StackAdapter
+    readonly guard?: import('@deepseek-ai/dsh-baf-core').GuardPolicy
+  } = {},
+) {
   const root = await mkdtemp(join(tmpdir(), 'baf-stage-'))
   const store = new ProjectionStore({ workspaceRoot: root })
   const baseline = await loadBaselineFile(FIXTURE_BASELINE)
@@ -31,6 +38,8 @@ async function setup(options: { readonly gitRevision?: string; readonly withGit?
     workspaceRoot: root,
     ...(gitRevision === undefined ? {} : { gitRevision }),
     baseline,
+    ...(options.stack === undefined ? {} : { stack: options.stack }),
+    ...(options.guard === undefined ? {} : { guard: options.guard }),
   })
   const service = createWorkflowService({ store })
   const { intake } = await service.intake({
@@ -212,6 +221,134 @@ describe('illegal entry', () => {
       expect(status.current).toBe('intake')
     } finally {
       await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('verify Phase 7 wiring', () => {
+  /** Shared chain setup reaching a completed implement for verify tests. */
+  async function setupAtVerify(
+    stack: import('@deepseek-ai/dsh-baf-core').StackAdapter | undefined,
+    guard: import('@deepseek-ai/dsh-baf-core').GuardPolicy | undefined,
+  ) {
+    const harness = await setup({ stack, guard })
+    await harness.pipeline.driveOpenStage(harness.changeId, 'Add report export API')
+    await harness.pipeline.driveClarifyStage({
+      changeId: harness.changeId,
+      questions: [{ question: 'Format?', answer: 'CSV (user call 2026-09-08)', status: 'decided' }],
+      acceptanceCriteria: ['npm test exports CSV'],
+    })
+    await harness.pipeline.driveDesignStage({
+      changeId: harness.changeId,
+      approach: 'Approach',
+      references: [await touchReference(harness.root, 'src/w.ts')],
+    })
+    const allowlistFile = 'src/w.ts'
+    await harness.pipeline.drivePlanStage({
+      changeId: harness.changeId,
+      tasks: [{
+        id: 't1',
+        title: 'Task',
+        files: [allowlistFile],
+        verify: ['npm test'],
+        rollback: 'git revert HEAD',
+      }],
+      allowlist: [allowlistFile],
+    })
+    const changeDirAbs = join(harness.root, 'openspec', 'changes', harness.changeId)
+    await writeFile(
+      join(changeDirAbs, ARTIFACT_FILES.proposal),
+      '# Add report export API\n\n## Why\n\nUsers need CSV export.\n',
+      'utf8',
+    )
+    await writeFile(
+      join(changeDirAbs, ARTIFACT_FILES.tasks),
+      '# Tasks\n\n- [x] t1 Task\n',
+      'utf8',
+    )
+    await harness.pipeline.enterImplementStage(harness.changeId)
+    await recordTouched(harness.root, { changeId: harness.changeId, file: allowlistFile })
+    await completeTask(harness.root, harness.changeId, 't1')
+    await harness.pipeline.driveImplementStage(harness.changeId)
+    return harness
+  }
+
+  it('wired failing quality adapter fails verify (T11) with structured reasons', async () => {
+    const stack: import('@deepseek-ai/dsh-baf-core').StackAdapter = {
+      detect: async () => ({ available: true, compiler: 'gcc' }),
+      runQuality: async input => ({
+        schema: 1,
+        baselineId: input.baseline.baselineId,
+        workspace: input.workspace.root,
+        toolVersions: { gcc: 'gcc 13' },
+        checks: [{ id: 'build', passed: false, reasonCode: 'exit_code' }],
+        artifacts: [],
+        passed: false,
+        diagnostics: [],
+      }),
+    }
+    const harness = await setupAtVerify(stack, undefined)
+    try {
+      const verify = await harness.pipeline.driveVerifyStage(harness.changeId)
+      expect(verify.node).toBe('verify')
+      expect(verify.result.backToImplement).toBe(true)
+      const qualityRow = verify.result.report.checks.find(row => row.name === 'quality')
+      expect(qualityRow).toMatchObject({ required: true, ok: false })
+      expect(qualityRow?.diagnostics).toContain('build:exit_code')
+      expect(verify.result.report.toolVersions.gcc).toBe('gcc 13')
+      // Unwired guard rows stay annotating (not gating).
+      const guardRow = verify.result.report.checks.find(row => row.name === 'guard')
+      expect(guardRow).toMatchObject({ required: false, ok: false })
+    } finally {
+      await rm(harness.root, { recursive: true, force: true })
+    }
+  })
+
+  it('wired guard policy gates verify via reason codes', async () => {
+    const guard: import('@deepseek-ai/dsh-baf-core').GuardPolicy = {
+      check: async input => ({
+        allowed: input.action !== 'verify',
+        reasonCodes: input.action === 'verify' ? ['protected_path'] : [],
+      }),
+    }
+    const harness = await setupAtVerify(undefined, guard)
+    try {
+      const verify = await harness.pipeline.driveVerifyStage(harness.changeId)
+      expect(verify.result.backToImplement).toBe(true)
+      const guardRow = verify.result.report.checks.find(row => row.name === 'guard')
+      expect(guardRow).toMatchObject({ required: true, ok: false })
+      expect(guardRow?.diagnostics).toContain('protected_path')
+      const secretRow = verify.result.report.checks.find(row => row.name === 'secret-scan')
+      expect(secretRow).toMatchObject({ required: true, ok: true })
+    } finally {
+      await rm(harness.root, { recursive: true, force: true })
+    }
+  })
+
+  it('wired passing adapters let verify complete', async () => {
+    const stack: import('@deepseek-ai/dsh-baf-core').StackAdapter = {
+      detect: async () => ({ available: true }),
+      runQuality: async input => ({
+        schema: 1,
+        baselineId: input.baseline.baselineId,
+        workspace: input.workspace.root,
+        toolVersions: {},
+        checks: [{ id: 'build', passed: true }],
+        artifacts: [],
+        passed: true,
+        diagnostics: [],
+      }),
+    }
+    const guard: import('@deepseek-ai/dsh-baf-core').GuardPolicy = {
+      check: async () => ({ allowed: true, reasonCodes: [] }),
+    }
+    const harness = await setupAtVerify(stack, guard)
+    try {
+      const verify = await harness.pipeline.driveVerifyStage(harness.changeId)
+      expect(verify.result.backToImplement).toBe(false)
+      expect(verify.result.report.checks.every(row => row.ok)).toBe(true)
+    } finally {
+      await rm(harness.root, { recursive: true, force: true })
     }
   })
 })

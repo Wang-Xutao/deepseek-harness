@@ -11,7 +11,7 @@
 
 
 
-## 实现进度（仓库实况 · 2026-09-07）
+## 实现进度（仓库实况 · 2026-09-13）
 
 > 本表是**当前仓库事实**，不是计划。设计正文（第 1–11、12 章步骤）仍描述目标态；实现时以本表为准判断「已做完什么」。
 
@@ -29,13 +29,13 @@
 | **4** | intake + projection + transition + Web 工作流 Tab（半交互）                        | **已完成** |
 | 5     | full-go 各阶段                                                                | **已完成** |
 | 6     | bug-fast-path / 升级                                                         | **已完成** |
-| 7     | quality / standard / guard / scaffold                                      | **未开始** |
+| 7     | quality / standard / guard / scaffold                                      | **已完成** |
 | 8     | slash / CLI / desktop IPC + **变更 Dashboard（归档总览）** | **未开始**（工作流页「变更总览」入口已先行） |
 | 9     | 三 scope 更新、签名、managed system root（热更）                                      | **未开始** |
 | 10    | release 门禁                                                                 | **未开始** |
 
 
-MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**差 ToolGuard 与 slash/`status`**（均属 Phase 7/8）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）已落地并随桌面 **baf-dsh 0.0.10** 分发；bug fast-path 与 T15 风险升级（Phase 6）已落地于 domain 层（`baf-workflow`，56/56 测试绿），桌面分发随下一次打包。
+MVP 完成线（Phase 0–7）**差 slash/`status` 与变更 Dashboard**（Phase 8）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）已落地并随桌面 **baf-dsh 0.0.12** 分发；bug fast-path 与 T15 风险升级（Phase 6）已落地；baseline 驱动的 quality/standard/guard/scaffold（Phase 7）已落地于 domain 层（`packages/baf` 17/17 文件 / 103/103 用例绿），桌面分发随下一次打包。
 
 ### Phase 4 — 已完成明细
 
@@ -84,6 +84,24 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**差 ToolGuard 与 s
 | 升级后 OpenSpec 补建 + 审计保留                | 已完成 | `escalate.ts`：`plan.json` → `fastpath-ledger.json` 原子改名保留 fast-path 审计；安装携带 bug 上下文（Problem/Root cause）的 `proposal.md` 与 `tasks.md` 模板；随后 `stage-entered(clarify)`，`pipeline.enterStage` 幂等续入（同节点 in-progress 直接续跑），补走 clarify → design → plan → implement → verify → archive |
 | mode 感知实现门禁修复                            | 已完成 | `implement.ts` `driveImplementComplete` 不再硬编码 `full-go`，mode 由 projection status 读出 |
 | 阶段测试（fast-path 全链路 / T5 / 回归先行拒绝 / 自动升级 / 显式升级 / 升级后补走） | 已完成 | `baf-workflow` `tests/fastpath.spec.ts`（8 用例）；`packages/baf` 全量 56/56 绿 |
+
+### Phase 7 — 已完成明细（2026-09-13）
+
+| 项                                        | 状态  | 落点                                                                                              |
+| ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
+| `baf-standard` 独立包（Cordis Service）         | 已完成 | `packages/baf/baf-standard/`；`StandardSummary` schema + `summarizeStandard` + `renderStandardPrompt`；占位态返回 `policy_missing` 并给出 `sourceRef#anchor` 指引，prompt 渲染走 service 表面 |
+| `baf-quality` 独立包（Cordis Service）          | 已完成 | `packages/baf/baf-quality/`；`createCStackAdapter` 接 C 栈（compiler probe / build / test / coverage / analyzers）；`QualityReport` schema 含 `toolVersions / checks / passed / diagnostics`；占位命令以 `policy_missing` 标记，coverage 数字阈值 fail-closed |
+| `baf-guard` 独立包（service + install row）      | 已完成 | `packages/baf/baf-guard/`；`BafGuard` 服务暴露 `policy(root)`（action `verify`/`secret-scan`），同步从 `.baf/projection/index.json` + change log + allowlist 重读裁决；`./install` 非隔离 row 经 host `agents` 服务给每个 agent 装 `tools.guard`（同 baf-commands 模式） |
+| 工具硬门禁裁决                              | 已完成 | `baf-guard/src/policy.ts`：fs write 走结构路径→密钥扫描→active change→intakeConfirmed→DOC_STAGES change dir → implement allowlist；shell 走危险模式（rm-root / format / shutdown / git-force-push）+ 间接写（`>`/`>>` 重定向、fd-to-file、heredoc、tee、sed -i、perl -i、truncate、shred、cp/mv、unzip/tar、wget/curl）双重识别 |
+| `baf-scaffold` 独立包（Cordis Service）        | 已完成 | `packages/baf/baf-scaffold/`；`planScaffold` 生成 `.baf/baseline.yml`（含 §15 占位）与 `openspec/changes/.gitkeep`；`applyScaffold` 不覆盖：相同内容跳过、内容不同→`<path>.baf-backup-<iso 时间戳>`；`scaffoldWorkspace` 必须 `humanConfirmed:true`，否则返回 `{kind:'refused', reason:'human_confirmation_required'}` |
+| verify CheckRunner 接线 stack/guard      | 已完成 | `baf-workflow` `stages/context.ts` 收 `stack?: StackAdapter` + `guard?: GuardPolicy`；`stages/verify.ts` 新增 quality row（`required: ctx.stack && ctx.baseline`）与 guard row（`ctx.guard.check({action:'verify', paths})`），secret-scan row 在 `baseline.guard.secretScan === 'off'` 时跳过；`toolVersions` 通过 `buildVerifyRunner(ctx, changeId, mode, options)` 注入并经 `Object.assign` 合并到报告 |
+| verify 阶段测试（Phase 7 wiring）             | 已完成 | `baf-workflow` `tests/stages.spec.ts`：quality 失败→T11 + 结构化 reasons + toolVersions 合并；guard 失败→`protected_path` 门禁；双通过→完成 |
+| 工具硬门禁测试                               | 已完成 | `baf-guard` `tests/tool-guard.spec.ts`：策略 reason codes、shell allow/deny 集、classification、stable-prefix denials、re-adjudication flip、sync disk state（空 workspace→`intake_confirmation_required`、real projection 驱动到 implement→allowlist honored）、GuardPolicy actions（verify/secret-scan/off）、install row 装配合约 |
+| baf 域 isolate 新成员                          | 已完成 | `presets/baf/agent.cordis.yml` `baf-domain` group 增 `bafStandard/bafQuality/bafGuard/bafScaffold` 至 isolate；新 row `baf-guard-install`（`@deepseek-ai/dsh-baf-guard/install`）位于 isolate 之外触达 host `agents`；`baf-roster.spec.ts` 增 Phase 7 断言；`baf-mount.spec.ts` 新测 Phase 7 服务在 isolate 下共享实例 |
+| workspace 自动发现 + pnpm 链接                  | 已完成 | `pnpm-workspace.yaml` `packages/*/*` 自动纳入；`tsconfig.base.json` 新增 4 条 path mapping；`pnpm install` 完成 workspace 链接 |
+| 桌面打包 FORCE_PACKAGES 补齐                    | 已完成 | `overlay/scripts/pack-dsh.mjs` FORCE_PACKAGES 新增 `baf-standard/baf-quality/baf-guard/baf-scaffold` |
+| 桌面版本说明                                  | 已完成 | `overlay/desktop/version-notes.json` Phase 7 desktop 注释 + 4 个新包 entries |
+| 阶段测试（standard/quality/guard/scaffold + verify 接线） | 已完成 | `packages/baf` 全量 17/17 文件 / 103/103 用例绿（无新增失败） |
 
 
 

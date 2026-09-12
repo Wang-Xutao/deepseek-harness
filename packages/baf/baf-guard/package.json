@@ -1,0 +1,56 @@
+{
+  "name": "@deepseek-ai/dsh-baf-guard",
+  "description": "BAF guard: baseline-driven tool hard-gate over filesystem/shell tools with sync projection adjudication and secret scanning",
+  "version": "0.1.0-alpha.1",
+  "bafNotesZh": "BAF 门禁：按 baseline 对 filesystem/shell 工具做硬门禁，同步读取 projection 逐调用裁决，含密钥扫描",
+  "bafNotesEn": "BAF guard: baseline-driven hard gate over filesystem/shell tools, adjudicating every call against the sync projection, with secret scanning",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/baf/baf-guard"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./install": {
+      "types": "./lib/types/install.d.ts",
+      "default": "./lib/install.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/install.js",
+    "lib/*.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/dsh-baf-core": "workspace:^",
+    "@deepseek-ai/dsh-baf-openspec": "workspace:^",
+    "@deepseek-ai/dsh-baf-workflow": "workspace:^",
+    "@deepseek-ai/schemastery": "workspace:^",
+    "js-yaml": "^4.1.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^"
+  }
+}

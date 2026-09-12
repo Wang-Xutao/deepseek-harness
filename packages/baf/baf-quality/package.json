@@ -1,0 +1,45 @@
+{
+  "name": "@deepseek-ai/dsh-baf-quality",
+  "description": "BAF quality runner and C stack adapter: baseline-driven build/test/coverage/analyzer checks with per-check timeout, cancel, truncation, and redaction",
+  "version": "0.1.0-alpha.1",
+  "bafNotesZh": "质量执行器与 C 栈适配器：按 baseline 执行 build/test/coverage/分析器检查，含单检查超时、取消、截断与脱敏",
+  "bafNotesEn": "Quality runner and C stack adapter: baseline-driven build/test/coverage/analyzer checks with per-check timeout, cancel, truncation, and redaction",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/baf/baf-quality"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/dsh-baf-core": "workspace:^",
+    "@deepseek-ai/schemastery": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^"
+  }
+}
