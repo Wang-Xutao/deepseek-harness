@@ -210,9 +210,14 @@ function smokePackedDshWeb() {
  */
 async function smokeExeShell() {
   const beforeLen = existsSync(launchLog) ? readFileSync(launchLog, 'utf8').length : 0
+  // VSCode/extension-host parents export ELECTRON_RUN_AS_NODE=1; inherited by
+  // the spawn it turns the Electron exe into a plain node REPL that exits 0
+  // silently on non-TTY stdin — a false smoke failure.
+  const { ELECTRON_RUN_AS_NODE, ...exeEnv } = process.env
   const child = spawn(exe, [], {
     cwd: unpacked,
     detached: true,
+    env: exeEnv,
     stdio: 'ignore',
     windowsHide: false,
   })
