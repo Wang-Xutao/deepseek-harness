@@ -36,6 +36,8 @@ export interface CheckReportRow {
 export interface VerifyReport {
   readonly schema: 1
   readonly changeId: string
+  /** Workflow mode the verify ran under (fast path swaps the check set). */
+  readonly mode?: string
   readonly sourceRevision?: string
   readonly baselineId?: string
   readonly toolVersions: Readonly<Record<string, string>>
@@ -121,13 +123,14 @@ export class CheckRunner {
    * Aggregate rows into the durable report shape.
    * @param changeId - owning change.
    * @param rows - rows from {@link runAll}.
-   * @param identity - source revision, baseline, and tool versions.
+   * @param identity - mode, source revision, baseline, and tool versions.
    * @returns aggregated report.
    */
   aggregate(
     changeId: string,
     rows: readonly CheckReportRow[],
     identity: {
+      readonly mode?: string
       readonly sourceRevision?: string
       readonly baselineId?: string
       readonly toolVersions?: Readonly<Record<string, string>>
@@ -136,6 +139,7 @@ export class CheckRunner {
     return {
       schema: 1,
       changeId,
+      ...(identity.mode === undefined ? {} : { mode: identity.mode }),
       ...(identity.sourceRevision === undefined ? {} : { sourceRevision: identity.sourceRevision }),
       ...(identity.baselineId === undefined ? {} : { baselineId: identity.baselineId }),
       toolVersions: identity.toolVersions ?? {},

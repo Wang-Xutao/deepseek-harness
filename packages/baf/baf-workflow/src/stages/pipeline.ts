@@ -5,6 +5,7 @@
  * @module @deepseek-ai/dsh-baf-workflow/stages/pipeline
  */
 
+import { join } from 'node:path'
 import {
   BafError,
   type BaselineManifest,
@@ -25,6 +26,7 @@ import { driveDesign, type DesignInput, type DesignStageResult } from './design.
 import { drivePlan, type PlanInput, type PlanStageResult } from './plan.ts'
 import {
   driveImplementComplete,
+  readLedger,
   type ImplementStageResult,
 } from './implement.ts'
 import { driveVerify, type VerifyStageResult } from './verify.ts'
@@ -35,6 +37,17 @@ import {
   type AbandonOptions,
   type AbandonStageResult,
 } from './abandon.ts'
+import {
+  driveFastPathOpen,
+  rootCauseRecorded,
+  type FastPathBugInput,
+} from './fastpath.ts'
+import {
+  driveEscalate,
+  scopeGrowthFiles,
+  type EscalateOptions,
+  type EscalateStageResult,
+} from './escalate.ts'
 
 /** Options for {@link StagePipeline}. */
 export interface StagePipelineOptions {
@@ -62,6 +75,7 @@ export type DriveResult =
   | { readonly node: 'drift'; readonly result: DriftStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'abandon'; readonly result: AbandonStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'implement'; readonly result: ImplementStageResult; readonly status: WorkflowStatus }
+  | { readonly node: 'escalate'; readonly result: EscalateStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'verify'; readonly result: VerifyStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'archive'; readonly result: ArchiveStageResult; readonly status: WorkflowStatus }
 
@@ -108,6 +122,15 @@ export class StagePipeline {
     // write so a blocked open leaves the change at intake with only a
     // transition-rejected audit event.
     const pre = await this.store.readStatus(changeId)
+    if (pre.mode === 'bug-fast-path') {
+      // Fast-path changes carry a bug record, not an OpenSpec skeleton.
+      await this.recordRejectionQuiet(changeId, pre, 'open', 'invalid_transition')
+      throw new BafError(
+        'invalid_transition',
+        'bug-fast-path change must use driveFastPathOpenStage',
+        { changeId },
+      )
+    }
     if (pre.mode === 'full-go') {
       if (this.ctx.baseline === undefined) {
         throw new BafError('baseline_unavailable', 'full-go open requires a parsed baseline', {
@@ -142,6 +165,56 @@ export class StagePipeline {
     }
     await this.completeStage(changeId, 'open', [result.changeDir])
     return { node: 'open', result, status }
+  }
+
+  /**
+   * Drive the fast-path open (T3): minimal bug record + fast-path implement
+   * ledger instead of the OpenSpec skeleton (§12 Phase 6). Git-unavailable
+   * warns in the record instead of blocking; baseline-locked still applies
+   * when both anchors are known.
+   * @param input - bug fields (problem/root cause/regression test/scope).
+   * @returns drive result.
+   */
+  async driveFastPathOpenStage(input: FastPathBugInput): Promise<DriveResult> {
+    const pre = await this.store.readStatus(input.changeId)
+    if (pre.mode !== 'bug-fast-path') {
+      await this.recordRejectionQuiet(input.changeId, pre, 'open', 'invalid_transition')
+      throw new BafError(
+        'invalid_transition',
+        'full-go change must use driveOpenStage',
+        { changeId: input.changeId },
+      )
+    }
+    const status = await this.enterStage(input.changeId, 'open')
+    const result = await driveFastPathOpen(this.ctx, input)
+    // Same anchor discipline as full-go open: lock the baseline + revision
+    // when both are observable; a missing revision only warns (recorded in
+    // the bug record by the handler).
+    const baseline = this.ctx.baseline
+    const revision = this.ctx.workspace.git?.revision
+    if (baseline !== undefined && revision !== undefined) {
+      await this.store.append(input.changeId, status.projectionVersion, meta => ({
+        type: 'baseline-locked',
+        lock: {
+          baselineId: baseline.baselineId,
+          sourceRevision: revision,
+          lockedAt: meta.at,
+        },
+        ...meta,
+      }))
+    }
+    const changeDirPath = join(
+      this.ctx.workspace.root,
+      'openspec',
+      'changes',
+      input.changeId,
+    )
+    await this.completeStage(input.changeId, 'open', result.artifacts)
+    return {
+      node: 'open',
+      result: { status: result.status, changeDir: changeDirPath },
+      status,
+    }
   }
 
   /**
@@ -181,19 +254,29 @@ export class StagePipeline {
   }
 
   /**
-   * Enter implement (T8) without running the completion gate. Callers run
-   * per-task work (recordTouched/completeTask) and then finish with
-   * {@link driveImplementStage}.
+   * Enter implement (T8 full-go / T5 fast-path) without running the
+   * completion gate. The fast-path edge carries machine evidence read back
+   * from the bug record — never a caller assertion.
+   * Callers run per-task work (recordTouched/completeTask) and then finish
+   * with {@link driveImplementStage}.
    * @param changeId - change id.
    * @returns status after entering implement.
    */
   async enterImplementStage(changeId: string): Promise<WorkflowStatus> {
+    const pre = await this.readCurrent(changeId)
+    if (pre.mode === 'bug-fast-path') {
+      return this.enterStage(changeId, 'implement', {
+        rootCauseRecorded: await rootCauseRecorded(this.ctx.workspace.root, changeId),
+      })
+    }
     return this.enterStage(changeId, 'implement')
   }
 
   /**
    * Drive implement completion (T9 exit): every task done and touched ⊆
-   * allowlist. Refuses when not inside implement.
+   * allowlist. On a fast-path change, out-of-allowlist touched files first
+   * trigger the T15 auto-escalation (§12 Phase 6) instead of a plain gate
+   * failure. Refuses when not inside implement.
    * @param changeId - change id.
    * @returns drive result.
    */
@@ -205,9 +288,41 @@ export class StagePipeline {
         from: status.current,
       })
     }
+    if (status.mode === 'bug-fast-path') {
+      const ledger = await readLedger(this.ctx.workspace.root, changeId)
+      const growth = scopeGrowthFiles(ledger)
+      if (growth.length > 0) {
+        const escalated = await driveEscalate(this.ctx, {
+          changeId,
+          cause: `scope growth: ${growth.join(', ')} outside allowlist`,
+        })
+        return {
+          node: 'implement',
+          result: {
+            status: escalated.status,
+            artifacts: [],
+            ledger,
+            escalated: { cause: escalated.cause },
+          },
+          status: escalated.status,
+        }
+      }
+    }
     const result = await driveImplementComplete(this.ctx, changeId)
     await this.completeStage(changeId, 'implement', result.artifacts)
     return { node: 'implement', result, status }
+  }
+
+  /**
+   * Drive an explicit T15 escalation (semantic causes the structural
+   * scope-growth check cannot see, e.g. public-API impact discovered during
+   * the fix). Only legal from fast-path implement.
+   * @param options - change id + cause.
+   * @returns drive result.
+   */
+  async driveEscalateStage(options: EscalateOptions): Promise<DriveResult> {
+    const result = await driveEscalate(this.ctx, options)
+    return { node: 'escalate', result, status: result.status }
   }
 
   /**
@@ -314,6 +429,10 @@ export class StagePipeline {
     evidence?: Readonly<Record<string, unknown>>,
   ): Promise<WorkflowStatus> {
     const status = await this.store.readStatus(changeId)
+    // Idempotent resume: the node is already in-progress (e.g. clarify was
+    // entered by a T15 escalation) — re-adjudicating would reject on the
+    // self-edge that does not exist in the table.
+    if (status.current === to && status.nodes[to] === 'in-progress') return status
     const decision = decideTransition({
       status,
       to,

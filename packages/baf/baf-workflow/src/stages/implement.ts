@@ -13,9 +13,12 @@ import { ARTIFACT_FILES, changeDir } from '@deepseek-ai/dsh-baf-openspec'
 import type { StageContext } from './context.ts'
 import { implementGate, type PlanDocument } from './gates.ts'
 import { stageArtifactPaths } from './artifacts.ts'
+import { assertRegressionFirst } from './fastpath.ts'
 
 /** Mutable task ledger persisted as plan.json during implement. */
 export interface ImplementLedger {
+  /** True for the bug fast-path ledger written at fast-path open. */
+  readonly fastPath?: boolean
   readonly tasks: readonly (PlanTaskInputRow & { done: boolean })[]
   readonly allowlist: readonly string[]
   /** Files actually edited or created so far. */
@@ -36,6 +39,8 @@ export interface ImplementStageResult {
   readonly status: WorkflowStatus
   readonly artifacts: readonly string[]
   readonly ledger: ImplementLedger
+  /** Set when the drive escalated to full-go instead of completing (T15). */
+  readonly escalated?: { readonly cause: string }
 }
 
 /** Options for {@link recordTouched}. */
@@ -100,6 +105,9 @@ export async function recordTouched(
 ): Promise<ImplementLedger> {
   const ledger = await readLedger(workspaceRoot, options.changeId)
   assertWithinAllowlist(ledger, options.file)
+  // Regression-test-first (bug fast path): refuse before the write happens
+  // so a violation stays recoverable (§12 Phase 6).
+  assertRegressionFirst(ledger, options.file)
   if (ledger.touched.includes(options.file)) return ledger
   const next: ImplementLedger = { ...ledger, touched: [...ledger.touched, options.file] }
   await persistLedger(workspaceRoot, options.changeId, next)
@@ -160,11 +168,14 @@ export async function driveImplementComplete(
   changeId: string,
 ): Promise<ImplementStageResult> {
   const ledger = await readLedger(ctx.workspace.root, changeId)
+  // Mode comes from the projection, not the caller: fast-path changes gate
+  // on the regression-test rule, full-go changes on plan completeness.
+  const status = await ctx.store.readStatus(changeId)
   const gate = await implementGate(
     {
       workspaceRoot: ctx.workspace.root,
       changeId,
-      mode: 'full-go',
+      mode: status.mode === 'bug-fast-path' ? 'bug-fast-path' : 'full-go',
     },
     ledger.touched,
   )
@@ -176,7 +187,7 @@ export async function driveImplementComplete(
     )
   }
   return {
-    status: await ctx.store.readStatus(changeId),
+    status,
     artifacts: stageArtifactPaths(ctx.workspace.root, changeId, [ARTIFACT_FILES.planJson]),
     ledger,
   }

@@ -28,14 +28,14 @@
 | **3** | route resolver + 审计                                                        | **已完成** |
 | **4** | intake + projection + transition + Web 工作流 Tab（半交互）                        | **已完成** |
 | 5     | full-go 各阶段                                                                | **已完成** |
-| 6     | bug-fast-path / 升级                                                         | **未开始** |
+| 6     | bug-fast-path / 升级                                                         | **已完成** |
 | 7     | quality / standard / guard / scaffold                                      | **未开始** |
 | 8     | slash / CLI / desktop IPC + **变更 Dashboard（归档总览）** | **未开始**（工作流页「变更总览」入口已先行） |
 | 9     | 三 scope 更新、签名、managed system root（热更）                                      | **未开始** |
 | 10    | release 门禁                                                                 | **未开始** |
 
 
-MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**差 ToolGuard 与 slash/`status`**（均属 Phase 7/8）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）已落地并随桌面 **baf-dsh 0.0.10** 分发。
+MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**差 ToolGuard 与 slash/`status`**（均属 Phase 7/8）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）已落地并随桌面 **baf-dsh 0.0.10** 分发；bug fast-path 与 T15 风险升级（Phase 6）已落地于 domain 层（`baf-workflow`，56/56 测试绿），桌面分发随下一次打包。
 
 ### Phase 4 — 已完成明细
 
@@ -70,6 +70,22 @@ MVP 完成线（Phase 0–5 + ToolGuard + slash/`status`）**差 ToolGuard 与 s
 | `abandon` 入口（T16）                          | 已完成 | `stages/abandon.ts`；`driveAbandon` 需显式确认 → `change-abandoned`；幂等保留产物，保留全部审计             |
 | 阶段测试（happy path + 门禁失败 + 非法进入 + 全链路 + T11 + drift + abandon） | 已完成 | `baf-workflow` `tests/stages.spec.ts`                                                          |
 | 桌面分发                                      | 已完成 | `pack-dsh.mjs` force 打包 `baf-openspec`；`baf-product-versions.json` 嵌入 `bafOpenspec` 字段          |
+
+### Phase 6 — 已完成明细（2026-09-12）
+
+| 项                                        | 状态  | 落点                                                                                              |
+| ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
+| fast-path open（T3 + 最小 Bug 记录）           | 已完成 | `stages/fastpath.ts` `driveFastPathOpen` + `pipeline.driveFastPathOpenStage`；`bug-record.md`（问题/根因/影响范围/回归测试/Workspace 锚点）+ fast-path 版 `plan.json` ledger（regression-test 任务先行）；Git revision 缺失仅告警不阻断（full-go 会阻断）；不创建 OpenSpec 骨架 |
+| T5 机器证据（root cause recorded）           | 已完成 | `fastpath.ts` `rootCauseRecorded` 从 bug-record 读回根因段判定；`pipeline.enterImplementStage` 以该裁决为 T5 evidence，证据缺失 → `invalid_transition` 且停留在 open |
+| 回归测试先行（regression-test-first）           | 已完成 | `fastpath.ts` `assertRegressionFirst` 挂在 `implement.recordTouched`（allowlist 检查之后、写入之前拒绝 → 可恢复）；`gates.ts` implement 门禁 fast-path 分支按 durable ledger 复核（任务存在、done、回归文件已 touched，否则 `regression_test_required`） |
+| fast-path verify 检查集                        | 已完成 | `stages/verify.ts` `buildVerifyRunner(ctx, changeId, mode)`；fast-path：`regression-test` 为必需检查（结构性判定 ledger），`openspec-validate` 降级为非必需并标注「未走 OpenSpec：intake reason codes」；报告新增 `mode` 字段（`check-runner.ts`） |
+| T15 升级（结构化范围扩大自动触发）                | 已完成 | `stages/escalate.ts` `driveEscalate` + `pipeline.driveImplementStage` 预检 `scopeGrowthFiles`（touched ∉ allowlist）；顺序约束：先在 mode 仍为 bug-fast-path 时裁决 T15，再写 `stage-failed(implement)` + `mode-upgraded`（否则表过滤会吞掉该边） |
+| T15 升级（语义原因显式触发）                      | 已完成 | `pipeline.driveEscalateStage({changeId, cause})`；非 fast-path implement 拒绝（`invalid_transition`）并留 `transition-rejected` 审计 |
+| 升级后 OpenSpec 补建 + 审计保留                | 已完成 | `escalate.ts`：`plan.json` → `fastpath-ledger.json` 原子改名保留 fast-path 审计；安装携带 bug 上下文（Problem/Root cause）的 `proposal.md` 与 `tasks.md` 模板；随后 `stage-entered(clarify)`，`pipeline.enterStage` 幂等续入（同节点 in-progress 直接续跑），补走 clarify → design → plan → implement → verify → archive |
+| mode 感知实现门禁修复                            | 已完成 | `implement.ts` `driveImplementComplete` 不再硬编码 `full-go`，mode 由 projection status 读出 |
+| 阶段测试（fast-path 全链路 / T5 / 回归先行拒绝 / 自动升级 / 显式升级 / 升级后补走） | 已完成 | `baf-workflow` `tests/fastpath.spec.ts`（8 用例）；`packages/baf` 全量 56/56 绿 |
+
+
 
 
 

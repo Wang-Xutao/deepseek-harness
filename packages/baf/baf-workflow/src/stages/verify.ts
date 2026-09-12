@@ -12,9 +12,8 @@ import { changeDir } from '@deepseek-ai/dsh-baf-openspec'
 import type { StageContext } from './context.ts'
 import { CheckRunner, type CheckReportRow, type VerifyReport } from './check-runner.ts'
 import { verifyGate } from './gates.ts'
-
-/** Default check names registered by the Phase 5 verify driver. */
-export const VERIFY_CHECK_NAMES = ['openspec-validate', 'quality', 'guard', 'secret-scan'] as const
+import { readLedger } from './implement.ts'
+import { regressionSatisfied } from './fastpath.ts'
 
 /** Result of a verify drive. */
 export interface VerifyStageResult {
@@ -26,22 +25,57 @@ export interface VerifyStageResult {
 }
 
 /**
- * Build the Phase 5 check set: openspec-validate live, Phase 7 checks as
- * explicit `tool_unavailable` placeholders that annotate but do not gate.
+ * Build the mode-scoped check set. Full-go: openspec-validate required and
+ * live. Bug fast-path (§12 Phase 6): `regression-test` over the durable
+ * ledger is the required check and openspec-validate degrades to an
+ * explicit skipped annotation (required: false). Phase 7 checks stay
+ * `tool_unavailable` placeholders that annotate but do not gate.
  * @param ctx - stage context.
  * @param changeId - change id.
+ * @param mode - workflow mode of the change.
  * @returns initialized runner.
  */
-export function buildVerifyRunner(ctx: StageContext, changeId: string): CheckRunner {
+export function buildVerifyRunner(
+  ctx: StageContext,
+  changeId: string,
+  mode: 'full-go' | 'bug-fast-path' = 'full-go',
+): CheckRunner {
   const runner = new CheckRunner()
-  runner.register({
-    name: 'openspec-validate',
-    required: true,
-    run: async () => {
-      const report = await ctx.adapter.validate({ changeId, path: '' })
-      return { ok: report.passed, diagnostics: report.diagnostics }
-    },
-  })
+  if (mode === 'bug-fast-path') {
+    runner.register({
+      name: 'regression-test',
+      required: true,
+      run: async () => {
+        // Structural verdict from the durable ledger; a missing/malformed
+        // plan.json surfaces as a failed row, never a crash.
+        const ledger = await readLedger(ctx.workspace.root, changeId)
+        return regressionSatisfied(ledger)
+          ? { ok: true, diagnostics: ['regression test written and its task done'] }
+          : { ok: false, diagnostics: ['regression_test_required: test not written or task not done'] }
+      },
+    })
+    runner.register({
+      name: 'openspec-validate',
+      required: false,
+      run: async () => {
+        const status = await ctx.store.readStatus(changeId)
+        const reasons = status.intake?.reasonCodes ?? []
+        return {
+          ok: true,
+          diagnostics: [`skipped: bug-fast-path (未走 OpenSpec; intake reason codes: ${reasons.join(', ')})`],
+        }
+      },
+    })
+  } else {
+    runner.register({
+      name: 'openspec-validate',
+      required: true,
+      run: async () => {
+        const report = await ctx.adapter.validate({ changeId, path: '' })
+        return { ok: report.passed, diagnostics: report.diagnostics }
+      },
+    })
+  }
   for (const name of ['quality', 'guard', 'secret-scan'] as const) {
     runner.register({
       name,
@@ -67,9 +101,13 @@ export async function driveVerify(
   changeId: string,
   signal: AbortSignal,
 ): Promise<VerifyStageResult> {
-  const runner = buildVerifyRunner(ctx, changeId)
+  // The projection's mode — not the caller's claim — selects the check set.
+  const status = await ctx.store.readStatus(changeId)
+  const mode = status.mode === 'bug-fast-path' ? 'bug-fast-path' : 'full-go'
+  const runner = buildVerifyRunner(ctx, changeId, mode)
   const rows = await runner.runAll(signal)
   const report = runner.aggregate(changeId, rows, {
+    mode,
     ...(ctx.workspace.git?.revision === undefined ? {} : { sourceRevision: ctx.workspace.git.revision }),
     ...(ctx.baseline === undefined ? {} : { baselineId: ctx.baseline.baselineId }),
     toolVersions: { openspec: 'local-file-1' },

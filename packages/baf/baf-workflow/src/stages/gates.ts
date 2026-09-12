@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { OpenSpecAdapter } from '@deepseek-ai/dsh-baf-core'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
+import { REGRESSION_TASK_ID } from './fastpath.ts'
 
 /** Outcome of one completion gate. */
 export interface GateOutcome {
@@ -151,6 +152,8 @@ export async function planGate(input: GateInput): Promise<GateOutcome> {
 /**
  * N5 implement gate: plan tasks all carry done=true and the touched file set
  * stays inside the allowlist (out-of-scope growth must escalate instead).
+ * Fast path gates on the durable regression-test rule instead of plan
+ * completeness: regression task present, done, and its file written.
  * @param input - gate input.
  * @param touched - files actually edited or created.
  * @returns gate outcome.
@@ -160,9 +163,24 @@ export async function implementGate(
   touched: readonly string[],
 ): Promise<GateOutcome> {
   if (input.mode === 'bug-fast-path') {
-    return touched.length > 0
-      ? ok
-      : fail(['stage_incomplete'], 'no touched files recorded')
+    const plan = await readPlan(input)
+    if (plan === undefined) return fail(['stage_incomplete'], 'plan.json missing or malformed')
+    const allow = new Set(plan.allowlist)
+    const outside = touched.filter(file => !allow.has(file))
+    if (outside.length > 0) {
+      return fail(['scope_exceeded'], `outside allowlist: ${outside.join(', ')}`)
+    }
+    const regression = plan.tasks.find(t => t.id === REGRESSION_TASK_ID)
+    const regressionFile = regression?.files?.[0]
+    const regressionDone = (regression as { done?: boolean } | undefined)?.done === true
+    if (regression === undefined || !regressionDone) {
+      return fail(['regression_test_required'], 'regression test task not done before fix work')
+    }
+    if (regressionFile === undefined || !touched.includes(regressionFile)) {
+      return fail(['regression_test_required'], 'regression test file was never recorded as touched')
+    }
+    if (touched.length === 0) return fail(['stage_incomplete'], 'no touched files recorded')
+    return ok
   }
   const plan = await readPlan(input)
   if (plan === undefined) return fail(['stage_incomplete'], 'plan.json missing or malformed')

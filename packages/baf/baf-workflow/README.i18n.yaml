@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/baf/baf-workflow/README.md
-README.md: e4268040fb6f237a7409a33206ed6a6e607c5d7a
-README.zh.md: a0da6fa00f62a9f744b3604c4637fd2f0338f52d
+README.md: 8f311a34a05ee39c515d2dea7bcfd7ff31efc082
+README.zh.md: 2ccf5db0beb44892f409d1795383b3f35c0ecdd0
