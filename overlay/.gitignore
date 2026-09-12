@@ -10,3 +10,24 @@ site/
 assets/*.ico
 desktop/branding/installerSidebar.bmp
 desktop/branding/installerHeader.bmp
+# 调试产物：CDP 探针、图标采样、一次性验证脚本与运行日志（留在磁盘，不入库）
+desktop/.dsh-*
+desktop/.web-*
+desktop/.session-*
+desktop/.*-report.txt
+desktop/_asar-extract/
+scripts/.*-report.txt
+scripts/cdp-*.mjs
+scripts/probe-*
+scripts/fetch-icons.mjs
+scripts/list-windows.ps1
+scripts/close-window.ps1
+scripts/png-hist.mjs
+scripts/exepath-ab.mjs
+scripts/test-console-spawn.mjs
+scripts/quadrant-test.mjs
+scripts/quadrant-result.json
+scripts/console-spawn-result.json
+scripts/icon-*.png
+scripts/gitbash-icon.png
+scripts/gitexe-icon.png
