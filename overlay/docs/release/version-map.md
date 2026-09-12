@@ -19,3 +19,4 @@ BAF 各插件包（`baf-core` / `baf-workflow` 等）在各自 `package.json` �
 | 0.0.10 | 0.1.3-alpha.1 | Phase 5 full-go 七阶段（open/clarify/design/plan/implement/verify/archive）与门禁；baf-openspec 独立包并入桌面产物 |
 | 0.0.11 | 0.1.3-alpha.1 | Phase 5.8：drift 检测（git revision / baseline id / baseline 内容 / verify-report 过期 / 已完成产物删除）+ abandon（T16）+ T11 修复回环；baseline-locked 投影锚点 |
 | 0.0.12 | 0.1.3-alpha.1 | Phase 6：bug 快路径（T3 最小 bug-record / T5 根因证据 / 回归测试先行）+ T15 风险升级（自动/显式升级 full-go、fastpath-ledger 审计保留、OpenSpec 补建）；verify 按 mode 交换检查集 |
+| 0.0.13 | 0.1.3-alpha.1 | Phase 7：baseline 驱动的质量门（StackAdapter/QualityReport 占位）+ 工具调用硬门禁（baf-guard：结构路径裁决 + 同步 projection 读 + 密钥扫描）+ 工作区脚手架（baf-scaffold：基线模板 + openspec 目录，人工确认与备份语义）；shipped preset baf-domain isolate 增 4 键 4 row + `baf-guard/install` 非隔离 row |
