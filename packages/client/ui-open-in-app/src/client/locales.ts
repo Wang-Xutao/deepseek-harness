@@ -44,11 +44,15 @@ export const zh = {
   'open.error': '打开失败',
   'menu.toggle': '选择打开方式',
   'menu.aria': '打开方式',
+  'settings.title': '在“打开方式”菜单中显示的应用',
+  'settings.description': '取消勾选即可在会话头部的下拉菜单中隐藏对应应用',
   ...PRODUCT_NAMES,
   'app.finder': '访达',
   'app.explorer': '文件资源管理器',
   'app.filemanager': '文件管理器',
   'app.terminal': '终端',
+  'app.cmd': '命令提示符',
+  'app.powershell': 'PowerShell',
 } as const
 
 /** English dictionary, key-identical to the Chinese source of truth. */
@@ -58,11 +62,15 @@ export const en: Record<OpenInAppKey, string> = {
   'open.error': 'Failed to open',
   'menu.toggle': 'Choose an app to open in',
   'menu.aria': 'Open in',
+  'settings.title': 'Apps shown in the “Open in” menu',
+  'settings.description': 'Uncheck an app to hide it from the session-header dropdown',
   ...PRODUCT_NAMES,
   'app.finder': 'Finder',
   'app.explorer': 'File Explorer',
   'app.filemanager': 'Files',
   'app.terminal': 'Terminal',
+  'app.cmd': 'Command Prompt',
+  'app.powershell': 'PowerShell',
 }
 
 /** Key domain of the `open-in-app` namespace (zh is the source of truth). */

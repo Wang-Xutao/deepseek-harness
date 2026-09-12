@@ -65,8 +65,16 @@
 .mask {
   position: absolute;
   inset: 0;
-  background: var(--dsw-alias-bg-mask-1, rgba(15, 18, 28, 0.32));
+  /* A darker, opaque base plus a `backdrop-filter` blur: on renderers that
+   * drop the filter (older Chromium builds, some embedded webviews) the
+   * background still occludes the page instead of leaking the sidebar
+   * through. */
+  background: color-mix(in srgb,
+    var(--dsw-alias-bg-mask-1, rgba(15, 18, 28, 0.32)) 100%,
+    transparent 0%);
+  background-color: rgba(15, 18, 28, 0.45);
   backdrop-filter: var(--dsw-mask-blur, blur(2px));
+  -webkit-backdrop-filter: var(--dsw-mask-blur, blur(2px));
 }
 
 .panel {
@@ -74,7 +82,11 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   width: min(1080px, 100%);
+  /* Cap the height to the viewport so the panel never overflows on short
+   * windows; align-items on the overlay centers it. */
+  max-height: calc(100vh - 40px);
   height: min(860px, calc(100vh - 40px));
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-inverted, var(--dsw-alias-border-l2));
@@ -169,6 +181,7 @@
 }
 
 .body {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -183,6 +196,35 @@
   min-height: 0;
   border: 0;
   background: #ffffff;
+}
+
+.skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px;
+  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-secondary));
+  pointer-events: none;
+}
+
+.skeletonBar {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--dsw-alias-bg-secondary) 0%,
+    var(--dsw-alias-interactive-bg-hover) 50%,
+    var(--dsw-alias-bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 
 @media (max-width: 720px) {

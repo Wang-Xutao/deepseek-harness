@@ -483,13 +483,20 @@ async function locate(
     case 'fixed': {
       // A fixed entry ships with its OS, so the icon path is trusted rather
       // than probed (a somehow-missing file surfaces as a 404 at extraction);
-      // only an unset variable (`${SystemRoot}`) drops the icon claim.
+      // only an unset variable (`${SystemRoot}`) drops the icon claim. The
+      // argv command template expands the same way, and an unset variable
+      // there means the launcher cannot even be named, so the locator proves
+      // nothing and the entry resolves as unavailable.
       const iconPath = expandCandidate(locator.iconPath, internals)
       const icon = iconPath === null
         ? undefined
         : internals.platform === 'win32'
           ? { kind: 'executable' as const, path: iconPath }
           : { kind: 'app-bundle' as const, path: iconPath }
+      if (locator.launch.kind === 'argv') {
+        const command = expandCandidate(locator.launch.command, internals)
+        return command === null ? null : { launch: { ...locator.launch, command }, icon }
+      }
       return { launch: locator.launch, icon }
     }
     case 'app': {
@@ -765,9 +772,14 @@ export async function launchResolved(
   resolved: OpenInAppResolvedLaunch, path: string, watchMs: number, internals: OpenInAppInternals = {},
 ): Promise<OpenInAppLaunchOutcome> {
   const completed = resolveInternals(internals)
-  const primary = await runLaunch(resolved.launch, path, watchMs, completed)
+  // The route's absolute-directory validation accepts either separator, but
+  // a win32 launcher re-parses its raw command line and reads a `/` in the
+  // directory as a switch (`start /d d:/x` → "无效开关 - /x"), so every
+  // launch on Windows carries Windows separators.
+  const directory = completed.platform === 'win32' ? path.replaceAll('/', '\\') : path
+  const primary = await runLaunch(resolved.launch, directory, watchMs, completed)
   if (primary === 'launched' || resolved.fallbackLaunch === undefined) return primary
-  const fallback = await runLaunch(resolved.fallbackLaunch, path, watchMs, completed)
+  const fallback = await runLaunch(resolved.fallbackLaunch, directory, watchMs, completed)
   if (fallback === 'launched') return 'launched'
   // Either tried launcher having vanished is grounds to refresh the resolution.
   return primary === 'missing' || fallback === 'missing' ? 'missing' : 'failed'

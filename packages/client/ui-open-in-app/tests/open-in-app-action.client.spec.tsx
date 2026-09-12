@@ -40,6 +40,7 @@ function bench(over: {
   } as unknown as SessionListState
   const apps = createSnapshotStore<readonly string[] | null>(over.apps ?? null)
   const choice = createSnapshotStore<string>(over.choice ?? '')
+  const disabled = createSnapshotStore<readonly string[]>([])
   const launch = vi.fn(over.launch ?? (async () => {}))
   const choose = vi.fn()
   function useSessions<T>(select: (snapshot: SessionListState) => T): T {
@@ -53,6 +54,7 @@ function bench(over: {
     useSessions,
     useOpenInAppApps: useSelector(apps),
     useOpenInAppChoice: useSelector(choice),
+    useOpenInAppDisabled: useSelector(disabled),
     launch,
     choose,
     iconUrl: (appId: string) => `/open-in-app/icon/${appId}`,

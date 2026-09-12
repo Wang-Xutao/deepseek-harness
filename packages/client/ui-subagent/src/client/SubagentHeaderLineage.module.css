@@ -85,7 +85,9 @@
 
 .trigger svg,
 .switcherTrigger svg {
-  transition: transform 120ms ease;
+  /* No transform transition: the chevron rotation races the catalog open
+     animation, and any tween produces a one-frame misalignment that the user
+     reads as flicker when the catalog toggles faster than the tween resolves. */
 }
 
 .triggerOpen {
@@ -93,7 +95,16 @@
 }
 
 .menu {
-  position: fixed;
+  /* Anchored to the trigger container; this keeps the menu inside the same
+   * pointer region as the trigger so `onMouseEnter`/`onMouseLeave` on the
+   * `.root` (or its single `onMouseEnter`/`onMouseLeave` on `.menu`)
+   * cannot be split by a gap and never produces a pointer-leave/re-enter
+   * flash. The earlier fixed-position portal version could flicker because
+   * the menu lived in `document.body` and a JavaScript `getBoundingClientRect`
+   * could be sampled after layout had already shifted. */
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
   z-index: 100;
   box-sizing: border-box;
   display: flex;

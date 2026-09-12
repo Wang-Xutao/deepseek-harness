@@ -1,7 +1,6 @@
 import {
-  useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent,
+  useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent,
 } from 'react'
-import { createPortal } from 'react-dom'
 import {
   type SessionListState, type SessionProjectionMap, type SessionSummary,
   type SubagentCatalogSnapshot,
@@ -464,20 +463,14 @@ type CatalogDropdownProps = CatalogDropdownSharedProps & (
   }
 )
 
-const MENU_VIEWPORT_MARGIN = 16
+/** Hover-debounce delay for opening the catalog; long enough that pointer
+ *  cross-overs in the trigger/header area do not flash the menu open. */
+const HOVER_OPEN_DELAY_MS = 120
 
-/** Place a portaled catalog below its trigger without crossing the viewport edge. */
-function catalogMenuPosition(trigger: HTMLButtonElement): CSSProperties {
-  const rect = trigger.getBoundingClientRect()
-  const width = Math.min(336, window.innerWidth - MENU_VIEWPORT_MARGIN * 2)
-  return {
-    top: rect.bottom + 5,
-    left: Math.min(
-      Math.max(MENU_VIEWPORT_MARGIN, rect.left),
-      window.innerWidth - width - MENU_VIEWPORT_MARGIN,
-    ),
-  }
-}
+/** Hover-debounce delay for closing; longer than the open delay so that
+ *  moving the pointer from the trigger to the menu inside one transition
+ *  never drops the menu before the menu's own enter handler runs. */
+const HOVER_CLOSE_DELAY_MS = 180
 
 /** One trigger-plus-tree dropdown over the catalog rooted at `rootSessionId`. */
 function CatalogDropdown({
@@ -489,7 +482,6 @@ function CatalogDropdown({
   const summaries = useSessions(state => state.byId)
   const catalog = catalogs[rootSessionId]
   const [open, setOpen] = useState(false)
-  const [menuPosition, setMenuPosition] = useState<CSSProperties>()
   const [now, setNow] = useState(() => Date.now())
   const [expanded, setExpanded] = useState<ReadonlySet<SessionId>>(() => new Set())
   const rootRef = useRef<HTMLDivElement>(null)
@@ -497,6 +489,8 @@ function CatalogDropdown({
   const menuRef = useRef<HTMLDivElement>(null)
   const hoverOpenTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const hoverCloseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const openRef = useRef(false)
+  openRef.current = open
   const observedCatalogs = useRef(new Set<SessionId>())
   const setCatalogOpenRef = useRef(setCatalogOpen)
   setCatalogOpenRef.current = setCatalogOpen
@@ -563,13 +557,10 @@ function CatalogDropdown({
       /* v8 ignore next -- a queued callback can outlive the trigger */
       if (trigger === null) return
       setOpen(true)
-      setMenuPosition(catalogMenuPosition(trigger))
-      setNow(Date.now())
       observeCatalog(rootSessionId, true)
     }
     else {
       setOpen(false)
-      setMenuPosition(undefined)
       closeAllCatalogs()
     }
     if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
@@ -578,11 +569,14 @@ function CatalogDropdown({
   const scheduleHoverOpen = (): void => {
     cancelHoverOpen()
     cancelHoverClose()
-    if (open) return
+    // Read the latest value through a ref so rapid pointer crossings cannot
+    // queue another open on top of an already-open menu; the stale closure
+    // in `open` would otherwise re-open after the user moved into the menu.
+    if (openRef.current) return
     hoverOpenTimer.current = setTimeout(() => {
       hoverOpenTimer.current = undefined
       changeOpen(true)
-    }, 150)
+    }, HOVER_OPEN_DELAY_MS)
   }
 
   const scheduleHoverClose = (): void => {
@@ -591,7 +585,7 @@ function CatalogDropdown({
     hoverCloseTimer.current = setTimeout(() => {
       hoverCloseTimer.current = undefined
       changeOpen(false)
-    }, 120)
+    }, HOVER_CLOSE_DELAY_MS)
   }
 
   const closeBranch = (root: SessionId): void => {
@@ -633,21 +627,11 @@ function CatalogDropdown({
     return () => { document.removeEventListener('pointerdown', closeOutside) }
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    const placeMenu = (): void => {
-      const trigger = triggerRef.current
-      /* v8 ignore next -- native resize or scroll can outlive the trigger */
-      if (trigger === null) return
-      setMenuPosition(catalogMenuPosition(trigger))
-    }
-    window.addEventListener('resize', placeMenu)
-    document.addEventListener('scroll', placeMenu, true)
-    return () => {
-      window.removeEventListener('resize', placeMenu)
-      document.removeEventListener('scroll', placeMenu, true)
-    }
-  }, [open])
+  // No positional remeasurement: the menu is a CSS-positioned child of the
+  // trigger container (`position: absolute; top: 100%`), so its placement is
+  // always correct and does not need to track scroll or resize. The earlier
+  // `placeMenu` effect could fire on inner-menu scroll and re-render the menu,
+  // producing visible flicker when the user hovered the catalog rows.
 
   useEffect(() => {
     if (!open || descendants.runningCount === 0) return
@@ -664,25 +648,41 @@ function CatalogDropdown({
     observedCatalogs.current.clear()
   }, [])
 
-  // Visibility needs evidence of children (entries, summary-known descendants,
-  // or a failed load worth retrying). A bare loading catalog is not evidence:
-  // selecting any session schedules a refresh whose loading snapshot would
-  // otherwise flash the action in and out on childless sessions.
+  // Visibility needs evidence of children (catalog rows, or summary-known
+  // descendants). A bare loading snapshot is not evidence, and neither is a
+  // failed fetch: selecting any session schedules a refresh, so a childless
+  // session whose catalog errors would flash the action in on the error and
+  // out again on the next refresh's loading snapshot — the "0 个子代理" hover
+  // flicker. A failed catalog that already holds rows (or knows descendants)
+  // stays visible, keeping its retry row reachable.
+  // `latchedVisible` freezes a once-true visibility until the menu closes: the
+  // open transition flips the catalog to `loading`, which would otherwise
+  // drop `visible` to false mid-hover and force a re-render that races the
+  // still-running scheduleHoverOpen timer.
+  const [latchedVisible, setLatchedVisible] = useState(false)
   const visible = presentedCatalog !== undefined
     && (variant === 'switcher'
-      || presentedCatalog.state === 'error'
       || presentedCatalog.entries.length > 0
       || descendantCount > 0)
   useEffect(() => {
+    if (visible) setLatchedVisible(true)
+  }, [visible])
+  useEffect(() => {
     if (visible) return
+    if (!latchedVisible) return
     cancelHoverOpen()
     cancelHoverClose()
     if (!open) return
     setOpen(false)
     closeAllCatalogs()
+  }, [visible, latchedVisible, open])
+  // Clear the latch once the menu has fully closed and we're no longer in the
+  // loading-flash window, so childless sessions can unmount the trigger.
+  useEffect(() => {
+    if (!visible && !open) setLatchedVisible(false)
   }, [visible, open])
 
-  if (!visible) return null
+  if (!visible && !latchedVisible) return null
 
   const focusAt = (index: number): void => {
     const items = treeItems(menuRef.current)
@@ -764,11 +764,10 @@ function CatalogDropdown({
           ? <SubagentSwitcherIcon />
           : <IconChevronDownOutline14 className={open ? css.triggerOpen : undefined} />}
       </button>
-      {open && createPortal((
+      {open && (
         <div
           ref={menuRef}
           className={css.menu}
-          style={menuPosition}
           role="tree"
           aria-label={t('tree.aria')}
           onMouseEnter={cancelHoverClose}
@@ -777,7 +776,12 @@ function CatalogDropdown({
           <CatalogRows
             parentSessionId={rootSessionId}
             currentSessionId={currentSessionId}
-            catalog={presentedCatalog}
+            catalog={presentedCatalog ?? {
+              entries: [],
+              parentAvailable: false,
+              state: 'loading',
+              error: null,
+            }}
             catalogs={catalogs}
             summaries={summaries}
             expanded={expanded}
@@ -790,7 +794,7 @@ function CatalogDropdown({
             t={t}
           />
         </div>
-      ), document.body)}
+      )}
     </div>
   )
 }

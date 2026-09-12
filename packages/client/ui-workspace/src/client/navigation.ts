@@ -67,6 +67,9 @@ export class DirectoryBrowseError extends Error {
   }
 }
 
+/** Wall-clock ceiling for the host directory picker (the modal can block indefinitely). */
+const DIRECTORY_PICK_TIMEOUT_MS = 5 * 60_000
+
 /** Implements Workspace archive and directory UI operations. */
 class UiWorkspaceService extends Service implements UiWorkspace {
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
@@ -137,9 +140,24 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   async pickDirectory(): Promise<string | null> {
-    const result = await this.directoryPicker.pick()
-    if (!result.ok) throw new Error(`directory picker failed: ${result.error.message}`)
-    return result.value
+    // The native dialog blocks the host child process until the user picks
+    // or cancels; a host that never answers (process crash, missing dialog
+    // binary, abandoned picker) would otherwise let this promise dangle and
+    // surface as `Failed to fetch` on the next RPC after a transport retry
+    // budgeted by the same caller. Race the call against a wall-clock
+    // ceiling so the UI gets a clear timeout rather than a silent hang.
+    const timeoutMs = DIRECTORY_PICK_TIMEOUT_MS
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { reject(new Error(`directory picker timed out after ${String(timeoutMs)} ms`)) }, timeoutMs)
+    })
+    try {
+      const result = await Promise.race([this.directoryPicker.pick(), timeout])
+      if (!result.ok) throw new Error(`directory picker failed: ${result.error.message}`)
+      return result.value
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
   }
 
   async listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {

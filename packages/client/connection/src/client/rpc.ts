@@ -12,6 +12,27 @@ const INTERNAL_BASE = 'http://dsh.internal'
 const CHANNEL_PATTERN = /^\/[A-Za-z0-9._~-]+$/
 const ENDPOINT_SEGMENT_PATTERN = /^[A-Za-z0-9_$.-]+$/
 
+/** Transport-level retry budget for socket drops; HTTP errors fall through untouched. */
+const TRANSPORT_RETRY_ATTEMPTS = 3
+/** Initial backoff between transport retries; each attempt multiplies by its index. */
+const TRANSPORT_RETRY_BACKOFF_MS = 120
+
+/** `fetch` only throws `TypeError: Failed to fetch` for socket-level failures. */
+function isTransportFailure(error: unknown): boolean {
+  if (!(error instanceof TypeError)) return false
+  // Chromium prefixes vary across versions; the message is the source of truth.
+  return /failed to fetch/i.test(error.message)
+}
+
+/** Sleep that honors an optional AbortSignal, resolving early on abort. */
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted === true) return Promise.reject(new DOMException('aborted', 'AbortError'))
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => { resolve() }, ms)
+    signal?.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
+  })
+}
+
 /** Transport this caller posts through; same signature as the global `fetch`. */
 export type RpcFetch = (input: URL, init: RequestInit) => Promise<Response>
 
@@ -40,23 +61,46 @@ export function createWebConnectionRpc(doFetch?: RpcFetch, openStream?: RpcStrea
         method: endpoint,
         payload,
       }
-      const response = await send(
-        new URL(`${channel}/${endpoint}`, resolveBase()),
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(message),
-          ...signal === undefined ? {} : { signal },
-        },
-      )
-      if (!response.ok) {
-        throw new Error(`transport failure for ${channel}/${endpoint}: HTTP ${response.status}`)
+      // A `TypeError: Failed to fetch` from the global fetch means the socket
+      // was torn down before a response arrived (host child process reload,
+      // window navigation, transient disconnect). The SPA re-tries that
+      // exact same call; without this loop every transient disconnect during
+      // a long read (e.g. native directory picker, agent-preset list) lands
+      // as a permanent error in the UI.
+      let lastError: unknown
+      for (let attempt = 0; attempt < TRANSPORT_RETRY_ATTEMPTS; attempt++) {
+        try {
+          const response = await send(
+            new URL(`${channel}/${endpoint}`, resolveBase()),
+            {
+              method: 'POST',
+              // Send the Host-issued browser-session cookie; without this Chromium
+              // omits the cookie on a same-origin POST and the Host Connection
+              // answers every RPC with 401, surfacing as `Failed to fetch` in the
+              // renderer because the SPA then re-fetches during a transient 401.
+              credentials: 'include',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(message),
+              ...signal === undefined ? {} : { signal },
+            },
+          )
+          if (!response.ok) {
+            throw new Error(`transport failure for ${channel}/${endpoint}: HTTP ${response.status}`)
+          }
+          const full = parseConnectionResponse(await response.json())
+          if (full.rpcId !== rpcId) {
+            throw new Error(`rpcId mismatch for ${endpoint}: sent ${rpcId}, got ${full.rpcId}`)
+          }
+          return full.result
+        } catch (error) {
+          if (!isTransportFailure(error) || signal?.aborted === true) throw error
+          lastError = error
+          if (attempt + 1 < TRANSPORT_RETRY_ATTEMPTS) {
+            await delay(TRANSPORT_RETRY_BACKOFF_MS * (attempt + 1), signal)
+          }
+        }
       }
-      const full = parseConnectionResponse(await response.json())
-      if (full.rpcId !== rpcId) {
-        throw new Error(`rpcId mismatch for ${endpoint}: sent ${rpcId}, got ${full.rpcId}`)
-      }
-      return full.result
+      throw lastError instanceof Error ? lastError : new Error(`transport failure for ${channel}/${endpoint}`)
     },
     ...openStream === undefined ? {} : {
       open(channel, endpoint, payload, signal) {

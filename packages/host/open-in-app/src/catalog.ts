@@ -371,6 +371,49 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
     },
   },
   {
+    // Windows Command Prompt — cmd.exe shipped with the OS. The host child
+    // has no console, so a directly spawned console app runs windowless
+    // (detached or not); cmd's `start` builtin is the one primitive that
+    // asks the OS for a fresh console (CREATE_NEW_CONSOLE). The transient
+    // outer `cmd /c` exits as soon as `start` has spawned the target.
+    // Quoting traps this entry avoids: no quote characters ride in the argv
+    // data (Node backslash-escapes them onto the raw command line, where
+    // cmd's parser reads a syntax error — a `start ""`-style title is
+    // exactly that bug), and the command template carries Windows
+    // separators, because cmd re-parses its raw command line and reads a
+    // `/` in the launcher path as a switch ("命令语法不正确").
+    id: 'cmd',
+    platforms: {
+      win32: spec({
+        kind: 'fixed',
+        launch: {
+          kind: 'argv',
+          command: '${SystemRoot}\\System32\\cmd.exe',
+          args: ['/c', 'start', '/d', PATH_TOKEN, 'cmd'],
+        },
+        iconPath: '${SystemRoot}/System32/cmd.exe',
+      }),
+    },
+  },
+  {
+    // Windows PowerShell — powershell.exe, wrapped in the same `start /d`
+    // console allocation as the cmd entry (see there for the quoting and
+    // separator rationale). `-NoExit` keeps the new window open at the
+    // directory `start` placed it in.
+    id: 'powershell',
+    platforms: {
+      win32: spec({
+        kind: 'fixed',
+        launch: {
+          kind: 'argv',
+          command: '${SystemRoot}\\System32\\cmd.exe',
+          args: ['/c', 'start', '/d', PATH_TOKEN, 'powershell', '-NoExit'],
+        },
+        iconPath: '${SystemRoot}/System32/WindowsPowerShell/v1.0/powershell.exe',
+      }),
+    },
+  },
+  {
     id: 'gnometerminal',
     platforms: {
       linux: desktopSpec(

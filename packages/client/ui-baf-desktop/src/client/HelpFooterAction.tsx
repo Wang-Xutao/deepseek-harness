@@ -1,7 +1,7 @@
 /**
  * Sidebar foot "Help" action with a centered MkDocs documentation panel.
  */
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
@@ -23,6 +23,7 @@ export type HelpFooterActionProps =
  */
 export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
   const [open, setOpen] = useState(false)
+  const [iframeLoaded, setIframeLoaded] = useState(false)
   const titleId = useId()
   const closeRef = useRef<HTMLButtonElement | null>(null)
   const helpUrl = resolveHelpDocsUrl()
@@ -41,6 +42,39 @@ export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [open])
+
+  // Reset the loaded flag every time the panel mounts: a fresh iframe is a
+  // new fetch, and an unmounted iframe (closing the panel) leaves the next
+  // mount with a stale "loaded" signal that would otherwise skip the
+  // skeleton and flash the panel's first paint.
+  useEffect(() => {
+    if (!open) return
+    setIframeLoaded(false)
+  }, [open])
+
+  // The help site's own `embedded.js` adds `html.baf-embedded` when running
+  // inside an iframe, but it fires before stylesheets finish loading and a
+  // race can leave the layout at the desktop (full-page) defaults on first
+  // paint. Force the class from this side on every iframe load — the JS
+  // fallback inside the help page only matters for cross-origin schemes
+  // (file://, dsh-app://) where the renderer cannot read the iframe DOM.
+  const frameRef = useRef<HTMLIFrameElement | null>(null)
+  const applyEmbeddedClass = useCallback((): void => {
+    const frame = frameRef.current
+    if (frame === null) return
+    let doc: Document | null = null
+    try {
+      doc = frame.contentDocument ?? frame.contentWindow?.document ?? null
+    }
+    catch {
+      // Cross-origin or sandboxed frame: the embedded.js inside the help
+      // page is the only fallback (used for file:// and dsh-app:// schemes).
+      return
+    }
+    if (doc === null) return
+    doc.documentElement.classList.add('baf-embedded')
+    doc.documentElement.lang = 'zh-CN'
+  }, [])
 
   const panel = open ? (
     <div className={css.overlay} role="presentation">
@@ -80,11 +114,27 @@ export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
         </header>
         <div className={css.body}>
           <iframe
+            ref={frameRef}
             className={css.frame}
             title={t('help.title')}
             src={helpUrl}
             referrerPolicy="no-referrer"
+            data-loaded={iframeLoaded || undefined}
+            onLoad={() => {
+              setIframeLoaded(true)
+              applyEmbeddedClass()
+            }}
           />
+          {iframeLoaded ? null : (
+            <div className={css.skeleton} aria-hidden="true">
+              <div className={css.skeletonBar} style={{ width: '40%' }} />
+              <div className={css.skeletonBar} style={{ width: '70%' }} />
+              <div className={css.skeletonBar} style={{ width: '55%' }} />
+              <div className={css.skeletonBar} style={{ width: '85%' }} />
+              <div className={css.skeletonBar} style={{ width: '45%' }} />
+              <div className={css.skeletonBar} style={{ width: '65%' }} />
+            </div>
+          )}
         </div>
       </aside>
     </div>

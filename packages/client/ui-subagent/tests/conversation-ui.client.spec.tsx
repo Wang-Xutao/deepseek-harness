@@ -227,37 +227,42 @@ describe('SubagentHeaderLineage', () => {
     expect(screen.queryByRole('tree')).toBeNull()
   })
 
-  it('opens only on hover and preserves the portaled-menu crossing grace', async () => {
+  it('opens only on hover and keeps the menu inside the trigger container', async () => {
+    // The catalog menu is now a CSS-positioned child of the trigger container
+    // (`position: absolute; top: calc(100% + 4px)`); no inline `top`/`left`
+    // styles are written and no scroll/resize listener re-positions the menu.
     vi.useFakeTimers()
     const advance = async (duration: number): Promise<void> => {
       await act(async () => { await vi.advanceTimersByTimeAsync(duration) })
     }
     const view = render(<SubagentHeaderLineage {...props(catalog())} />)
     const trigger = screen.getByRole('button', { name: /2 个子代理/ })
-    const triggerRect = vi.spyOn(trigger, 'getBoundingClientRect')
-      .mockReturnValue({ bottom: 40, left: 50 } as DOMRect)
 
     fireEvent.click(trigger)
     expect(screen.queryByRole('tree')).toBeNull()
 
     fireEvent.mouseEnter(trigger.parentElement!)
-    await advance(149)
+    await advance(119)
     expect(screen.queryByRole('tree')).toBeNull()
     await advance(1)
     const tree = screen.getByRole('tree')
-    expect(tree.style.top).toBe('45px')
-    expect(tree.style.left).toBe('50px')
-    triggerRect.mockReturnValue({ bottom: 60, left: 70 } as DOMRect)
+    // No inline top/left — the menu is anchored by CSS so the previous
+    // `tree.style.top === '45px'` shape no longer applies.
+    expect(tree.style.top).toBe('')
+    expect(tree.style.left).toBe('')
+    // Resize must not write a new inline position (no JS measurement).
     fireEvent.resize(window)
-    expect(tree.style.top).toBe('65px')
-    expect(tree.style.left).toBe('70px')
+    expect(tree.style.top).toBe('')
+    // Moving from trigger to the menu must keep the menu open across the
+    // crossing grace window: leaving the trigger and entering the menu
+    // should not start a close timer.
     fireEvent.mouseLeave(trigger.parentElement!)
     fireEvent.mouseEnter(tree)
-    await advance(120)
+    await advance(180)
     expect(screen.getByRole('tree')).toBeTruthy()
 
     fireEvent.mouseLeave(tree)
-    await advance(119)
+    await advance(179)
     expect(screen.getByRole('tree')).toBeTruthy()
     await advance(1)
     expect(screen.queryByRole('tree')).toBeNull()
@@ -265,28 +270,26 @@ describe('SubagentHeaderLineage', () => {
     hoverCatalog(trigger)
     fireEvent.mouseLeave(trigger.parentElement!)
     view.unmount()
-    await advance(120)
+    await advance(180)
   })
 
-  it('repositions an open catalog after viewport resize and document scroll', () => {
+  it('does not reposition the open catalog on viewport resize or scroll', () => {
+    // With CSS-positioned placement the menu never reads trigger rect at
+    // runtime, so scroll/resize no longer mutate its inline position.
     const view = render(<SubagentHeaderLineage {...props(catalog())} />)
     const trigger = screen.getByRole('button', { name: /2 个子代理/ })
-    const bounds = vi.spyOn(trigger, 'getBoundingClientRect')
-    bounds.mockReturnValue({ bottom: 20, left: 30 } as DOMRect)
     hoverCatalog(trigger)
     const tree = screen.getByRole('tree')
-    expect(tree.style.top).toBe('25px')
-    expect(tree.style.left).toBe('30px')
+    expect(tree.style.top).toBe('')
+    expect(tree.style.left).toBe('')
 
-    bounds.mockReturnValue({ bottom: 70, left: 80 } as DOMRect)
     act(() => { window.dispatchEvent(new Event('resize')) })
-    expect(tree.style.top).toBe('75px')
-    expect(tree.style.left).toBe('80px')
+    expect(tree.style.top).toBe('')
+    expect(tree.style.left).toBe('')
 
-    bounds.mockReturnValue({ bottom: 90, left: 100 } as DOMRect)
     act(() => { document.dispatchEvent(new Event('scroll')) })
-    expect(tree.style.top).toBe('95px')
-    expect(tree.style.left).toBe('100px')
+    expect(tree.style.top).toBe('')
+    expect(tree.style.left).toBe('')
     view.unmount()
   })
 
@@ -563,7 +566,7 @@ describe('SubagentHeaderLineage', () => {
     expect(screen.queryByRole('treeitem', { name: /indexer/ })).toBeNull()
   })
 
-  it('hides an arrived empty catalog and exposes retry for a failed one', () => {
+  it('hides childless catalogs in every state and keeps retry for a failed one with known children', () => {
     const absent = render(<SubagentHeaderLineage {...props(undefined)} />)
     expect(screen.queryByRole('button')).toBeNull()
     absent.unmount()
@@ -573,13 +576,25 @@ describe('SubagentHeaderLineage', () => {
     expect(screen.queryByRole('button')).toBeNull()
     view.unmount()
 
-    const failed = props(catalog({
+    // A failed fetch is no evidence of children either: selection schedules
+    // a refresh, and an error snapshot would otherwise flash the "0 个子代理"
+    // action in and the next refresh's loading snapshot back out.
+    const failedEmpty = props(catalog({
       entries: [],
       state: 'error',
       error: new RemoteError('gateway/internal', 'index down', {}),
     }))
+    const failedView = render(<SubagentHeaderLineage {...failedEmpty} />)
+    expect(screen.queryByRole('button')).toBeNull()
+    failedView.unmount()
+
+    // A failed catalog whose rows survived the error keeps the retry row.
+    const failed = props(catalog({
+      state: 'error',
+      error: new RemoteError('gateway/internal', 'index down', {}),
+    }))
     render(<SubagentHeaderLineage {...failed} />)
-    hoverCatalog(screen.getByRole('button', { name: /0 个子代理/ }))
+    hoverCatalog(screen.getByRole('button', { name: /2 个子代理/ }))
     expect(screen.getByText('index down')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /重试/ }))
     expect(failed.refresh).toHaveBeenCalledWith(PARENT)
@@ -612,9 +627,10 @@ describe('SubagentHeaderLineage', () => {
     expect(staleEmpty.openChild).not.toHaveBeenCalled()
   })
 
-  it('hides a bare loading catalog and keeps the error fallback without focusable rows', async () => {
+  it('hides bare loading and failed childless catalogs', () => {
     // Selecting any session schedules a catalog refresh; a loading snapshot
-    // with no other evidence of children must not flash the action in.
+    // with no other evidence of children must not flash the action in, and a
+    // failed one neither — sessions that used no subagents never show it.
     const loading = props(catalog({ entries: [], state: 'loading' }))
     const view = render(<SubagentHeaderLineage {...loading} />)
     expect(screen.queryByRole('button')).toBeNull()
@@ -622,13 +638,7 @@ describe('SubagentHeaderLineage', () => {
 
     const failed = props(catalog({ entries: [], state: 'error', error: null }))
     render(<SubagentHeaderLineage {...failed} />)
-    const trigger = screen.getByRole('button', { name: /0 个子代理/ })
-    hoverCatalog(trigger)
-    expect(screen.getByText('无法加载子代理')).toBeTruthy()
-    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
-    await Promise.resolve()
-    expect(screen.getByRole('tree')).toBeTruthy()
-    fireEvent.keyDown(screen.getByRole('tree'), { key: 'ArrowUp' })
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('navigates from outside the tree and tolerates a deferred focus after unmount', async () => {

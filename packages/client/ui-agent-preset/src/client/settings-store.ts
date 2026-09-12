@@ -59,11 +59,21 @@ const EMPTY_ROSTER: AgentPresetRoster = { presets: [], authorable: false }
 
 /**
  * Read the roster, turning a refusal into the message every surface shows.
+ *
+ * Network-level errors (e.g. `TypeError: Failed to fetch` after the RPC
+ * transport's retry budget is spent) become a normal roster error so the
+ * caller can render a "try again" affordance instead of an unhandled
+ * rejection that leaks as `Failed to fetch` to the user.
  * @param ctx - the browser plugin context carrying the Remote namespaces.
  * @returns the roster, or the message to show in its place.
  */
 export async function readRoster(ctx: ClientContext): Promise<RosterRead> {
-  const result = await ctx.remote.agentPresets.list()
+  let result
+  try {
+    result = await ctx.remote.agentPresets.list()
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
   if (result.ok) return { ok: true, value: result.value }
   // Agent presets are optional: without that service every session uses the
   // Host composition, so callers receive the same empty roster as a mounted
