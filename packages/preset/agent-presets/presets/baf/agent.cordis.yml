@@ -269,6 +269,17 @@
 - id: baf-commands
   name: '@deepseek-ai/dsh-baf-workflow/commands'
 
+# Phase 8.2: standalone CLI mirror of /baf-* slash commands. Disabled by
+# default so ordinary `baf` agent sessions do NOT pull this row (an idle
+# `cmdlineArgs` consumer that waits for argv is harmless but wasteful). The
+# shipped `overlays/baf-cli.cordis.patch.yml` re-enables it for the
+# `baf-cli` profile path. Sits outside the isolate for the same reason as
+# baf-commands: `cmdlineArgs` / `appExit` are host-provided and reading them
+# from a preset realm would block every agent that mounts this preset.
+- id: baf-cli
+  disabled: true
+  name: '@deepseek-ai/dsh-baf-workflow/cmdline'
+
 # Per-agent tool guard install row. Like baf-commands, this sits outside the
 # baf-domain isolate: it reaches the host `agents` service so each new agent
 # gets a workspace-bound ToolGuard installed (entry workspace decided by

@@ -1,0 +1,12 @@
+# Phase 8.2 — `baf-cli` profile patch.
+#
+# Usage:
+#   dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- <subcommand>
+#
+# This patch enables the `baf-cli` row in the shipped `baf` preset, which
+# mounts the standalone Commander tree (`@deepseek-ai/dsh-baf-workflow/cmdline`).
+# Reuses the same Cordis subtree as `baf`; no second launcher, no second
+# Cordis tree, no second CLI executable (per docs/architecture.md
+# `verify-application-entrypoints`).
+- id: baf-cli
+  disabled: false

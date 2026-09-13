@@ -14,18 +14,24 @@ import {
   type WorkflowStatus,
   type WorkflowNode,
 } from '@deepseek-ai/dsh-baf-core'
-import { createLocalOpenSpecAdapter } from '@deepseek-ai/dsh-baf-openspec'
+import { ARTIFACT_FILES, createLocalOpenSpecAdapter } from '@deepseek-ai/dsh-baf-openspec'
 import { assertTransitionAccepted, decideTransition } from '../transition.ts'
 import { ProjectionStore } from '../projection.ts'
 import { createStageContext, type StageContext } from './context.ts'
 import { driveOpen, type OpenStageResult } from './open.ts'
 import {
   driveClarify,
+  renderClarifyBody,
   type ClarifyInput,
   type ClarifyStageResult,
 } from './clarify.ts'
-import { driveDesign, type DesignInput, type DesignStageResult } from './design.ts'
-import { drivePlan, type PlanInput, type PlanStageResult } from './plan.ts'
+import { driveDesign, renderDesignBody, type DesignInput, type DesignStageResult } from './design.ts'
+import {
+  drivePlan,
+  renderPlanBody,
+  type PlanInput,
+  type PlanStageResult,
+} from './plan.ts'
 import {
   driveImplementComplete,
   readLedger,
@@ -34,6 +40,9 @@ import {
 import { driveVerify, type VerifyStageResult } from './verify.ts'
 import { driveArchive, type ArchiveStageResult } from './archive.ts'
 import { detectAndRecord, type DriftObservation, type DriftSignal } from './drift.ts'
+import { clarifyGate, designGate, planGate } from './gates.ts'
+import { stageArtifactPaths } from './artifacts.ts'
+import { writeArtifact } from './write.ts'
 import {
   driveAbandon,
   type AbandonOptions,
@@ -331,6 +340,85 @@ export class StagePipeline {
   async driveEscalateStage(options: EscalateOptions): Promise<DriveResult> {
     const result = await driveEscalate(this.ctx, options)
     return { node: 'escalate', result, status: result.status }
+  }
+
+  /**
+   * Adjudicate completion of a documentation stage whose artifact the model
+   * authored through guarded writes after a `begin` drive installed the
+   * template (§5.6: model writes artifacts, domain adjudicates completion).
+   * Runs the node's durable gate and records `stage-completed` only when it
+   * passes; never writes the artifact itself.
+   * @param changeId - change id.
+   * @param node - documentation node to complete (clarify/design/plan).
+   * @returns status after the completion attempt.
+   * @throws {BafError} invalid_transition when not in-progress on that node
+   * or the gate refuses the current artifact.
+   */
+  async completeDocStage(
+    changeId: string,
+    node: 'clarify' | 'design' | 'plan',
+  ): Promise<WorkflowStatus> {
+    const status = await this.readCurrent(changeId)
+    if (status.current !== node || status.nodes[node] !== 'in-progress') {
+      throw new BafError(
+        'invalid_transition',
+        `${node} completion requires an in-progress ${node} stage (current: ${String(status.current)})`,
+        { changeId, node, reasonCodes: ['stage_incomplete'] },
+      )
+    }
+    const mode = status.mode === 'bug-fast-path' ? 'bug-fast-path' as const : 'full-go' as const
+    const gateInput = { workspaceRoot: this.ctx.workspace.root, changeId, mode }
+    const gate = node === 'clarify'
+      ? await clarifyGate(gateInput)
+      : node === 'design'
+        ? await designGate(gateInput)
+        : await planGate(gateInput)
+    if (!gate.ok) {
+      throw new BafError(
+        'invalid_transition',
+        `${node} gate failed: ${gate.reasonCodes.join(', ')} — ${gate.detail ?? ''}`,
+        { changeId, node, reasonCodes: gate.reasonCodes },
+      )
+    }
+    const artifacts = stageArtifactPaths(this.ctx.workspace.root, changeId, [
+      node === 'clarify' ? ARTIFACT_FILES.clarify : node === 'design' ? ARTIFACT_FILES.design : ARTIFACT_FILES.plan,
+    ])
+    await this.completeStage(changeId, node, artifacts)
+    return this.readCurrent(changeId)
+  }
+
+  /**
+   * Begin a documentation stage: adjudicate entry (transition table) and
+   * install the unfilled template artifacts without running the completion
+   * gate. The model then authors the real content through guarded writes and
+   * the caller finishes with {@link completeDocStage}.
+   * @param changeId - change id.
+   * @param node - documentation node to begin (clarify/design/plan).
+   * @returns status after entering the node.
+   * @throws {BafError} invalid_transition when the entry edge is illegal.
+   */
+  async beginDocStage(changeId: string, node: 'clarify' | 'design' | 'plan'): Promise<WorkflowStatus> {
+    await this.enterStage(changeId, node)
+    if (node === 'clarify') {
+      await writeArtifact(this.ctx.workspace.root, changeId, ARTIFACT_FILES.clarify, renderClarifyBody({
+        changeId, questions: [], acceptanceCriteria: [],
+      }))
+    } else if (node === 'design') {
+      await writeArtifact(this.ctx.workspace.root, changeId, ARTIFACT_FILES.design, renderDesignBody({
+        changeId, approach: 'TODO: chosen approach — interfaces, data flow, error paths, compatibility.', references: [],
+      }))
+    } else {
+      await writeArtifact(this.ctx.workspace.root, changeId, ARTIFACT_FILES.plan, renderPlanBody({
+        changeId, tasks: [], allowlist: [],
+      }))
+      await writeArtifact(
+        this.ctx.workspace.root,
+        changeId,
+        ARTIFACT_FILES.planJson,
+        `${JSON.stringify({ tasks: [], allowlist: [], touched: [] }, null, 2)}\n`,
+      )
+    }
+    return this.readCurrent(changeId)
   }
 
   /**

@@ -6,6 +6,12 @@
 import type { TerminalState, WorkflowNode } from '@deepseek-ai/dsh-baf-core/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
+/**
+ * Mirrors `WorkflowMode` from baf-core (declared locally to avoid pulling
+ * the full intake module across the Remote boundary).
+ */
+export type BafWorkflowMode = 'full-go' | 'bug-fast-path' | 'clarify-required'
+
 /** Request carrying the session whose cwd owns the projection. */
 export interface BafWorkflowSessionRequest {
   readonly sessionId: SessionId
@@ -31,4 +37,18 @@ export interface BafWorkflowTransitionRequest {
   readonly to: WorkflowNode | TerminalState
   /** JSON-safe evidence payload attached to the transition. */
   readonly evidence?: Readonly<Record<string, string | number | boolean | null>>
+}
+
+/**
+ * One row of the workspace change Dashboard (`listChanges` Remote return).
+ *
+ * Mirrors `ProjectionIndexEntry` from baf-workflow; declared here as the
+ * typert boundary contract so the wire payload stays owned by this package.
+ */
+export interface BafWorkflowChangeRow {
+  readonly changeId: string
+  readonly mode: BafWorkflowMode
+  readonly current: WorkflowNode | TerminalState
+  readonly seq: number
+  readonly updatedAt: string
 }

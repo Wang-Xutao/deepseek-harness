@@ -30,12 +30,13 @@
 | 5     | full-go 各阶段                                                                | **已完成** |
 | 6     | bug-fast-path / 升级                                                         | **已完成** |
 | 7     | quality / standard / guard / scaffold                                      | **已完成** |
-| 8     | slash / CLI / desktop IPC + **变更 Dashboard（归档总览）** | **未开始**（工作流页「变更总览」入口已先行） |
+| 8     | slash / CLI / desktop IPC + **变更 Dashboard（归档总览）** | **未开始**（先行：只读 slash `/baf-help` `/baf-status` `/baf-version` `/baf-doctor`；工作流页「变更总览」入口） |
 | 9     | 三 scope 更新、签名、managed system root（热更）                                      | **未开始** |
 | 10    | release 门禁                                                                 | **未开始** |
 
 
-MVP 完成线（Phase 0–7）**差 slash/`status` 与变更 Dashboard**（Phase 8）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）已落地并随桌面 **baf-dsh 0.0.12** 分发；bug fast-path 与 T15 风险升级（Phase 6）已落地；baseline 驱动的 quality/standard/guard/scaffold（Phase 7）已落地于 domain 层（`packages/baf` 17/17 文件 / 103/103 用例绿），桌面分发随下一次打包。
+MVP 完成线（Phase 0–7）**差 slash/`status` 与变更 Dashboard**（Phase 8）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）已落地并随桌面 **baf-dsh 0.0.12** 分发；bug fast-path 与 T15 风险升级（Phase 6）已落地；baseline 驱动的 quality/standard/guard/scaffold（Phase 7）已落地于 domain 层（`packages/baf` 17/17 文件 / 103/103 用例绿），桌面分发随下一次打包（0.0.13 版本号已 bump；磁盘 dist 仍为 0.0.12，重打包后才含 Phase 7 四包）。
+**已知问题（2026-09-13 复核，均非 Phase 6/7 引入）**：① `agent-presets` 通用测试 `mount.spec.ts`「scopes prompt sections…」1 例失败——merge `9c2aa8a6d4` 带入的上游 system-prompt 变更所致（Phase 6/7 提交未触及相关源码；BAF 专属 roster/mount 测试 7/7 绿）；② `packages/baf` 未达仓库 per-file 100% 覆盖率门禁（`pnpm run test:coverage` 会失败；Phase 2 起累积的债），需专项补测试或做豁免决策。
 
 ### Phase 4 — 已完成明细
 
@@ -186,8 +187,8 @@ MVP 完成线（Phase 0–7）**差 slash/`status` 与变更 Dashboard**（Phase
 | `packages/baf/baf-core` 运行时包                    | **已完成**（`@deepseek-ai/dsh-baf-core`；baseline loader + unavailable adapters + RouteStatusView） |
 | composition 启用 `baf-core` / `baf-workflow` row  | **已完成**（`isolate.bafCore` + `isolate.bafWorkflow` + `isolate.bafOpenspec`）                        |
 | go 状态机 / intake / projection                    | **Phase 4 已完成**；full-go 阶段 handler 与 `StagePipeline` **Phase 5 已完成**；Web 工作流 Tab 已落地                |
-| ToolGuard / quality / OpenSpec adapter          | OpenSpec adapter **已完成**（`baf-openspec` 本地文件模式）；ToolGuard / quality 未实现（Phase 7）              |
-| slash / `baf` CLI profile / desktop bridge      | 未实现（Phase 8）                                                                                  |
+| ToolGuard / quality / OpenSpec adapter          | **全部已完成**：OpenSpec `baf-openspec`（本地文件模式）；quality `baf-quality`；ToolGuard `baf-guard`（Phase 7，含 per-agent 非隔离 install row） |
+| slash / `baf` CLI profile / desktop bridge      | 只读 slash 子集已先行（`/baf-help` `/baf-status` `/baf-version` `/baf-doctor`，`baf-workflow/commands`）；阶段命令、CLI profile、desktop IPC 属 Phase 8 |
 | `overlay/plugin` → `~/.dsh/.agent-presets` 官方同步 | **已关闭**（桌面不同步 `agent-presets`；官方 BAF 仅 shipped）                                               |
 | 更新签名强制 / InstalledVersions schema 2 代码          | 未实现（Phase 9）                                                                                  |
 | 企业输入真值（模型清单/公钥等）                                | 部分已填：OpenSpec=`latest`、编译器=`gcc`、覆盖率=`project-config`；其余仍 `unavailable`                       |
@@ -1695,7 +1696,14 @@ export function resolveRoute(
 
 落点建议：`packages/client/ui-baf-workflow/` 面板升级 + `baf-workflow` Remote `listChanges`（若现有 `getTabView` 不足）；desktop IPC 复用 8.3。
 
+#### 8.x Phase 8 落地状态（baf-dsh 0.0.14）
 
+- **8.1 slash 全集**：`packages/baf/baf-workflow/src/commands.ts` 注册 `/baf-help` `/baf-version` `/baf-status` `/baf-list` `/baf-doctor` + 11 个阶段/quality/guard 驱动器；handler 只委派 `command-drives.ts`，统一错误码走 `CommandResult`。
+- **8.2 standalone CLI**：`packages/baf/baf-workflow/src/cmdline.ts`（subpath `./cmdline`）用 `commander` 构建 `baf` 树，所有 subcommand 与 slash 一一对应；handler 同样只委派 `command-drives.ts`。启用方式：`dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- <subcommand>`（**无新增 bin**，`verify-application-entrypoints` 仍绿）。
+- **8.3 desktop bridge**：Typert Remote `bafWorkflowView` 经 `packages/api/remotes` 走 api-gateway；desktop-host child process 已在 Phase 4–7 提供 framed-byte IPC。Phase 8.6 的 `listChanges` 是同一管线的新方法。
+- **8.4 工作流 Tab（Electron）**：Web Tab（`ui-baf-workflow`）+ Typert Remote（`BafWorkflowTabRemote`）已在 Phase 4 落地；Phase 8 仅补 8.6 listChanges。
+- **8.5 一致性测试**：`packages/baf/baf-workflow/tests/surface-parity.spec.ts` 锁住 slash / CLI / Remote / drives 四入口的命名一致性（5/5 用例绿）。
+- **8.6 变更 Dashboard**：`BafWorkflowTabRemote.listChanges`（`packages/client/ui-baf-workflow/src/index.ts`）读 projection index，typert 边界类型 `BafWorkflowChangeRow` 在 `types.ts` 自有（避免 root-realm 类型穿越）。UI 表/筛选/导出后置；MVP 仅暴露 Remote 方法。
 
 ### Phase 9：桌面打包、三 scope 更新、签名和回滚
 

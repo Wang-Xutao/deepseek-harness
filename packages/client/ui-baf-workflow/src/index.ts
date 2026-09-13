@@ -7,8 +7,6 @@ import { Context } from '@deepseek-ai/cordis'
 import {
   BafError,
   isBafError,
-  type TerminalState,
-  type WorkflowNode,
 } from '@deepseek-ai/dsh-baf-core'
 import {
   ProjectionStore,
@@ -22,6 +20,13 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import type {
+  BafWorkflowChangeRequest,
+  BafWorkflowChangeRow,
+  BafWorkflowSessionRequest,
+  BafWorkflowStartIntakeRequest,
+  BafWorkflowTransitionRequest,
+} from './types.ts'
 
 export type { WorkflowTabView }
 
@@ -41,30 +46,13 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 }
 
 /** Request carrying the session whose cwd owns the projection. */
-export interface BafWorkflowSessionRequest {
-  readonly sessionId: SessionId
-  readonly changeId?: string
-}
-
-/** Confirm / reject intake for one change. */
-export interface BafWorkflowChangeRequest {
-  readonly sessionId: SessionId
-  readonly changeId: string
-}
-
-/** Start intake from a free-form description. */
-export interface BafWorkflowStartIntakeRequest {
-  readonly sessionId: SessionId
-  readonly description: string
-}
-
-/** Request a legal transition. */
-export interface BafWorkflowTransitionRequest {
-  readonly sessionId: SessionId
-  readonly changeId: string
-  readonly to: WorkflowNode | TerminalState
-  readonly evidence?: Readonly<Record<string, unknown>>
-}
+export type {
+  BafWorkflowChangeRequest,
+  BafWorkflowChangeRow,
+  BafWorkflowSessionRequest,
+  BafWorkflowStartIntakeRequest,
+  BafWorkflowTransitionRequest,
+} from './types.ts'
 
 /**
  * Host Remote: assembles {@link WorkflowTabView} and applies semi-interactive mutations.
@@ -148,6 +136,28 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       ...(request.evidence === undefined ? {} : { evidence: request.evidence }),
     }))
     return buildWorkflowTabView(store, request.changeId)
+  }
+
+  /**
+   * Read every change in the workspace (Dashboard list view).
+   *
+   * Returns the full derived index: one row per change with its current stage,
+   * mode, projection seq, and timestamp. Drives the Dashboard's archive
+   * overview alongside the focused tab view.
+   * @param request - session (workspace = session.header.cwd).
+   * @returns one entry per change, in projection order.
+   */
+  @Remote('listChanges')
+  async listChanges(request: BafWorkflowSessionRequest): Promise<readonly BafWorkflowChangeRow[]> {
+    const store = await this.storeFor(request.sessionId)
+    const index = await store.readIndex()
+    return index.changes.map(c => ({
+      changeId: c.changeId,
+      mode: c.mode as 'full-go' | 'bug-fast-path' | 'clarify-required',
+      current: c.current,
+      seq: c.seq,
+      updatedAt: c.updatedAt,
+    }))
   }
 
   private async storeFor(sessionId: SessionId): Promise<ProjectionStore> {

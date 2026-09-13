@@ -13,6 +13,20 @@ import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import { formatCommandReport, modeZh } from './command-format.ts'
 import { ProjectionStore } from './projection.ts'
 import { resolveBafProductVersions } from './product-versions.ts'
+import type { GuardPolicy, StackAdapter } from '@deepseek-ai/dsh-baf-core'
+import {
+  driveAbandon,
+  driveArchive,
+  driveClassify,
+  driveClarify,
+  driveDesign,
+  driveGuard,
+  driveImplement,
+  driveOpen,
+  drivePlan,
+  driveQuality,
+  driveVerify,
+} from './command-drives.ts'
 
 export const name = 'baf-commands'
 export const inject = ['commands']
@@ -181,6 +195,31 @@ export function apply(ctx: Context): void {
       },
     }),
     ctx.commands.register({
+      name: 'baf-list',
+      description: '列出当前工作区所有变更（含已归档/已放弃）',
+      handler: async ({ agent }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') {
+          return {
+            kind: 'error',
+            text: formatCommandReport(false, 'BAF 列表 · 缺少工作区', [
+              { title: '原因', lines: ['当前会话没有 cwd'] },
+            ]),
+          }
+        }
+        const store = new ProjectionStore({ workspaceRoot: cwd })
+        const index = await store.readIndex()
+        const rows = index.changes.map(c => `${c.changeId} · ${modeZh(c.mode)} · ${String(c.current)} · ${c.updatedAt}`)
+        return {
+          kind: 'success',
+          text: formatCommandReport(true, `BAF 列表 · ${rows.length} 条变更`, [
+            { title: '变更', lines: rows.length === 0 ? ['（无）'] : rows },
+            { title: '工作区', lines: [`cwd: ${cwd}`] },
+          ]),
+        }
+      },
+    }),
+    ctx.commands.register({
       name: 'baf-doctor',
       description: '检查 BAF 工作流是否可用',
       handler: ({ agent }): CommandResult => {
@@ -212,33 +251,140 @@ export function apply(ctx: Context): void {
         }
       },
     }),
-    ...(['open', 'classify', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive', 'abandon'] as const)
-      .map(stage => ctx.commands.register({
-        name: `baf-${stage}`,
-        description: `BAF ${stage}（阶段驱动，建设中）`,
-        handler: (): CommandResult => ({
-          kind: 'error',
-          text: formatCommandReport(false, `/baf-${stage} · 尚未实现`, [
-            {
-              title: '当前可用替代',
-              lines: [
-                '打开「工作流」页签完成分类确认与合法转换',
-                '查询状态：/baf-status',
-                '帮助：/baf-help',
-              ],
-            },
-            {
-              title: '计划',
-              lines: [`阶段驱动指令 /baf-${stage} 将在后续 Phase 落地`],
-            },
-          ]),
-        }),
-      })),
+    ...(['open'] as const).map(stage => ctx.commands.register({
+      name: `baf-${stage}`,
+      description: `BAF ${stage}（T1 intake classifier）`,
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd(`/baf-${stage}`)
+        return driveOpen(cwd, rawInput)
+      },
+    })),
+    ctx.commands.register({
+      name: 'baf-classify',
+      description: 'BAF classify（confirm / reject）',
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-classify')
+        return driveClassify(cwd, rawInput)
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-clarify',
+      description: 'BAF clarify 阶段（N2）',
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-clarify')
+        return driveClarify(cwd, rawInput)
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-design',
+      description: 'BAF design 阶段（N3）',
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-design')
+        return driveDesign(cwd, rawInput)
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-plan',
+      description: 'BAF plan 阶段（N4）',
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-plan')
+        return drivePlan(cwd, rawInput)
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-implement',
+      description: 'BAF implement 阶段（N5）',
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-implement')
+        return driveImplement(cwd, rawInput)
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-verify',
+      description: 'BAF verify 阶段（N6）',
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-verify')
+        const { stack, guard } = resolveAdapters(ctx, cwd)
+        return driveVerify(cwd, rawInput, { ...(stack === undefined ? {} : { stack }), ...(guard === undefined ? {} : { guard }) })
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-archive',
+      description: 'BAF archive 阶段（N7）',
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-archive')
+        return driveArchive(cwd, rawInput)
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-abandon',
+      description: 'BAF abandon（T16）',
+      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-abandon')
+        return driveAbandon(cwd, rawInput)
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-quality',
+      description: 'BAF quality（C-stack baseline 检查，verify 外执行）',
+      handler: async ({ agent }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-quality')
+        const { stack } = resolveAdapters(ctx, cwd)
+        return driveQuality(cwd, { ...(stack === undefined ? {} : { stack }) })
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-guard',
+      description: 'BAF guard（verify + secret-scan）',
+      handler: async ({ agent }): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-guard')
+        const { guard } = resolveAdapters(ctx, cwd)
+        return driveGuard(cwd, { ...(guard === undefined ? {} : { guard }) })
+      },
+    }),
   ]
 
   ctx.effect(() => () => {
     for (const off of offs) off()
   }, 'baf-commands: unregister')
+}
+
+/** Standard missing-cwd error card for any /baf-* drive. */
+function missingCwd(command: string): CommandResult {
+  return {
+    kind: 'error',
+    text: formatCommandReport(false, `${command} · 缺少工作区`, [
+      { title: '原因', lines: ['当前会话没有 cwd，无法读取 .baf/projection'] },
+      { title: '处理', lines: ['为会话绑定工作区目录后重试'] },
+    ]),
+  }
+}
+
+/**
+ * Resolve the optional StackAdapter / GuardPolicy services for verify/quality/guard.
+ *
+ * These come from sibling `baf-quality` and `baf-guard` packages when mounted.
+ * Returns undefined entries for the absent ones — drives tolerate that and
+ * surface a clear "服务未挂挂" card to the caller.
+ */
+function resolveAdapters(ctx: Context, cwd: string): { stack?: StackAdapter; guard?: GuardPolicy } {
+  const stack = ctx.get('bafQuality')?.adapter()
+  const guard = ctx.get('bafGuard')?.policy(cwd)
+  return {
+    ...(stack === undefined ? {} : { stack }),
+    ...(guard === undefined ? {} : { guard }),
+  }
 }
 
 // Named exports only (no `default`): loader `unwrapExports` would otherwise
