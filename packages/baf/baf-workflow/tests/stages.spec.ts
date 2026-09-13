@@ -231,7 +231,10 @@ describe('verify Phase 7 wiring', () => {
     stack: import('@deepseek-ai/dsh-baf-core').StackAdapter | undefined,
     guard: import('@deepseek-ai/dsh-baf-core').GuardPolicy | undefined,
   ) {
-    const harness = await setup({ stack, guard })
+    const harness = await setup({
+      ...(stack === undefined ? {} : { stack }),
+      ...(guard === undefined ? {} : { guard }),
+    })
     await harness.pipeline.driveOpenStage(harness.changeId, 'Add report export API')
     await harness.pipeline.driveClarifyStage({
       changeId: harness.changeId,
@@ -290,7 +293,7 @@ describe('verify Phase 7 wiring', () => {
     const harness = await setupAtVerify(stack, undefined)
     try {
       const verify = await harness.pipeline.driveVerifyStage(harness.changeId)
-      expect(verify.node).toBe('verify')
+      if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(true)
       const qualityRow = verify.result.report.checks.find(row => row.name === 'quality')
       expect(qualityRow).toMatchObject({ required: true, ok: false })
@@ -314,6 +317,7 @@ describe('verify Phase 7 wiring', () => {
     const harness = await setupAtVerify(undefined, guard)
     try {
       const verify = await harness.pipeline.driveVerifyStage(harness.changeId)
+      if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(true)
       const guardRow = verify.result.report.checks.find(row => row.name === 'guard')
       expect(guardRow).toMatchObject({ required: true, ok: false })
@@ -345,6 +349,7 @@ describe('verify Phase 7 wiring', () => {
     const harness = await setupAtVerify(stack, guard)
     try {
       const verify = await harness.pipeline.driveVerifyStage(harness.changeId)
+      if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(false)
       expect(verify.result.report.checks.every(row => row.ok)).toBe(true)
     } finally {
@@ -405,7 +410,7 @@ describe('verify T11', () => {
         'utf8',
       )
       const verify = await pipeline.driveVerifyStage(changeId)
-      expect(verify.node).toBe('verify')
+      if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(true)
       const status = await store.readStatus(changeId)
       expect(status.nodes.verify).toBe('failed')

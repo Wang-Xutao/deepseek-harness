@@ -26,6 +26,7 @@
     { "path": "../../util/brand" },
     { "path": "../../core/session" },
     { "path": "../../preset/agent-presets" },
-    { "path": "../../typert/protocol" }
+    { "path": "../../typert/protocol" },
+    { "path": "../../baf/baf-core" }
   ]
 }

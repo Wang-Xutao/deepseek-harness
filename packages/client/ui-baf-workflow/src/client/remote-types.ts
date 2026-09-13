@@ -4,47 +4,31 @@
  * depending on Host build artifacts beyond the committed remote contribution.
  */
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import type { SessionId } from '@deepseek-ai/dsh-session/types'
-
-export interface BafWorkflowSessionRequest {
-  readonly sessionId: SessionId
-  readonly changeId?: string
-}
-
-export interface BafWorkflowChangeRequest {
-  readonly sessionId: SessionId
-  readonly changeId: string
-}
-
-export interface BafWorkflowStartIntakeRequest {
-  readonly sessionId: SessionId
-  readonly description: string
-}
-
-export interface BafWorkflowTransitionRequest {
-  readonly sessionId: SessionId
-  readonly changeId: string
-  readonly to: string
-  readonly evidence?: Readonly<Record<string, unknown>>
-}
+import type { WorkflowTabView } from '@deepseek-ai/dsh-baf-core/types'
+import type {
+  BafWorkflowChangeRequest,
+  BafWorkflowSessionRequest,
+  BafWorkflowStartIntakeRequest,
+  BafWorkflowTransitionRequest,
+} from '../types.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
-  interface TypertRemoteNamespace$bafWorkflowView {
-    getTabView: (request: BafWorkflowSessionRequest) => Promise<RemoteResult<unknown>>
-    startIntake: (request: BafWorkflowStartIntakeRequest) => Promise<RemoteResult<unknown>>
-    confirmIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<unknown>>
-    rejectIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<unknown>>
-    transition: (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<unknown>>
+  interface TypertRemoteNamespace$626166576f726b666c6f7756696577 {
+    confirmIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
+    getTabView: (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabView>>
+    rejectIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
+    startIntake: (request: BafWorkflowStartIntakeRequest) => Promise<RemoteResult<WorkflowTabView>>
+    transition: (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabView>>
   }
   interface TypertRemoteMap {
-    'bafWorkflowView/getTabView': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<unknown>>
-    'bafWorkflowView/startIntake': (request: BafWorkflowStartIntakeRequest) => Promise<RemoteResult<unknown>>
-    'bafWorkflowView/confirmIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<unknown>>
-    'bafWorkflowView/rejectIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<unknown>>
-    'bafWorkflowView/transition': (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<unknown>>
+    'bafWorkflowView/confirmIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
+    'bafWorkflowView/getTabView': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabView>>
+    'bafWorkflowView/rejectIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
+    'bafWorkflowView/startIntake': (request: BafWorkflowStartIntakeRequest) => Promise<RemoteResult<WorkflowTabView>>
+    'bafWorkflowView/transition': (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabView>>
   }
   interface TypertRemoteNamespaceMap {
-    bafWorkflowView: TypertRemoteNamespace$bafWorkflowView
+    'bafWorkflowView': TypertRemoteNamespace$626166576f726b666c6f7756696577
   }
 }
 

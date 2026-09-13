@@ -20,6 +20,9 @@ import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { afterEach, describe, expect, it } from 'vitest'
 import AgentPresets, { COMPOSITION_FILE } from '@deepseek-ai/dsh-agent-presets'
+// Type-side only: pulls the `bafStandard` Context augmentation into this
+// compile so serviceFor's keyof Context accepts the name.
+import type {} from '@deepseek-ai/dsh-baf-standard'
 
 const BAF_CORE_SRC = join(
   dirname(fileURLToPath(import.meta.url)),

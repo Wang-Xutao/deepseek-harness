@@ -125,6 +125,7 @@ describe('fast-path happy path', () => {
       await pipeline.driveImplementStage(changeId)
 
       const verify = await pipeline.driveVerifyStage(changeId)
+      if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(false)
       expect(verify.result.report.mode).toBe('bug-fast-path')
       const regressionRow = verify.result.report.checks.find(c => c.name === 'regression-test')
@@ -240,7 +241,7 @@ describe('T15 escalation', () => {
       await writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8')
 
       const drive = await pipeline.driveImplementStage(changeId)
-      expect(drive.node).toBe('implement')
+      if (drive.node !== 'implement') throw new Error('expected an implement drive')
       expect(drive.result.escalated).toBeDefined()
 
       const status = await store.readStatus(changeId)
@@ -334,6 +335,7 @@ describe('T15 escalation', () => {
       await pipeline.driveImplementStage(changeId)
 
       const verify = await pipeline.driveVerifyStage(changeId)
+      if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(false)
       expect(verify.result.report.mode).toBe('full-go')
 

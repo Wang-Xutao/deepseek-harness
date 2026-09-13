@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-baf-tracegraph",
   "description": "baf-dsh 轨迹图 view: turn navigator, REQUEST/RESPONSE/TOOL pipeline, orchestration inline child traces, with a 工作流 settings page that toggles the tab",
-  "version": "0.1.3-alpha.1",
+  "version": "0.1.5-alpha.1",
   "publishConfig": {
     "access": "public"
   },

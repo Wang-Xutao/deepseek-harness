@@ -5,12 +5,13 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import type { AdapterContext, BaselineManifest, QualityCommandResult } from '@deepseek-ai/dsh-baf-core'
+import type { AdapterContext, BaselineManifest } from '@deepseek-ai/dsh-baf-core'
 import {
   createCStackAdapter,
   parseCoveragePercent,
   redactSecrets,
   truncateOutput,
+  type QualityCommandResult,
   type QualityExecutor,
 } from '../src/runner.ts'
 

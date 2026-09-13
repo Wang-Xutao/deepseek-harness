@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-baf-openspec",
   "description": "BAF local file-mode OpenSpec adapter: change skeleton, read, validate, and atomic archive",
-  "version": "0.1.3-alpha.1",
+  "version": "0.1.5-alpha.1",
   "bafNotesZh": "OpenSpec 本地文件适配器：变更骨架、读取、校验、原子归档",
   "bafNotesEn": "Local file-mode OpenSpec adapter: skeleton, read, validate, atomic archive",
   "publishConfig": {

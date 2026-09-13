@@ -50,12 +50,16 @@ describe('planScaffold', () => {
       '.baf/baseline.yml',
       'openspec/changes/.gitkeep',
     ])
-    expect(plan.files[0].content).toContain('baselineId: plan-test')
+    const [baseline] = plan.files
+    if (baseline === undefined) throw new Error('expected a baseline file')
+    expect(baseline.content).toContain('baselineId: plan-test')
   })
 
   it('defaults to baf-baseline-init when no baseline id is supplied', () => {
     const plan = planScaffold()
-    expect(plan.files[0].content).toContain('baselineId: baf-baseline-init')
+    const [baseline] = plan.files
+    if (baseline === undefined) throw new Error('expected a baseline file')
+    expect(baseline.content).toContain('baselineId: baf-baseline-init')
   })
 })
 
@@ -105,6 +109,7 @@ describe('applyScaffold', () => {
     const backups = readdirSync(join(workspace, '.baf'))
     const backupFile = backups.find((n: string) => n.startsWith('baseline.yml.baf-backup-'))
     expect(backupFile).toBeDefined()
+    if (backupFile === undefined) throw new Error('expected a backup file')
     expect(readFileSync(join(workspace, '.baf', backupFile), 'utf8'))
       .toContain('baselineId: first')
   })

@@ -27,7 +27,9 @@ export interface PackedIdentity {
  * @returns Every path inside the archive.
  */
 export function tarballFiles(tarball: string): string[] {
-  return capture('tar', ['-tzf', tarball]).split(/\r?\n/u).filter(line => line !== '')
+  // `--force-local` keeps GNU tar from parsing `D:\...` as a `user@host:path`
+  // remote-tape spec when the child process inherits the Windows path as-is.
+  return capture('tar', ['--force-local', '-tzf', tarball]).split(/\r?\n/u).filter(line => line !== '')
 }
 
 /**
@@ -36,7 +38,7 @@ export function tarballFiles(tarball: string): string[] {
  * @returns The name and version the tarball declares.
  */
 export function packedIdentity(tarball: string): PackedIdentity {
-  const manifest: unknown = JSON.parse(capture('tar', ['-xOzf', tarball, 'package/package.json']))
+  const manifest: unknown = JSON.parse(capture('tar', ['--force-local', '-xOzf', tarball, 'package/package.json']))
   if (manifest === null || typeof manifest !== 'object') throw new Error(`${tarball} has no manifest`)
   const { name, version } = manifest as Record<string, unknown>
   if (typeof name !== 'string' || typeof version !== 'string') throw new Error(`${tarball} manifest lacks name/version`)

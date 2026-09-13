@@ -665,7 +665,7 @@ export async function driveQuality(cwd: string, adapters: DriveAdapters): Promis
     { workspace: { root: cwd }, baseline, changeId: 'adhoc' },
     new AbortController().signal,
   )
-  const rows = report.checks.map(check => {
+  const rows = report.checks.map((check) => {
     const row = check as { id?: unknown; passed?: unknown; reasonCode?: unknown }
     const id = typeof row.id === 'string' ? row.id : String(row.id ?? '?')
     const passed = Boolean(row.passed)

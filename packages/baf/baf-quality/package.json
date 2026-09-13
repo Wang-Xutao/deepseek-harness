@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-baf-quality",
   "description": "BAF quality runner and C stack adapter: baseline-driven build/test/coverage/analyzer checks with per-check timeout, cancel, truncation, and redaction",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.5-alpha.1",
   "bafNotesZh": "质量执行器与 C 栈适配器：按 baseline 执行 build/test/coverage/分析器检查，含单检查超时、取消、截断与脱敏",
   "bafNotesEn": "Quality runner and C stack adapter: baseline-driven build/test/coverage/analyzer checks with per-check timeout, cancel, truncation, and redaction",
   "publishConfig": {

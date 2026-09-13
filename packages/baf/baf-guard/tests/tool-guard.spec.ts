@@ -77,7 +77,7 @@ describe('policy: filesystem writes', () => {
   })
 
   it('fails closed without an active change or with unconfirmed intake', () => {
-    const noChange = adjudicateFsWrite(CONFIG, state({ active: false, changeId: undefined }), {
+    const noChange = adjudicateFsWrite(CONFIG, state({ active: false }), {
       root: ROOT, path: 'src/x.c',
     })
     expect(noChange).toMatchObject({ allowed: false, reasonCode: 'intake_confirmation_required' })

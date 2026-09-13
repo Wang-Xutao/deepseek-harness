@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-baf-scaffold",
   "description": "BAF workspace scaffold: init skeleton with human confirmation, no-overwrite semantics, and timestamped backups",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.5-alpha.1",
   "bafNotesZh": "BAF 工作区脚手架：init 骨架，需人工确认，防覆盖并对已有文件做时间戳备份",
   "bafNotesEn": "BAF workspace scaffold: init skeleton requiring human confirmation, no-overwrite semantics with timestamped backups",
   "publishConfig": {
