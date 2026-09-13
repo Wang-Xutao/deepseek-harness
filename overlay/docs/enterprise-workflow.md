@@ -3,15 +3,15 @@
 > **读者**：BAF 实现工程师、企业落地负责人、dsh 维护者。
 > **目标**：把旧版「Claude Code + Comet + Superpowers + vibe + marketplace + hooks」的工作流指南，重构为 dsh 原生、可随桌面应用分发、可签名升级回滚的企业级 Agent 实施方案；工程师按本文档落地，不再做关键架构决策。
 > **用法**：第 0 章是导航；**文首「实现进度」是仓库实况（已完成 / 未完成）**；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
-> **对照基准**：仓库现状 2026-09-09（分支 `baf`；dsh `0.1.3-alpha.1`；桌面 **baf-dsh 0.0.10**）。**Phase 0–5 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 为品牌/IDE/帮助；`packages/client/ui-baf-workflow` 为 BAF 会话「工作流」Tab（与「轨迹图」无关）；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader、adapter stub、`NODE_CATALOG`/`WORKFLOW_GRAPH`；`baf-workflow` 已提供 route、projection、transition、intake 与 `WorkflowTabView` Web Remote；`baf-openspec` 提供本地文件模式 OpenSpec adapter；`baf-workflow` `stages/` 提供 full-go 七阶段 handler 与 `StagePipeline` 编排。
-> **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，并把 MVP 裁到「可发现 system preset + intake/projection + full-go 主链 + ToolGuard」，签名三 scope 更新可并行但不应挡主链。
+> **对照基准**：仓库现状 2026-09-14（分支 `baf`；dsh `0.1.5-alpha.1`；桌面 **baf-dsh 0.0.14**）。**Phase 0–8 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 为品牌/IDE/帮助；`packages/client/ui-baf-workflow` 为 BAF 会话「工作流」Tab（与「轨迹图」无关）；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader、adapter stub、`NODE_CATALOG`/`WORKFLOW_GRAPH`；`baf-workflow` 已提供 route、projection、transition、intake 与 `WorkflowTabView` Web Remote；`baf-openspec` 提供本地文件模式 OpenSpec adapter；`baf-workflow` `stages/` 提供 full-go 七阶段 handler 与 `StagePipeline` 编排；Phase 8 进一步把 slash 全集、`baf-cli` standalone CLI、`listChanges` Remote + Dashboard 入口都接通，并随 `baf-dsh 0.0.14` 桌面应用分发。
+> **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）已随 `baf-dsh 0.0.14` 出包；签名三 scope 更新（Phase 9）与 release 门禁（Phase 10）仍属后续硬化工作。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，签名三 scope 更新可并行但不应挡主链。
 > **本文档完全取代**旧版面向 Claude Code 的建设指南：Comet、Superpowers、vibe workflow、Claude Code marketplace、`enabledPlugins`、Claude Code hooks 不再是新架构的组成部分。
 
 ---
 
 
 
-## 实现进度（仓库实况 · 2026-09-13）
+## 实现进度（仓库实况 · 2026-09-14）
 
 > 本表是**当前仓库事实**，不是计划。设计正文（第 1–11、12 章步骤）仍描述目标态；实现时以本表为准判断「已做完什么」。
 
@@ -30,13 +30,13 @@
 | 5     | full-go 各阶段                                                                | **已完成** |
 | 6     | bug-fast-path / 升级                                                         | **已完成** |
 | 7     | quality / standard / guard / scaffold                                      | **已完成** |
-| 8     | slash / CLI / desktop IPC + **变更 Dashboard（归档总览）** | **未开始**（先行：只读 slash `/baf-help` `/baf-status` `/baf-version` `/baf-doctor`；工作流页「变更总览」入口） |
+| **8** | slash 全集 + `baf-cli` standalone CLI + desktop IPC + **变更 Dashboard（listChanges Remote）** | **已完成**（commit `3ab67a934f`；`baf-dsh 0.0.14` 已出包） |
 | 9     | 三 scope 更新、签名、managed system root（热更）                                      | **未开始** |
 | 10    | release 门禁                                                                 | **未开始** |
 
 
-MVP 完成线（Phase 0–7）**差 slash/`status` 与变更 Dashboard**（Phase 8）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）已落地并随桌面 **baf-dsh 0.0.12** 分发；bug fast-path 与 T15 风险升级（Phase 6）已落地；baseline 驱动的 quality/standard/guard/scaffold（Phase 7）已落地于 domain 层（`packages/baf` 17/17 文件 / 103/103 用例绿），桌面分发随下一次打包（0.0.13 版本号已 bump；磁盘 dist 仍为 0.0.12，重打包后才含 Phase 7 四包）。
-**已知问题（2026-09-13 复核，均非 Phase 6/7 引入）**：① `agent-presets` 通用测试 `mount.spec.ts`「scopes prompt sections…」1 例失败——merge `9c2aa8a6d4` 带入的上游 system-prompt 变更所致（Phase 6/7 提交未触及相关源码；BAF 专属 roster/mount 测试 7/7 绿）；② `packages/baf` 未达仓库 per-file 100% 覆盖率门禁（`pnpm run test:coverage` 会失败；Phase 2 起累积的债），需专项补测试或做豁免决策。
+MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 **baf-dsh 0.0.14** 分发（commit `3ab67a934f`，commit `cb814b7be2` 配套修了 Windows `tar` `--force-local` 与 5 个 dsh client 包版本对齐 `0.1.5-alpha.1`）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）随 0.0.12 起桌面分发；bug fast-path 与 T15 风险升级（Phase 6）随 0.0.12 起；baseline 驱动的 quality/standard/guard/scaffold（Phase 7）随 0.0.13 起；slash 全集 + `baf-cli` standalone CLI + `listChanges` Remote（Phase 8）随 **0.0.14** 起。`packages/baf` 域层 17/17 文件 / 103/103 用例绿；`surface-parity.spec.ts` 锁住 slash / CLI / Remote / drives 四入口命名一致性 5/5 绿。
+**已知问题（2026-09-14 复核，均非 Phase 8 引入）**：① `agent-presets` 通用测试 `mount.spec.ts`「scopes prompt sections…」1 例失败——merge `9c2aa8a6d4` 带入的上游 system-prompt 变更所致（Phase 8 提交未触及相关源码；BAF 专属 roster/mount 测试 7/7 绿）；② `packages/baf` 未达仓库 per-file 100% 覆盖率门禁（`pnpm run test:coverage` 会失败；Phase 2 起累积的债），需专项补测试或做豁免决策。
 
 ### Phase 4 — 已完成明细
 
@@ -85,6 +85,23 @@ MVP 完成线（Phase 0–7）**差 slash/`status` 与变更 Dashboard**（Phase
 | 升级后 OpenSpec 补建 + 审计保留                | 已完成 | `escalate.ts`：`plan.json` → `fastpath-ledger.json` 原子改名保留 fast-path 审计；安装携带 bug 上下文（Problem/Root cause）的 `proposal.md` 与 `tasks.md` 模板；随后 `stage-entered(clarify)`，`pipeline.enterStage` 幂等续入（同节点 in-progress 直接续跑），补走 clarify → design → plan → implement → verify → archive |
 | mode 感知实现门禁修复                            | 已完成 | `implement.ts` `driveImplementComplete` 不再硬编码 `full-go`，mode 由 projection status 读出 |
 | 阶段测试（fast-path 全链路 / T5 / 回归先行拒绝 / 自动升级 / 显式升级 / 升级后补走） | 已完成 | `baf-workflow` `tests/fastpath.spec.ts`（8 用例）；`packages/baf` 全量 56/56 绿 |
+
+### Phase 8 — 已完成明细（2026-09-14）
+
+| 项                                        | 状态  | 落点                                                                                              |
+| ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
+| slash 全集（`/baf-help` `/baf-version` `/baf-status` `/baf-list` `/baf-doctor` + 11 个阶段 / quality / guard 驱动器） | 已完成 | `packages/baf/baf-workflow/src/commands.ts`；handler 仅委派 `command-drives.ts`，统一错误码走 `CommandResult` |
+| 命令驱动器（slash / CLI 共源）                     | 已完成 | `packages/baf/baf-workflow/src/command-drives.ts` + `src/cli-args.ts`；slash / CLI / Remote / drives 四入口读同一 `WorkflowService` |
+| standalone CLI（Commander 树，无新增 bin）       | 已完成 | `packages/baf/baf-workflow/src/cmdline.ts`（subpath `./cmdline`）；启用：`dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- <subcommand>`；`verify-application-entrypoints` 仍绿 |
+| CLI enable patch                          | 已完成 | `packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml`：把默认 disable 的 `baf-cli` row 翻成 enabled；普通 `baf` agent session 不引入此 row |
+| `baf-cli` row（默认 disable）                | 已完成 | `packages/preset/agent-presets/presets/baf/agent.cordis.yml` 末尾新增 `@deepseek-ai/dsh-baf-workflow/cmdline` row，`disabled: true`，普通 preset 不引入 |
+| desktop bridge（framed-byte IPC → api-gateway → Typert Remote） | 已完成 | `packages/api/remotes` + `packages/client/ui-baf-workflow`（`BafWorkflowTabRemote`）；desktop-host child process 在 Phase 4–7 已提供，本步仅新增 `listChanges` |
+| 工作流 Tab（Electron） | 已完成 | Web Tab + Typert Remote 已在 Phase 4 落地；Phase 8 不另起 Electron Tab，复用同一 `WorkflowTabView` / domain service |
+| `listChanges` Remote（变更 Dashboard） | 已完成 | `BafWorkflowTabRemote.listChanges`（`packages/client/ui-baf-workflow/src/index.ts`）；typert 边界类型 `BafWorkflowChangeRow` 在 `types.ts` 自有（避免 root-realm 类型穿越）；读 projection index，返回 `changeId / mode / current / seq / updatedAt` |
+| 四入口一致性 snapshot                          | 已完成 | `packages/baf/baf-workflow/tests/surface-parity.spec.ts`：slash / CLI / Remote / drives 命名 / 命令表一致 5/5 绿 |
+| 桌面分发                                  | 已完成 | `baf-dsh 0.0.14` 已构建：`overlay/desktop/dist/win-unpacked/baf-dsh.exe`（≈ 205 MB），含 `cmdline.js`（140.58 kB）、`listChanges` Remote、7 个 `dsh-baf-*` 包版本 `0.1.5-alpha.1` |
+| 配套修复                                  | 已完成 | commit `cb814b7be2`：`scripts/release/tarball.ts` + `apps/desktop/scripts/prepare-package-set.ts` 给 tar 调用加 `--force-local`（Windows 上 GNU tar 把 `D:\...` 解析为 `user@host:path`）；5 个 dsh client 包（`ui-baf-desktop / ui-baf-tracegraph / ui-baf-workflow / ui-settings-general / ui-settings-updates`）从 `0.1.3` bump 到 `0.1.5-alpha.1` 对齐 dsh family |
+
 
 ### Phase 7 — 已完成明细（2026-09-13）
 
@@ -1698,12 +1715,15 @@ export function resolveRoute(
 
 #### 8.x Phase 8 落地状态（baf-dsh 0.0.14）
 
+> 落地 commit：Phase 8 主交付在 `3ab67a934f`；`cb814b7be2` 配套修 Windows `tar` `--force-local` 与 5 个 dsh client 包版本对齐 `0.1.5-alpha.1`，让 `pnpm run release:pack --family dsh` 走通。
+
 - **8.1 slash 全集**：`packages/baf/baf-workflow/src/commands.ts` 注册 `/baf-help` `/baf-version` `/baf-status` `/baf-list` `/baf-doctor` + 11 个阶段/quality/guard 驱动器；handler 只委派 `command-drives.ts`，统一错误码走 `CommandResult`。
 - **8.2 standalone CLI**：`packages/baf/baf-workflow/src/cmdline.ts`（subpath `./cmdline`）用 `commander` 构建 `baf` 树，所有 subcommand 与 slash 一一对应；handler 同样只委派 `command-drives.ts`。启用方式：`dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- <subcommand>`（**无新增 bin**，`verify-application-entrypoints` 仍绿）。
 - **8.3 desktop bridge**：Typert Remote `bafWorkflowView` 经 `packages/api/remotes` 走 api-gateway；desktop-host child process 已在 Phase 4–7 提供 framed-byte IPC。Phase 8.6 的 `listChanges` 是同一管线的新方法。
 - **8.4 工作流 Tab（Electron）**：Web Tab（`ui-baf-workflow`）+ Typert Remote（`BafWorkflowTabRemote`）已在 Phase 4 落地；Phase 8 仅补 8.6 listChanges。
 - **8.5 一致性测试**：`packages/baf/baf-workflow/tests/surface-parity.spec.ts` 锁住 slash / CLI / Remote / drives 四入口的命名一致性（5/5 用例绿）。
 - **8.6 变更 Dashboard**：`BafWorkflowTabRemote.listChanges`（`packages/client/ui-baf-workflow/src/index.ts`）读 projection index，typert 边界类型 `BafWorkflowChangeRow` 在 `types.ts` 自有（避免 root-realm 类型穿越）。UI 表/筛选/导出后置；MVP 仅暴露 Remote 方法。
+- **桌面 0.0.14 出包**：`overlay/desktop/dist/win-unpacked/baf-dsh.exe`（≈ 205 MB，`ProductVersion 0.0.14.0`）；7 个 `dsh-baf-*` 包版本 `0.1.5-alpha.1`；`cmdline.js`（140.58 kB）与 `BafWorkflowChangeRow` 边界已在 unpacked `resources/dsh/node_modules` 内可见。`baf-product-versions.json` 嵌入 bafDsh / dsh / bafCore / bafWorkflow / bafOpenspec 五项版本。
 
 ### Phase 9：桌面打包、三 scope 更新、签名和回滚
 
