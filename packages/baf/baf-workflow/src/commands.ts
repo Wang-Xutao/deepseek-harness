@@ -1,6 +1,22 @@
 /**
  * Slash commands for BAF sessions (`/baf-help`, `/baf-status`, …).
  *
+ * Naming follows a two-tier scheme:
+ *   - **Core** (no middle segment): `/baf-help`, `/baf-version`, `/baf-status`,
+ *     `/baf-doctor`, `/baf-list` — entry / discovery / view surfaces used
+ *     across every session.
+ *   - **Workflow** (`baf-workflow-*`): the go-workflow stage commands
+ *     (open / classify / clarify / design / plan / implement / verify /
+ *     archive / abandon).
+ *   - **Check** (`baf-check-*`): baseline machine gates (`quality`,
+ *     `guard`).
+ *
+ * Descriptions drop the leading "BAF" prefix and end with a usage-frequency
+ * mark (★★★ 常用 / ★★ 偶尔 / ★ 极少). Card titles mirror the description
+ * and append the standardize expand/collapse hint
+ * `点本行展开/折叠指令全文`, so the slash card and the picker line read as
+ * one.
+ *
  * Mounted as a non-isolated preset row (like `@deepseek-ai/dsh-command-goal`)
  * so registration reaches the host `commands` service. Handlers use the
  * file-backed projection store — not the isolate-local `bafWorkflow` service.
@@ -31,23 +47,48 @@ import {
 export const name = 'baf-commands'
 export const inject = ['commands']
 
-const READY = [
-  '/baf-help       显示本帮助（指令一览与用法）',
-  '/baf-status     查看当前变更：模式 / 阶段 / intake',
-  '/baf-version    查看 BAF 指令与预设版本信息',
-  '/baf-doctor     快速自检：cwd、指令注册、页签提示',
+/** Append the standard expand/collapse hint to a card title. */
+function withHint(description: string, runtime?: string): string {
+  return runtime === undefined
+    ? `${description} · 点本行展开/折叠指令全文`
+    : `${description} · ${runtime} · 点本行展开/折叠指令全文`
+}
+
+/** Shape of the args Cordis passes to a slash handler. */
+type SlashHandlerArgs = {
+  agent: { session: { header: { cwd?: string } } }
+  rawInput: string
+}
+
+const HELP_CORE = [
+  '/baf-help           列出全部指令与用法 · ★★',
+  '/baf-status         查看当前变更：模式/阶段/intake · ★★★',
+  '/baf-version        查看桌面/插件版本（对齐设置页） · ★',
+  '/baf-doctor         工作流自检：cwd/注册/页签 · ★',
+  '/baf-list           列出工作区全部变更（含已归档/已放弃） · ★★',
 ] as const
 
-const BUILDING = [
-  '/baf-open /baf-classify /baf-clarify /baf-design /baf-plan',
-  '/baf-implement /baf-verify /baf-archive /baf-abandon',
-  '（请先用「工作流」页签完成分类与合法转换）',
+const HELP_FLOW = [
+  '/baf-workflow-open         启动变更：intake 分类 · ★★★',
+  '/baf-workflow-classify     分类确认 / 拒绝 · ★★',
+  '/baf-workflow-clarify      澄清阶段（N2） · ★★',
+  '/baf-workflow-design       设计阶段（N3） · ★★',
+  '/baf-workflow-plan         计划阶段（N4） · ★★',
+  '/baf-workflow-implement    实现阶段（N5 进入/完成） · ★★★',
+  '/baf-workflow-verify       验证阶段（N6） · ★★★',
+  '/baf-workflow-archive      归档变更（N7/T14，需 confirm） · ★★★',
+  '/baf-workflow-abandon      放弃变更（T16，需 confirm） · ★',
+] as const
+
+const HELP_CHECK = [
+  '/baf-check-quality    基线 C 栈质量检查 · ★★',
+  '/baf-check-guard      安全门禁（verify + secret-scan） · ★★',
 ] as const
 
 const USAGE = [
   '1. 新建会话，选「BAF 模式」',
   '2. 打开「工作流」页签 →「新建变更」，或直接描述需求',
-  '3. 确认分类后再改代码；阶段由系统推进，勿口头宣称完成',
+  '3. 分类确认后再改代码；阶段由 domain service 推进，勿口头宣称完成',
 ] as const
 
 const MODE_LINES = [
@@ -68,12 +109,13 @@ export function apply(ctx: Context): void {
   const offs = [
     ctx.commands.register({
       name: 'baf-help',
-      description: 'BAF 模式帮助（阶段说明与可用指令）',
+      description: '列出全部指令与用法 · ★★',
       handler: (): CommandResult => ({
         kind: 'success',
-        text: formatCommandReport(true, 'BAF 帮助 · 4 条可用指令 · 点本行展开全文', [
-          { title: '可用指令', lines: READY },
-          { title: '建设中', lines: BUILDING },
+        text: formatCommandReport(true, withHint('列出全部指令与用法 · ★★'), [
+          { title: '核心', lines: HELP_CORE },
+          { title: '流程', lines: HELP_FLOW },
+          { title: '检查', lines: HELP_CHECK },
           { title: '怎么用', lines: USAGE },
           { title: '模式说明', lines: MODE_LINES },
         ]),
@@ -81,12 +123,12 @@ export function apply(ctx: Context): void {
     }),
     ctx.commands.register({
       name: 'baf-version',
-      description: '显示 BAF / 桌面 / 插件版本（对齐设置页）',
+      description: '查看桌面/插件版本（对齐设置页） · ★',
       handler: (): CommandResult => {
         const v = resolveBafProductVersions()
         return {
           kind: 'success',
-          text: formatCommandReport(true, `BAF 版本 · BAF DSH DESKTOP ${v.bafDsh} · 点行可收起`, [
+          text: formatCommandReport(true, withHint('查看桌面/插件版本（对齐设置页） · ★', v.bafDsh), [
             {
               title: '与设置「版本与更新」对齐',
               lines: [
@@ -120,13 +162,13 @@ export function apply(ctx: Context): void {
     }),
     ctx.commands.register({
       name: 'baf-status',
-      description: '显示当前变更工作流状态',
+      description: '查看当前变更：模式/阶段/intake · ★★★',
       handler: async ({ agent }): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') {
           return {
             kind: 'error',
-            text: formatCommandReport(false, 'BAF 状态 · 缺少工作区', [
+            text: formatCommandReport(false, withHint('查看当前变更：模式/阶段/intake · ★★★', '缺少工作区'), [
               { title: '原因', lines: ['当前会话没有 cwd，无法读取 .baf/projection'] },
               { title: '处理', lines: ['为会话绑定工作区目录后重试 /baf-status'] },
             ]),
@@ -138,7 +180,7 @@ export function apply(ctx: Context): void {
         if (ids.length === 0) {
           return {
             kind: 'success',
-            text: formatCommandReport(true, 'BAF 状态 · 模板（空闲）· 无活动变更', [
+            text: formatCommandReport(true, withHint('查看当前变更：模式/阶段/intake · ★★★', '模板（空闲）· 无活动变更'), [
               { title: '工作区', lines: [`cwd: ${cwd}`] },
               {
                 title: '变更',
@@ -155,7 +197,7 @@ export function apply(ctx: Context): void {
         if (changeId === undefined) {
           return {
             kind: 'success',
-            text: formatCommandReport(true, 'BAF 状态 · 模板（空闲）· 无活动变更', [
+            text: formatCommandReport(true, withHint('查看当前变更：模式/阶段/intake · ★★★', '模板（空闲）· 无活动变更'), [
               { title: '工作区', lines: [`cwd: ${cwd}`] },
               { title: '变更', lines: ['（无）'] },
             ]),
@@ -169,7 +211,7 @@ export function apply(ctx: Context): void {
           kind: 'success',
           text: formatCommandReport(
             true,
-            `BAF 状态 · ${modeZh(status.mode)} · 当前 ${String(status.current)}`,
+            withHint('查看当前变更：模式/阶段/intake · ★★★', `${modeZh(status.mode)} · 当前 ${String(status.current)}`),
             [
               {
                 title: '焦点变更',
@@ -196,13 +238,13 @@ export function apply(ctx: Context): void {
     }),
     ctx.commands.register({
       name: 'baf-list',
-      description: '列出当前工作区所有变更（含已归档/已放弃）',
+      description: '列出工作区全部变更（含已归档/已放弃） · ★★',
       handler: async ({ agent }): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') {
           return {
             kind: 'error',
-            text: formatCommandReport(false, 'BAF 列表 · 缺少工作区', [
+            text: formatCommandReport(false, withHint('列出工作区全部变更（含已归档/已放弃） · ★★', '缺少工作区'), [
               { title: '原因', lines: ['当前会话没有 cwd'] },
             ]),
           }
@@ -212,7 +254,7 @@ export function apply(ctx: Context): void {
         const rows = index.changes.map(c => `${c.changeId} · ${modeZh(c.mode)} · ${String(c.current)} · ${c.updatedAt}`)
         return {
           kind: 'success',
-          text: formatCommandReport(true, `BAF 列表 · ${rows.length} 条变更`, [
+          text: formatCommandReport(true, withHint('列出工作区全部变更（含已归档/已放弃） · ★★', `${rows.length} 条变更`), [
             { title: '变更', lines: rows.length === 0 ? ['（无）'] : rows },
             { title: '工作区', lines: [`cwd: ${cwd}`] },
           ]),
@@ -221,7 +263,7 @@ export function apply(ctx: Context): void {
     }),
     ctx.commands.register({
       name: 'baf-doctor',
-      description: '检查 BAF 工作流是否可用',
+      description: '工作流自检：cwd/注册/页签 · ★',
       handler: ({ agent }): CommandResult => {
         const cwd = agent.session.header.cwd
         const cwdOk = cwd !== undefined && cwd !== ''
@@ -229,7 +271,7 @@ export function apply(ctx: Context): void {
           kind: cwdOk ? 'success' : 'error',
           text: formatCommandReport(
             cwdOk,
-            cwdOk ? 'BAF 自检 · 通过' : 'BAF 自检 · 缺少工作区',
+            withHint('工作流自检：cwd/注册/页签 · ★', cwdOk ? '通过' : '缺少工作区'),
             [
               {
                 title: '检查项',
@@ -251,104 +293,104 @@ export function apply(ctx: Context): void {
         }
       },
     }),
-    ...(['open'] as const).map(stage => ctx.commands.register({
+    ...(['workflow-open'] as const).map(stage => ctx.commands.register({
       name: `baf-${stage}`,
-      description: `BAF ${stage}（T1 intake classifier）`,
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      description: '启动变更：intake 分类 · ★★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd(`/baf-${stage}`)
         return driveOpen(cwd, rawInput)
       },
     })),
     ctx.commands.register({
-      name: 'baf-classify',
-      description: 'BAF classify（confirm / reject）',
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      name: 'baf-workflow-classify',
+      description: '分类确认 / 拒绝 · ★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-classify')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-classify')
         return driveClassify(cwd, rawInput)
       },
     }),
     ctx.commands.register({
-      name: 'baf-clarify',
-      description: 'BAF clarify 阶段（N2）',
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      name: 'baf-workflow-clarify',
+      description: '澄清阶段（N2） · ★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-clarify')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-clarify')
         return driveClarify(cwd, rawInput)
       },
     }),
     ctx.commands.register({
-      name: 'baf-design',
-      description: 'BAF design 阶段（N3）',
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      name: 'baf-workflow-design',
+      description: '设计阶段（N3） · ★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-design')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-design')
         return driveDesign(cwd, rawInput)
       },
     }),
     ctx.commands.register({
-      name: 'baf-plan',
-      description: 'BAF plan 阶段（N4）',
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      name: 'baf-workflow-plan',
+      description: '计划阶段（N4） · ★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-plan')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-plan')
         return drivePlan(cwd, rawInput)
       },
     }),
     ctx.commands.register({
-      name: 'baf-implement',
-      description: 'BAF implement 阶段（N5）',
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      name: 'baf-workflow-implement',
+      description: '实现阶段（N5 进入/完成） · ★★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-implement')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-implement')
         return driveImplement(cwd, rawInput)
       },
     }),
     ctx.commands.register({
-      name: 'baf-verify',
-      description: 'BAF verify 阶段（N6）',
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      name: 'baf-workflow-verify',
+      description: '验证阶段（N6） · ★★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-verify')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-verify')
         const { stack, guard } = resolveAdapters(ctx, cwd)
         return driveVerify(cwd, rawInput, { ...(stack === undefined ? {} : { stack }), ...(guard === undefined ? {} : { guard }) })
       },
     }),
     ctx.commands.register({
-      name: 'baf-archive',
-      description: 'BAF archive 阶段（N7）',
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      name: 'baf-workflow-archive',
+      description: '归档变更（N7/T14，需 confirm） · ★★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-archive')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-archive')
         return driveArchive(cwd, rawInput)
       },
     }),
     ctx.commands.register({
-      name: 'baf-abandon',
-      description: 'BAF abandon（T16）',
-      handler: async ({ agent, rawInput }: { agent: { session: { header: { cwd?: string } } }; rawInput: string }): Promise<CommandResult> => {
+      name: 'baf-workflow-abandon',
+      description: '放弃变更（T16，需 confirm） · ★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-abandon')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-abandon')
         return driveAbandon(cwd, rawInput)
       },
     }),
     ctx.commands.register({
-      name: 'baf-quality',
-      description: 'BAF quality（C-stack baseline 检查，verify 外执行）',
+      name: 'baf-check-quality',
+      description: '基线 C 栈质量检查 · ★★',
       handler: async ({ agent }): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-quality')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-check-quality')
         const { stack } = resolveAdapters(ctx, cwd)
         return driveQuality(cwd, { ...(stack === undefined ? {} : { stack }) })
       },
     }),
     ctx.commands.register({
-      name: 'baf-guard',
-      description: 'BAF guard（verify + secret-scan）',
+      name: 'baf-check-guard',
+      description: '安全门禁（verify + secret-scan） · ★★',
       handler: async ({ agent }): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd('/baf-guard')
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-check-guard')
         const { guard } = resolveAdapters(ctx, cwd)
         return driveGuard(cwd, { ...(guard === undefined ? {} : { guard }) })
       },
@@ -364,7 +406,7 @@ export function apply(ctx: Context): void {
 function missingCwd(command: string): CommandResult {
   return {
     kind: 'error',
-    text: formatCommandReport(false, `${command} · 缺少工作区`, [
+    text: formatCommandReport(false, `${command} · 缺少工作区 · 点本行展开/折叠指令全文`, [
       { title: '原因', lines: ['当前会话没有 cwd，无法读取 .baf/projection'] },
       { title: '处理', lines: ['为会话绑定工作区目录后重试'] },
     ]),

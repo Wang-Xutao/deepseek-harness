@@ -27,37 +27,54 @@ describe('baf-cli Commander tree', () => {
   it('exposes the slash-mirroring subcommand set', () => {
     const names = program.commands.map(c => c.name()).slice().sort()
     expect(names).toEqual([
-      'abandon',
-      'archive',
-      'clarify',
-      'classify',
-      'design',
+      'check-guard',
+      'check-quality',
       'doctor',
-      'guard',
       'help',
-      'implement',
       'list',
-      'open',
-      'plan',
-      'quality',
       'status',
-      'verify',
       'version',
+      'workflow-abandon',
+      'workflow-archive',
+      'workflow-clarify',
+      'workflow-classify',
+      'workflow-design',
+      'workflow-implement',
+      'workflow-open',
+      'workflow-plan',
+      'workflow-verify',
     ])
   })
 
   it('mirrors /baf-status wording in the status subcommand description', () => {
     const status = program.commands.find(c => c.name() === 'status')
-    expect(status?.description()).toBe('显示当前变更工作流状态')
+    expect(status?.description()).toBe('查看当前变更：模式/阶段/intake · ★★★')
   })
 
-  it('declares drive-style subcommands without the .action() body leaking', () => {
+  it('declares drive-style subcommands with the new tier-prefixed names', () => {
     // Drive subcommands share the same handler template; asserting the
-    // description keeps "与 /baf-<stage> 同源 drive" so anyone scanning the
-    // program knows the source of truth.
-    for (const stage of ['open', 'classify', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive', 'abandon']) {
+    // description keeps "与 /baf-<slash> 同源 drive" so anyone scanning the
+    // program knows the source of truth, and that the tier prefix
+    // (`workflow-` or `check-`) lines up with the slash name.
+    const driveMap: ReadonlyArray<readonly [string, string]> = [
+      ['workflow-open', 'baf-workflow-open'],
+      ['workflow-classify', 'baf-workflow-classify'],
+      ['workflow-clarify', 'baf-workflow-clarify'],
+      ['workflow-design', 'baf-workflow-design'],
+      ['workflow-plan', 'baf-workflow-plan'],
+      ['workflow-implement', 'baf-workflow-implement'],
+      ['workflow-archive', 'baf-workflow-archive'],
+      ['workflow-abandon', 'baf-workflow-abandon'],
+    ]
+    for (const [stage, slash] of driveMap) {
       const cmd = program.commands.find(c => c.name() === stage)
-      expect(cmd?.description()).toContain(`与 /baf-${stage} 同源 drive`)
+      expect(cmd?.description()).toContain(`与 /${slash} 同源 drive`)
     }
+    const verify = program.commands.find(c => c.name() === 'workflow-verify')
+    expect(verify?.description()).toContain('与 /baf-workflow-verify 同源 drive')
+    const quality = program.commands.find(c => c.name() === 'check-quality')
+    expect(quality?.description()).toContain('与 /baf-check-quality 同源 drive')
+    const guard = program.commands.find(c => c.name() === 'check-guard')
+    expect(guard?.description()).toContain('与 /baf-check-guard 同源 drive')
   })
 })

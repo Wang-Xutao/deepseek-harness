@@ -114,7 +114,7 @@ export function buildEmptyTabView(
       id: 'supplement-intake',
       enabled: true,
       labelKey: 'action.newChange',
-      reason: 'Start intake from chat or /baf-open',
+      reason: 'Start intake from chat or /baf-workflow-open',
     }],
   }
 }

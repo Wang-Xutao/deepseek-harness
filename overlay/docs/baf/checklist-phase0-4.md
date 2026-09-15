@@ -20,10 +20,10 @@
 
 ## C. 斜杠指令（BAF 会话）
 
-- [ ] 输入 `/` 可见 `baf-help` / `baf-status` / `baf-version` / `baf-doctor`
-- [ ] `/baf-help` 为**指令卡片**（标题为指令名）；**默认展开**；分区格式（【可用指令】等）
-- [ ] `/baf-status` / `/baf-version` / `/baf-doctor` 同样默认展开；`/baf-version` 三层字段与设置「版本与更新」一致，并列出 `baf-core` / `baf-workflow`
-- [ ] `/baf-open` 等建设中指令返回明确「尚未实现」错误卡，不进大模型
+- [ ] 输入 `/` 可见核心 5 条 + 流程 9 条 + 检查 2 条 = 共 16 条
+- [ ] `/baf-help` 为**指令卡片**（首行 = description + "点本行展开/折叠指令全文"）；**默认展开**；分区格式（【核心】【流程】【检查】等）
+- [ ] `/baf-status` / `/baf-version` / `/baf-doctor` / `/baf-list` 同样默认展开；`/baf-version` 三层字段与设置「版本与更新」一致，并列出 `baf-core` / `baf-workflow`
+- [ ] 流程指令（`/baf-workflow-*`）与检查指令（`/baf-check-*`）返回值与「工作流」页签一致
 
 ## D. 工作流 Tab — 空态 / 模板
 

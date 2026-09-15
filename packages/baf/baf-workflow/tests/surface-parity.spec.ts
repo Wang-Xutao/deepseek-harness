@@ -41,28 +41,50 @@ const REMOTE_METHODS = [
 ] as const
 
 // The slash handlers register through `ctx.commands.register`; their `name`
-// field is the user-facing identifier (the `/baf-*` token minus the prefix).
-// Read the registration list from the commands module without invoking any
-// command handler — the module exports the build-time command descriptors
-// for inspection (see `commands.ts` apply()).
+// field is the user-facing identifier. Read the registration list from the
+// commands module without invoking any command handler — the module exports
+// the build-time command descriptors for inspection (see `commands.ts`
+// apply()).
 const SLASH_NAMES = [
   'baf-help',
   'baf-version',
   'baf-status',
   'baf-list',
   'baf-doctor',
-  'baf-open',
-  'baf-classify',
-  'baf-clarify',
-  'baf-design',
-  'baf-plan',
-  'baf-implement',
-  'baf-verify',
-  'baf-archive',
-  'baf-abandon',
-  'baf-quality',
-  'baf-guard',
+  'baf-workflow-open',
+  'baf-workflow-classify',
+  'baf-workflow-clarify',
+  'baf-workflow-design',
+  'baf-workflow-plan',
+  'baf-workflow-implement',
+  'baf-workflow-verify',
+  'baf-workflow-archive',
+  'baf-workflow-abandon',
+  'baf-check-quality',
+  'baf-check-guard',
 ]
+
+// Slash names ↔ drive exports. Drives are organised by domain so the slash
+// names are tier-prefixed (`baf-workflow-*` for stage transitions,
+// `baf-check-*` for gated checks); the CLI subcommand is the slash name
+// with the `baf-` prefix stripped.
+const DRIVE_TO_SLASH: Record<string, string> = {
+  driveOpen: 'baf-workflow-open',
+  driveClassify: 'baf-workflow-classify',
+  driveClarify: 'baf-workflow-clarify',
+  driveDesign: 'baf-workflow-design',
+  drivePlan: 'baf-workflow-plan',
+  driveImplement: 'baf-workflow-implement',
+  driveVerify: 'baf-workflow-verify',
+  driveArchive: 'baf-workflow-archive',
+  driveAbandon: 'baf-workflow-abandon',
+  driveQuality: 'baf-check-quality',
+  driveGuard: 'baf-check-guard',
+}
+
+const SLASH_TO_DRIVE: Record<string, string> = Object.fromEntries(
+  Object.entries(DRIVE_TO_SLASH).map(([d, s]) => [s, d]),
+)
 
 describe('BAF surface parity (Phase 8.5)', () => {
   it('CLI subcommand names match slash names (modulo baf- prefix)', () => {
@@ -73,12 +95,20 @@ describe('BAF surface parity (Phase 8.5)', () => {
   })
 
   it('every drive export has a corresponding CLI subcommand', () => {
-    // `driveX` corresponds to the CLI subcommand `x`. A rename in either
-    // surface is the trigger for reviewing the parity.
-    for (const name of DRIVE_NAMES) {
-      const subcommand = name.replace(/^drive/, '').toLowerCase()
-      expect(CLI_NAMES, `drive ${name} -> subcommand ${subcommand}`).toContain(subcommand)
+    // Drives map 1:1 to slash names via DRIVE_TO_SLASH; the CLI subcommand
+    // is the slash name with the `baf-` prefix stripped. A rename in either
+    // surface is the trigger for reviewing this snapshot.
+    for (const [drive, slash] of Object.entries(DRIVE_TO_SLASH)) {
+      const subcommand = slash.replace(/^baf-/, '')
+      expect(CLI_NAMES, `drive ${drive} -> subcommand ${subcommand}`).toContain(subcommand)
     }
+  })
+
+  it('DRIVE_TO_SLASH covers every drive export (no orphan drives)', () => {
+    // A new `driveX` export must also be added to DRIVE_TO_SLASH, otherwise
+    // it would be reachable from no surface at all — the map is the only
+    // link between the drive module and the slash / CLI names.
+    expect([...DRIVE_NAMES].sort()).toEqual(Object.keys(DRIVE_TO_SLASH).sort())
   })
 
   it('CLI subcommands map back to drive exports (no orphan subcommands)', () => {
@@ -89,8 +119,9 @@ describe('BAF surface parity (Phase 8.5)', () => {
     const cliSubcommandSet = new Set(CLI_NAMES)
     const direct = new Set(['list', 'help', 'version', 'doctor', 'status'])
     for (const sub of CLI_NAMES) {
+      const slash = `baf-${sub}`
       const isDirect = direct.has(sub)
-      const isDrive = DRIVE_NAMES.includes(`drive${sub[0]!.toUpperCase()}${sub.slice(1)}`)
+      const isDrive = slash in SLASH_TO_DRIVE
       expect(isDirect || isDrive, `${sub} is neither a CLI-direct surface nor backed by a drive`).toBe(true)
       expect(cliSubcommandSet.has(sub)).toBe(true)
     }

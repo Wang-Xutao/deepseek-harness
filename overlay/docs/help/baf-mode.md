@@ -37,14 +37,28 @@ BAF 是面向「改代码要按流程走」的会话模式。选中后，系统�
 
 输入 `/` 可选；执行后出现**指令卡片**。`baf-*` 指令**默认展开**全文，便于直接阅读；仍可点行收起。首行是摘要，正文按【分区】格式化。
 
-| 指令 | 作用 |
-|------|------|
-| `/baf-help` | 帮助与指令一览 |
-| `/baf-status` | 当前变更模式 / 阶段 / intake |
-| `/baf-version` | 与设置「版本与更新」对齐：BAF DSH DESKTOP、DeepSeek Harness，以及各 BAF 插件独立版本 |
-| `/baf-doctor` | 自检 cwd 与注册 |
+按功能分三类，**核心**指令无中间缀，**流程**指令加 `baf-workflow-` 前缀（go 工作流阶段），**检查**指令加 `baf-check-` 前缀（基线门禁）。结尾的 ★★ 是常用等级（★★★ 常用 / ★★ 偶尔 / ★ 极少）。
 
-建设中：`/baf-open`、`/baf-classify`、各阶段与归档等 —— 请先用「工作流」页签。
+| 指令 | 类别 | 作用 | 常用 |
+|------|------|------|------|
+| `/baf-help` | 核心 | 列出全部指令与用法 | ★★ |
+| `/baf-status` | 核心 | 当前变更：模式 / 阶段 / intake | ★★★ |
+| `/baf-version` | 核心 | 与设置「版本与更新」对齐：BAF DSH DESKTOP、DeepSeek Harness，以及各 BAF 插件独立版本 | ★ |
+| `/baf-doctor` | 核心 | 自检 cwd 与注册 | ★ |
+| `/baf-list` | 核心 | 变更总览（工作区全部变更，含已归档/已放弃） | ★★ |
+| `/baf-workflow-open` | 流程 | 启动变更：intake 分类 | ★★★ |
+| `/baf-workflow-classify` | 流程 | 分类确认 / 拒绝 | ★★ |
+| `/baf-workflow-clarify` | 流程 | 澄清阶段（N2） | ★★ |
+| `/baf-workflow-design` | 流程 | 设计阶段（N3） | ★★ |
+| `/baf-workflow-plan` | 流程 | 计划阶段（N4） | ★★ |
+| `/baf-workflow-implement` | 流程 | 实现阶段（N5 进入/完成） | ★★★ |
+| `/baf-workflow-verify` | 流程 | 验证阶段（N6） | ★★★ |
+| `/baf-workflow-archive` | 流程 | 归档变更（N7/T14，需 confirm） | ★★★ |
+| `/baf-workflow-abandon` | 流程 | 放弃变更（T16，需 confirm） | ★ |
+| `/baf-check-quality` | 检查 | 基线 C 栈质量检查（verify 外执行） | ★★ |
+| `/baf-check-guard` | 检查 | 安全门禁（verify + secret-scan） | ★★ |
+
+日常多在「工作流」页签完成阶段推进，slash 指令用来补漏与排障；用 `/baf-help` 随时看完整列表。
 
 ## 断点续跑（新会话 / 新电脑）
 

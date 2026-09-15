@@ -43,6 +43,29 @@ export interface DriveAdapters {
   readonly guard?: GuardPolicy
 }
 
+/** Slash → description map (mirrors the descriptors in `commands.ts`). */
+const SLASH_DESC: Record<string, string> = {
+  '/baf-workflow-open': '启动变更：intake 分类 · ★★★',
+  '/baf-workflow-classify': '分类确认 / 拒绝 · ★★',
+  '/baf-workflow-clarify': '澄清阶段（N2） · ★★',
+  '/baf-workflow-design': '设计阶段（N3） · ★★',
+  '/baf-workflow-plan': '计划阶段（N4） · ★★',
+  '/baf-workflow-implement': '实现阶段（N5 进入/完成） · ★★★',
+  '/baf-workflow-verify': '验证阶段（N6） · ★★★',
+  '/baf-workflow-archive': '归档变更（N7/T14，需 confirm） · ★★★',
+  '/baf-workflow-abandon': '放弃变更（T16，需 confirm） · ★',
+  '/baf-check-quality': '基线 C 栈质量检查 · ★★',
+  '/baf-check-guard': '安全门禁（verify + secret-scan） · ★★',
+}
+
+/** Build a slash-command card title from its description + optional runtime info. */
+function cardTitle(slash: string, runtime?: string): string {
+  const desc = SLASH_DESC[slash] ?? slash
+  return runtime === undefined
+    ? `${desc} · 点本行展开/折叠指令全文`
+    : `${desc} · ${runtime} · 点本行展开/折叠指令全文`
+}
+
 /**
  * Load the workspace's governing baseline.
  * @param cwd - absolute workspace root.
@@ -96,7 +119,13 @@ type ChangeResolution =
   | { readonly kind: 'none' }
   | { readonly kind: 'ambiguous'; readonly candidates: readonly string[] }
 
-function resolveChange(index: { changes: readonly { changeId: string; current: string; updatedAt: string }[] }, explicit?: string): ChangeResolution {
+/** One row in the projection index. */
+type IndexRow = { readonly changeId: string; readonly current: string; readonly updatedAt: string }
+
+/** Subset of the projection index the resolver needs. */
+type IndexShape = { readonly changes: readonly IndexRow[] }
+
+function resolveChange(index: IndexShape, explicit?: string): ChangeResolution {
   if (explicit !== undefined) {
     return index.changes.some(c => c.changeId === explicit)
       ? { kind: 'ok', changeId: explicit }
@@ -152,7 +181,7 @@ function statusLines(status: WorkflowStatus): string[] {
 }
 
 /**
- * `/baf-open <描述>` — run the intake classifier (T1).
+ * `/baf-workflow-open <描述>` — run the intake classifier (T1).
  * @param cwd - workspace root.
  * @param rawInput - free-form change description.
  * @returns classification card.
@@ -162,8 +191,8 @@ export async function driveOpen(cwd: string, rawInput: string): Promise<CommandR
   if (description === '') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-open · 缺少描述', [
-        { title: '用法', lines: ['/baf-open <需求或 Bug 描述>'] },
+      text: formatCommandReport(false, cardTitle('/baf-workflow-open', '缺少描述'), [
+        { title: '用法', lines: ['/baf-workflow-open <需求或 Bug 描述>'] },
       ]),
     }
   }
@@ -179,7 +208,7 @@ export async function driveOpen(cwd: string, rawInput: string): Promise<CommandR
     kind: 'success',
     text: formatCommandReport(
       true,
-      `/baf-open · 分类完成 · ${modeZh(intake.mode)}`,
+      cardTitle('/baf-workflow-open', `分类完成 · ${modeZh(intake.mode)}`),
       [
         {
           title: '分类卡',
@@ -196,8 +225,8 @@ export async function driveOpen(cwd: string, rawInput: string): Promise<CommandR
         {
           title: '下一步',
           lines: [
-            `确认：/baf-classify confirm${intake.mode === 'bug-fast-path' ? ' problem=… root-cause=… file=… test=… test-cmd=…' : ' title=…'}`,
-            '拒绝：/baf-classify reject',
+            `确认：/baf-workflow-classify confirm${intake.mode === 'bug-fast-path' ? ' problem=… root-cause=… file=… test=… test-cmd=…' : ' title=…'}`,
+            '拒绝：/baf-workflow-classify reject',
           ],
         },
       ],
@@ -206,7 +235,7 @@ export async function driveOpen(cwd: string, rawInput: string): Promise<CommandR
 }
 
 /**
- * `/baf-classify [confirm|reject]` — confirm/reject pending intake and open (T2/T3).
+ * `/baf-workflow-classify [confirm|reject]` — confirm/reject pending intake and open (T2/T3).
  * @param cwd - workspace root.
  * @param rawInput - subcommand plus optional key=value fields.
  * @returns result card.
@@ -220,17 +249,17 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
   if (resolution.kind === 'none') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-classify · 无此变更', [
-        { title: '当前工作区变更', lines: index.changes.length === 0 ? ['（无）— 先 /baf-open <描述>'] : index.changes.map(c => `${c.changeId} · ${String(c.current)}`) },
+      text: formatCommandReport(false, cardTitle('/baf-workflow-classify', '无此变更'), [
+        { title: '当前工作区变更', lines: index.changes.length === 0 ? ['（无）— 先 /baf-workflow-open <描述>'] : index.changes.map(c => `${c.changeId} · ${String(c.current)}`) },
       ]),
     }
   }
   if (resolution.kind === 'ambiguous') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-classify · 多个活动变更，需显式指定', [
+      text: formatCommandReport(false, cardTitle('/baf-workflow-classify', '多个活动变更，需显式指定'), [
         { title: '候选', lines: resolution.candidates.map(c => `- ${c}`) },
-        { title: '用法', lines: ['/baf-classify confirm change=<changeId> …'] },
+        { title: '用法', lines: ['/baf-workflow-classify confirm change=<changeId> …'] },
       ]),
     }
   }
@@ -240,7 +269,7 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
     await rejectIntake(store, changeId)
     return {
       kind: 'success',
-      text: formatCommandReport(true, `/baf-classify · 已拒绝 ${changeId}`, [
+      text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `已拒绝 ${changeId}`), [
         { title: '状态', lines: ['intake 被拒绝，change 进入已放弃（审计保留）'] },
       ]),
     }
@@ -251,7 +280,7 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
     const intake = status.intake
     return {
       kind: 'success',
-      text: formatCommandReport(true, `/baf-classify · ${changeId} 当前分类`, [
+      text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `${changeId} 当前分类`), [
         {
           title: '分类卡',
           lines: intake === undefined
@@ -263,7 +292,7 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
               `reasonCodes: ${intake.reasonCodes.join(', ') || '（无）'}`,
             ],
         },
-        { title: '用法', lines: ['/baf-classify confirm [字段…]', '/baf-classify reject'] },
+        { title: '用法', lines: ['/baf-workflow-classify confirm [字段…]', '/baf-workflow-classify reject'] },
       ]),
     }
   }
@@ -272,7 +301,7 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
   if (status.current !== 'intake') {
     return {
       kind: 'success',
-      text: formatCommandReport(true, `/baf-classify · ${changeId} 已确认并进入 ${String(status.current)}`, [
+      text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `${changeId} 已确认并进入 ${String(status.current)}`), [
         { title: '状态', lines: statusLines(status) },
       ]),
     }
@@ -295,12 +324,12 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
     if (missing.length > 0) {
       return {
         kind: 'error',
-        text: formatCommandReport(false, '/baf-classify · fast-path 缺少 Bug 字段', [
+        text: formatCommandReport(false, cardTitle('/baf-workflow-classify', 'fast-path 缺少 Bug 字段'), [
           { title: '缺少', lines: missing.map(m => `- ${m}`) },
           {
             title: '用法',
             lines: [
-              '/baf-classify confirm problem="现象" root-cause="根因" \\',
+              '/baf-workflow-classify confirm problem="现象" root-cause="根因" \\',
               '  file=src/a.c file=tests/x.c test=tests/x.c test-cmd="ctest -R x"',
             ],
           },
@@ -319,7 +348,7 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
     if (pipeline.context().baseline === undefined) {
       return {
         kind: 'error',
-        text: formatCommandReport(false, '/baf-classify · baseline_unavailable', [
+        text: formatCommandReport(false, cardTitle('/baf-workflow-classify', 'baseline_unavailable'), [
           { title: '原因', lines: [`工作区缺少可解析的 ${WORKSPACE_BASELINE_PATH}`] },
           { title: '处理', lines: ['先初始化工作区基线（baf-scaffold / 企业基线包）再确认 full-go'] },
         ]),
@@ -330,11 +359,11 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
   const after = await store.readStatus(changeId)
   return {
     kind: 'success',
-    text: formatCommandReport(true, `/baf-classify · 已确认并进入 open · ${modeZh(after.mode)}`, [
+    text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `已确认并进入 open · ${modeZh(after.mode)}`), [
       { title: '状态', lines: statusLines(after) },
       ...(after.mode === 'bug-fast-path'
-        ? [{ title: 'fast-path', lines: ['bug-record.md 与回归测试台账已建立', '下一步：/baf-implement（先写回归测试）'] } as const]
-        : [{ title: '下一步', lines: ['clarify：/baf-clarify（或页签）', '分类卡与产物在 openspec/changes/ 下'] } as const]),
+        ? [{ title: 'fast-path', lines: ['bug-record.md 与回归测试台账已建立', '下一步：/baf-workflow-implement（先写回归测试）'] } as const]
+        : [{ title: '下一步', lines: ['clarify：/baf-workflow-clarify（或页签）', '分类卡与产物在 openspec/changes/ 下'] } as const]),
     ]),
   }
 }
@@ -353,8 +382,8 @@ async function driveDocStage(
   if (resolution.kind !== 'ok') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, `${command} · 无活动变更`, [
-        { title: '处理', lines: ['先 /baf-open <描述> 并 /baf-classify confirm'] },
+      text: formatCommandReport(false, cardTitle(command, '无活动变更'), [
+        { title: '处理', lines: ['先 /baf-workflow-open <描述> 并 /baf-workflow-classify confirm'] },
       ]),
     }
   }
@@ -365,7 +394,7 @@ async function driveDocStage(
     const status = await pipeline.completeDocStage(changeId, node)
     return {
       kind: 'success',
-      text: formatCommandReport(true, `${command} · ${node} 完成裁决通过 · 当前 ${String(status.current)}`, [
+      text: formatCommandReport(true, cardTitle(command, `${node} 完成裁决通过 · 当前 ${String(status.current)}`), [
         { title: '状态', lines: statusLines(status) },
       ]),
     }
@@ -379,7 +408,7 @@ async function driveDocStage(
     if (drive.node !== node) return renderDomainError(command, new Error(`unexpected drive node: ${drive.node}`))
     return {
       kind: 'success',
-      text: formatCommandReport(true, `${command} · ${node} 产物写入并完成 · 当前 ${String(drive.status.current)}`, [
+      text: formatCommandReport(true, cardTitle(command, `${node} 产物写入并完成 · 当前 ${String(drive.status.current)}`), [
         { title: '产物', lines: drive.result.artifacts },
       ]),
     }
@@ -388,7 +417,7 @@ async function driveDocStage(
   const status = await pipeline.beginDocStage(changeId, node)
   return {
     kind: 'success',
-    text: formatCommandReport(true, `${command} · ${node} 已进入 · 模板已安装`, [
+    text: formatCommandReport(true, cardTitle(command, `${node} 已进入 · 模板已安装`), [
       { title: '状态', lines: statusLines(status) },
       {
         title: '接下来',
@@ -431,37 +460,37 @@ function structuredDesign(changeId: string, args: ReturnType<typeof parseArgs>) 
 }
 
 /**
- * `/baf-clarify [done | q=… a=… crit=…]` — N2 drive.
+ * `/baf-workflow-clarify [done | q=… a=… crit=…]` — N2 drive.
  * @param cwd - workspace root.
  * @param rawInput - subcommand/fields.
  * @returns result card.
  */
 export async function driveClarify(cwd: string, rawInput: string): Promise<CommandResult> {
-  return driveDocStage('/baf-clarify', cwd, rawInput, 'clarify')
+  return driveDocStage('/baf-workflow-clarify', cwd, rawInput, 'clarify')
 }
 
 /**
- * `/baf-design [done | approach=… ref=…]` — N3 drive.
+ * `/baf-workflow-design [done | approach=… ref=…]` — N3 drive.
  * @param cwd - workspace root.
  * @param rawInput - subcommand/fields.
  * @returns result card.
  */
 export async function driveDesign(cwd: string, rawInput: string): Promise<CommandResult> {
-  return driveDocStage('/baf-design', cwd, rawInput, 'design')
+  return driveDocStage('/baf-workflow-design', cwd, rawInput, 'design')
 }
 
 /**
- * `/baf-plan [done]` — N4 drive (tasks are authored in plan.md/plan.json).
+ * `/baf-workflow-plan [done]` — N4 drive (tasks are authored in plan.md/plan.json).
  * @param cwd - workspace root.
  * @param rawInput - subcommand/fields.
  * @returns result card.
  */
 export async function drivePlan(cwd: string, rawInput: string): Promise<CommandResult> {
-  return driveDocStage('/baf-plan', cwd, rawInput, 'plan')
+  return driveDocStage('/baf-workflow-plan', cwd, rawInput, 'plan')
 }
 
 /**
- * `/baf-implement [done]` — N5 entry (T5/T8) and completion (T9 + T15 precheck).
+ * `/baf-workflow-implement [done]` — N5 entry (T5/T8) and completion (T9 + T15 precheck).
  * @param cwd - workspace root.
  * @param rawInput - subcommand.
  * @returns result card.
@@ -474,8 +503,8 @@ export async function driveImplement(cwd: string, rawInput: string): Promise<Com
   if (resolution.kind !== 'ok') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-implement · 无活动变更', [
-        { title: '处理', lines: ['先 /baf-open 并 /baf-classify confirm'] },
+      text: formatCommandReport(false, cardTitle('/baf-workflow-implement', '无活动变更'), [
+        { title: '处理', lines: ['先 /baf-workflow-open 并 /baf-workflow-classify confirm'] },
       ]),
     }
   }
@@ -486,33 +515,33 @@ export async function driveImplement(cwd: string, rawInput: string): Promise<Com
       const status = await store.readStatus(resolution.changeId)
       return {
         kind: 'success',
-        text: formatCommandReport(true, '/baf-implement · T15 已升级 full-go · 当前 clarify', [
+        text: formatCommandReport(true, cardTitle('/baf-workflow-implement', 'T15 已升级 full-go · 当前 clarify'), [
           { title: '原因', lines: [result.result.escalated.cause] },
           { title: '状态', lines: statusLines(status) },
-          { title: '下一步', lines: ['/baf-clarify → /baf-design → /baf-plan 补走'] },
+          { title: '下一步', lines: ['/baf-workflow-clarify → /baf-workflow-design → /baf-workflow-plan 补走'] },
         ]),
       }
     }
     const status = await store.readStatus(resolution.changeId)
     return {
       kind: 'success',
-      text: formatCommandReport(true, `/baf-implement · 实现完成 · 当前 ${String(status.current)}`, [
+      text: formatCommandReport(true, cardTitle('/baf-workflow-implement', `实现完成 · 当前 ${String(status.current)}`), [
         { title: '状态', lines: statusLines(status) },
-        { title: '下一步', lines: ['/baf-verify'] },
+        { title: '下一步', lines: ['/baf-workflow-verify'] },
       ]),
     }
   }
   const status = await pipeline.enterImplementStage(resolution.changeId)
   return {
     kind: 'success',
-    text: formatCommandReport(true, `/baf-implement · 已进入实现 · 当前 ${String(status.current)}`, [
+    text: formatCommandReport(true, cardTitle('/baf-workflow-implement', `已进入实现 · 当前 ${String(status.current)}`), [
       { title: '状态', lines: statusLines(status) },
       {
         title: '纪律',
         lines: [
           'bug-fast-path：必须先写回归测试（recordTouched 顺序强制）',
           '只允许修改 plan.json allowlist 内文件（baf-guard 硬门禁）',
-          '完成后：/baf-implement done',
+          '完成后：/baf-workflow-implement done',
         ],
       },
     ]),
@@ -520,7 +549,7 @@ export async function driveImplement(cwd: string, rawInput: string): Promise<Com
 }
 
 /**
- * `/baf-verify` — N6 (T9 entry, check run, T10/T11 verdict).
+ * `/baf-workflow-verify` — N6 (T9 entry, check run, T10/T11 verdict).
  * @param cwd - workspace root.
  * @param rawInput - subcommand.
  * @param adapters - optional stack/guard wiring from the mounted services.
@@ -534,39 +563,39 @@ export async function driveVerify(cwd: string, rawInput: string, adapters: Drive
   if (resolution.kind !== 'ok') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-verify · 无活动变更', [
-        { title: '处理', lines: ['先推进到 implement 完成：/baf-implement done'] },
+      text: formatCommandReport(false, cardTitle('/baf-workflow-verify', '无活动变更'), [
+        { title: '处理', lines: ['先推进到 implement 完成：/baf-workflow-implement done'] },
       ]),
     }
   }
   const pipeline = await pipelineFor(cwd, adapters)
   const result = await pipeline.driveVerifyStage(resolution.changeId)
-  if (result.node !== 'verify') return renderDomainError('/baf-verify', new Error('unexpected drive result'))
+  if (result.node !== 'verify') return renderDomainError('/baf-workflow-verify', new Error('unexpected drive result'))
   const rows = result.result.report.checks
     .map(row => `${row.ok ? '✓' : '✗'} ${row.name}${row.required ? '' : '（非必需）'} — ${row.diagnostics.join('; ')}`)
   const status = await store.readStatus(resolution.changeId)
   if (result.result.backToImplement) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-verify · 必需检查失败 · T11 回实现', [
+      text: formatCommandReport(false, cardTitle('/baf-workflow-verify', '必需检查失败 · T11 回实现'), [
         { title: '检查', lines: rows },
         { title: '报告', lines: [result.result.reportPath] },
-        { title: '下一步', lines: ['修复后 /baf-implement → /baf-implement done → /baf-verify'] },
+        { title: '下一步', lines: ['修复后 /baf-workflow-implement → /baf-workflow-implement done → /baf-workflow-verify'] },
       ]),
     }
   }
   return {
     kind: 'success',
-    text: formatCommandReport(true, `/baf-verify · 全部必需检查通过 · 当前 ${String(status.current)}`, [
+    text: formatCommandReport(true, cardTitle('/baf-workflow-verify', `全部必需检查通过 · 当前 ${String(status.current)}`), [
       { title: '检查', lines: rows },
       { title: '报告', lines: [result.result.reportPath] },
-      { title: '下一步', lines: ['/baf-archive confirm'] },
+      { title: '下一步', lines: ['/baf-workflow-archive confirm'] },
     ]),
   }
 }
 
 /**
- * `/baf-archive confirm` — N7 (T14) with explicit human confirmation.
+ * `/baf-workflow-archive confirm` — N7 (T14) with explicit human confirmation.
  * @param cwd - workspace root.
  * @param rawInput - must contain `confirm`.
  * @returns result card.
@@ -576,8 +605,8 @@ export async function driveArchive(cwd: string, rawInput: string): Promise<Comma
   if (!args.positionals.includes('confirm')) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-archive · 需要人工确认', [
-        { title: '用法', lines: ['/baf-archive confirm'] },
+      text: formatCommandReport(false, cardTitle('/baf-workflow-archive', '需要人工确认'), [
+        { title: '用法', lines: ['/baf-workflow-archive confirm'] },
       ]),
     }
   }
@@ -587,7 +616,7 @@ export async function driveArchive(cwd: string, rawInput: string): Promise<Comma
   if (resolution.kind !== 'ok') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-archive · 无活动变更', []),
+      text: formatCommandReport(false, cardTitle('/baf-workflow-archive', '无活动变更'), []),
     }
   }
   const pipeline = await pipelineFor(cwd)
@@ -595,14 +624,14 @@ export async function driveArchive(cwd: string, rawInput: string): Promise<Comma
   const status = await store.readStatus(resolution.changeId)
   return {
     kind: 'success',
-    text: formatCommandReport(true, `/baf-archive · 已归档 · ${status.changeId}`, [
+    text: formatCommandReport(true, cardTitle('/baf-workflow-archive', `已归档 · ${status.changeId}`), [
       { title: '状态', lines: [`terminal: ${String(status.terminal)}`] },
     ]),
   }
 }
 
 /**
- * `/baf-abandon confirm` — T16 with explicit human confirmation.
+ * `/baf-workflow-abandon confirm` — T16 with explicit human confirmation.
  * @param cwd - workspace root.
  * @param rawInput - must contain `confirm`.
  * @returns result card.
@@ -612,8 +641,8 @@ export async function driveAbandon(cwd: string, rawInput: string): Promise<Comma
   if (!args.positionals.includes('confirm')) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-abandon · 需要人工确认', [
-        { title: '用法', lines: ['/baf-abandon confirm'] },
+      text: formatCommandReport(false, cardTitle('/baf-workflow-abandon', '需要人工确认'), [
+        { title: '用法', lines: ['/baf-workflow-abandon confirm'] },
       ]),
     }
   }
@@ -623,7 +652,7 @@ export async function driveAbandon(cwd: string, rawInput: string): Promise<Comma
   if (resolution.kind !== 'ok') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-abandon · 无活动变更', []),
+      text: formatCommandReport(false, cardTitle('/baf-workflow-abandon', '无活动变更'), []),
     }
   }
   const pipeline = await pipelineFor(cwd)
@@ -631,14 +660,14 @@ export async function driveAbandon(cwd: string, rawInput: string): Promise<Comma
   const status = await store.readStatus(resolution.changeId)
   return {
     kind: 'success',
-    text: formatCommandReport(true, `/baf-abandon · 已放弃 · ${status.changeId}`, [
+    text: formatCommandReport(true, cardTitle('/baf-workflow-abandon', `已放弃 · ${status.changeId}`), [
       { title: '状态', lines: [`terminal: ${String(status.terminal)}`, '审计与产物保留'] },
     ]),
   }
 }
 
 /**
- * `/baf-quality` — run the baseline's C-stack checks outside the verify gate.
+ * `/baf-check-quality` — run the baseline's C-stack checks outside the verify gate.
  * @param cwd - workspace root.
  * @param adapters - must carry a stack adapter (resolved by the entry surface).
  * @returns quality report card.
@@ -647,7 +676,7 @@ export async function driveQuality(cwd: string, adapters: DriveAdapters): Promis
   if (adapters.stack === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-quality · quality 服务未挂载', [
+      text: formatCommandReport(false, cardTitle('/baf-check-quality', 'quality 服务未挂载'), [
         { title: '原因', lines: ['当前 composition 未安装 baf-quality（StackAdapter 不可用）'] },
       ]),
     }
@@ -656,7 +685,7 @@ export async function driveQuality(cwd: string, adapters: DriveAdapters): Promis
   if (baseline === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-quality · baseline_unavailable', [
+      text: formatCommandReport(false, cardTitle('/baf-check-quality', 'baseline_unavailable'), [
         { title: '原因', lines: [`工作区缺少可解析的 ${WORKSPACE_BASELINE_PATH}`] },
       ]),
     }
@@ -674,7 +703,7 @@ export async function driveQuality(cwd: string, adapters: DriveAdapters): Promis
   })
   return {
     kind: report.passed ? 'success' : 'error',
-    text: formatCommandReport(report.passed, `/baf-quality · ${report.passed ? '通过' : '未通过'} · ${report.baselineId}`, [
+    text: formatCommandReport(report.passed, cardTitle('/baf-check-quality', `${report.passed ? '通过' : '未通过'} · ${report.baselineId}`), [
       { title: '检查', lines: rows },
       { title: '工具版本', lines: Object.entries(report.toolVersions).map(([tool, version]) => `${tool}: ${version}`) },
       ...(report.diagnostics.length === 0 ? [] : [{ title: '诊断', lines: report.diagnostics } as const]),
@@ -683,7 +712,7 @@ export async function driveQuality(cwd: string, adapters: DriveAdapters): Promis
 }
 
 /**
- * `/baf-guard` — run the guard policy (verify + secret-scan) over touched files.
+ * `/baf-check-guard` — run the guard policy (verify + secret-scan) over touched files.
  * @param cwd - workspace root.
  * @param adapters - must carry a guard policy (resolved by the entry surface).
  * @returns guard report card.
@@ -692,7 +721,7 @@ export async function driveGuard(cwd: string, adapters: DriveAdapters): Promise<
   if (adapters.guard === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-guard · guard 服务未挂载', [
+      text: formatCommandReport(false, cardTitle('/baf-check-guard', 'guard 服务未挂载'), [
         { title: '原因', lines: ['当前 composition 未安装 baf-guard（GuardPolicy 不可用）'] },
       ]),
     }
@@ -701,7 +730,7 @@ export async function driveGuard(cwd: string, adapters: DriveAdapters): Promise<
   if (baseline === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, '/baf-guard · baseline_unavailable', [
+      text: formatCommandReport(false, cardTitle('/baf-check-guard', 'baseline_unavailable'), [
         { title: '原因', lines: [`工作区缺少可解析的 ${WORKSPACE_BASELINE_PATH}`] },
       ]),
     }
@@ -723,7 +752,7 @@ export async function driveGuard(cwd: string, adapters: DriveAdapters): Promise<
   const ok = verifyReport.allowed && secretReport.allowed
   return {
     kind: ok ? 'success' : 'error',
-    text: formatCommandReport(ok, `/baf-guard · ${ok ? '通过' : '拒绝'}`, [
+    text: formatCommandReport(ok, cardTitle('/baf-check-guard', ok ? '通过' : '拒绝'), [
       { title: 'verify', lines: verifyReport.reasonCodes.length === 0 ? ['within policy'] : verifyReport.reasonCodes },
       { title: 'secret-scan', lines: secretReport.reasonCodes.length === 0 ? ['no secrets detected'] : secretReport.reasonCodes },
       { title: '受检文件', lines: paths.length === 0 ? ['（无 touched 记录）'] : paths },

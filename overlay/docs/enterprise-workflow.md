@@ -56,7 +56,7 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 
 | 项                                        | 状态  | 落点                                                                                              |
 | ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
-| `baf-openspec` 独立包（Cordis Service）          | 已完成 | `packages/baf/baf-openspec/`；本地文件模式 OpenSpec adapter（骨架、读取、校验、原子归档）+ `BafOpenspec` service |
+| `baf-openspec` 独立包（Cordis Service）          | 已完成 | `packages/baf/baf-workflow-openspec/`；本地文件模式 OpenSpec adapter（骨架、读取、校验、原子归档）+ `BafOpenspec` service |
 | 阶段运行时上下文                                  | 已完成 | `baf-workflow` `stages/context.ts`；绑定 projection store / adapter / workspace / baseline            |
 | N1 `open` 骨架创建                            | 已完成 | `stages/open.ts`；Git revision 前置检查 + change skeleton + `stage-entered`                          |
 | N2 `clarify` 产物 + T6 门禁                     | 已完成 | `stages/clarify.ts`；阻塞问题/验收条件/非目标渲染，模板态可覆写、已填态拒绝                        |
@@ -108,8 +108,8 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 | 项                                        | 状态  | 落点                                                                                              |
 | ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
 | `baf-standard` 独立包（Cordis Service）         | 已完成 | `packages/baf/baf-standard/`；`StandardSummary` schema + `summarizeStandard` + `renderStandardPrompt`；占位态返回 `policy_missing` 并给出 `sourceRef#anchor` 指引，prompt 渲染走 service 表面 |
-| `baf-quality` 独立包（Cordis Service）          | 已完成 | `packages/baf/baf-quality/`；`createCStackAdapter` 接 C 栈（compiler probe / build / test / coverage / analyzers）；`QualityReport` schema 含 `toolVersions / checks / passed / diagnostics`；占位命令以 `policy_missing` 标记，coverage 数字阈值 fail-closed |
-| `baf-guard` 独立包（service + install row）      | 已完成 | `packages/baf/baf-guard/`；`BafGuard` 服务暴露 `policy(root)`（action `verify`/`secret-scan`），同步从 `.baf/projection/index.json` + change log + allowlist 重读裁决；`./install` 非隔离 row 经 host `agents` 服务给每个 agent 装 `tools.guard`（同 baf-commands 模式） |
+| `baf-quality` 独立包（Cordis Service）          | 已完成 | `packages/baf/baf-check-quality/`；`createCStackAdapter` 接 C 栈（compiler probe / build / test / coverage / analyzers）；`QualityReport` schema 含 `toolVersions / checks / passed / diagnostics`；占位命令以 `policy_missing` 标记，coverage 数字阈值 fail-closed |
+| `baf-guard` 独立包（service + install row）      | 已完成 | `packages/baf/baf-check-guard/`；`BafGuard` 服务暴露 `policy(root)`（action `verify`/`secret-scan`），同步从 `.baf/projection/index.json` + change log + allowlist 重读裁决；`./install` 非隔离 row 经 host `agents` 服务给每个 agent 装 `tools.guard`（同 baf-commands 模式） |
 | 工具硬门禁裁决                              | 已完成 | `baf-guard/src/policy.ts`：fs write 走结构路径→密钥扫描→active change→intakeConfirmed→DOC_STAGES change dir → implement allowlist；shell 走危险模式（rm-root / format / shutdown / git-force-push）+ 间接写（`>`/`>>` 重定向、fd-to-file、heredoc、tee、sed -i、perl -i、truncate、shred、cp/mv、unzip/tar、wget/curl）双重识别 |
 | `baf-scaffold` 独立包（Cordis Service）        | 已完成 | `packages/baf/baf-scaffold/`；`planScaffold` 生成 `.baf/baseline.yml`（含 §15 占位）与 `openspec/changes/.gitkeep`；`applyScaffold` 不覆盖：相同内容跳过、内容不同→`<path>.baf-backup-<iso 时间戳>`；`scaffoldWorkspace` 必须 `humanConfirmed:true`，否则返回 `{kind:'refused', reason:'human_confirmation_required'}` |
 | verify CheckRunner 接线 stack/guard      | 已完成 | `baf-workflow` `stages/context.ts` 收 `stack?: StackAdapter` + `guard?: GuardPolicy`；`stages/verify.ts` 新增 quality row（`required: ctx.stack && ctx.baseline`）与 guard row（`ctx.guard.check({action:'verify', paths})`），secret-scan row 在 `baseline.guard.secretScan === 'off'` 时跳过；`toolVersions` 通过 `buildVerifyRunner(ctx, changeId, mode, options)` 注入并经 `Object.assign` 合并到报告 |
@@ -117,7 +117,7 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 | 工具硬门禁测试                               | 已完成 | `baf-guard` `tests/tool-guard.spec.ts`：策略 reason codes、shell allow/deny 集、classification、stable-prefix denials、re-adjudication flip、sync disk state（空 workspace→`intake_confirmation_required`、real projection 驱动到 implement→allowlist honored）、GuardPolicy actions（verify/secret-scan/off）、install row 装配合约 |
 | baf 域 isolate 新成员                          | 已完成 | `presets/baf/agent.cordis.yml` `baf-domain` group 增 `bafStandard/bafQuality/bafGuard/bafScaffold` 至 isolate；新 row `baf-guard-install`（`@deepseek-ai/dsh-baf-guard/install`）位于 isolate 之外触达 host `agents`；`baf-roster.spec.ts` 增 Phase 7 断言；`baf-mount.spec.ts` 新测 Phase 7 服务在 isolate 下共享实例 |
 | workspace 自动发现 + pnpm 链接                  | 已完成 | `pnpm-workspace.yaml` `packages/*/*` 自动纳入；`tsconfig.base.json` 新增 4 条 path mapping；`pnpm install` 完成 workspace 链接 |
-| 桌面打包 FORCE_PACKAGES 补齐                    | 已完成 | `overlay/scripts/pack-dsh.mjs` FORCE_PACKAGES 新增 `baf-standard/baf-quality/baf-guard/baf-scaffold` |
+| 桌面打包 FORCE_PACKAGES 补齐                    | 已完成 | `overlay/scripts/pack-dsh.mjs` FORCE_PACKAGES 新增 `baf-standard/baf-check-quality/baf-check-guard/baf-scaffold` |
 | 桌面版本说明                                  | 已完成 | `overlay/desktop/version-notes.json` Phase 7 desktop 注释 + 4 个新包 entries |
 | 阶段测试（standard/quality/guard/scaffold + verify 接线） | 已完成 | `packages/baf` 全量 17/17 文件 / 103/103 用例绿（无新增失败） |
 
@@ -542,10 +542,10 @@ BAF plugin 每个 service row 的放置位置（realm）在设计阶段逐项标
 
 ### 5.1 总流程图
 
-所有入口（session 自然语言、`/baf-open`、`baf open`、工作流 Tab“新建变更”）先经过 N0 分类，再进入对应模式。`[方括号]` = 状态机节点；`●` = 终态；返回箭头 = 允许的回环。
+所有入口（session 自然语言、`/baf-workflow-open`、`baf open`、工作流 Tab“新建变更”）先经过 N0 分类，再进入对应模式。`[方括号]` = 状态机节点；`●` = 终态；返回箭头 = 允许的回环。
 
 ```text
-用户输入（消息 │ /baf-open │ baf open │ Tab“新建变更”）
+用户输入（消息 │ /baf-workflow-open │ baf open │ Tab“新建变更”）
    │
    ▼
 [N0 intake 分类]
@@ -637,7 +637,7 @@ bug-fast-path 主链（低风险 Bug）：
 - 产物：`ChangeIntake { kind, mode, openspecRequired, reasonCodes, affectedScope, confidence }` 分类卡和确认记录。
 - 完成条件：分类结果和用户确认（如需要）已写入 projection。
 - 失败处理：baseline 缺失 → `policy_missing`/`baseline_unavailable`，禁止启用 fast path；无法分类 → `clarify-required`，不写源码。
-- 入口：session 消息、`/baf-open`、`baf open`、工作流 Tab“新建变更”。
+- 入口：session 消息、`/baf-workflow-open`、`baf open`、工作流 Tab“新建变更”。
 - 模型路由：轻量低延迟 route（第 6 章）。
 - 硬规则：**分类确认之前禁止任何源码写入**；用户要求跳过 full-go 但规则判定必须走时，拒绝并展示 reason codes。
 
@@ -651,7 +651,7 @@ bug-fast-path 主链（低风险 Bug）：
 - 产物：change id；skeleton 文件；初始化后的 workflow projection。
 - 完成条件：change id 唯一、目标非空、目录合法；baseline lock 已记录。
 - 失败处理：OpenSpec 不可用且流程需要规格 → `openspec_unavailable`；不覆盖任何已有文件。
-- 入口：intake 自动进入；`/baf-open`、`baf open`、Tab 节点“开始”。
+- 入口：intake 自动进入；`/baf-workflow-open`、`baf open`、Tab 节点“开始”。
 - 模型路由：轻量 route。
 
 
@@ -664,7 +664,7 @@ bug-fast-path 主链（低风险 Bug）：
 - 产物：clarify 文档 / 决策记录。
 - 完成条件：阻塞问题已回答或明确延期；验收条件可测试。
 - 失败处理：用户未回答 → 阶段保持 in-progress；模型推测不得标记为用户确认。
-- 入口：自动于 N1 后；`/baf-clarify`、Tab。
+- 入口：自动于 N1 后；`/baf-workflow-clarify`、Tab。
 - 模型路由：低成本、长上下文整理 route。
 
 
@@ -677,7 +677,7 @@ bug-fast-path 主链（低风险 Bug）：
 - 产物：design 文档、风险清单。
 - 完成条件：设计引用实际文件/API 并符合 baseline；被用户/规则确认。
 - 失败处理：读取后仓库已变化 → drift 标记；引用无法验证 → 不允许进入 plan。
-- 入口：自动于 N2 后；`/baf-design`、Tab。
+- 入口：自动于 N2 后；`/baf-workflow-design`、Tab。
 - 模型路由：高推理、长上下文 route。
 
 
@@ -690,7 +690,7 @@ bug-fast-path 主链（低风险 Bug）：
 - 产物：plan 文档、任务列表、文件 allowlist、guard snapshot。
 - 完成条件：每项任务可执行、可验证、可回滚。
 - 失败处理：计划不能只写“实现功能”；计划变化必须记录新事件，不得静默扩大范围。
-- 入口：自动于 N3 后；`/baf-plan`、Tab。
+- 入口：自动于 N3 后；`/baf-workflow-plan`、Tab。
 - 模型路由：高推理、结构化输出 route。
 
 
@@ -703,7 +703,7 @@ bug-fast-path 主链（低风险 Bug）：
 - 产物：源码、测试、规格变更；任务结果记录。
 - 完成条件：全部任务有结果；没有越界修改；没有把测试跳过当作通过。
 - 失败处理：guard 拒绝 → blocked + 稳定 reason code；取消 → 不产生虚假 completed；fast path 发现范围扩大 → T15 升级。
-- 入口：自动转换；`/baf-implement`、`baf implement`、Tab。
+- 入口：自动转换；`/baf-workflow-implement`、`baf implement`、Tab。
 - 模型路由：代码生成、工具调用 route。
 
 
@@ -716,7 +716,7 @@ bug-fast-path 主链（低风险 Bug）：
 - 产物：结构化 quality/guard/openspec 报告。
 - 完成条件：全部必需检查通过且报告未过期。
 - 失败处理：任一检查失败 → T11 回 implement；工具不可用 → `tool_unavailable` blocked；超时/取消可区分；依据变化 → T12 drift。质量通过不等于安全通过。
-- 入口：自动转换；`/baf-verify`、`baf verify`、Tab。
+- 入口：自动转换；`/baf-workflow-verify`、`baf verify`、Tab。
 - 模型路由：稳定、严谨、结构化报告分析 route；机器门禁结果优先于模型解释。
 
 
@@ -729,7 +729,7 @@ bug-fast-path 主链（低风险 Bug）：
 - 产物：archived change / 最终记录、摘要、最终 projection。
 - 完成条件：归档原子完成，不能伪造成功。
 - 失败处理：保持原 change 可恢复，不产生半归档状态；可重试且幂等。
-- 入口：`/baf-archive`、Tab“确认归档”。
+- 入口：`/baf-workflow-archive`、Tab“确认归档”。
 - 模型路由：低延迟、严格指令遵循 route；模型不能自行触发归档。
 
 
@@ -1562,7 +1562,7 @@ export function resolveRoute(
 
 #### 5.1 open（`baf-openspec` 建包）
 
-- 新建 `packages/baf/baf-openspec/`：`OpenSpecAdapter` 实现——`detect()`（探测 CLI 与版本，走受控执行器）、`open()`（创建 change skeleton 目录与初始文档，不覆盖已有）、`read()`、`validate()`、`archive()`（原子：临时目录 → 校验 → rename）。
+- 新建 `packages/baf/baf-workflow-openspec/`：`OpenSpecAdapter` 实现——`detect()`（探测 CLI 与版本，走受控执行器）、`open()`（创建 change skeleton 目录与初始文档，不覆盖已有）、`read()`、`validate()`、`archive()`（原子：临时目录 → 校验 → rename）。
 - `baf-workflow/src/stages/open.ts`：探测 workspace/Git/baseline/OpenSpec；多 active change 强制选择；change id 生成；写 `stage-entered`。
 - `tests/openspec.spec.ts`：用本地 OpenSpec CLI fixture（或 stub 执行器）覆盖 validate 成功/失败/不可用。
 
@@ -1630,7 +1630,7 @@ export function resolveRoute(
 
 #### 7.1 `baf-quality` 建包
 
-- 新建 `packages/baf/baf-quality/`：`StackAdapter`/`QualityRunner` 实现——从 baseline `stack` 读取编译器/构建/测试/覆盖率/分析器配置；每个 check 独立受控执行（超时、取消、退出码、stdout/stderr 截断脱敏）；产出 `QualityReport`（8.5 结构）。
+- 新建 `packages/baf/baf-check-quality/`：`StackAdapter`/`QualityRunner` 实现——从 baseline `stack` 读取编译器/构建/测试/覆盖率/分析器配置；每个 check 独立受控执行（超时、取消、退出码、stdout/stderr 截断脱敏）；产出 `QualityReport`（8.5 结构）。
 - verify 的 `CheckRunner` 接入全部 quality checks + 阈值判定。
 
 
@@ -1643,7 +1643,7 @@ export function resolveRoute(
 
 #### 7.3 `baf-guard` 建包
 
-- 新建 `packages/baf/baf-guard/`：protected path、workspace escape、path traversal、危险命令清单、secret scan（正则规则来自 baseline）、`invalid_transition`、`verify_required`、system_resource_conflict；通过 BAF agent 的 `agent.ctx` 注册现有 `ctx.tools.guard()` 单调 guard，覆盖所有 mutating filesystem/shell tool，而不只覆盖 stage handler。guard 从 projection 读取 intake 确认、当前阶段、allowlist 和 snapshot：确认前任何源码写入返回 `intake_confirmation_required`，implement 外或越界写入返回稳定策略错误；每次 tool body 前重新判定，listener 顺序不能 force-allow。补 `tests/tool-guard.spec.ts` 覆盖普通自然语言触发的工具调用、slash/CLI/Tab 旁路尝试、shell 间接写入、scope 隔离和 disposer/HMR 清理。
+- 新建 `packages/baf/baf-check-guard/`：protected path、workspace escape、path traversal、危险命令清单、secret scan（正则规则来自 baseline）、`invalid_transition`、`verify_required`、system_resource_conflict；通过 BAF agent 的 `agent.ctx` 注册现有 `ctx.tools.guard()` 单调 guard，覆盖所有 mutating filesystem/shell tool，而不只覆盖 stage handler。guard 从 projection 读取 intake 确认、当前阶段、allowlist 和 snapshot：确认前任何源码写入返回 `intake_confirmation_required`，implement 外或越界写入返回稳定策略错误；每次 tool body 前重新判定，listener 顺序不能 force-allow。补 `tests/tool-guard.spec.ts` 覆盖普通自然语言触发的工具调用、slash/CLI/Tab 旁路尝试、shell 间接写入、scope 隔离和 disposer/HMR 清理。
 - 打开 composition 中 `baf-quality`/`baf-standard`/`baf-guard` rows。
 
 
@@ -1661,7 +1661,7 @@ export function resolveRoute(
 
 #### 8.1 slash commands
 
-- 新建 `packages/baf/baf-workflow/src/commands.ts`：用 `CommandRuntime.register()` 注册第 9.2 全部命令（`/baf-help`、`/baf-status`、`/baf-doctor`、`/baf-version`、`/baf-open`、`/baf-classify`、`/baf-clarify`、`/baf-design`、`/baf-plan`、`/baf-implement`、`/baf-verify`、`/baf-archive`、`/baf-abandon`、`/baf-quality`、`/baf-guard`、`/baf-update-*`）；每个 handler 只调 `WorkflowService`/`UpdateService`，统一错误码转 `CommandResult`。
+- 新建 `packages/baf/baf-workflow/src/commands.ts`：用 `CommandRuntime.register()` 注册第 9.2 全部命令（`/baf-help`、`/baf-status`、`/baf-doctor`、`/baf-version`、`/baf-workflow-open`、`/baf-workflow-classify`、`/baf-workflow-clarify`、`/baf-workflow-design`、`/baf-workflow-plan`、`/baf-workflow-implement`、`/baf-workflow-verify`、`/baf-workflow-archive`、`/baf-workflow-abandon`、`/baf-check-quality`、`/baf-check-guard`、`/baf-update-*`）；每个 handler 只调 `WorkflowService`/`UpdateService`，统一错误码转 `CommandResult`。
 
 
 
@@ -1792,7 +1792,7 @@ export function resolveRoute(
 ### 新增
 
 - `packages/preset/agent-presets/presets/baf/{preset.yml,agent.cordis.yml,skills/**}`；
-- `packages/baf/baf-core/`、`packages/baf/baf-workflow/`、`packages/baf/baf-openspec/`、`packages/baf/baf-standard/`、`packages/baf/baf-quality/`、`packages/baf/baf-guard/`、`packages/baf/baf-scaffold/`（各含 `src/`、`tests/`）；
+- `packages/baf/baf-core/`、`packages/baf/baf-workflow/`、`packages/baf/baf-workflow-openspec/`、`packages/baf/baf-standard/`、`packages/baf/baf-check-quality/`、`packages/baf/baf-check-guard/`、`packages/baf/baf-scaffold/`（各含 `src/`、`tests/`）；
 - `packages/client/ui-baf-workflow/`（工作流 Tab）；
 - `overlay/docs/baf/{enterprise-inputs,error-codes,compatibility-matrix,route-notes}.md`；
 - `overlay/plugin/standards/baf-baseline-c/`（baseline fixture）；
