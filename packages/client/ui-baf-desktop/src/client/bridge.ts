@@ -2,21 +2,14 @@
  * Electron bridge helpers shared by baf desktop chrome components.
  */
 
-export type IdeAvailability = {
-  vscode: boolean
-  cursor: boolean
-}
-
-export type BafDesktopIdeBridge = {
+export type BafDesktopBridge = {
   isDesktop: true
-  getIdeTools: () => Promise<IdeAvailability>
-  openInIde: (ide: 'vscode' | 'cursor', folderPath: string) => Promise<{ ok: boolean; error?: string }>
   openExternal?: (url: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 declare global {
   interface Window {
-    bafDesktop?: BafDesktopIdeBridge & Record<string, unknown>
+    bafDesktop?: BafDesktopBridge & Record<string, unknown>
   }
 }
 
@@ -26,12 +19,11 @@ export const HELP_DOCS_PATH = '/help/index.html'
 /**
  * @returns the desktop bridge when running inside baf-dsh Electron.
  */
-export function readIdeBridge(): BafDesktopIdeBridge | undefined {
+export function readDesktopBridge(): BafDesktopBridge | undefined {
   if (typeof window === 'undefined') return undefined
   const bridge = window.bafDesktop
   if (bridge === undefined || bridge.isDesktop !== true) return undefined
-  if (typeof bridge.getIdeTools !== 'function' || typeof bridge.openInIde !== 'function') return undefined
-  return bridge as BafDesktopIdeBridge
+  return bridge as BafDesktopBridge
 }
 
 /**
@@ -52,7 +44,7 @@ export function resolveHelpDocsUrl(): string {
  * @param url - absolute help URL.
  */
 export function openHelpExternal(url: string): void {
-  const bridge = readIdeBridge()
+  const bridge = readDesktopBridge()
   if (bridge?.openExternal !== undefined) {
     void bridge.openExternal(url)
     return

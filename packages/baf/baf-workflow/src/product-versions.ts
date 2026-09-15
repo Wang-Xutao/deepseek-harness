@@ -17,11 +17,19 @@ export interface BafProductVersions {
   readonly bafCore: string
   readonly bafWorkflow: string
   readonly bafOpenspec: string
+  readonly bafStandard: string
+  readonly bafQuality: string
+  readonly bafGuard: string
+  readonly bafScaffold: string
   readonly bafDshNotes: string
   readonly dshNotes: string
   readonly bafCoreNotes: string
   readonly bafWorkflowNotes: string
   readonly bafOpenspecNotes: string
+  readonly bafStandardNotes: string
+  readonly bafQualityNotes: string
+  readonly bafGuardNotes: string
+  readonly bafScaffoldNotes: string
   readonly source: string
 }
 
@@ -63,12 +71,27 @@ type EmbeddedProduct = {
   bafCore?: string
   bafWorkflow?: string
   bafOpenspec?: string
+  bafStandard?: string
+  bafQuality?: string
+  bafGuard?: string
+  bafScaffold?: string
   bafDshNotes?: string
   dshNotes?: string
   bafCoreNotes?: string
   bafWorkflowNotes?: string
   bafOpenspecNotes?: string
+  bafStandardNotes?: string
+  bafQualityNotes?: string
+  bafGuardNotes?: string
+  bafScaffoldNotes?: string
 }
+
+const OPTIONAL_BAF_KEYS = [
+  'bafStandard', 'bafQuality', 'bafGuard', 'bafScaffold',
+] as const
+const NOTES_KEYS = [
+  'bafStandardNotes', 'bafQualityNotes', 'bafGuardNotes', 'bafScaffoldNotes',
+] as const
 
 /**
  * Walk ancestors of a start path looking for `baf-product-versions.json`.
@@ -86,14 +109,19 @@ function readEmbeddedProductFile(start: string): EmbeddedProduct | undefined {
         const dsh = typeof raw.dsh === 'string' ? raw.dsh : undefined
         if (bafDsh && dsh) {
           const out: EmbeddedProduct = { bafDsh, dsh }
-          if (typeof raw.bafCore === 'string') out.bafCore = raw.bafCore
-          if (typeof raw.bafWorkflow === 'string') out.bafWorkflow = raw.bafWorkflow
-          if (typeof raw.bafOpenspec === 'string') out.bafOpenspec = raw.bafOpenspec
-          if (typeof raw.bafDshNotes === 'string') out.bafDshNotes = raw.bafDshNotes
-          if (typeof raw.dshNotes === 'string') out.dshNotes = raw.dshNotes
-          if (typeof raw.bafCoreNotes === 'string') out.bafCoreNotes = raw.bafCoreNotes
-          if (typeof raw.bafWorkflowNotes === 'string') out.bafWorkflowNotes = raw.bafWorkflowNotes
-          if (typeof raw.bafOpenspecNotes === 'string') out.bafOpenspecNotes = raw.bafOpenspecNotes
+          for (const key of ['bafCore', 'bafWorkflow', 'bafOpenspec', ...OPTIONAL_BAF_KEYS] as const) {
+            if (typeof raw[key] === 'string') {
+              ;(out as Record<string, unknown>)[key] = raw[key]
+            }
+          }
+          for (const key of [
+            'bafDshNotes', 'dshNotes', 'bafCoreNotes', 'bafWorkflowNotes', 'bafOpenspecNotes',
+            ...NOTES_KEYS,
+          ] as const) {
+            if (typeof raw[key] === 'string') {
+              ;(out as Record<string, unknown>)[key] = raw[key]
+            }
+          }
           return out
         }
       } catch {
@@ -115,6 +143,10 @@ export function resolveBafProductVersions(): BafProductVersions {
   const bafCoreResolved = pkgVersion('@deepseek-ai/dsh-baf-core')
   const bafWorkflowResolved = pkgVersion('@deepseek-ai/dsh-baf-workflow')
   const bafOpenspecResolved = pkgVersion('@deepseek-ai/dsh-baf-openspec')
+  const bafStandardResolved = pkgVersion('@deepseek-ai/dsh-baf-standard')
+  const bafQualityResolved = pkgVersion('@deepseek-ai/dsh-baf-quality')
+  const bafGuardResolved = pkgVersion('@deepseek-ai/dsh-baf-guard')
+  const bafScaffoldResolved = pkgVersion('@deepseek-ai/dsh-baf-scaffold')
   const dshPkg = pkgVersion('@deepseek-ai/dsh')
 
   const here = dirname(fileURLToPath(import.meta.url))
@@ -128,11 +160,19 @@ export function resolveBafProductVersions(): BafProductVersions {
       bafCore: embedded.bafCore ?? bafCoreResolved,
       bafWorkflow: embedded.bafWorkflow ?? bafWorkflowResolved,
       bafOpenspec: embedded.bafOpenspec ?? bafOpenspecResolved,
+      bafStandard: embedded.bafStandard ?? bafStandardResolved,
+      bafQuality: embedded.bafQuality ?? bafQualityResolved,
+      bafGuard: embedded.bafGuard ?? bafGuardResolved,
+      bafScaffold: embedded.bafScaffold ?? bafScaffoldResolved,
       bafDshNotes: embedded.bafDshNotes ?? '',
       dshNotes: embedded.dshNotes ?? '',
       bafCoreNotes: embedded.bafCoreNotes ?? pkgNotes('@deepseek-ai/dsh-baf-core'),
       bafWorkflowNotes: embedded.bafWorkflowNotes ?? pkgNotes('@deepseek-ai/dsh-baf-workflow'),
       bafOpenspecNotes: embedded.bafOpenspecNotes ?? pkgNotes('@deepseek-ai/dsh-baf-openspec'),
+      bafStandardNotes: embedded.bafStandardNotes ?? pkgNotes('@deepseek-ai/dsh-baf-standard'),
+      bafQualityNotes: embedded.bafQualityNotes ?? pkgNotes('@deepseek-ai/dsh-baf-quality'),
+      bafGuardNotes: embedded.bafGuardNotes ?? pkgNotes('@deepseek-ai/dsh-baf-guard'),
+      bafScaffoldNotes: embedded.bafScaffoldNotes ?? pkgNotes('@deepseek-ai/dsh-baf-scaffold'),
       source: 'baf-product-versions.json（与设置「版本与更新」同源字段）',
     }
   }
@@ -143,11 +183,19 @@ export function resolveBafProductVersions(): BafProductVersions {
     bafCore: bafCoreResolved,
     bafWorkflow: bafWorkflowResolved,
     bafOpenspec: bafOpenspecResolved,
+    bafStandard: bafStandardResolved,
+    bafQuality: bafQualityResolved,
+    bafGuard: bafGuardResolved,
+    bafScaffold: bafScaffoldResolved,
     bafDshNotes: '',
     dshNotes: '',
     bafCoreNotes: pkgNotes('@deepseek-ai/dsh-baf-core'),
     bafWorkflowNotes: pkgNotes('@deepseek-ai/dsh-baf-workflow'),
     bafOpenspecNotes: pkgNotes('@deepseek-ai/dsh-baf-openspec'),
+    bafStandardNotes: pkgNotes('@deepseek-ai/dsh-baf-standard'),
+    bafQualityNotes: pkgNotes('@deepseek-ai/dsh-baf-quality'),
+    bafGuardNotes: pkgNotes('@deepseek-ai/dsh-baf-guard'),
+    bafScaffoldNotes: pkgNotes('@deepseek-ai/dsh-baf-scaffold'),
     source: 'npm 包解析（未找到打包嵌入的 baf-product-versions.json）',
   }
 }

@@ -1,7 +1,43 @@
+/* Hero trailing BAF mark: the Sora two-ring raster, its lobes spun apart on hover. */
+
 .mark {
-  display: block;
-  object-fit: contain;
   flex: none;
   user-select: none;
-  pointer-events: none;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Rotation pivots are handed in per lobe through the inline `transform-origin`;
+   this pins them to user units instead of the element's own bounding box, so a
+   lobe spins about its true centre. */
+.spinCw,
+.spinCcw {
+  transform-box: view-box;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .mark:hover .spinCw {
+    animation: baf-ring-spin-cw 1600ms linear infinite;
+  }
+
+  .mark:hover .spinCcw {
+    animation: baf-ring-spin-ccw 1600ms linear infinite;
+  }
+}
+
+@keyframes baf-ring-spin-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes baf-ring-spin-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
 }

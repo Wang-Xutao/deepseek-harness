@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-baf-core",
   "description": "BAF enterprise core: shared types, baseline loader, adapter contracts, and domain service registration",
-  "version": "0.1.5-alpha.1",
+  "version": "0.0.1",
   "bafNotesZh": "baseline loader、adapter stub、bafCore isolate 挂载",
   "bafNotesEn": "Baseline loader, adapter stubs, bafCore isolate mount",
   "publishConfig": {

@@ -1,0 +1,26 @@
+/* Sidebar brand name slot: "BAF DSH" + the version capsule.
+   The host (`SidebarRoot.module.css` .brandName) already sets the 18px/600
+   wordmark type and the 6px gutter, so these two spans only carry what the
+   wordmark itself does not. */
+
+.name {
+  white-space: nowrap;
+}
+
+/* Mirrors BrandWordmark's build-label pill: 14px tall, 2px radius, filled with
+   the label ink and the glyphs knocked out in the inverted label colour. */
+.version {
+  display: inline-flex;
+  align-items: center;
+  height: 14px;
+  padding: 0 5px;
+  border-radius: 2px;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

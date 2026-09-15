@@ -81,36 +81,49 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--dsw-alias-bg-canvas);
+  background: var(--dsw-alias-button-elevated-fill);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.18),
     0 0 0 1px var(--dsw-alias-border-l3);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--dsw-alias-text-tertiary);
   font-size: 11px;
   font-weight: 800;
   line-height: 1;
-  transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* The tick belongs to the checked state only — on the idle thumb it read as a
+   stray glyph next to an unrelated control. */
 .toggleThumb::before {
   content: '\2713';
+  opacity: 0;
+  transition: opacity 160ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .toggle[data-state='on'] {
   color: var(--dsw-alias-text-success, #1a7f37);
 }
 
+/* Checked track: the accent is the same green the "on" label already used, not
+   `--dsw-alias-brand-primary`. The brand ink is near-black in the light theme
+   (and near-white in the dark one), so a 40×22 capsule of it read as a heavy
+   slab parked beside the row copy. */
 .toggle[data-state='on'] .toggleTrack {
-  background: var(--dsw-alias-brand-primary);
-  border-color: var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-state-success-primary);
+  border-color: var(--dsw-alias-state-success-primary);
 }
 
 .toggle[data-state='on'] .toggleThumb {
   transform: translateX(18px);
-  color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.toggle[data-state='on'] .toggleThumb::before {
+  opacity: 1;
 }
 
 .toggleLabel {

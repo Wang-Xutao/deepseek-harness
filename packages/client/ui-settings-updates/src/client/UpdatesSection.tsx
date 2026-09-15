@@ -159,6 +159,31 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
           version={versions?.bafWorkflow}
           notes={versions?.bafWorkflowNotes}
         />
+        <VersionRow
+          label={t('labelBafOpenspec')}
+          version={versions?.bafOpenspec}
+          notes={versions?.bafOpenspecNotes}
+        />
+        <VersionRow
+          label={t('labelBafStandard')}
+          version={versions?.bafStandard}
+          notes={versions?.bafStandardNotes}
+        />
+        <VersionRow
+          label={t('labelBafQuality')}
+          version={versions?.bafQuality}
+          notes={versions?.bafQualityNotes}
+        />
+        <VersionRow
+          label={t('labelBafGuard')}
+          version={versions?.bafGuard}
+          notes={versions?.bafGuardNotes}
+        />
+        <VersionRow
+          label={t('labelBafScaffold')}
+          version={versions?.bafScaffold}
+          notes={versions?.bafScaffoldNotes}
+        />
       </ul>
       <div className={css.actions}>
         <button

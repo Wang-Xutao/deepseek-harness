@@ -163,6 +163,21 @@ importers:
       '@deepseek-ai/dsh-baf-core':
         specifier: workspace:^
         version: link:../../packages/baf/baf-core
+      '@deepseek-ai/dsh-baf-guard':
+        specifier: workspace:^
+        version: link:../../packages/baf/baf-guard
+      '@deepseek-ai/dsh-baf-openspec':
+        specifier: workspace:^
+        version: link:../../packages/baf/baf-openspec
+      '@deepseek-ai/dsh-baf-quality':
+        specifier: workspace:^
+        version: link:../../packages/baf/baf-quality
+      '@deepseek-ai/dsh-baf-scaffold':
+        specifier: workspace:^
+        version: link:../../packages/baf/baf-scaffold
+      '@deepseek-ai/dsh-baf-standard':
+        specifier: workspace:^
+        version: link:../../packages/baf/baf-standard
       '@deepseek-ai/dsh-baf-workflow':
         specifier: workspace:^
         version: link:../../packages/baf/baf-workflow
@@ -892,6 +907,9 @@ importers:
       '@deepseek-ai/dsh-util-values':
         specifier: workspace:^
         version: link:../../util/values
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -971,9 +989,6 @@ importers:
       '@deepseek-ai/dsh-user-questions':
         specifier: workspace:^
         version: link:../../interaction/user-questions
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
 
   packages/api/session-controller:
     dependencies:
@@ -2648,6 +2663,9 @@ importers:
       clsx:
         specifier: ^2.0.0
         version: 2.1.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^

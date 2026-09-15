@@ -10,6 +10,11 @@ export type UpdatesSettingsKey =
   | 'packagesHeading'
   | 'labelBafCore'
   | 'labelBafWorkflow'
+  | 'labelBafOpenspec'
+  | 'labelBafStandard'
+  | 'labelBafQuality'
+  | 'labelBafGuard'
+  | 'labelBafScaffold'
   | 'check'
   | 'update'
   | 'checking'
@@ -31,6 +36,11 @@ export const en: Record<UpdatesSettingsKey, string> = {
   packagesHeading: 'BAF packages',
   labelBafCore: '@deepseek-ai/dsh-baf-core',
   labelBafWorkflow: '@deepseek-ai/dsh-baf-workflow',
+  labelBafOpenspec: '@deepseek-ai/dsh-baf-openspec',
+  labelBafStandard: '@deepseek-ai/dsh-baf-standard',
+  labelBafQuality: '@deepseek-ai/dsh-baf-quality',
+  labelBafGuard: '@deepseek-ai/dsh-baf-guard',
+  labelBafScaffold: '@deepseek-ai/dsh-baf-scaffold',
   check: 'Check for updates',
   update: 'Update',
   checking: 'Checking…',
@@ -53,6 +63,11 @@ export const zh: Record<UpdatesSettingsKey, string> = {
   packagesHeading: 'BAF 插件包',
   labelBafCore: '@deepseek-ai/dsh-baf-core',
   labelBafWorkflow: '@deepseek-ai/dsh-baf-workflow',
+  labelBafOpenspec: '@deepseek-ai/dsh-baf-openspec',
+  labelBafStandard: '@deepseek-ai/dsh-baf-standard',
+  labelBafQuality: '@deepseek-ai/dsh-baf-quality',
+  labelBafGuard: '@deepseek-ai/dsh-baf-guard',
+  labelBafScaffold: '@deepseek-ai/dsh-baf-scaffold',
   check: '检查更新',
   update: '更新',
   checking: '正在检查…',

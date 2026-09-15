@@ -24,16 +24,15 @@ import {
 import { ensureDshModulesExpanded } from './ensure-dsh-modules.ts'
 import { findSupportedNode } from './find-node.ts'
 import { parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './prefs.ts'
+import { readyTimeoutMs } from './ready-timeout.ts'
 import { parseWebReadyUrl } from './ready-url.ts'
 import { DEFAULT_CHANNEL_TAG, DEFAULT_UPDATE_OWNER, DEFAULT_UPDATE_REPO } from './update/defaults.ts'
 import { UpdateService, type CheckUpdateResult } from './update/service.ts'
-import { detectIdeTools, openFolderInIde, type IdeAvailability } from './ide-tools.ts'
 import { userFacingLaunchError } from './user-errors.ts'
 import { DEFAULT_VERSIONS, parseVersions, readDesktopVersionFile, type AppVersions } from './versions.ts'
 
 const APP_USER_MODEL_ID = 'com.baf.dsh.desktop'
 const APP_NAME = 'baf-dsh'
-const READY_TIMEOUT_MS = 90_000
 
 app.setAppUserModelId(APP_USER_MODEL_ID)
 Menu.setApplicationMenu(null)
@@ -125,10 +124,20 @@ function seedVersions(): AppVersions {
     bafPlugin,
     bafCore: embedded?.bafCore ?? DEFAULT_VERSIONS.bafCore,
     bafWorkflow: embedded?.bafWorkflow ?? DEFAULT_VERSIONS.bafWorkflow,
+    bafOpenspec: embedded?.bafOpenspec ?? DEFAULT_VERSIONS.bafOpenspec,
+    bafStandard: embedded?.bafStandard ?? DEFAULT_VERSIONS.bafStandard,
+    bafQuality: embedded?.bafQuality ?? DEFAULT_VERSIONS.bafQuality,
+    bafGuard: embedded?.bafGuard ?? DEFAULT_VERSIONS.bafGuard,
+    bafScaffold: embedded?.bafScaffold ?? DEFAULT_VERSIONS.bafScaffold,
     bafDshNotes: embedded?.bafDshNotes ?? DEFAULT_VERSIONS.bafDshNotes,
     dshNotes: embedded?.dshNotes ?? DEFAULT_VERSIONS.dshNotes,
     bafCoreNotes: embedded?.bafCoreNotes ?? DEFAULT_VERSIONS.bafCoreNotes,
     bafWorkflowNotes: embedded?.bafWorkflowNotes ?? DEFAULT_VERSIONS.bafWorkflowNotes,
+    bafOpenspecNotes: embedded?.bafOpenspecNotes ?? DEFAULT_VERSIONS.bafOpenspecNotes,
+    bafStandardNotes: embedded?.bafStandardNotes ?? DEFAULT_VERSIONS.bafStandardNotes,
+    bafQualityNotes: embedded?.bafQualityNotes ?? DEFAULT_VERSIONS.bafQualityNotes,
+    bafGuardNotes: embedded?.bafGuardNotes ?? DEFAULT_VERSIONS.bafGuardNotes,
+    bafScaffoldNotes: embedded?.bafScaffoldNotes ?? DEFAULT_VERSIONS.bafScaffoldNotes,
   }
 }
 
@@ -204,9 +213,6 @@ let closeDialog: BrowserWindow | undefined
 let quitting = false
 let prefs: AppPrefs = { ...DEFAULT_PREFS }
 let updateService: UpdateService | undefined
-let ideTools: IdeAvailability = { vscode: false, cursor: false }
-/** In-flight / completed splash probe; UI must await this, not the seed false/false. */
-let ideToolsPromise: Promise<IdeAvailability> = Promise.resolve(ideTools)
 
 function killChildTree(): void {
   if (child?.pid === undefined) return
@@ -231,11 +237,12 @@ function waitForReady(proc: ChildProcess): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false
     let combined = ''
+    const timeoutMs = readyTimeoutMs()
     const timer = setTimeout(() => {
       if (settled) return
       settled = true
-      reject(new Error(`启动超时（${String(READY_TIMEOUT_MS / 1000)}s）\n${combined.slice(-4000)}`))
-    }, READY_TIMEOUT_MS)
+      reject(new Error(`启动超时（${String(timeoutMs / 1000)}s）\n${combined.slice(-4000)}`))
+    }, timeoutMs)
 
     let lineBuf = ''
     const onData = (chunk: Buffer | string): void => {
@@ -606,18 +613,6 @@ ipcMain.handle('update:start', async () => {
 })
 ipcMain.handle('update:lastCheck', () => updateService?.getLastCheck() ?? null)
 
-ipcMain.handle('ide:getTools', () => ideToolsPromise)
-
-ipcMain.handle('ide:open', async (_event, raw: unknown) => {
-  if (raw === null || typeof raw !== 'object') return { ok: false, error: '无效请求' }
-  const o = raw as { ide?: unknown, folderPath?: unknown }
-  const ide = o.ide === 'vscode' || o.ide === 'cursor' ? o.ide : undefined
-  const folderPath = typeof o.folderPath === 'string' ? o.folderPath.trim() : ''
-  if (ide === undefined || folderPath.length === 0) return { ok: false, error: '缺少 IDE 或路径' }
-  // Re-resolve at click time so a late PATH / install still works.
-  return openFolderInIde(ide, folderPath)
-})
-
 ipcMain.handle('shell:openExternal', async (_event, raw: unknown) => {
   if (typeof raw !== 'string' || raw.trim() === '') return { ok: false, error: '无效 URL' }
   const url = raw.trim()
@@ -670,11 +665,6 @@ app.whenReady().then(async () => {
 
   // Background check during splash; never block startup on network/UI.
   const checkPromise = updateService.checkForUpdate()
-  // Probe IDE CLIs during splash; expose the same Promise so the UI awaits completion.
-  ideToolsPromise = detectIdeTools().then((tools) => {
-    ideTools = tools
-    return tools
-  })
 
   try {
     await startDshAndShow()

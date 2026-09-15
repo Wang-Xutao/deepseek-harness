@@ -13,55 +13,20 @@ import { NS, type OpenInAppKey } from './locales.ts'
 import css from './OpenInAppSettingsRow.module.css'
 
 /** Known catalog ids; the user can toggle each in settings, and the host
- * still decides which are actually installed. */
+ * still decides which are actually installed. baf-dsh ships only the six
+ * apps that match the dropdown the renderer surfaces: 文件资源管理器、
+ * Cursor、VS Code、Git Bash、命令提示符、PowerShell. */
 const KNOWN_IDS: readonly string[] = [
-  'explorer', 'filemanager', 'finder',
-  'cursor', 'vscode', 'vscodeinsiders', 'windsurf', 'zed',
-  'sublimetext', 'xcode', 'androidstudio',
-  'intellij', 'pycharm', 'webstorm', 'phpstorm', 'goland', 'rider', 'rustrover',
-  'fork', 'sourcetree', 'github', 'tower', 'gitkraken', 'smartgit', 'sublimemerge',
-  'ghostty', 'warp', 'iterm', 'kitty',
-  'terminal', 'windowsterminal', 'gitbash', 'cmd', 'powershell',
-  'gnometerminal', 'konsole',
+  'explorer', 'cursor', 'vscode', 'gitbash', 'cmd', 'powershell',
 ]
 
 const APP_LABEL_KEY: Record<string, OpenInAppKey | undefined> = {
   explorer: 'app.explorer',
-  filemanager: 'app.filemanager',
-  finder: 'app.finder',
   cursor: 'app.cursor',
   vscode: 'app.vscode',
-  vscodeinsiders: 'app.vscodeinsiders',
-  windsurf: 'app.windsurf',
-  zed: 'app.zed',
-  sublimetext: 'app.sublimetext',
-  xcode: 'app.xcode',
-  androidstudio: 'app.androidstudio',
-  intellij: 'app.intellij',
-  pycharm: 'app.pycharm',
-  webstorm: 'app.webstorm',
-  phpstorm: 'app.phpstorm',
-  goland: 'app.goland',
-  rider: 'app.rider',
-  rustrover: 'app.rustrover',
-  fork: 'app.fork',
-  sourcetree: 'app.sourcetree',
-  github: 'app.github',
-  tower: 'app.tower',
-  gitkraken: 'app.gitkraken',
-  smartgit: 'app.smartgit',
-  sublimemerge: 'app.sublimemerge',
-  ghostty: 'app.ghostty',
-  warp: 'app.warp',
-  iterm: 'app.iterm',
-  kitty: 'app.kitty',
-  terminal: 'app.terminal',
-  windowsterminal: 'app.windowsterminal',
   gitbash: 'app.gitbash',
   cmd: 'app.cmd',
   powershell: 'app.powershell',
-  gnometerminal: 'app.gnometerminal',
-  konsole: 'app.konsole',
 }
 
 /** Browser operations and state injected into the Settings-row slot. */

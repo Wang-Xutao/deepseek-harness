@@ -15,6 +15,13 @@ export function userFacingLaunchError(raw: string): string {
     return '应用程序文件不完整。请卸载后重新安装 baf-dsh，再试一次。'
   }
 
+  // Ahead of the exit-code check below: the timeout message carries the tail of
+  // the child's output, which may itself contain `code=…` and would otherwise
+  // be reported as a plain early exit.
+  if (text.includes('超时') || text.includes('timeout') || text.includes('未打印就绪')) {
+    return '启动等待超时。首次启动需要展开并扫描程序文件，耗时较长，请重试；若反复出现，请卸载后重新安装 baf-dsh。'
+  }
+
   if (text.includes('就绪前退出') || text.includes('before ready') || /code=\s*-?\d+/.test(text)) {
     return '应用未能完成启动。请关闭后重试；若仍然失败，请卸载并重新安装 baf-dsh。'
   }
@@ -33,10 +40,6 @@ export function userFacingLaunchError(raw: string): string {
 
   if (text.includes('未找到 dsh') || text.includes('frontend dist not built')) {
     return '应用程序组件缺失。请卸载后重新安装 baf-dsh。'
-  }
-
-  if (text.includes('超时') || text.includes('timeout') || text.includes('未打印就绪')) {
-    return '启动时间过长，已取消。请稍后重试；若反复出现，请重新安装。'
   }
 
   if (text.includes('eacces') || text.includes('permission')) {

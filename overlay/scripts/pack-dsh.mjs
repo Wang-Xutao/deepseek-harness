@@ -381,6 +381,11 @@ const mustResolve = [
   '@deepseek-ai/dsh-baf-core',
   '@deepseek-ai/dsh-baf-workflow',
   '@deepseek-ai/dsh-baf-openspec',
+  '@deepseek-ai/dsh-baf-standard',
+  '@deepseek-ai/dsh-baf-quality',
+  '@deepseek-ai/dsh-baf-guard',
+  '@deepseek-ai/dsh-baf-guard/install',
+  '@deepseek-ai/dsh-baf-scaffold',
   '@deepseek-ai/dsh-agent-presets',
   '@deepseek-ai/dsh-scope',
   '@deepseek-ai/dsh-shell',
@@ -415,6 +420,10 @@ const rootPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
 const bafCorePkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-core/package.json'), 'utf8'))
 const bafWorkflowPkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-workflow/package.json'), 'utf8'))
 const bafOpenspecPkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-openspec/package.json'), 'utf8'))
+const bafStandardPkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-standard/package.json'), 'utf8'))
+const bafQualityPkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-quality/package.json'), 'utf8'))
+const bafGuardPkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-guard/package.json'), 'utf8'))
+const bafScaffoldPkg = JSON.parse(readFileSync(join(repoRoot, 'packages/baf/baf-scaffold/package.json'), 'utf8'))
 writeFileSync(
   join(dest, 'baf-product-versions.json'),
   `${JSON.stringify({
@@ -424,6 +433,10 @@ writeFileSync(
     bafCore: bafCorePkg.version,
     bafWorkflow: bafWorkflowPkg.version,
     bafOpenspec: bafOpenspecPkg.version,
+    bafStandard: bafStandardPkg.version,
+    bafQuality: bafQualityPkg.version,
+    bafGuard: bafGuardPkg.version,
+    bafScaffold: bafScaffoldPkg.version,
     bafDshNotes: notes.desktop?.notesZh ?? '',
     dshNotes: notes.dsh?.notesZh ?? '',
     bafCoreNotes: bafCorePkg.bafNotesZh ?? notes.packages?.['@deepseek-ai/dsh-baf-core']?.notesZh ?? '',
@@ -432,6 +445,18 @@ writeFileSync(
       ?? '',
     bafOpenspecNotes: bafOpenspecPkg.bafNotesZh
       ?? notes.packages?.['@deepseek-ai/dsh-baf-openspec']?.notesZh
+      ?? '',
+    bafStandardNotes: bafStandardPkg.bafNotesZh
+      ?? notes.packages?.['@deepseek-ai/dsh-baf-standard']?.notesZh
+      ?? '',
+    bafQualityNotes: bafQualityPkg.bafNotesZh
+      ?? notes.packages?.['@deepseek-ai/dsh-baf-quality']?.notesZh
+      ?? '',
+    bafGuardNotes: bafGuardPkg.bafNotesZh
+      ?? notes.packages?.['@deepseek-ai/dsh-baf-guard']?.notesZh
+      ?? '',
+    bafScaffoldNotes: bafScaffoldPkg.bafNotesZh
+      ?? notes.packages?.['@deepseek-ai/dsh-baf-scaffold']?.notesZh
       ?? '',
     writtenAt: new Date().toISOString(),
   }, null, 2)}\n`,

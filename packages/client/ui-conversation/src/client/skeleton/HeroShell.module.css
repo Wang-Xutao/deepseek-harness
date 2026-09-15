@@ -81,12 +81,12 @@
   justify-content: center;
 }
 
+/* The slot owner dresses its mark itself; this only pins it into the flex line
+   and hands it the headline ink. It must not impose a `display`, since the
+   mark can be an `<svg>` root whose children are laid out by SVG, not by CSS. */
 .trailingMark {
   flex: none;
   color: var(--dsw-alias-label-primary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Keep the hero mark in the same primary ink as its headline. */

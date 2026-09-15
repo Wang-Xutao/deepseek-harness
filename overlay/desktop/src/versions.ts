@@ -12,10 +12,20 @@ export type AppVersions = {
   bafPlugin: string
   bafCore?: string
   bafWorkflow?: string
+  bafOpenspec?: string
+  bafStandard?: string
+  bafQuality?: string
+  bafGuard?: string
+  bafScaffold?: string
   bafDshNotes?: string
   dshNotes?: string
   bafCoreNotes?: string
   bafWorkflowNotes?: string
+  bafOpenspecNotes?: string
+  bafStandardNotes?: string
+  bafQualityNotes?: string
+  bafGuardNotes?: string
+  bafScaffoldNotes?: string
 }
 
 export const DEFAULT_VERSIONS: AppVersions = {
@@ -24,10 +34,20 @@ export const DEFAULT_VERSIONS: AppVersions = {
   bafPlugin: '0.0.2',
   bafCore: '0.1.0',
   bafWorkflow: '0.1.0',
+  bafOpenspec: '0.1.0',
+  bafStandard: '0.1.0',
+  bafQuality: '0.1.0',
+  bafGuard: '0.1.0',
+  bafScaffold: '0.1.0',
   bafDshNotes: 'Phase 4 工作流 Tab 半交互；设置版本明细与独立 bump；splash/通用设置打磨',
   dshNotes: '上游 DeepSeek Harness 运行时（会话、工具、Web GUI）',
   bafCoreNotes: 'baseline loader、adapter stub、bafCore isolate 挂载',
   bafWorkflowNotes: 'projection、intake、transition、工作流 Tab Remote',
+  bafOpenspecNotes: 'OpenSpec 本地文件适配器',
+  bafStandardNotes: 'baseline 摘要 + 提示词渲染',
+  bafQualityNotes: 'C 栈质量执行器：build/test/coverage',
+  bafGuardNotes: '工具调用硬门禁：fs/shell 裁决 + 密钥扫描',
+  bafScaffoldNotes: '工作区 init 骨架：基线模板 + openspec 目录',
 }
 
 /**
@@ -41,29 +61,26 @@ export function parseVersions(raw: unknown): AppVersions {
     const v = o[key]
     return typeof v === 'string' && v.length > 0 ? v : fallback
   }
-  return {
+  const optStr = (key: keyof AppVersions): string | undefined => str(key, undefined)
+  const out: AppVersions = {
     bafDsh: str('bafDsh', DEFAULT_VERSIONS.bafDsh) ?? DEFAULT_VERSIONS.bafDsh,
     dsh: str('dsh', DEFAULT_VERSIONS.dsh) ?? DEFAULT_VERSIONS.dsh,
     bafPlugin: str('bafPlugin', DEFAULT_VERSIONS.bafPlugin) ?? DEFAULT_VERSIONS.bafPlugin,
-    ...(str('bafCore', DEFAULT_VERSIONS.bafCore) !== undefined
-      ? { bafCore: str('bafCore', DEFAULT_VERSIONS.bafCore) }
-      : {}),
-    ...(str('bafWorkflow', DEFAULT_VERSIONS.bafWorkflow) !== undefined
-      ? { bafWorkflow: str('bafWorkflow', DEFAULT_VERSIONS.bafWorkflow) }
-      : {}),
-    ...(str('bafDshNotes', DEFAULT_VERSIONS.bafDshNotes) !== undefined
-      ? { bafDshNotes: str('bafDshNotes', DEFAULT_VERSIONS.bafDshNotes) }
-      : {}),
-    ...(str('dshNotes', DEFAULT_VERSIONS.dshNotes) !== undefined
-      ? { dshNotes: str('dshNotes', DEFAULT_VERSIONS.dshNotes) }
-      : {}),
-    ...(str('bafCoreNotes', DEFAULT_VERSIONS.bafCoreNotes) !== undefined
-      ? { bafCoreNotes: str('bafCoreNotes', DEFAULT_VERSIONS.bafCoreNotes) }
-      : {}),
-    ...(str('bafWorkflowNotes', DEFAULT_VERSIONS.bafWorkflowNotes) !== undefined
-      ? { bafWorkflowNotes: str('bafWorkflowNotes', DEFAULT_VERSIONS.bafWorkflowNotes) }
-      : {}),
   }
+  for (const key of [
+    'bafCore', 'bafWorkflow', 'bafOpenspec', 'bafStandard', 'bafQuality', 'bafGuard', 'bafScaffold',
+  ] as const) {
+    const v = optStr(key)
+    if (v !== undefined) out[key] = v
+  }
+  for (const key of [
+    'bafDshNotes', 'dshNotes', 'bafCoreNotes', 'bafWorkflowNotes',
+    'bafOpenspecNotes', 'bafStandardNotes', 'bafQualityNotes', 'bafGuardNotes', 'bafScaffoldNotes',
+  ] as const) {
+    const v = optStr(key)
+    if (v !== undefined) out[key] = v
+  }
+  return out
 }
 
 /**
@@ -93,10 +110,20 @@ export function loadVersions(userData: string, seed: AppVersions = DEFAULT_VERSI
       dsh: seed.dsh,
       bafCore: seed.bafCore ?? parsed.bafCore,
       bafWorkflow: seed.bafWorkflow ?? parsed.bafWorkflow,
+      bafOpenspec: seed.bafOpenspec ?? parsed.bafOpenspec,
+      bafStandard: seed.bafStandard ?? parsed.bafStandard,
+      bafQuality: seed.bafQuality ?? parsed.bafQuality,
+      bafGuard: seed.bafGuard ?? parsed.bafGuard,
+      bafScaffold: seed.bafScaffold ?? parsed.bafScaffold,
       bafDshNotes: seed.bafDshNotes ?? parsed.bafDshNotes,
       dshNotes: seed.dshNotes ?? parsed.dshNotes,
       bafCoreNotes: seed.bafCoreNotes ?? parsed.bafCoreNotes,
       bafWorkflowNotes: seed.bafWorkflowNotes ?? parsed.bafWorkflowNotes,
+      bafOpenspecNotes: seed.bafOpenspecNotes ?? parsed.bafOpenspecNotes,
+      bafStandardNotes: seed.bafStandardNotes ?? parsed.bafStandardNotes,
+      bafQualityNotes: seed.bafQualityNotes ?? parsed.bafQualityNotes,
+      bafGuardNotes: seed.bafGuardNotes ?? parsed.bafGuardNotes,
+      bafScaffoldNotes: seed.bafScaffoldNotes ?? parsed.bafScaffoldNotes,
     }
   } catch {
     return { ...seed }

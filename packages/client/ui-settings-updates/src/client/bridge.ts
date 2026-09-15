@@ -7,10 +7,20 @@ export type DesktopVersions = {
   bafPlugin?: string
   bafCore?: string
   bafWorkflow?: string
+  bafOpenspec?: string
+  bafStandard?: string
+  bafQuality?: string
+  bafGuard?: string
+  bafScaffold?: string
   bafDshNotes?: string
   dshNotes?: string
   bafCoreNotes?: string
   bafWorkflowNotes?: string
+  bafOpenspecNotes?: string
+  bafStandardNotes?: string
+  bafQualityNotes?: string
+  bafGuardNotes?: string
+  bafScaffoldNotes?: string
 }
 
 export type DesktopPrefs = {

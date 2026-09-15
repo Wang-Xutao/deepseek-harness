@@ -128,6 +128,7 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
           <span className={css.titleGroup}>
             {/* Own element: keeps the headline text addressable apart from the badge. */}
             <span>{t('hero.headline')}</span>
+            {renderSlot('conversation.hero.brand.trailing', { size: 28, className: css.trailingMark })}
             <span className={css.previewBadge}>{t('hero.preview')}</span>
           </span>
         </div>

@@ -4,7 +4,7 @@
 > **目标**：把旧版「Claude Code + Comet + Superpowers + vibe + marketplace + hooks」的工作流指南，重构为 dsh 原生、可随桌面应用分发、可签名升级回滚的企业级 Agent 实施方案；工程师按本文档落地，不再做关键架构决策。
 > **用法**：第 0 章是导航；**文首「实现进度」是仓库实况（已完成 / 未完成）**；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
 > **对照基准**：仓库现状 2026-09-14（分支 `baf`；dsh `0.1.5-alpha.1`；桌面 **baf-dsh 0.0.14**）。**Phase 0–8 已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 为品牌/IDE/帮助；`packages/client/ui-baf-workflow` 为 BAF 会话「工作流」Tab（与「轨迹图」无关）；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader、adapter stub、`NODE_CATALOG`/`WORKFLOW_GRAPH`；`baf-workflow` 已提供 route、projection、transition、intake 与 `WorkflowTabView` Web Remote；`baf-openspec` 提供本地文件模式 OpenSpec adapter；`baf-workflow` `stages/` 提供 full-go 七阶段 handler 与 `StagePipeline` 编排；Phase 8 进一步把 slash 全集、`baf-cli` standalone CLI、`listChanges` Remote + Dashboard 入口都接通，并随 `baf-dsh 0.0.14` 桌面应用分发。
-> **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）已随 `baf-dsh 0.0.14` 出包；签名三 scope 更新（Phase 9）与 release 门禁（Phase 10）仍属后续硬化工作。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，签名三 scope 更新可并行但不应挡主链。
+> **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）已随 `baf-dsh 0.0.14` 出包；签名三 scope 更新（Phase 9，**baseline scope 暂缓——baseline 当前随 plugin zip 以 `overlay/plugin/standards/baf-baseline-c/baseline.yml` 静态 fixture 形式发布，无独立版本号/独立 hot-update 路径，Phase 9 先交 harness + plugin 两 scope**）与 release 门禁（Phase 10）仍属后续硬化工作。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，签名两 scope 更新（Phase 9）可并行但不应挡主链。
 > **本文档完全取代**旧版面向 Claude Code 的建设指南：Comet、Superpowers、vibe workflow、Claude Code marketplace、`enabledPlugins`、Claude Code hooks 不再是新架构的组成部分。
 
 ---
@@ -31,7 +31,7 @@
 | 6     | bug-fast-path / 升级                                                         | **已完成** |
 | 7     | quality / standard / guard / scaffold                                      | **已完成** |
 | **8** | slash 全集 + `baf-cli` standalone CLI + desktop IPC + **变更 Dashboard（listChanges Remote）** | **已完成**（commit `3ab67a934f`；`baf-dsh 0.0.14` 已出包） |
-| 9     | 三 scope 更新、签名、managed system root（热更）                                      | **未开始** |
+| 9     | harness + plugin 两 scope 更新、签名、managed system root（热更）；baseline scope 暂缓（baseline 仍随 plugin zip 以 `overlay/plugin/standards/baf-baseline-c/baseline.yml` 静态 fixture 形式发布，无独立版本号/独立 hot-update 路径） | **未开始** |
 | 10    | release 门禁                                                                 | **未开始** |
 
 

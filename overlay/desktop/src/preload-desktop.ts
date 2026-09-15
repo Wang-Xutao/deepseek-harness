@@ -6,10 +6,20 @@ export type DesktopVersions = {
   bafPlugin: string
   bafCore?: string
   bafWorkflow?: string
+  bafOpenspec?: string
+  bafStandard?: string
+  bafQuality?: string
+  bafGuard?: string
+  bafScaffold?: string
   bafDshNotes?: string
   dshNotes?: string
   bafCoreNotes?: string
   bafWorkflowNotes?: string
+  bafOpenspecNotes?: string
+  bafStandardNotes?: string
+  bafQualityNotes?: string
+  bafGuardNotes?: string
+  bafScaffoldNotes?: string
 }
 
 contextBridge.exposeInMainWorld('bafDesktop', {
@@ -20,9 +30,6 @@ contextBridge.exposeInMainWorld('bafDesktop', {
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   startUpdate: () => ipcRenderer.invoke('update:start'),
   getLastCheckResult: () => ipcRenderer.invoke('update:lastCheck'),
-  getIdeTools: () => ipcRenderer.invoke('ide:getTools'),
-  openInIde: (ide: 'vscode' | 'cursor', folderPath: string) =>
-    ipcRenderer.invoke('ide:open', { ide, folderPath }),
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   onUpdateProgress: (cb: (payload: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {

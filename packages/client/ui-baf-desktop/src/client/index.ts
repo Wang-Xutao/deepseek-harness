@@ -1,5 +1,5 @@
 /**
- * Browser half: hero trailing Sora mark, IDE open utilities, and help docs panel.
+ * Browser half: hero trailing Sora mark, sidebar brand slots, and help docs panel.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { HeroTrailingMark } from './HeroTrailingMark.tsx'
 import { SidebarBrandMark } from './SidebarBrandMark.tsx'
-import { IdeOpenButtons } from './IdeOpenButtons.tsx'
+import { SidebarBrandName } from './SidebarBrandName.tsx'
 import { HelpFooterAction } from './HelpFooterAction.tsx'
 import { en, zh, type BafDesktopKey } from './locales.ts'
 
@@ -36,16 +36,16 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.register({ name: 'sidebar.brand.mark' }, SidebarBrandMark))
 
+  // Override ui-brand-official's "DeepSeek Harness" wordmark so the title row
+  // reads "BAF DSH" + the version capsule instead. baf-desktop activates after
+  // brand-official in the standard profile boot order, so this slot wins.
+  ctx.slots.inject('sidebar.brand.name', () =>
+    ctx.slots.register({ name: 'sidebar.brand.name' }, SidebarBrandName))
+
+  // Trailing two-ring mark after the hero headline; the rings spin in opposite
+  // directions while the mark is hovered.
   ctx.slots.inject('conversation.hero.brand.trailing', () =>
     ctx.slots.register({ name: 'conversation.hero.brand.trailing' }, HeroTrailingMark))
-
-  ctx.slots.inject('conversation.session.header.utilities', () =>
-    ctx.slots.register({
-      name: 'conversation.session.header.utilities',
-      id: 'ide-open',
-      order: 10,
-      locale: NS,
-    }, IdeOpenButtons))
 
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register({

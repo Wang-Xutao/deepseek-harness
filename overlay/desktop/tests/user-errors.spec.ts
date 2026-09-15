@@ -6,6 +6,18 @@ describe('userFacingLaunchError', () => {
     expect(userFacingLaunchError('Error [ERR_MODULE_NOT_FOUND]: Cannot find package')).toContain('重新安装')
   })
 
+  it('maps a ready timeout to retry guidance', () => {
+    expect(userFacingLaunchError('启动超时（240s）\nno url yet')).toContain('启动等待超时')
+  })
+
+  // The timeout error carries the child's output tail, which may itself mention
+  // an exit code; without the timeout check winning, the user would be told the
+  // app "failed to start" and never learn it was merely slow.
+  it('reports a timeout even when the captured output contains an exit code', () => {
+    const message = userFacingLaunchError('启动超时（240s）\n[child] exited code=0 after 30s')
+    expect(message).toContain('启动等待超时')
+  })
+
   it('maps port conflict', () => {
     expect(userFacingLaunchError('Error: listen EADDRINUSE')).toContain('端口')
   })

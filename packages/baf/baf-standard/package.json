@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-baf-standard",
   "description": "BAF standard baseline provider: structured rule-area summary from the baseline standard section, no embedded rule values",
-  "version": "0.1.5-alpha.1",
+  "version": "0.0.1",
   "bafNotesZh": "标准基线提供者：从 baseline standard 段输出结构化规则摘要（prompt 注入 / plan 校验 / guard 引用），不内嵌规则值",
   "bafNotesEn": "Standard baseline provider: structured rule-area summary from the baseline standard section (prompt injection / plan validation / guard reference), no embedded rule values",
   "publishConfig": {

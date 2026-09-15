@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-baf-guard",
   "description": "BAF guard: baseline-driven tool hard-gate over filesystem/shell tools with sync projection adjudication and secret scanning",
-  "version": "0.1.5-alpha.1",
+  "version": "0.0.1",
   "bafNotesZh": "BAF 门禁：按 baseline 对 filesystem/shell 工具做硬门禁，同步读取 projection 逐调用裁决，含密钥扫描",
   "bafNotesEn": "BAF guard: baseline-driven hard gate over filesystem/shell tools, adjudicating every call against the sync projection, with secret scanning",
   "publishConfig": {

@@ -45,9 +45,6 @@ nsis:
   installerIcon: branding/icon.ico
   uninstallerIcon: branding/icon.ico
   installerHeaderIcon: branding/icon.ico
-  installerHeader: branding/installerHeader.bmp
-  installerSidebar: branding/installerSidebar.bmp
-  uninstallerSidebar: branding/installerSidebar.bmp
   include: ../installer/node-check.nsh
   shortcutName: baf-dsh
   createDesktopShortcut: true
