@@ -13,38 +13,38 @@
  * @module @deepseek-ai/dsh-baf-workflow/command-drives
  */
 
-import { execFile } from 'node:child_process'
-import { join } from 'node:path'
-import { promisify } from 'node:util'
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import {
   isBafError,
-  loadBaselineFile,
-  type BaselineManifest,
-  type GuardPolicy,
-  type StackAdapter,
+  type WorkflowNode,
   type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
-import { ProjectionStore } from './projection.ts'
-import { StagePipeline } from './stages/pipeline.ts'
+import { isActiveChange, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
+import { rerunChain } from './stages/drift.ts'
 import { confirmIntake, createWorkflowService, rejectIntake } from './workflow-service.ts'
 import { readLedger } from './stages/implement.ts'
 import { formatCommandReport, modeZh } from './command-format.ts'
 import { parseArgs, valueOf, valuesOf } from './cli-args.ts'
+import {
+  WORKSPACE_BASELINE_PATH,
+  loadWorkspaceBaseline,
+  pipelineFor,
+  type DriveAdapters,
+} from './pipeline-factory.ts'
 
-const execFileAsync = promisify(execFile)
-
-/** Workspace convention for the governing baseline (same path baf-guard reads). */
-export const WORKSPACE_BASELINE_PATH = '.baf/baseline.yml'
-
-/** Optional sibling-package adapters the caller wires into verify/quality/guard. */
-export interface DriveAdapters {
-  readonly stack?: StackAdapter
-  readonly guard?: GuardPolicy
-}
+// Every drive below resolves its pipeline through the shared factory so the
+// slash, CLI and Tab surfaces drive a change under identical workspace facts.
+export {
+  WORKSPACE_BASELINE_PATH,
+  gitRevisionOf,
+  loadWorkspaceBaseline,
+  pipelineFor,
+  type DriveAdapters,
+} from './pipeline-factory.ts'
 
 /** Slash → description map (mirrors the descriptors in `commands.ts`). */
 const SLASH_DESC: Record<string, string> = {
+  '/baf-go': '自动驱动到下一个客户确认点 · ★★★',
   '/baf-workflow-open': '启动变更：intake 分类 · ★★★',
   '/baf-workflow-classify': '分类确认 / 拒绝 · ★★',
   '/baf-workflow-clarify': '澄清阶段（N2） · ★★',
@@ -54,63 +54,22 @@ const SLASH_DESC: Record<string, string> = {
   '/baf-workflow-verify': '验证阶段（N6） · ★★★',
   '/baf-workflow-archive': '归档变更（N7/T14，需 confirm） · ★★★',
   '/baf-workflow-abandon': '放弃变更（T16，需 confirm） · ★',
+  '/baf-workflow-resume': 'drift 复位（T13，需选目标节点） · ★★★',
   '/baf-check-quality': '基线 C 栈质量检查 · ★★',
   '/baf-check-guard': '安全门禁（verify + secret-scan） · ★★',
 }
 
-/** Build a slash-command card title from its description + optional runtime info. */
-function cardTitle(slash: string, runtime?: string): string {
+/**
+ * Build a slash-command card title from its description + optional runtime info.
+ * @param slash - slash command name (must have a {@link SLASH_DESC} row).
+ * @param runtime - optional runtime qualifier (change id, outcome, …).
+ * @returns rendered card title.
+ */
+export function cardTitle(slash: string, runtime?: string): string {
   const desc = SLASH_DESC[slash] ?? slash
   return runtime === undefined
     ? `${desc} · 点本行展开/折叠指令全文`
     : `${desc} · ${runtime} · 点本行展开/折叠指令全文`
-}
-
-/**
- * Load the workspace's governing baseline.
- * @param cwd - absolute workspace root.
- * @returns parsed baseline, or undefined when absent/unparseable.
- */
-export async function loadWorkspaceBaseline(cwd: string): Promise<BaselineManifest | undefined> {
-  try {
-    return await loadBaselineFile(join(cwd, WORKSPACE_BASELINE_PATH))
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * Current Git revision of the workspace, if any.
- * @param cwd - absolute workspace root.
- * @returns `git rev-parse HEAD` output, or undefined when Git is unavailable.
- */
-export async function gitRevisionOf(cwd: string): Promise<string | undefined> {
-  try {
-    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd, timeout: 10_000 })
-    return stdout.trim() === '' ? undefined : stdout.trim()
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * Build the stage pipeline bound to a workspace.
- * @param cwd - absolute workspace root.
- * @param adapters - optional stack/guard adapters for verify wiring.
- * @returns pipeline with baseline and git facts resolved.
- */
-export async function pipelineFor(cwd: string, adapters: DriveAdapters = {}): Promise<StagePipeline> {
-  const store = new ProjectionStore({ workspaceRoot: cwd })
-  const baseline = await loadWorkspaceBaseline(cwd)
-  const gitRevision = await gitRevisionOf(cwd)
-  return new StagePipeline({
-    store,
-    workspaceRoot: cwd,
-    ...(gitRevision === undefined ? {} : { gitRevision }),
-    ...(baseline === undefined ? {} : { baseline }),
-    ...(adapters.stack === undefined ? {} : { stack: adapters.stack }),
-    ...(adapters.guard === undefined ? {} : { guard: adapters.guard }),
-  })
 }
 
 /** Outcome of resolving the change a command addresses. */
@@ -120,7 +79,7 @@ type ChangeResolution =
   | { readonly kind: 'ambiguous'; readonly candidates: readonly string[] }
 
 /** One row in the projection index. */
-type IndexRow = { readonly changeId: string; readonly current: string; readonly updatedAt: string }
+type IndexRow = Pick<ProjectionIndexEntry, 'changeId' | 'current' | 'updatedAt'>
 
 /** Subset of the projection index the resolver needs. */
 type IndexShape = { readonly changes: readonly IndexRow[] }
@@ -131,7 +90,7 @@ function resolveChange(index: IndexShape, explicit?: string): ChangeResolution {
       ? { kind: 'ok', changeId: explicit }
       : { kind: 'none' }
   }
-  const actives = index.changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+  const actives = index.changes.filter(isActiveChange)
   if (actives.length === 0) return { kind: 'none' }
   if (actives.length > 1) return { kind: 'ambiguous', candidates: actives.map(c => `${c.changeId} · ${String(c.current)}`) }
   const first = actives[0]
@@ -171,7 +130,12 @@ export function renderDomainError(command: string, error: unknown): CommandResul
   }
 }
 
-function statusLines(status: WorkflowStatus): string[] {
+/**
+ * The canonical status block every drive card ends with (§20.1).
+ * @param status - recovered status.
+ * @returns stable `change/mode/current/projection` rows.
+ */
+export function statusLines(status: WorkflowStatus): string[] {
   return [
     `change: ${status.changeId}`,
     `mode: ${status.mode}（${modeZh(status.mode)}）`,
@@ -664,6 +628,134 @@ export async function driveAbandon(cwd: string, rawInput: string): Promise<Comma
       { title: '状态', lines: [`terminal: ${String(status.terminal)}`, '审计与产物保留'] },
     ]),
   }
+}
+
+/**
+ * `/baf-workflow-resume [节点]` — the T13 drift exit (§19).
+ *
+ * No argument is the **only** correct way to ask "what are my options": it runs
+ * a read-only detection, writes nothing, and renders the candidate card. An
+ * argument performs the resume. The candidate set is machine-computed and the
+ * choice is the customer's — the driver never picks a node on its own (§19.4).
+ * @param cwd - workspace root.
+ * @param rawInput - optional target node, optional `change=<id>`.
+ * @returns candidate card, resume card, or the no-drift / idempotent card.
+ */
+export async function driveResume(cwd: string, rawInput: string): Promise<CommandResult> {
+  const args = parseArgs(rawInput)
+  const store = new ProjectionStore({ workspaceRoot: cwd })
+  const index = await store.readIndex()
+  const resolution = resolveChange(index, valueOf(args, 'change'))
+  if (resolution.kind !== 'ok') {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('/baf-workflow-resume', '无活动变更'), []),
+    }
+  }
+  const changeId = resolution.changeId
+  const pipeline = await pipelineFor(cwd)
+  const options = await pipeline.resumeOptions(changeId)
+  const { status } = options
+
+  if (status.terminal !== undefined) {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('/baf-workflow-resume', `已终态 · ${changeId}`), [
+        { title: '状态', lines: [`terminal: ${status.terminal}`, '终态变更无需复位'] },
+      ]),
+    }
+  }
+
+  const target = args.positionals[0]
+
+  if (status.current !== 'drift') {
+    if (target !== undefined && target === status.current) {
+      return {
+        kind: 'success',
+        text: formatCommandReport(true, cardTitle('/baf-workflow-resume', `已在 ${target} · ${changeId}`), [
+          { title: '状态', lines: [...statusLines(status), '已在目标节点，未写事件'] },
+        ]),
+      }
+    }
+    return {
+      kind: 'success',
+      text: formatCommandReport(true, cardTitle('/baf-workflow-resume', `无漂移 · ${changeId}`), [
+        { title: '状态', lines: [...statusLines(status), '当前无漂移，无需复位'] },
+      ]),
+    }
+  }
+
+  if (target === undefined) {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('/baf-workflow-resume', `drift detected · ${changeId} · 请选择复位目标`), [
+        { title: '漂移证据', lines: evidenceLines(options.signals, status) },
+        {
+          title: '候选复位目标',
+          lines: options.candidates.map(node => candidateLine(node, options.anchor, options.candidates.length)),
+        },
+        { title: '不做任何事的后果', lines: ['流程停在 drift，所有 mutating 工具被 guard 拒绝'] },
+      ]),
+    }
+  }
+
+  if (!options.candidates.includes(target as WorkflowNode)) {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('/baf-workflow-resume', `invalid_transition · ${changeId}`), [
+        { title: '原因', lines: [`目标节点 ${target} 不在候选集内（锚点 ${options.anchor}）`] },
+        { title: '候选复位目标', lines: options.candidates.map(node => `  /baf-workflow-resume ${node}`) },
+      ]),
+    }
+  }
+
+  const resumed = await pipeline.driveResumeStage(changeId, target as WorkflowNode)
+  if (resumed.node !== 'resume') throw new Error('expected a resume drive')
+  const after = await store.readStatus(changeId)
+  return {
+    kind: 'success',
+    text: formatCommandReport(true, cardTitle('/baf-workflow-resume', `已复位到 ${target} · ${changeId}`), [
+      { title: '锚点', lines: [`${resumed.result.anchor} → ${resumed.result.target}`] },
+      { title: '漂移证据', lines: evidenceLines(resumed.result.signals, status) },
+      { title: '状态', lines: statusLines(after) },
+      { title: '需要重跑', lines: [rerunChain(target as WorkflowNode).join(' → ')] },
+      { title: '下一步', lines: ['敲 /baf-go 从该节点继续自动推进'] },
+    ]),
+  }
+}
+
+/**
+ * Evidence rows for a resume card.
+ *
+ * A fresh detection can come back empty when the drift was recorded earlier
+ * (the anchors it compares against are the ones it already invalidated), so
+ * the recorded cause from the `drift-detected` event is the fallback — the
+ * card must never claim a drift without saying why.
+ * @param signals - freshly detected signals.
+ * @param status - drifted status.
+ * @returns non-empty evidence lines.
+ */
+function evidenceLines(
+  signals: readonly { trigger: string; detail: string }[],
+  status: WorkflowStatus,
+): string[] {
+  if (signals.length > 0) return signals.map(s => `${s.trigger}  ${s.detail}`)
+  const recorded = status.annotations?.drift?.detail
+  return recorded === undefined ? ['（漂移已记录于 projection，未复现新信号）'] : [recorded]
+}
+
+/**
+ * One candidate row on the resume card: the default is marked, others show the
+ * downstream chain they reopen.
+ * @param node - candidate node.
+ * @param anchor - default candidate.
+ * @param total - candidate count (a single candidate is trivially default).
+ * @returns rendered line.
+ */
+function candidateLine(node: WorkflowNode, anchor: WorkflowNode, total: number): string {
+  const command = `/baf-workflow-resume ${node}`
+  if (node === anchor && total > 1) return `  ${command}     ← 默认`
+  return `  ${command}    重跑 ${rerunChain(node).join(' → ')}`
 }
 
 /**

@@ -78,7 +78,9 @@ export function createWorkflowService(options: WorkflowServiceOptions): Workflow
 
     async resume(input: WorkflowIdentity): Promise<ResumeResult> {
       const status = await store.readStatus(input.changeId)
-      const drifted = status.nodes.drift === 'drifted' || status.current === 'drift'
+      // §19.3: a T13 resume moves `current` off `drift` and clears the park,
+      // so the parked pseudo-node is the single test for "still drifted".
+      const drifted = status.current === 'drift'
       return { status, drifted }
     },
   }
@@ -136,21 +138,10 @@ async function applyAcceptedTransition(
     })
   }
 
-  if (to === 'drift') {
-    const { status: next } = await store.append(status.changeId, version, meta => ({
-      type: 'drift-detected',
-      node: (status.current === 'completed' || status.current === 'abandoned'
-        ? 'intake'
-        : status.current) as WorkflowNode,
-      cause: String(evidence?.cause ?? 'evidence-changed'),
-      ...meta,
-    }))
-    return next
-  }
-
   const { status: next } = await store.append(status.changeId, version, meta => ({
     type: 'stage-entered',
     node: to,
+    ...(typeof evidence?.cause === 'string' ? { cause: evidence.cause } : {}),
     ...meta,
   }))
   return next

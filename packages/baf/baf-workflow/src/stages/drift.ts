@@ -83,7 +83,8 @@ const ARTIFACTS_BY_NODE: Readonly<Record<WorkflowNode, readonly string[]>> = {
 /** What the projection captured at open for one baseline. */
 interface LockedBaseline {
   readonly baselineId: string
-  readonly contentHash: string
+  /** Absent in pre-Phase-8.9 logs; the content check is then skipped. */
+  readonly contentHash?: string
 }
 
 /** Probe projection state captured at open. */
@@ -95,20 +96,28 @@ interface LockedState {
 
 /**
  * Reconstruct the locked-at-open projection facts from current events.
+ *
+ * The lock carries both anchors: `baseline.sourceRevision` is the revision
+ * recorded when open ran, and `baseline.contentHash` the manifest content
+ * hash taken at that same moment. `status.sourceRevision` is only a fallback
+ * for a projection that locked a revision without a baseline.
  * @param status - recovered status.
  * @returns locked state, or null when projection carries no anchor.
  */
 export function lockedFromStatus(status: WorkflowStatus): LockedState | null {
-  if (status.sourceRevision === undefined && status.baseline === undefined) {
+  const revision = status.baseline?.sourceRevision ?? status.sourceRevision
+  if (revision === undefined && status.baseline === undefined) {
     return null
   }
   const locked: LockedBaseline | undefined = status.baseline === undefined ? undefined : {
     baselineId: status.baseline.baselineId,
-    contentHash: hashCanonical(status.baseline),
+    ...(status.baseline.contentHash === undefined
+      ? {}
+      : { contentHash: status.baseline.contentHash }),
   }
   return {
     changeId: status.changeId,
-    ...(status.sourceRevision === undefined ? {} : { sourceRevision: status.sourceRevision }),
+    ...(revision === undefined ? {} : { sourceRevision: revision }),
     ...(locked === undefined ? {} : { baseline: locked }),
   }
 }
@@ -158,27 +167,30 @@ export function compareToLocked(
     })
   }
 
-  if (locked.baseline !== undefined) {
-    if (observation.baseline === undefined) {
-      signals.push({
-        trigger: 'baseline-id-changed',
-        source: 'baseline',
-        detail: `baseline ${locked.baseline.baselineId} was loaded at open but is now unavailable`,
-      })
-    } else if (observation.baseline.baselineId !== locked.baseline.baselineId) {
+  if (locked.baseline !== undefined && observation.baseline !== undefined) {
+    // Every comparison in this module is "both sides observable", so a probe
+    // that cannot see a baseline reports nothing rather than "unavailable":
+    // the two cases (file deleted vs. probe has no baseline wired) are
+    // indistinguishable here, and guessing "deleted" parks healthy changes in
+    // drift from every baseline-less entry point.
+    if (observation.baseline.baselineId !== locked.baseline.baselineId) {
       signals.push({
         trigger: 'baseline-id-changed',
         source: 'baseline',
         detail: `baseline id changed: ${locked.baseline.baselineId} → ${observation.baseline.baselineId}`,
       })
     } else {
-      const currentHash = hashCanonical(observation.baseline)
-      if (currentHash !== locked.baseline.contentHash) {
-        signals.push({
-          trigger: 'baseline-content-changed',
-          source: 'baseline',
-          detail: `baseline ${observation.baseline.baselineId} content changed since open`,
-        })
+      // Only comparable when open recorded a content hash; a pre-Phase-8.9
+      // lock has none, and skipping beats reporting a permanent false drift.
+      if (locked.baseline.contentHash !== undefined) {
+        const currentHash = hashCanonical(observation.baseline)
+        if (currentHash !== locked.baseline.contentHash) {
+          signals.push({
+            trigger: 'baseline-content-changed',
+            source: 'baseline',
+            detail: `baseline ${observation.baseline.baselineId} content changed since open`,
+          })
+        }
       }
     }
   }
@@ -264,8 +276,14 @@ export async function scanCompletedArtifacts(
 
 /**
  * Pick the earliest affected node for T13: the first stage whose artifact is
- * flagged by an artifact-missing signal, otherwise the current active stage
- * when identity drifted, otherwise the node the signal names.
+ * flagged by an artifact-missing signal, otherwise the anchor the detector
+ * recorded when it parked the change, otherwise the active stage.
+ *
+ * A *drifted* status parks `current` at the pseudo-node `drift`, so the
+ * persisted anchor is recovered from the node the detector marked `drifted`
+ * (`drift-detected` sets `nodes[anchor] = 'drifted'`). This keeps the anchor
+ * algorithm single-sourced (§21.5): both the recording path and the resume
+ * path call this function.
  * @param status - current status.
  * @param signals - detected signals.
  * @returns target node for T13.
@@ -281,10 +299,50 @@ export function earliestAffectedNode(
       }
     }
   }
-  if (status.current !== 'completed' && status.current !== 'abandoned') {
+  const anchor = STAGE_ORDER.find(node => status.nodes[node] === 'drifted')
+  if (anchor !== undefined) return anchor
+  if (status.current !== 'completed' && status.current !== 'abandoned'
+    && status.current !== 'drift') {
     return status.current
   }
   return 'verify'
+}
+
+/**
+ * Stages a drift resume may target, latest-first (§19.2 / §19.3).
+ *
+ * The set is "the earliest affected node and everything before it", minus the
+ * two entry stages (`intake` / `open`) which are not re-runnable — their
+ * record stands and a drift never invalidates it. The earliest affected node
+ * is always present, so the fallback for a degenerate signal set is just that
+ * node.
+ * @param status - drifted status.
+ * @param signals - detected signals.
+ * @returns candidate targets, latest-first (index 0 = recommended default).
+ */
+export function resumeCandidates(
+  status: WorkflowStatus,
+  signals: readonly DriftSignal[],
+): readonly WorkflowNode[] {
+  const target = earliestAffectedNode(status, signals)
+  const index = STAGE_ORDER.indexOf(target)
+  const upto = index < 0 ? [target] : STAGE_ORDER.slice(0, index + 1)
+  const rerunnable = upto.filter(node => node !== 'intake' && node !== 'open')
+  return rerunnable.length > 0 ? [...rerunnable].reverse() : [target]
+}
+
+/**
+ * Stages a drift resume must re-run after re-entering `target`, in order
+ * (§19.3). Runs from the target up to and including `verify`; `archive` is
+ * excluded because it is the customer's final gate, not a re-run.
+ * @param target - chosen resume target.
+ * @returns ordered stage names.
+ */
+export function rerunChain(target: WorkflowNode): readonly WorkflowNode[] {
+  const from = STAGE_ORDER.indexOf(target)
+  const to = STAGE_ORDER.indexOf('verify')
+  if (from < 0 || to < 0 || from > to) return [target]
+  return STAGE_ORDER.slice(from, to + 1)
 }
 
 /**

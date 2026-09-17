@@ -269,6 +269,23 @@
 - id: baf-commands
   name: '@deepseek-ai/dsh-baf-workflow/commands'
 
+# Phase 8.8 session gate (§18.3). Fires ONCE per agent, right after the agent
+# exists: it probes the toolchain, binds/echoes the unfinished-workflow state,
+# and prints the welcome card — which is also the BAF-mode greeting
+# (requirement 6). It sits outside the baf-domain isolate like the two rows
+# around it, because it needs BOTH host-plane registries: `agents` (per-agent
+# install + agent/created) and `commands` (the card is delivered by executing
+# `/baf-welcome`, the only path that puts a card in the transcript before the
+# first model turn — a `system/message` would need an open turn, and a
+# synthetic `user/message` would put words in the customer's mouth).
+#
+# Ordered AFTER baf-commands on purpose: the gate executes `/baf-welcome`, so
+# the registration must already be in the registry when the first agent is
+# created. It degrades to a log line if the command is absent — a broken
+# workspace must still open a session (§17.7 R19).
+- id: baf-session-gate
+  name: '@deepseek-ai/dsh-baf-workflow/session-gate'
+
 # Phase 8.2: standalone CLI mirror of /baf-* slash commands. Disabled by
 # default so ordinary `baf` agent sessions do NOT pull this row (an idle
 # `cmdlineArgs` consumer that waits for argv is harmless but wasteful). The

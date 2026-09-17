@@ -69,6 +69,11 @@ export function apply(ctx: ClientContext): void {
         rejectIntake: async changeId => unwrap(await remote.rejectIntake({ sessionId, changeId })) as WorkflowTabView,
         startIntake: async description => unwrap(await remote.startIntake({ sessionId, description })) as WorkflowTabView,
         transition: async (changeId, to) => unwrap(await remote.transition({ sessionId, changeId, to })) as WorkflowTabView,
+        resume: async (changeId, node) => unwrap(await remote.resume({
+          sessionId,
+          changeId,
+          ...(node === undefined ? {} : { node }),
+        })) as WorkflowTabView,
       }
     },
   }, WorkflowView)

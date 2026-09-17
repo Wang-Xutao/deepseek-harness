@@ -30,10 +30,12 @@ describe('baf-cli Commander tree', () => {
       'check-guard',
       'check-quality',
       'doctor',
+      'go',
       'help',
       'list',
       'status',
       'version',
+      'welcome',
       'workflow-abandon',
       'workflow-archive',
       'workflow-clarify',
@@ -42,6 +44,7 @@ describe('baf-cli Commander tree', () => {
       'workflow-implement',
       'workflow-open',
       'workflow-plan',
+      'workflow-resume',
       'workflow-verify',
     ])
   })
@@ -49,6 +52,13 @@ describe('baf-cli Commander tree', () => {
   it('mirrors /baf-status wording in the status subcommand description', () => {
     const status = program.commands.find(c => c.name() === 'status')
     expect(status?.description()).toBe('查看当前变更：模式/阶段/intake · ★★★')
+  })
+
+  it('mirrors /baf-welcome wording in the welcome subcommand description', () => {
+    // §18.3 startup card: the CLI mirror exists so a CI job or a terminal-only
+    // user can read the same binding + toolchain report the desktop prints.
+    const welcome = program.commands.find(c => c.name() === 'welcome')
+    expect(welcome?.description()).toContain('与 /baf-welcome 同源渲染')
   })
 
   it('declares drive-style subcommands with the new tier-prefixed names', () => {
@@ -65,6 +75,7 @@ describe('baf-cli Commander tree', () => {
       ['workflow-implement', 'baf-workflow-implement'],
       ['workflow-archive', 'baf-workflow-archive'],
       ['workflow-abandon', 'baf-workflow-abandon'],
+      ['workflow-resume', 'baf-workflow-resume'],
     ]
     for (const [stage, slash] of driveMap) {
       const cmd = program.commands.find(c => c.name() === stage)

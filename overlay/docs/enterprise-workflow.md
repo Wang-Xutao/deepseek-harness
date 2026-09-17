@@ -11,7 +11,7 @@
 
 
 
-## 实现进度（仓库实况 · 2026-09-14）
+## 实现进度（仓库实况 · 2026-09-17）
 
 > 本表是**当前仓库事实**，不是计划。设计正文（第 1–11、12 章步骤）仍描述目标态；实现时以本表为准判断「已做完什么」。
 
@@ -31,11 +31,15 @@
 | 6     | bug-fast-path / 升级                                                         | **已完成** |
 | 7     | quality / standard / guard / scaffold                                      | **已完成** |
 | **8** | slash 全集 + `baf-cli` standalone CLI + desktop IPC + **变更 Dashboard（listChanges Remote）** | **已完成**（commit `3ab67a934f`；`baf-dsh 0.0.14` 已出包） |
+| **8.7** | `baf-go` 自动驱动 + 两个强制确认门（design 完成 → plan 之前、verify 通过 → archive 之前） + 单会话单工作流约束 | **已完成（2026-09-17）**：命令行主路径 + Tab 门高亮 + §18.4.3 双泳道视图均落地；细节见 §18.9 / §18.11 |
+| **8.8** | 会话启动门：绑定 / 新建工作流选择 + 必须工具链体检 + BAF 欢迎语（缺件引导下载） | **已完成（2026-09-17）**：`session-gate.ts` + preset 行 `baf-session-gate`、`/baf-welcome` slash + `baf welcome` CLI、`/baf-doctor` 复用同一探针，`tests/session-gate.spec.ts` 18 例通过；落地细节见 §18.10。**待出包后在桌面里看首屏观感**（与 §8.7.8 同批） |
+| **8.9** | `/baf-workflow-resume`：N8 drift 的交互式复位入口（T13 合法目标集，客户选点） | **已完成（2026-09-17）**：域层 `driveResumeStage` + slash + CLI + Tab 按钮 + `BafWorkflowTabRemote.resume()` + `pipeline-factory.ts` 共用 provider 全部接通；细节见 §18.11 / §19。`tests/resume.spec.ts` 12 例通过；顺带修掉 §21.6/§21.7 两个假阳性与 park 语义 bug |
+| **8.10** | BAF 工作流输出规范（状态行 / 卡片 / 日志统一格式 + i18n key 清单） | **设计阶段**（§20 + Phase 12 §8.10；代码未动） |
 | 9     | harness + plugin 两 scope 更新、签名、managed system root（热更）；baseline scope 暂缓（baseline 仍随 plugin zip 以 `overlay/plugin/standards/baf-baseline-c/baseline.yml` 静态 fixture 形式发布，无独立版本号/独立 hot-update 路径） | **未开始** |
 | 10    | release 门禁                                                                 | **未开始** |
 
 
-MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 **baf-dsh 0.0.14** 分发（commit `3ab67a934f`，commit `cb814b7be2` 配套修了 Windows `tar` `--force-local` 与 5 个 dsh client 包版本对齐 `0.1.5-alpha.1`）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）随 0.0.12 起桌面分发；bug fast-path 与 T15 风险升级（Phase 6）随 0.0.12 起；baseline 驱动的 quality/standard/guard/scaffold（Phase 7）随 0.0.13 起；slash 全集 + `baf-cli` standalone CLI + `listChanges` Remote（Phase 8）随 **0.0.14** 起。`packages/baf` 域层 17/17 文件 / 103/103 用例绿；`surface-parity.spec.ts` 锁住 slash / CLI / Remote / drives 四入口命名一致性 5/5 绿。
+MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 **baf-dsh 0.0.14** 分发（commit `3ab67a934f`，commit `cb814b7be2` 配套修了 Windows `tar` `--force-local` 与 5 个 dsh client 包版本对齐 `0.1.5-alpha.1`）；full-go 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）随 0.0.12 起桌面分发；bug fast-path 与 T15 风险升级（Phase 6）随 0.0.12 起；baseline 驱动的 quality/standard/guard/scaffold（Phase 7）随 0.0.13 起；slash 全集 + `baf-cli` standalone CLI + `listChanges` Remote（Phase 8）随 **0.0.14** 起。`packages/baf` 域层 **22/22 文件 / 166/166 用例绿**（2026-09-17 复跑，含 §18 coordinator、§19 resume 与 §18.3 会话启动门的新增用例）；`surface-parity.spec.ts` 锁住 slash / CLI / Remote / drives 四入口命名一致性 6/6 绿。
 **已知问题（2026-09-14 复核，均非 Phase 8 引入）**：① `agent-presets` 通用测试 `mount.spec.ts`「scopes prompt sections…」1 例失败——merge `9c2aa8a6d4` 带入的上游 system-prompt 变更所致（Phase 8 提交未触及相关源码；BAF 专属 roster/mount 测试 7/7 绿）；② `packages/baf` 未达仓库 per-file 100% 覆盖率门禁（`pnpm run test:coverage` 会失败；Phase 2 起累积的债），需专项补测试或做豁免决策。
 
 ### Phase 4 — 已完成明细
@@ -236,6 +240,11 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 | 架构分几层、每层谁负责、复用哪些现有代码         | 第 3 章               |
 | 官方资源如何隔离（内置-only，不可复制）       | 第 4 章               |
 | **工作流怎么走、每个节点做什么**           | **第 5 章（核心）**       |
+| **一条命令驱动整个工作流（`baf-go` + 两个确认门）** | **第 18 章** |
+| **会话打开时怎么绑定/新建工作流、体检工具链、欢迎语长什么样** | **第 18.3 节 + 第 20.3 节** |
+| **drift（依据漂移）之后怎么回到合法节点** | **第 19 章** |
+| **日志、卡片、状态行按什么格式打印** | **第 20 章** |
+| **还有哪几项没拍板（开工前要确认）** | **第 21 章** |
 | 不同阶段怎么用不同模型                  | 第 6 章               |
 | 企业规则和工具从哪里来                  | 第 7 章               |
 | 代码怎么拆成插件、命令长什么样              | 第 8、9 章             |
@@ -744,7 +753,7 @@ bug-fast-path 主链（低风险 Bug）：
 
 #### 横切行为 `resume` / `abandon`
 
-- `resume`：崩溃、重开 session、child 重启后，从最后一致阶段恢复，并恢复分类结果、裁剪理由、baseline lock 和 route 语义；
+- `resume`：崩溃、重开 session、child 重启后，从最后一致阶段恢复，并恢复分类结果、裁剪理由、baseline lock 和 route 语义。**注意与 drift 复位的区别**：`resume` 是自动恢复（阶段不变），drift 之后的显式复位是**客户决策**（阶段可能回退），入口是 `/baf-workflow-resume`（第 19 章）；两者语义不能混用，也不能互相替代；
 - `abandon`：任意 active change 经用户确认进入 `已放弃` 终态；保留全部产物与审计记录；不自动删除 OpenSpec change（用户选择保留或手工清理，选择被记录）。
 
 
@@ -1074,6 +1083,9 @@ slash command 复用 `@deepseek-ai/dsh-commands`（`CommandRuntime.register()`�
 | `verify`                  | 运行所有必要检查                                                   | 写入报告        |
 | `archive`                 | 归档已验证 change                                               | 是，需确认       |
 | `abandon`                 | 放弃当前 active change                                         | 是，需确认       |
+| `baf-workflow-*`           | 阶段单步驱动器（保留 §5.6 「命令 + 阶段工具」入口，便于脚本化复跑）           | 各阶段         |
+| `baf-workflow-resume [节点]` | **drift 复位**：列出 T13 合法目标节点，客户交互式选点后回退并重跑；无参数时只列候选不猜；详见 §19      | drift       |
+| `baf-go [描述]`            | **自动驱动**：无参数为主——把本 session 推进到下一个需要客户动作的点并重放待决卡片（已停在同一张卡上时幂等）；drift 时自动转 `/baf-workflow-resume`；N3 design 完成 → N4 plan 之前 与 N7 archive 之前 强制客户确认，客户再敲一次 `baf-go` 即确认；带描述仅在「未绑定」时等价于直接说需求；详见 §18 | 各阶段 |
 | `quality`                 | 运行或查看 C 质量检查                                               | 写入报告        |
 | `guard`                   | 查看或运行策略门禁                                                  | 写入诊断        |
 | `update check`            | 检查三类 scope 的签名 manifest 和本地兼容性                             | 否           |
@@ -1725,6 +1737,75 @@ export function resolveRoute(
 - **8.6 变更 Dashboard**：`BafWorkflowTabRemote.listChanges`（`packages/client/ui-baf-workflow/src/index.ts`）读 projection index，typert 边界类型 `BafWorkflowChangeRow` 在 `types.ts` 自有（避免 root-realm 类型穿越）。UI 表/筛选/导出后置；MVP 仅暴露 Remote 方法。
 - **桌面 0.0.14 出包**：`overlay/desktop/dist/win-unpacked/baf-dsh.exe`（≈ 205 MB，`ProductVersion 0.0.14.0`）；7 个 `dsh-baf-*` 包版本 `0.1.5-alpha.1`；`cmdline.js`（140.58 kB）与 `BafWorkflowChangeRow` 边界已在 unpacked `resources/dsh/node_modules` 内可见。`baf-product-versions.json` 嵌入 bafDsh / dsh / bafCore / bafWorkflow / bafOpenspec 五项版本。
 
+#### 8.7 `baf-go` 自动驱动 + 强制确认 + 单会话单工作流（落点：Phase 8.7）
+
+> 不再增 `baf` CLI bin；只在 `commands.ts` / `cmdline.ts` 加 `/baf-go` 与 `baf go` 两条新入口，把 §18 的路由 + 强制确认门 + 单会话约束复用现有 drive 链。`baf-workflow-*` 与 `baf-check-*` 全保留。
+>
+> **形态定调（§18.2）**：`/baf-go` **无参数**是主用法——「把本 session 推进到下一个需要客户动作的点，并重放那张卡片」；需求一律用自然语言说（启动门 → intake → 分类卡），不存在 `baf-go + 需求` 这个主路径，也不存在 `baf-go confirm` 子命令（门上再敲一次 `baf-go` 即确认）。
+
+- 8.7.1 新增 `packages/baf/baf-workflow/src/go-coordinator.ts`：`driveGo(cwd, rawInput, ctx?)` 读 projection + session 焦点，按 §18.4 路由表派发；返回结构与现有 drive 同形（`CommandResult`），命令报告卡走同一 `formatCommandReport`（§20.2）；**不写新 drive 函数，只组合现有 drive**。
+- 8.7.2 路由表实现：状态机是单一权威——`projection.status.current` 决定下一个 drive；fast-path 与 full-go 在同一表内分支；T15 升级后**不换 session**，coordinator 按 `clarify` 继续走 full-go 链（§18.4.2）；状态非法 / 无绑定走 §18.7 错误卡。
+- 8.7.3 两个强制确认门：N3 design 完成（`completeDocStage('design')` 返回成功）→ 卡住、打印「设计已实现，请客户确认是否进入 plan」；N7 archive 之前（`pipeline.driveArchiveStage` 前的 `enterStage('archive')` 路径）→ 卡住、打印「verify 已通过，请客户确认是否归档」。**解锁方式统一为「客户再敲一次 `/baf-go`」**；卡片副标题明确 `awaiting_customer_confirm`。
+- 8.7.4 单会话单工作流守卫：session 焦点缓存到 `BafWorkflow.bindWorkspace(cwd)` 旁路（**不写 projection**）；客户在已有 active change 的 session 里说另一个需求 → 返回「请新开一个 session」卡，不在原 session 跨变更；`>= 2` active change 时必须客户显式选一条，不自动猜。
+- 8.7.5 slash 与 CLI 接入：`/baf-go`（无参数）和 `baf go`；与 `/baf-workflow-*` 完全平行注册；help 文本把 `baf-go` 标为「推进当前工作流 · 单条命令」。
+- 8.7.6 一致性测试：`tests/surface-parity.spec.ts` 扩 `baf-go` 行——slash / CLI / Remote 三入口读同一 coordinator，输出 bit-identical；加 §18.4 路由表每条边的快照。
+- 8.7.7 工作流 Tab 适配：「工作流」Tab 在确认门状态下高亮当前节点为 `awaiting_customer_confirm` 并把对应驱动按钮改为「确认进入下一阶段」；T15 升级时切到**双泳道视图**（§18.4.3）。
+- 8.7.8 桌面分发：随下一个 `baf-dsh` 出包携带 `go-coordinator.ts`；无新依赖、无新 bin、`verify-application-entrypoints` 与 `baf-roster.spec.ts` 仍绿。
+- **验收**：新 session 启动门报告「无未完成工作流」→ 客户直接说需求 → 分类卡弹出；确认后一次走到 N3 design 完成卡住；客户 `/baf-go` 后继续到 N6 verify；N7 archive 前再次卡住；客户 `/baf-go` 后归档；同 session 再说另一个需求必须返回「请新开 session」；dashboard 行显示 `awaiting_customer_confirm` 标记。
+
+**Phase 8.7 落地实况（2026-09-17）**
+
+| 子项 | 状态 | 落点 / 证据 |
+| --- | --- | --- |
+| 8.7.1 coordinator | 已完成 | `packages/baf/baf-workflow/src/go-coordinator.ts`：`driveGo(input)` 是**纯路由器**——`route()` 按 `status.current` × `status.mode` 派发到既有 drive / `pipeline` 方法，自身不拥有任何 transition |
+| 8.7.2 路由表 | 已完成 | §18.4.2 每行都有对应用例（`open` 两分支由 `reachDesign` / `reachImplement` 夹具覆盖，`drift` 行在 drift handoff 组）；细节见 §18.9 |
+| 8.7.3 两个确认门 | 已完成 | `gateUnlocked()` / `parkOnGate()`；两张卡的标题与 §18.5 逐字一致（含 `awaiting_customer_confirm` 标记），由 `tests/go.spec.ts` 的「names both gate cards with the awaiting_customer_confirm marker」逐字断言 |
+| 8.7.4 单会话单工作流守卫 | 已完成 | `src/session-focus.ts`：`focusFor(cwd)` 按 workspace root 键控的进程内缓存（**不写 projection**）；`resolveBinding()` 六步判定，五种拒绝卡见 §18.9 |
+| 8.7.5 slash / CLI 接入 | 已完成 | `commands.ts` 注册 `/baf-go`（与其它 slash 同层、非 isolate）；`cmdline.ts` 新增 `baf go` subcommand + doctor 行 + 两份 help 文本首行 |
+| 8.7.6 一致性测试 | 已完成 | `tests/surface-parity.spec.ts` 增 `baf-go` 行与 `go` 的「第三类入口」说明；`tests/cmdline.spec.ts` 子命令名单增 `go`；`npx vitest run packages/baf` → 22 文件 / 166 用例全绿（含 8.8 新增，见 §18.10） |
+| 8.7.7 工作流 Tab 适配 | **未完成** | 确认门节点高亮、`awaiting_customer_confirm` 配色与「确认进入下一阶段」按钮、双泳道视图（§18.4.3）均未实现——与 §19.5 的 Tab 复位按钮同批做，属于纯 UI 层，不阻塞命令行主路径 |
+| 8.7.8 桌面分发 | 待下次出包 | 无新依赖、无新 bin（未动 `package.json` 的 `bin` 字段）；`verify-application-entrypoints` 不受影响 |
+
+#### 8.8 会话启动门 + 必须工具链体检 + BAF 欢迎语（落点：Phase 8.8）
+
+> 需求：**BAF 模式必须依托工作流才能落代码**——所以会话一打开就要先定「这条 session 绑哪条工作流」，同时把必须工具链体检一遍、打印成欢迎语。硬门禁其实**已经存在**（`baf-guard` 的 `adjudicateFsWrite` 在 `!state.active` 时直接 `deny('intake_confirmation_required', 'no active change: …')`），本 Phase 只补「让客户看得见、知道该干什么」这一层 UX，不新增门禁。
+
+- 8.8.1 新增 `packages/baf/baf-workflow/src/session-gate.ts`：导出 `probeToolchain(cwd)`（只读探测，返回每项 `ok/state/hint`）与 `renderWelcomeCard(binding, probe)`。挂载行 `baf-session-gate`（非 isolate，同 `baf-guard-install` 模式，`inject: ['agents']`，`agent/created` 时对每个 agent 装一次），落在 `packages/preset/agent-presets/presets/baf/agent.cordis.yml`。
+- 8.8.2 绑定判定：读 `ProjectionStore.readIndex()` 数 `current ∉ {completed, abandoned}` 的 change；`0 / 1 / >=2` 三种分支按 §18.3.1 出卡；客户选「继续」时把 changeId 写入 session 焦点缓存（`BafWorkflow` 旁路，**不写 projection**），选「新开」时置空焦点。
+- 8.8.3 工具链体检：抽取 `baf-doctor`（`commands.ts` / `command-drives.ts` 既有探测）里的探测逻辑成共享函数，`probeToolchain` 与 `baf-doctor` 共用一份实现；检查项见 §18.3.2（workspace / baseline / Git / OpenSpec / C 工具链 / guard+quality / 版本）。逐项超时（建议 1.5s）降级为「未探测」，**不阻断会话打开**。
+- 8.8.4 欢迎卡渲染走 §20.3 模板（首行结论 + `【环境体检】` + `【本会话绑定】` + `【可用指令】`）；缺件行用 `✗` + 一行安装引导；齐备行用 `✓`。
+- 8.8.5 测试：三绑定分支、体检缺件不阻断、超时降级、继续型会话（已有 active change）重跑体检、焦点缓存不落 projection。
+- **验收**：新 session 首屏出欢迎卡；工作区已有未完成 change 时出「继续 / 新开」选择卡；删掉 `openspec/` 时体检行变 `✗` 且给安装引导；未选绑定直接让模型改代码 → guard 拒绝且 reason code 稳定。
+
+**Phase 8.8 落地实况（2026-09-17）**
+
+| 子项 | 状态 | 落点 / 证据 |
+| --- | --- | --- |
+| 8.8.1 gate row | 已完成 | `packages/baf/baf-workflow/src/session-gate.ts`：`apply()` 对每个 agent 装一次（`agents.list()` 补装已存在的 + `agent/created` / `agent/disposed`）；preset 行 `baf-session-gate` 落在 `agent.cordis.yml` 的 `baf-commands` **之后**；`package.json` `exports` 与 `tsdown.config.ts` 各加一个入口（第四入口）。细节见 §18.10 |
+| 8.8.2 绑定判定 | 已完成（口径微调） | `resolveStartupBinding(cwd)` 读 `ProjectionStore.readIndex()` + 复用 `isActiveChange()`——与 `baf-go` 同一个谓词，不另写一份「什么算未完成」；`0 / 1 / ≥2` 三分支按 §18.3.1 出卡。**卡是只读的**：不替客户落绑定，改由卡片【下一步】印出 `/baf-go continue`（或 `/baf-go change=<id>`），绑定仍走 §18.6 `resolveBinding`（§18.10-2） |
+| 8.8.3 工具链体检 | 已完成 | `probeToolchain(cwd, options)`：七项 = workspace / baseline / Git / OpenSpec / C / guard+quality / 版本；逐项预算 1.5s，超时记 `?` 并把仍能拿到的判定照常显示；`/baf-doctor` 与启动卡共用 `renderProbeLines()`，两处不可能不一致 |
+| 8.8.4 欢迎卡渲染 | 已完成 | §20.3 骨架：首行结论（`BAF 模式已就绪 · <目录> · 无未完成工作流 / 检测到未完成工作流 <id>（当前 N<k>）· 继续还是新开？`）+【环境体检】+【本会话绑定】+【下一步】+【可用指令】+【版本】；缺件 `✗` + `↳ 引导` 行，未探测 `?`，`info` 行不带符号 |
+| 8.8.5 测试 | 已完成 | `tests/session-gate.spec.ts` **18 例**：探针七项不抛 / 目录不存在降级为 `✗` / guard+quality 未挂载点名 / **C 工具链首屏不 spawn**（§21.4）/ TTL 内复用同一次探针 / 符号逐态渲染 / **挂住的外部命令降级为 `?`**（真写一个 `openspec.cmd` 存根挂住 PATH）/ 三分支 + 已归档不计入 / 全缺件仍出可用卡 / §20.4 日志行只含元数据且不泄露变更内容 / 模型侧 section 先报「进行中」再报事实 / 卡片投递方式（执行 `/baf-welcome`，缺失时只记日志）/ **命令层抛异常也出卡** / 每 agent 一段 section + 挂载标志读取 |
+| 验收项状态 | 已由测试固定 | 「首屏出卡」「三分支」「缺件不阻断」「超时降级」「不替客户选」都有逐字断言（含「卡片里绝不出现凭空绑定」与「焦点缓存不落 projection」）。**未覆盖**：真正的桌面首屏观感——要出包后在 GUI 里看，与 §8.7.8 同批；guard 的拒绝 reason code 是 Phase 0 既有能力，本 Phase 未改一行 guard |
+
+#### 8.9 `/baf-workflow-resume`：drift 交互式复位（落点：Phase 8.9）
+
+> **这是当前仓库的真实能力缺口**：`stages/drift.ts` 把 `drift-detected` 写进 projection、`WorkflowService.transition()` 在 T13 上允许 `drift → 最早受影响节点`，但**没有任何 slash / CLI / Tab 入口暴露 T13**；`stages/pipeline.ts:480` 的 `{@link driveResumeStage}` 是一个指向不存在方法的失效引用。客户一旦 drift，UI 上无路可走。本 Phase 补这条出口。
+
+- 8.9.1 `stages/pipeline.ts` 新增公开方法 `driveResumeStage(changeId, target, evidence?)`：调 `WorkflowService.transition({from:'drift', to:target, evidence})` 并落 `stage-entered`；同时改正 480 行的失效 JSDoc 引用。目标集必须由 `earliestAffectedNode()` 裁定为候选，客户只能选候选内节点。
+- 8.9.2 `command-drives.ts` 新增 `driveResume`：先 `pipeline.driveDriftStage(changeId, …, {record:false})` 做只读检测 → 无信号则返回「当前无漂移」卡（不写事件）→ 有信号则渲染候选卡；带 `<节点>` 参数时校验 ∈ 候选集，否则 `invalid_transition`。
+- 8.9.3 `commands.ts` 注册 `/baf-workflow-resume`，`cmdline.ts` 注册 `baf workflow-resume`，两入口共用 `driveResume`；`tier` 前缀沿用 2026-09-14 既有约定。
+- 8.9.4 Tab：drift 节点加「复位到…」按钮 + 候选下拉；选中后调 `BafWorkflowTabRemote.resume(node)`。
+- 8.9.5 测试：候选集计算（五类 drift 触发器 → 目标节点）、非法目标 `invalid_transition`、幂等（已在目标节点时不重复写）、无 drift 时 no-op（`projectionVersion` 不变）、复位后 `drifted` 标注不回滚已完成节点。
+- **验收**：`git checkout` 到别的 revision 触发 `git-revision-changed` 后，`/baf-workflow-resume` 列出 `verify` 候选；选 `verify` 后 `current === 'verify'` 且 `nodes.verify === 'in-progress'`；`/baf-go` 在 drift 状态下自动渲染同一张候选卡且**不自动选点**。
+
+#### 8.10 输出规范落地（落点：Phase 8.10）
+
+- 8.10.1 `command-format.ts` 增语义化封装 `cardTitle(kind, …)` / `statusLine(status)`（§20.1 L1/L2），把 §20.2 的固定 section 顺序与 §20.5 的符号语义固化在代码里，而非散在各 drive 的字符串拼接里。
+- 8.10.2 全量替换 `/baf-*`、`baf *`、Remote 的文案输出走 §20.2 骨架；新增 §20.4 的结构化日志行 `[baf] <iso> <changeId> <node> <event> key=value…`（只打元数据，不打内容）。
+- 8.10.3 i18n：按 §20.7 冻结的 key 清单登记到 `packages/client/ui-baf-workflow` 字典；`verify-client-ui-i18n` 必须绿。
+- **验收**：所有 `baf-*` 输出首行可折叠读；确认门卡片首行含动作词；日志行无内容/无凭证；i18n 门禁绿。
+
 ### Phase 9：桌面打包、三 scope 更新、签名和回滚
 
 
@@ -1794,6 +1875,7 @@ export function resolveRoute(
 - `packages/preset/agent-presets/presets/baf/{preset.yml,agent.cordis.yml,skills/**}`；
 - `packages/baf/baf-core/`、`packages/baf/baf-workflow/`、`packages/baf/baf-workflow-openspec/`、`packages/baf/baf-standard/`、`packages/baf/baf-check-quality/`、`packages/baf/baf-check-guard/`、`packages/baf/baf-scaffold/`（各含 `src/`、`tests/`）；
 - `packages/client/ui-baf-workflow/`（工作流 Tab）；
+- `packages/baf/baf-workflow/src/{go-coordinator.ts,session-gate.ts}`（Phase 8.7 / 8.8：自动驱动协调器 + 会话启动门与工具链体检）；
 - `overlay/docs/baf/{enterprise-inputs,error-codes,compatibility-matrix,route-notes}.md`；
 - `overlay/plugin/standards/baf-baseline-c/`（baseline fixture）；
 - baseline/workflow/quality/guard/manifest/signature 各类 fixture 与 spec。
@@ -1808,6 +1890,10 @@ export function resolveRoute(
 - `overlay/desktop/src/update/{manifest,github,public-key,plan,apply,service}.ts`（schema 2、签名、scoped plan/apply）；
 - `overlay/desktop/src/{main.ts,preload-desktop.ts}`（splash、IPC）；
 - `overlay/scripts/{pack-plugin,pack-dsh,generate-manifest,build-release}.mjs`；
+- `packages/baf/baf-workflow/src/{commands.ts,cmdline.ts,command-drives.ts,command-format.ts,stages/pipeline.ts,index.ts}`（Phase 8.7–8.10：`/baf-go`、`/baf-workflow-resume`、输出规范、`driveResumeStage`）；
+- `packages/preset/agent-presets/presets/baf/agent.cordis.yml`（新增 `baf-session-gate` row）+ `skills/baf-go/SKILL.md`（补「说需求 → 分类卡 → baf-go 推进」的入口语义）；
+- `packages/client/ui-baf-workflow/`（确认门节点态、双泳道视图、复位按钮、i18n 字典）；
+- `overlay/docs/baf/error-codes.md`（仅在决定为「未绑定工作流」单列 `workflow_binding_required` 时改；否则复用 `intake_confirmation_required`）；
 - `overlay/plugin/README.md`；
 - `.github/workflows/baf-dsh-release.yml`。
 
@@ -1842,6 +1928,10 @@ protected path、workspace escape、路径穿越、危险命令、强制 Git、s
 ### 14.6 Command/UI/desktop
 
 slash、CLI、desktop、Tab 同输入同状态；`baf status/doctor/version/classify/update` 输出稳定；launcher flags 不被 BAF 污染；打包后真实应用能发现挂载 BAF；UI 将官方 BAF 标为内置且禁用复制。
+
+### 14.8 `baf-go` / 会话启动门 / drift 复位 / 输出规范（Phase 8.7–8.10）
+
+会话启动门在 `0 / 1 / >=2` 三条 active-change 分支下给出正确卡片；体检缺件不阻断会话、超时降级为「未探测」、继续型会话重跑体检；焦点变更缓存不落 projection。直接说需求即触发 intake 并弹出分类卡；对话中断后 `/baf-go` 能重放同一张卡且幂等。确认门 A/B 只认 `/baf-go`，自然语言「继续」不推进任何状态；门上再敲一次 `baf-go` 才进入下一阶段。同 session 第二个需求被硬拒并提示新开 session；≥2 active change 时必须客户显式选一条。`/baf-workflow-resume` 的五类 drift 触发器各自算出正确候选集，非候选目标返回 `invalid_transition`，无 drift 时 `projectionVersion` 不变，`baf-go` 在 drift 下只渲染候选卡不自动选点。T15 升级后不换 session 继续 full-go 链，Tab 双泳道视图保留 fast-path 产物并画出升级边。全部 `baf-*` 输出首行可折叠读、确认门卡片首行含动作词、日志行只打元数据（无内容/无凭证）、i18n key 清单登记且 `verify-client-ui-i18n` 绿。
 
 ### 14.7 Update/release
 
@@ -2024,9 +2114,704 @@ Phase 10 release 门禁
 7. 每个 Phase PR 带该 Phase 验收用例；
 8. 企业发行前对照第 15–16 章，而不是对照「演示过一次」。
 
+Phase 8.7–8.10 开工前追加确认这 4 项：
+
+1. 已理解 §18.2：`/baf-go` **无参数**是主用法，需求走自然语言；不实现 `baf-go + 需求` 主路径，也不实现 `baf-go confirm`；
+2. 已理解 §18.3.3：BAF 模式下**没有 guard 之外的落码通道**——启动门是 UX，硬门禁在 ToolGuard，不要为「未绑定工作流」另建第二套拦截；
+3. 已理解 §19.4：`baf-go` 在 drift 下**只渲染候选、永不自动选点**；
+4. 已理解 §20.1：**不新增第四套输出通道**——所有输出落在状态行 / 卡片 / 日志三层里。
+
+### 17.7 `baf-go`、会话启动门、drift 复位与输出规范的运行时影响
+
+> 与 §18、§19、§20 配套：本节是评审视角的运行时风险登记，方便实现 Phase 8.7–8.10 时一一对照。
+
+| 风险                                                | 等级  | 为什么                                                        | 缓解                                                                                          |
+| ------------------------------------------------- | --- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| R11 coordinator 自己写了第二套转换规则，与 §5.2 转换表分叉         | 高   | 状态机权威被稀释，resume / audit 不一致                            | coordinator 必须是纯路由器：不调 `WorkflowService.transition`，所有状态改走现有 drive                                                |
+| R12 coordinator 把单步驱动器（`/baf-workflow-*`）偷偷替换或废弃       | 中   | 客户脚本化复跑被破坏                                              | §18.1 明确：单步驱动器原样保留；coordinator 是上层习惯，不强制门禁                                                            |
+| R13 确认门 A/B 被模型用自然语言绕过（「继续」「好的」「下一步」）                | 中   | 误把客户在会话中说的「继续」当作 confirm；跳过 review              | 确认只认 `/baf-go` 这一条**斜杠命令**（§18.5）；自然语言回复不触发任何 drive；确认门卡片第一行必须出现动作词「回复 /baf-go 继续」 |
+| R14 同 session 跨变更（active change = 1 + 新描述）被模型自动开第二条   | 中   | 工作流视图按 session 分组时被多条变更污染；审计链路交叉                  | §18.6 守卫 5：硬返回「请新开 session」卡，coordinator 不调 driveOpen                                                |
+| R15 drift / 已放弃 / completed 状态下 `/baf-go` 误把旧变更当新需求启动 | 中 | 失去终态语义 | §18.7 边界表：drift → 转 §19 候选卡（不自动选点）；终态一律返回错误卡，走新会话新 intake |
+| R16 verify 报告过期，confirm 后仍直接 archive                | 低   | 依赖新鲜度未校验                                              | coordinator confirm 路径重读 `verify-report.json` 时间戳与 source revision，不匹配返回 `verify_stale` 卡                      |
+| R17 coordinator 与 §8.6 listChanges 的会话维度冲突             | 低   | dashboard 列全 cwd 变更；Tab 只列本 session 焦点变更；客户误读为 bug | §18.6 明确两个视图分工：dashboard = cwd 全集；Tab = session 焦点；文案区分                                                |
+| R18 drift 下 `/baf-go` 自动替客户选回退节点                     | 中   | 客户没意识到哪些已完成工作被判失效，静默丢工作                          | §19.4 明确：`baf-go` 只做检测 + 渲染候选卡，**永不自动选节点**；选点是客户对「哪些工作作废」的决策                                    |
+| R19 会话启动门体检失败/超时阻塞会话打开                          | 中   | 缺一个外部工具就打不开 BAF 会话，比不体检更糟                          | §18.3 体检是**只读 + 不阻断**：超时降级为「未探测」，缺件只影响对应阶段（如缺 OpenSpec → full-go 启动时才 `openspec_unavailable`）        |
+| R20 启动门在 `agent/created` 做 I/O 拖慢首屏                   | 低   | 首屏白屏或卡顿                                            | 体检异步、结果缓存到 session 焦点旁路；首屏先出绑定结论，体检明细后填                                                       |
+| R21 双 path 视图把 fast-path ledger 与 full-go 产物画成一条线     | 中   | 客户看不懂「从哪跳的」，追溯断裂                                  | §18.4.3 明确**两泳道 + 一条升级边**；fast-path 产物（`fastpath-ledger.json`、最小 bug 记录）永久保留并单独标注                           |
+| R22 日志行泄露内容或凭证                                     | 中   | 排障日志把源码/密钥写进会话                                          | §20.4 只打 `key=value` 元数据；不打文件内容、不打 token；受 `secret-scan` 门禁                                        |
+| R23 新增 i18n key 漏登记，落地时被 `verify-client-ui-i18n` 卡住 | 低   | 实现阶段返工                                              | §20.7 先冻结 key 清单；客户端文案一律走字典，禁止硬编码                                                              |
+| R24 新增 `awaiting-confirm` 事件但漏改 `projection.ts` replay 的穷尽 `switch` | **高** | `default` 分支抛 `projection_corrupted`，**任何含该事件的 projection 重放全部判损坏**，已归档审计链一起失效 | §18.8 已注明：加事件的同一次提交必须加 `case`；PR 检查单列为必查项；`tests/projection.spec.ts` 加未知事件用例 |
+
+
 ---
 
 
+
+## 18. `baf-go`：会话启动门、自动驱动与强制客户确认
+
+> 本章与 5.6「阶段如何被驱动」、9「命令」、12「实施计划」、17「评审结论」并列（第 19 章是它的 drift 出口，第 20 章是它的输出格式）。三条定调：
+>
+> 1. **BAF 模式下不存在「绕过工作流的开发」**。想落代码，就必须有一条 active change 且处于 implement——这条硬规则**已经落地**：`baf-guard` 的 `adjudicateFsWrite()` 在 `!state.active` 时直接 `deny('intake_confirmation_required', 'no active change: start and confirm one in the workflow tab first')`。所以会话一打开的第一件事是**确定本会话绑哪条工作流**（§18.3）。
+> 2. **客户永远用自然语言说需求**。不需要背 `/baf-go 需求` 这种形式——直接说要做什么，分类卡会自己弹出来（§18.2）。
+> 3. **`baf-go` 是「推」不是「输」**。它把当前 session 推进到下一个需要客户动作的点，并把那张卡片重放一遍；它适配所有工作流状态——在途、待确认、drift、终态——每种状态触发不同的阶段操作或错误卡（§18.4）。
+
+### 18.1 设计目标与四条典型路径
+
+把 §5.1 状态机对客户的暴露从「按顺序敲 9 个 slash」压缩成「说需求 → 需要时回一句 `baf-go`」。
+
+1. **新需求（主路径）**：用户打开 BAF 会话 → 启动门报告「无未完成工作流」+ 工具链体检（§18.3）→ 用户**直接说需求**（「增加用户登录」）→ intake 分类器跑完弹出**分类卡** → 客户在卡上选 `确认 / 补充 / 退出` → 确认后走 full-go → clarify / design / plan / implement / verify 自动推进 → **N3 design 完成后停下** → 客户 `/baf-go` → **N7 archive 前再次停下** → 客户 `/baf-go` 归档。
+2. **继续会话**：客户在启动门选「继续 `<changeId>`」→ 之后只管说人话（clarify 阶段答问题、implement 阶段提修改意见）→ 需要推动阶段时敲 `/baf-go`（无参数）→ coordinator 读 projection 当前节点并路由到下一步。
+3. **崩溃 / 换机 / 换 session 后恢复**：换机后 `cwd` 还是同一工作区，开新 session → 启动门读到 projection 里那条未完成 change → 客户选「继续」→ 起点与之前完全一致（projection 是 cwd 绑定、跨 session 共享的可恢复索引，§5.7）。
+4. **依据漂移（drift）**：启动门或任意 `/baf-go` 前检测到 drift → coordinator **不自动猜**，转 `/baf-workflow-resume` 让客户交互式选合法目标节点（第 19 章）。
+
+**不做什么**：`baf-go` 不替代 §5.6 的硬规则——`WorkflowService.transition` 仍是唯一权威；模型仍然必须经命令或阶段工具才能动状态机。`baf-go` 只是把分散的驱动器组合成一个自动推进器，并在两个确认门强制停。
+
+### 18.2 入口语义：说需求 vs 推流程
+
+| 客户动作 | 触发什么 | 要 `/baf-go` 吗 |
+| --- | --- | --- |
+| **直接说需求**（自然语言） | 启动门 →（新开时）intake 分类 → 弹**分类卡** | **不要**。这是主路径 |
+| **分类卡被错过 / 对话中断后想重新弹出** | coordinator 重放那张待决卡 | 要：`/baf-go` |
+| **在途阶段想推到下一步**（clarify 答完、design 写完、plan 写完、implement 做完…） | 路由表派发到对应 drive | 要：`/baf-go` |
+| **停在确认门上**（门 A / 门 B） | 视为**确认**，进入下一阶段 | 要：`/baf-go`（**没有 `confirm` 子命令**） |
+| **drift 状态** | 自动转 `/baf-workflow-resume` 的交互式选点 | 要：`/baf-go`（自动映射） |
+| **终态**（completed / abandoned） | 错误卡：请新开工作流 | 要：`/baf-go`（只报错） |
+
+**`baf-go` 的统一定义**：*「把本 session 推进到下一个需要客户动作的点，并渲染那张卡片」*。它**幂等**——已经停在同一张待决卡上时再敲一次只是重渲同一张卡，不重复推进状态、不产生新事件。
+
+**没有 `/baf-go <描述>` 这个主用法**。需求一律用自然语言表达。带描述的形式只在两种边缘场景保留（脚本化、CLI 一次性投喂），且行为被明确定义为：**未绑定时**等价于说需求；**已绑定**时返回「请新开 session」卡（§18.6 守卫 5）。
+
+**没有 `/baf-go confirm`**。门上的下一张卡就是「确认」本身，客户敲 `/baf-go` 即确认——少一个要记的子命令，也少一个「`confirm` 一词两义」的坑（intake 的 confirm 走 `/baf-workflow-classify confirm`，两者路径不通用，见 §18.5 统一约定）。
+
+| 形态 | 调用 | 描述参数处理 |
+| --- | --- | --- |
+| slash（**主用法**） | `/baf-go` | 无参数 |
+| slash（边缘） | `/baf-go <描述...>` | 未绑定 → 等价于说需求；已绑定 → 「请新开 session」卡 |
+| slash | `/baf-workflow-resume [节点]` | 见第 19 章 |
+| standalone CLI | `dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- go` | 同 slash 无参形态 |
+| desktop 工作流 Tab | 顶栏「继续 / 自动驱动」按钮 | 不带描述 |
+| Remote（Typert） | `BafWorkflowTabRemote.go()` | 与 slash / CLI 共源 |
+
+### 18.3 会话启动门（Session Binding Gate）
+
+> 需求：**BAF 模式必须依托工作流才能进行**——session 想继续、想落代码，就必须走工作流或受控裁剪。所以会话一打开就先把「这条 session 绑哪条工作流」定下来，同时把必须工具链体检一遍、打印成欢迎语。
+
+**触发时机**：`agent/created` 时安装，**第一次模型 turn 之前**呈现。挂载行与 `baf-guard-install` 同层（非 isolate row，`inject: ['agents']`；实现另需 `commands`——卡片是**执行 `/baf-welcome`** 投递的，见 §18.10-5），见 §12 Phase 8.8。此时还没有任何模型请求，客户看到的第一屏就是启动卡。
+
+**三件事，一次呈现**：
+
+| 步骤 | 做什么 | 输出 |
+| --- | --- | --- |
+| 3.1 绑定判定 | 读 `<workspace>/.baf/projection/index.json`，数 `current ∉ {completed, abandoned}` 的 change | `0` / `1` / `>= 2` 条 |
+| 3.2 工具链体检 | 只读探测必须工具链（§18.3.2） | 每项 `✓ / ✗ / ?` + 缺失引导 |
+| 3.3 欢迎语 | 把 3.1 + 3.2 合成一张 BAF 欢迎卡（模板见 §20.3） | 一张卡，一次呈现 |
+
+#### 18.3.1 绑定判定
+
+| projection 现状 | 卡片 | 客户可选 |
+| --- | --- | --- |
+| 无 active change | 「无未完成工作流 · 请描述需求」 | 直接说需求 |
+| 恰好 1 条 active change | 「检测到未完成工作流 `<id>`（当前 `N<x>` · `mode`）· 继续还是新开？」 | `继续` / `新开` |
+| `>= 2` 条 active change | 列出候选（id · 模式 · 当前节点 · 最后活动时间） | 选一条继续 / 新开 |
+
+- 选「**继续**」→ 该 `changeId` 成为本 session 的**焦点变更**，缓存在 `BafWorkflow.bindWorkspace()` 旁路（**不写 projection**）；后续说需求视为对该变更的补充，**不再走新 intake**。
+  - 实现口径：启动卡**只读**，不替客户落绑定（§18.10-2）。客户说「继续」= 敲卡片【下一步】里印出的那条命令——单条时 `/baf-go continue`，多条时 `/baf-go change=<id>`；绑定走 §18.6 `resolveBinding` 既有路径，不新增判定分支。
+- 选「**新开**」→ **硬拦**（§21.2 已决）：只要 cwd 里还存在未终态 change，就**拒绝**新开并提示「请新开一个会话」，焦点保持不变。理由：需求 3「一个对话条目下仅支持一个工作流」；同一 session 里堆第二条 active change 会让工作流视图按 session 分组时被污染。客户要换工作流，就先 `abandon` 旧的（`/baf-workflow-abandon`）——那本身是一个显式决策。
+- **唯一允许新开的场景**：cwd 里 `active change === 0`（此时「新开」=「说需求」，直接进 intake）。
+- 选「**drift 复位**」→ 直接转 `/baf-workflow-resume`（第 19 章）。
+
+#### 18.3.2 必须工具链体检（同一张卡片打印）
+
+| 检查项 | 探测方式 | 缺失时的引导 |
+| --- | --- | --- |
+| workspace | `cwd` 存在且可写 | 换目录打开 |
+| baseline | `.baf/baseline.yml` 可读可解析 | `baf scaffold` 生成 / 导入企业 baseline |
+| Git | `git rev-parse HEAD`（drift 锚点） | 初始化仓库 |
+| OpenSpec | `openspec` CLI 可执行（超时则记 `?`，见下） + `openspec/` 存在（full-go 硬前置） | 安装 OpenSpec CLI / `baf scaffold` |
+| C 工具链 | **首屏不探测**（§21.4 已决）：显示 `? 未探测 · 首次进入 verify 时检查`；逐项探测交给 Phase 7 QualityRunner | 进入 verify 时按 baseline 逐项给出（如 `pip install gcovr`） |
+| guard / quality | `baf-guard` / `baf-quality` 挂载情况 | 检查 preset composition |
+| 版本 | `resolveBafProductVersions()`：`baf-dsh` / dsh / 四个 `baf-*` | 提示更新 |
+
+- 体检是**只读探测**：不写 projection、不改状态、不触发任何 transition。
+- **缺件不阻断会话打开**；但缺 OpenSpec 时 full-go 一启动就会返回 `openspec_unavailable`（§18.7）——在启动时把这句说清楚，比在 N1 报错好。
+- 逐项**超时（建议 1.5s）降级**为 `? 未探测`，绝不因为一个外部命令卡住首屏。
+  - 降级是**逐项**的，不是整卡失败：同一行里已经拿到的判定照常显示。OpenSpec 行就是这样——CLI 探测超时（首次经 shell 拉起 `openspec.cmd` 在 Windows 上实测可达 1.4s）时该行记 `? … · CLI 未探测（超时）`，而 `openspec/changes` 的**目录判定照常给出**，因此缺目录时仍然带 `baf scaffold` 引导。这一行**不能**写成 `✗`：那会把已经装好的客户打发去重装一个只是慢的 CLI。
+- 结果缓存到 session 焦点旁路；**继续型会话同样重跑**（换 session 可能换了机器 / 换了 baseline 版本）。
+
+#### 18.3.3 与 ToolGuard 的关系：「必须依托工作流」的强制力
+
+启动门本身是**引导**，不是硬门禁。硬门禁在 ToolGuard（§5.4）：未绑定任何 active change、或绑定到的 change 不在 implement 阶段时，`write` / `edit` / `bash` / `pwsh` 的写入被拒。因此即使客户跳过启动卡不选，也**落不了代码**——这就是需求 1 的「必须依托工作流才能落代码」。错误码复用既有集合（`intake_confirmation_required` / `scope_exceeded` / `protected_path` …）；「未绑定工作流」的码**已定：复用 `intake_confirmation_required`**（§21.1），不新增。
+
+### 18.4 自动驱动流程（路由表）
+
+`driveGo` 读 `ProjectionStore.readStatus(changeId)`，按 `status.current` 与 `status.mode` 派发；所有判定走 §5.2 转换表 + 阶段门禁（**不允许在 coordinator 里另写转换规则**）。下表是路由图，`→` 表示「本步完成后下一步自动路由到」，`■` 表示「停下等客户」。
+
+#### 18.4.1 前置：session 绑定
+
+| session 状态 | 下一步 | 停下？ |
+| --- | --- | --- |
+| 未绑定 + 无 active change | 渲染启动卡：「无未完成工作流 · 请描述需求」 | **■** |
+| 未绑定 + 有 active change | 渲染启动卡：「继续 / 新开」 | **■** |
+| 未绑定 + 客户此时说了需求（新开） | `driveOpen` → intake 分类卡 | **■** |
+| 已绑定焦点 change | 进入下面的节点路由 | — |
+
+#### 18.4.2 节点路由
+
+| 当前节点 + 模式 | 下一步 drive（coordinator 委派） | 完成后 | 停下？ |
+| --- | --- | --- | --- |
+| `intake`（未 confirm） | 重放 intake 分类卡 | — | **■** |
+| `intake`（已 confirm，未 open） | `pipeline.driveOpenStage` / `driveFastPathOpenStage`（mode 由 intake 决定） | `open` | — |
+| `open` | `pipeline.beginDocStage('clarify')` | `clarify` in-progress | — |
+| `clarify` in-progress | `pipeline.completeDocStage('clarify')` | `design` | — |
+| `clarify` available（已装模板未填） | 等模型在会话中填模板；coordinator 不动 | `design` | — |
+| `design` in-progress | `pipeline.completeDocStage('design')` | **进入门 A** | **■** |
+| `plan` in-progress | `pipeline.completeDocStage('plan')` | `implement` | — |
+| `plan` available | 等模型写 `plan.json`；coordinator 不动 | `implement` | — |
+| `implement` in-progress（full-go） | 检查 `plan.json`：有未完成 → 等模型；全 done → `driveImplementStage` | `verify` | — |
+| `implement` in-progress（fast-path） | 检查 `fastpath-ledger.json`：有未完成 → 等模型；全 done → `driveImplementStage` | 触发 T15 则升级（见下）；否则 `verify` | — |
+| `verify`（`enterStage` 成功） | `pipeline.driveVerifyStage` | 通过 → **门 B**；失败 → 回 `implement` | 通过时 **■** |
+| `archive`（已通过 verify） | `pipeline.driveArchiveStage(..., humanConfirmed: true)`（**只在客户确认后**） | `archived` | **■** |
+| `drift` | **转 `/baf-workflow-resume` 候选卡**（§19.4） | 客户选点后回到该节点 | **■** |
+| `completed` / `abandoned` | 错误卡「当前工作流已终态；请新开一个会话」 | — | — |
+
+**T15 升级后不换 session**：fast-path 在 implement 阶段升级为 full-go 时，`driveEscalateStage` 写 `mode-upgraded` + `stage-entered('clarify')`，`status.current` 变成 `clarify`。下一次 `/baf-go` **自然命中** `clarify in-progress` 那一行，按 full-go 继续走 clarify → design → plan → implement → verify。这是**预期行为**，不需要新 session、不需要额外命令；卡片必须显式说明「已升级 full-go · 当前 clarify · 缺少的 clarify/design/plan 将补走」，避免客户看到流程图回退而困惑。同时 Tab 切到双泳道视图（§18.4.3）。
+
+实现要点：
+
+- coordinator **不重写** drive 函数；`driveGo` 是纯路由器（switch over `status.current` × `status.mode`），只调现有 `driveOpen` / `driveClassify` / `pipeline.{beginDocStage,completeDocStage,driveImplementStage,driveVerifyStage,driveArchiveStage}`。
+- 「等模型在会话中填模板」分支：coordinator 返回「当前在 N2 clarify，请回答模板问题后再次 `/baf-go`」卡，**不阻塞新 turn**——模型在同一 session 的下一次自然语言回复中继续写产物。
+- `verify` 失败回 `implement` 是 §5.2 T11 既有路径；`driveVerifyStage` 返回 `backToImplement` 时 coordinator 直接渲染「修复后再次 `/baf-go`」卡，不另写逻辑。
+
+#### 18.4.3 双泳道视图（fast-path → full-go 升级）
+
+需求：fast-path 跑到一半升级到 full-go 时，工作流 Tab **必须同时体现两条 path 的流程**，并清楚看到「从之前什么位置跳到 full-go 的什么位置」，且**保留升级前 path 生成的 spec 文档记录**以便追溯。
+
+```
+fast-path 泳道（升级后置灰，但永远保留、可追溯）
+  [open]──►[implement]──►[verify]──►[archive]
+                │
+                │  T15 升级边（范围扩大 / 语义原因）
+                │  证据：mode-upgraded 事件 + escalate 原因
+                ▼
+full-go 泳道（从升级落点接续，缺失阶段补走）
+  [open]──►[clarify]──►[design]──►[plan]──►[implement]──►[verify]──►[archive]
+                ▲
+                └── 升级落点：clarify
+```
+
+- 两条泳道各自渲染 `nodes` 状态（`completed` / `in-progress` / `drifted` / `skipped`），中间一条**升级边**标注 `T15 · <原因> · <时间>`。
+- 升级前 fast-path 的产物**不删**：`fastpath-ledger.json`、最小 bug 记录、回归测试、`verify-report.json`（若已有）在泳道旁单独列出并标注「未走 OpenSpec」。
+- 升级后**追加**缺失阶段，**不清除**已完成节点（既有 §14.3 验收条款）；`mode-upgraded` 与 `stage-entered` 事件都在 projection 里，图由事件重建，不靠 UI 记忆。
+- 泳道标签与升级边文案走 i18n（§20.7：`baf.tab.lane.fastpath` / `baf.tab.lane.fullgo` / `baf.tab.edge.upgraded`）。
+- **数据来源（实现工作量，别低估）**：projection 目前只有**一套** `nodes` + `mode` + `mode-upgraded` 事件，`deriveWorkflowMetrics(events)` 也只产出**单链**指标。双泳道必须**从事件时间轴切分**：以 `mode-upgraded` 事件为分界点，其之前的 `stage-entered`/`stage-completed` 归 fast-path 泳道（置灰保留），其之后的归 full-go 泳道；升级落点取该事件相邻的 `stage-entered('clarify')`。**不要**给 projection 加 lane 字段（会破坏 append-only 的既有事件形状）——切分放在 Tab 派生层做，属于 Phase 8.7 的显式工作量。
+- **落地状态（2026-09-17）**：**未实现**。Phase 8.7 交付的是命令行主路径（`go-coordinator.ts`），双泳道是 Tab 派生层的活，与确认门高亮一并留在 §8.7.7，见 §18.9 末尾的「未落地项」。domain 侧无需改动——`mode-upgraded` + `stage-entered` 事件已经齐全，缺的只是 Tab 怎么画。
+
+### 18.5 两个强制客户确认门
+
+> 这两处是**产品决策**而不是硬门禁——`/baf-workflow-*` 单步驱动器仍可绕过；`baf-go` 必须停。理由：N3 design 是客户对实现方向的最终背书；N7 archive 是客户对全部工作的最终背书——错过一次，返工成本最高。
+
+**门 A：N3 design 完成 → N4 plan 之前**
+
+- 触发：`pipeline.completeDocStage('design')` 返回成功、`status.current === 'design'` 且 `status.nodes.design === 'completed'` 时，coordinator **不**自动调用 `beginDocStage('plan')`。
+- 卡片标题：`自动驱动 · 设计文档已实现 · awaiting_customer_confirm · 点本行展开/折叠指令全文`。
+- **解锁**：客户再敲一次 `/baf-go`。coordinator 收到后从 projection 重读状态、确认当前为 `design completed`，再 `beginDocStage('plan')`。
+- 客户回复别的内容：卡片重放、状态不动；模型可以在同 session 自然语言里继续讨论设计修改，但 `completeDocStage('design')` 不会被 coordinator 重跑，直到客户敲 `/baf-go`。
+- 修改路径：若客户在确认前要求改设计，coordinator 返回「请 `/baf-workflow-design approach="..." ref="..."` 重跑」卡（不阻塞，但**不**自动重跑——客户得显式动作，避免 coordinator 反复自动覆盖设计）。
+
+**门 B：N6 verify 通过 → N7 archive 之前**
+
+- 触发：`pipeline.driveVerifyStage` 返回 `result.backToImplement === undefined` 且 `status.current === 'verify'` 且 `status.nodes.verify === 'completed'` 时，coordinator **不**自动调用 `pipeline.driveArchiveStage`。
+- 卡片标题：`自动驱动 · verify 已通过 · awaiting_customer_confirm · 点本行展开/折叠指令全文`。
+- **解锁**：客户敲 `/baf-go` → coordinator 校验 verify 报告未过期、依赖未漂移（与 §5.3 N7 既有 `verify-report.json` 新鲜度判定一致）→ `driveArchiveStage(changeId, humanConfirmed: true)`。
+- 客户回复别的内容：卡片重放、状态不动。
+
+**统一约定**
+
+- 两个确认门都用 `awaiting_customer_confirm` 标记，落 projection：新增 `awaiting-confirm` 事件类型（只记录客户确认时间戳与门名，**不参与门禁拦截**）。
+- **confirm 一词两义要分清**（这是最容易踩的坑）：
+  - **intake 分类的 confirm** = `/baf-workflow-classify confirm [title=...]`，把 intake 分类确认下来（并顺手推进 open）；**只**在 intake 阶段有效。
+  - **门 A / 门 B 的 confirm** = 再敲一次 `/baf-go`；**只**在两个确认门上有效。
+  - 两条路径的命令**不通用**：在 intake 阶段敲 `/baf-go` 只会重放分类卡；在确认门上敲 `/baf-workflow-classify` 会返回「当前不在 intake」。
+- 工作流 Tab（§10.3）：`awaiting_customer_confirm` 节点状态的配色与文案与 `blocked` 区分；按钮文字改为「确认进入下一阶段」，且只有这一个按钮可点；其余合法 `transition` 仍可经 §5.6 阶段驱动器触发（**不锁 Tab**）。
+- 「`/baf-workflow-*` 跳过确认门」是**允许的**——这是 §5.6「命令 + 阶段工具」契约的一部分。理由：脚本化复跑、CI 自动化、人工细控需要绕过确认门。`baf-go` 只是上层习惯，不强制全流程门禁。
+
+### 18.6 单一会话单工作流约束
+
+> 投影是 **cwd 绑定**（不是 session 绑定），所以「多变更可同 cwd 并存」是 §5.7 既定事实。本约束是 **session 维度**的额外约束：**一个 dsh 会话（一次打开的 desktop conversation）只承载一个 active change**，这样工作流视图按 session 分组时不会被多条变更污染。
+
+**约束规则**
+
+1. 进入 `driveGo` 第一步：读 `ProjectionStore.readIndex()`，数 `current ∉ {completed, abandoned}` 的 change。
+2. `=== 0`：按 §18.4.1「未绑定」分支走（提示描述需求）。
+3. `=== 1`：该 change 即本 session 焦点（缓存到 `BafWorkflow.bindWorkspace(cwd)` 旁路，**不写 projection**），后续所有 `/baf-go` 都作用在它上面。
+4. `>= 2`：coordinator 返回选择卡列出候选，**要求客户显式选一条**；不自动猜（与 §5.6「多 change 强制选择」同一原则）。
+5. **「同 session 内开第二条」硬禁用**：客户在已有 active change 的 session 里描述另一个需求 → coordinator 立即返回「请新开一个 session」卡，**不**在原 session 内开第二个 active change。原因：工作流视图按 session 分组时，混入会破坏视图完整性，也让审计链路交叉。
+6. **跨 session 跑同一条 change 是设计而非 bug**：工作流状态**全部基于文件记录**（`<workspace>/.baf/projection/`），session 不记录状态。所以 A 会话推进到 design、B 会话（同 cwd）接着推进 plan 是**合法且预期**的——coordinator 只读 projection 决定起点，聊天记录不参与状态判定。§18.6 的约束是「**一个 session 不允许同时有两条 active change**」，**不是**「一条 change 只能被一个 session 碰」。
+
+**Tab 配合**：会话 Tab「工作流」只展示本 session 焦点变更的图；其他 active change 仅在「变更总览」（§8.6 `listChanges`）里以「其他 session / 其他时间窗口」标记，不污染本 session 视图。
+
+**与既有 §5.6「多 change 强制选择」的关系**：§5.6 是 **workspace 维度**（同一 cwd 下多变更），§18.6 是 **session 维度**（同一会话只一条 active change）。两者正交：cwd 可有 N 个变更、跨 N 个 session；每个 session 只承载其中 1 条。客户在 dashboard（§8.6）看到的是 cwd 全集；进任一 session 只看到自己那条。
+
+### 18.7 边界与错误处理
+
+| 场景 | 返回卡片（标题 + 副标题） | 后续动作 |
+| --- | --- | --- |
+| 缺 cwd | `缺少工作区`（同 `missingCwd`） | 同既有 |
+| baseline 缺失 / 不兼容 | `baseline_unavailable` / `baseline_incompatible` | 提示 `baf scaffold` 或导入企业 baseline |
+| **OpenSpec 不可用（fixture 模式或未装 CLI）** | `openspec_unavailable · full-go 需要 OpenSpec · 下一步安装 CLI 或 baf scaffold` | 客户装 CLI 后 `/baf-go` 重试 |
+| 会话未绑定 + 空描述 | `请先描述需求，或选择「继续」已有工作流` | 客户说需求 / 选继续 |
+| active change `>= 2` | `多个活动变更，需显式指定` | 客户在卡上选一条 |
+| active change = 1 + 新描述 | `本 session 已有工作流 · 请新开一个会话`（§18.6 守卫 5） | 客户新开 conversation |
+| 当前 `intake` 未 confirm | `请 /baf-workflow-classify confirm` | 客户补 confirm |
+| 当前 `drift` | `drift detected · 请选择复位目标节点`（转第 19 章候选卡） | 客户选点 |
+| 当前 `completed` / `abandoned` | `当前 change 已终态` | 客户 `/baf-go <新描述>` 或放弃 |
+| `verify` 失败（T11） | `必需检查失败 · T11 回实现` | 客户修复后 `/baf-go` 续跑 |
+| T15 升级（fast-path 范围扩大） | `T15 已升级 full-go · 当前 clarify · 补齐 clarify/design/plan 后继续` | 客户 `/baf-go` 续跑 |
+| 两个确认门任一处客户回复非 `/baf-go` | 卡片重放（幂等，状态不动） | 客户敲 `/baf-go` |
+| 模型在确认前重跑设计（`/baf-workflow-design`） | 单步驱动器成功；coordinator 不视为冲突，继续等确认 | 客户最终 `/baf-go` |
+
+**错误码全部沿用 §0.1**（`tool_unavailable` / `openspec_unavailable` / `baseline_unavailable` / `baseline_incompatible` / `policy_missing` / `invalid_transition` / `intake_confirmation_required` / `scope_exceeded` / `protected_path` / `verify_required` …）；coordinator 不引入新错误码。
+
+**待决项（已决，2026-09-17）**：「未绑定任何 active change 就调 mutating 工具」复用 `intake_confirmation_required`（`baf-guard` 的 `adjudicateFsWrite` 已有这条分支），**不新增错误码**——见 §21.1。取舍原文：语义上是「分类未确认」，实际含义是「压根没有工作流」，因此曾考虑在 `error-codes.md` 增补 `workflow_binding_required`；结论是 Phase 0 冻结的错误码清单是给企业看的 contract，为命名美感动它不划算，卡片首行的中文文案负责把话说清楚。
+
+### 18.8 落地实现要点（与 §12 Phase 8.7–8.10 对齐）
+
+- **不写新 drive 函数**：coordinator 仅组合既有 `command-drives.ts` / `pipeline.ts` 入口（唯一例外是 Phase 8.9 新增 `driveResumeStage`，那是补 §19 的能力缺口）。
+- **不写新 bin**：`baf go` / `baf workflow-resume` 走 §9.1 形态 A（profile + patch），与 `baf workflow-*` 同树。
+- **不破坏既有入口**：`/baf-help` 输出加 `baf-go` 与 `baf-workflow-resume` 各一行，不删 `baf-workflow-*` 与 `baf-check-*` 任何一项。
+- **projection 新事件**：仅新增 `awaiting-confirm`（门 A/B 确认时间戳与门名）；不引入新 schema 字段。**⚠ 必须同时在 `projection.ts` 的 replay `switch` 里加一个 `case 'awaiting-confirm'`（空实现即可）**——那个 switch 是**穷尽**的，`default` 分支会 `throw new BafError('projection_corrupted', 'unknown projection event type')`。漏了这一步，任何含该事件的 projection 重放都会直接判损坏，属于「上线才发现」级别的事故。
+- **i18n**：文案走 §10.2 既有 i18n；新增 key 清单在 §20.7 冻结，登记到 `packages/client/ui-baf-workflow` 字典。
+- **桌面出包携带**：与 Phase 8 一并走 `pack-dsh.mjs`；`session-gate.ts` 需要 `agent.cordis.yml` 加一行 `baf-session-gate`，`baf-product-versions.json` 不增字段（仍 7 个 `dsh-baf-*` 包）。
+- **测试新增**：单测覆盖 §18.4 路由表每条边 + §18.5 两个确认门 + §18.6 单会话守卫 + §18.3 三条绑定分支；`surface-parity.spec.ts` 加 `/baf-go`、`/baf-workflow-resume` 与 `baf go`、`baf workflow-resume` 两组一致性行。
+- **风险**：① 模型在两个确认门之间反复 `/baf-go` → coordinator 幂等（重读 status 后无 op）；② 客户在确认门内改 cwd → 投影不可见（`readIndex` 空）；③ 多 session 同 cwd 并行写 projection → §4.7 既定单 writer + CAS 仍兜底；④ 启动门体检在首屏做 I/O → 见 §17.7 R19/R20。
+
+### 18.9 Phase 8.7 落地记录（2026-09-17）
+
+> §18.4–§18.6 是**规范**；本节记录实现时规范没写到、但必须定下来的五处细节。与 §21.6 / §21.7 同一性质：事后回溯「为什么这么写」的唯一依据。落点：`packages/baf/baf-workflow/src/go-coordinator.ts` + `src/session-focus.ts`。
+
+**文件分工**
+
+| 文件 | 职责 |
+| --- | --- |
+| `go-coordinator.ts` | `driveGo(input)`：绑定判定 → 读 status → 路由 → 渲染卡片。**纯路由**，不拥有任何 transition |
+| `session-focus.ts` | `focusFor(cwd)`：本 session 焦点变更的进程内缓存（§18.6 守卫 3 的「旁路」） |
+
+`driveGo` **故意不放进 `command-drives.ts`**：`surface-parity.spec.ts` 的 `DRIVE_TO_SLASH` 是「一个 drive = 一次阶段转换」的严格映射，coordinator 组合 drive 却不拥有转换，放进那张表会让映射语义失真。它也**不是第五个入口**——它是「入口的组合」，四条表面（slash / CLI / Remote / drives）照旧，`/baf-go` 只是在 slash 与 CLI 两条上各加一行。
+
+**五处实现细节（就地拍板）**
+
+1. **`intake` 已 confirm 但未 open → 继续把它 open 完，不报错。** §18.4.2 该行的「下一步」写的是 `pipeline.driveOpenStage` / `driveFastPathOpenStage`；coordinator 用 `driveClassify(cwd, 'confirm change=<id>')` 达成同一效果。理由：其余三入口都把「confirm + open」当**一个动作**，在这里反过来要求客户重敲命令是把实现细节泄漏给客户。
+2. **`baf-go <描述>` 的拒绝判定放在焦点判定之前。** 只要 cwd 里存在 active change，带需求的调用一律返回「本会话已有工作流」卡——**即使**焦点就是那条 change。理由：需求文本是「开始新工作」的信号（§18.6 守卫 5），焦点不能把它降级成「对当前变更的补充说明」。补充说明直接对模型说即可，那作用于当前变更，不需要走命令。
+3. **焦点变更已终态时仍然绑定，渲染「已终态」卡。** `resolveBinding` 的 `known` 参数取自 `index.changes` 全量 id（不只是 active 的），所以归档后客户再敲 `/baf-go` 看到的是「当前工作流已终态；请新开一个会话」，而不是「无未完成工作流」。理由：前者是**事实**（他刚归档了一条工作流），后者像是状态凭空消失。
+4. **门的解锁判定是「看事件尾巴」。** `gateUnlocked()` 只读 `events.at(-1)`：尾事件是 `awaiting-confirm` 且 `gate` 匹配 → 视为本次调用就是客户确认；否则 `parkOnGate()` 补写一条 `awaiting-confirm`。这个「看尾巴」的写法正是解锁**恰好消耗一次**的原因——确认后流程往前推进、尾巴变成 `stage-entered`，再敲就又是「还没 park 过」。若改成「扫一遍事件里有没有该门」，卡会永久处于已解锁状态，客户能在设计未过目时被推到 plan。
+5. **`awaiting-confirm` 是审计事件，不参与门禁判定。** 门是开是关，唯一依据是 `status.current` + `status.nodes.<node> === 'completed'`（与 §18.5 的「触发」条件逐字对应）；事件的唯一用途是「这次调用算不算确认」和审计时间戳。所以 §18.8 要求的 replay `case 'awaiting-confirm'` 是**空实现**。
+
+**未落地项（明确记账，别当成已完成）**
+
+- §18.4.3 双泳道视图：Tab 派生层从事件时间轴切分，未开始（§8.7.7）。
+- 确认门在 Tab 上的高亮 / 按钮文案：未开始（§8.7.7）。
+- 启动门（§18.3）在**本节写作时尚未实现**，是 Phase 8.8 的交付物——`resolveBinding` 已经把绑定判定的逻辑跑通，8.8 复用同一套判定而不是另写一份。**已于同日落地，见 §18.10**。
+
+### 18.10 Phase 8.8 落地记录（2026-09-17）
+
+> §18.3 / §20.3 / §20.4 是**规范**；本节记录实现时规范没写到、但必须定下来的八处细节。与 §18.9 同一性质：事后回溯「为什么这么写」的唯一依据。落点：`packages/baf/baf-workflow/src/session-gate.ts`（新增）+ `src/commands.ts` / `src/cmdline.ts`（接入）。
+
+**文件分工**
+
+| 文件 | 职责 |
+| --- | --- |
+| `session-gate.ts` | 探针（`probeToolchain`）+ 绑定判定（`resolveStartupBinding`）+ 卡片（`renderWelcomeCard`）+ 日志行（`sessionGateLogLine`）+ 模型侧 section（`sessionGateSection`）+ 挂载行（`apply`） |
+| `commands.ts` | `/baf-welcome`：**卡片的唯一渲染入口**（门也走它）；`/baf-doctor` 改为消费同一份探针与渲染函数 |
+| `cmdline.ts` | `baf welcome`（与 slash 同源渲染，§9.1 一致性）+ `baf doctor` 增体检块 |
+| `projection.ts` | `isActiveChange()` 参数放宽为最小结构——`baf-go` / 门 / `command-drives.ts` 三处共用同一谓词 |
+
+**八处实现细节（就地拍板）**
+
+1. **探针缓存按 `cwd` + 挂载标志键控，TTL 30s。** 门跑完会**立刻**执行 `/baf-welcome`，两次渲染必须共用同一次 `git rev-parse` / `openspec --version`——否则首屏要等两遍外部命令（实测裸 workspace 合计约 1.7s，其中 `openspec` 首次经 Windows shell 拉起占 1.38s）。键里带上 `guardMounted` / `qualityMounted` 是因为那两项的结果取决于 composition，只按 `cwd` 键控会复用一份「preset 还没挂 guard」的旧结论。用 TTL 而不是「一会话一次」：长会话里工作区事实会变（中途 `baf scaffold` 装好 baseline），30s 既能压掉首屏的重复，又让客户手动重看时拿到新结果。
+2. **门只读，不替客户落绑定。** §18.3.1 写的是「客户选『继续』→ 焦点缓存」，实现里**没有**把「选」做成一等步骤：卡片列出候选并印出**要敲的那条命令**（单条 `/baf-go continue`，多条 `/baf-go change=<id>`）。理由：绑定是一次**采纳**（§18.6 守卫 4），必须有明确的客户动作；首屏卡片是非交互文本，把「点一下」伪装成选择，会让「这条 session 是怎么绑上这条工作流的」在审计上无从追溯。所以「继续」= 敲那条命令，绑定仍只有 `resolveBinding` 一个入口，卡的【下一步】与 §18.6 的拒绝卡是同一套话术。
+3. **`openspec --version` 经 shell 执行，超时降级为 `?` 而不是 `✗`。** 必须走 shell：Windows 上 npm 装的 CLI 是 `openspec.cmd`，而 `execFile` 在 `shell: false` 下拒绝启动 `.cmd`（Node 对 CVE-2024-27980 的修复）——同仓 `baf-quality` 包（`src/runner.ts:111-116`）用 `spawn(..., { shell: true })` 拉外部 CLI，是既有先例。安全性靠**命令串是字面量**：没有任何工作区数据插进 shell（变化的部分全部作为参数或作为独立探测项）。降级为 `?` 而不是 `✗`：把「探测不到」报成「没装」会把已经装好的客户打发去重装一个只是慢的 CLI；实测首次调用 1.38s，超过 1.5s 的项预算并非罕见。
+4. **`/baf-doctor` 复用探针，而不是「从 doctor 里抽出来」。** §8.8.3 写的是「抽取 `baf-doctor` 既有探测逻辑成共享函数」，实现方向相反：新建 `probeToolchain`，doctor 改成它的消费方（`renderProbeLines()`）。理由：doctor 的既有探测散在 `commands.ts` + `command-drives.ts` 两处，先「抽出来」等于先合并两份再抽——多一步且仍可能抽出第三份；而两处的关注面本来就不同（doctor 是自检、卡是首屏），共享**渲染函数**比共享命令更容易保证逐字一致。
+5. **卡片经 `ctx.commands.execute(agent, '/baf-welcome', [])` 投递。** 这是唯一能在**首个模型 turn 之前**把卡片放进转录的机制：`system/message` 要求有未结束的 turn（`packages/core/session/src/invariant.ts:145`），而合成的 `user/message` 会把话语强加给客户——等于替他做了「继续还是新开」的选择。代价有两条，都已在 preset 注释里写死：gate 行因此需要 `commands` 注册表（`inject: ['agents', 'commands']`），且**必须排在 `baf-commands` 之后**，否则首个 agent 创建时 `/baf-welcome` 还没注册。命令层缺失或抛异常都降级为一条 `logger.warn` + 一行日志（§17.7 R19）——**工作区再破也必须能开会话**，卡片退化成无卡但会话可用。
+6. **模型侧事实走同步 section，读的是缓存快照。** `systemPrompt.section` 的 `text()` 是同步的，所以 section 只能读 `snapshotCache`。快照缺席时**不返回空串**而是返回「体检进行中」——模型需要在客户开口前就知道「暂时别假设已有工作流」，空串等于让它自由发挥。section 用 `order: 605`（`PLAN_POLICY: 500` / `TEAM_POLICY: 600` 之后、`PTC_ONLY: 800` 之前），名字 `baf:session-gate`。
+7. **`tsconfig.base.json` 手工补三条映射，不重跑生成器。** `…/baf-workflow/session-gate`、`…/baf-workflow/cmdline`、`…/baf-guard/install` 三个说明符**在 HEAD 上就不存在**（既有的预置行早就解析不了，与本次改动无关）；`verify-cordis-config.ts` 现在只剩一条预先存在的 `apps/cli/tests/profiles/acp/cordis.yml` 报错。没有跑 `gen-tsconfig-paths` 重生成：它会重写整段生成区，并顺手带回无关漂移（`@deepseek-ai/dsh-baf-core/types` 一条手工映射会被删掉）。把「补缺件」和「重排生成区」分成两件事，是这次刻意留下的取舍。
+8. **`版本` 在卡上只出现一次。** 写文档核对样张时发现首版实现把它印了两遍：一次是 `info` 态的体检行（`versionItem()`，与 §20.3 样张一致），一次是卡尾一个独立的 `【版本】` 分区（`versionLine()`，逐字相同的字符串）。删掉分区，并顺手去掉 `renderWelcomeCard` 的 `versions` 入参——那个入参只喂给了被删的分区，改由 `versionItem()` 自己调 `resolveBafProductVersions()`，留着会让「能注入版本号」成为一句空话（体检行根本不读它）。
+
+**一条工具坑（不是代码问题，但会误导后来人）**
+
+`npx tsx scripts/run-oxlint.ts <某个子目录>` 会报出成片的假阳性（`no-unnecessary-type-conversion` / `no-unsafe-*` / `require-await`）。原因：`.oxlintrc.json` 开了 `typeAware: true`，tsgolint 需要**整仓项目图**；只给它一个子树时部分类型退化成 `any`，规则就开始按错的前提开火。落地时实测：`packages/baf/baf-workflow` 子树报 47 条，其中一条落在**从未改动**的 `tests/fastpath.spec.ts` 上——同一个文件在仓库根调用下干净。判定标准是**仓库根**调用（`npx tsx scripts/run-oxlint.ts .`）：本次改动涉及的所有文件在根调用下**一条诊断都没有**。注意根调用本身也不是零基线（客户端 spec / `apps/web/tests` / `baf-guard/src/service.ts` 等未改动文件有约 28 条既有诊断，且**退出码为 0**），所以「lint 全绿」这句话不要写，能写的标准是「我改的文件不出现在输出里」。
+
+**未落地项（明确记账，别当成已完成）**
+
+- 桌面首屏的真实观感（卡片在 GUI 里的折行、`↳` 引导行是否够醒目）：要出包后在桌面里看，与 §8.7.8 同批。
+- §8.7.7 的 Tab 确认门高亮与 §18.4.3 双泳道视图：仍未开始（属 §8.7.7）。
+- §19.5 的 Tab 复位按钮 + `BafWorkflowTabRemote.resume()`：仍未开始。
+- §20.2 骨架接线 / §20.7 i18n key 登记到 `packages/client/ui-baf-workflow` 字典：属 Phase 8.10；当前卡片文案是 `session-gate.ts` 里的字面量，**尚未**走 i18n。
+- `gen-tsconfig-paths` 下次被谁调用时仍会报告 stale（它不认手工补的三条）——第 7 条已说明取舍。
+
+### 18.11 Phase 8.10 落地记录（2026-09-17）
+
+> §8.7.7 / §18.4.3 / §18.5 / §19.5 是**规范**；本节记录 Tab 上的三件配套落地：双泳道视图、确认门高亮 + 按钮、Tab 复位按钮 + `BafWorkflowTabRemote.resume()`。与 §18.9 / §18.10 同一性质。落点：`packages/baf/baf-workflow/src/lanes.ts`（新增）+ `src/pipeline-factory.ts`（新增）+ `src/tab-view.ts` + `src/command-drives.ts` + `src/index.ts`，以及 `packages/baf/baf-core/src/graph.ts` / `src/tab-view.ts`，以及 `packages/client/ui-baf-workflow/src/{client,types,index,typert.remote-client}` + `typert-artifacts/typert.remote-client.d.ts` + `client/remote-types.ts`。
+
+**文件分工**
+
+| 文件 | 职责 |
+| --- | --- |
+| `baf-workflow/src/lanes.ts` | `deriveLanes(events)`：在事件时间轴上以 `mode-upgraded` 为切点折两条泳道；纯函数、无副作用，Tab 每次刷新都重跑 |
+| `baf-workflow/src/pipeline-factory.ts` | `pipelineFor(cwd)`：workspace → baseline + git revision + pipeline 的统一构造器；slash / CLI / Tab Remote 三入口共用 |
+| `baf-core/src/graph.ts` | 把私有的 `FAST_PATH_ROWS` / `FULL_GO_ROWS` 提升为导出常量（§18.4.3 泳道行序的唯一定义者） |
+| `baf-core/src/tab-view.ts` | 新增 `gateToTabView` 单源谓词、`'confirm-gate' \| 'resume'` 两个 action ID；`statusToTabView` 加 4th `extras` 参数 |
+| `baf-workflow/src/tab-view.ts` | `buildWorkflowTabView` 接受 `resume?` provider；只有 `current === 'drift'` 时才调用 |
+| `baf-workflow/src/command-drives.ts` | 复用 `pipeline-factory.ts` 的 helper；保留 `driveResumeStage` 的暴露 |
+| `client/ui-baf-workflow/src/{client,types,index,typert.remote-client}` | i18n key 16 条、`<LanePanel>` / `<ResumeCard>` / `stripGate` UI、`@Remote('resume')` 方法 |
+| `typert-artifacts/typert.remote-client.d.ts` + `client/remote-types.ts` | `resume` namespace 注册到 host `$bafWorkflowView` + client `$626166576f726b666c6f7756696577`，与 5 个既有 descriptor 并列 |
+
+**五处实现细节（就地拍板）**
+
+1. **§18.4.3 双泳道在派生层实现，projection schema 不动。** `lanes.ts` 是**读 events 不写 events** 的纯函数；`mode-upgraded` 事件是唯一切点，切点前/后的 slice 各折一份 per-node status。这样既符合 §18.4.3 「不要给 projection 加 lane 字段」的约束，又让 UI 可以在每次刷新时重画两条泳道而无需重建事件流。**实现陷阱**：intake 节点没有自己的 `stage-entered` 事件，其生命周期是 `intake-classified` + `intake-confirmed` 两条，fold 时必须**显式映射**，否则两条泳道上 `intake` 永远是空状态。
+2. **升级边 `from`/`to` 从事件里读，不写死常量。** §18.4.3 要求图能「看」跳的是哪条边——硬编码 `implement → clarify` 会骗人。`from = lastEntered(before)` / `to = firstEntered(after) ?? DEFAULT_LANDING`，退化日志（升级前/后都为空）时降级到 `from = to = 'clarify'`，至少让边在屏上能看见而不是整个泳道视图塌掉。
+3. **保留产物从 `stage-completed` 拼，不从 `nodes` 终态推。** 这是 §18.4.3 「升级前 fast-path 的产物不删」的落实路径：升级前 slice 里的 `stage-completed` 事件自带的 `artifacts` 数组是该节点真正写入磁盘的产物清单，把它平铺出来作为 `preservedArtifacts` 比从当前 status 推可靠（status 不保留文件路径，只保留阶段状态）。**lintspec 捕到一个**：`before.flatMap(event => event.type === 'stage-completed' ? event.artifacts : [])` 即可，不要先 `.filter` 再 `.flatMap`——TS 在 `.filter` 之后已收窄类型，比较就成冗余。
+4. **§18.5 确认门用 `gateToTabView` 单源谓词。** 之前有至少两处独立判定「design 完成 / verify 完成 → 是否可推」，一处忘改另一处就成隐性 bug。集中后 `statusToTabView` 只问「当前节点是不是 parked 在 design/verify 且节点已完成」，命中则生成 `{ id, node, actionKey }` 让 UI 直接渲染按钮。i18n key `gate.confirmIntoPlan` / `gate.confirmArchive` 与按钮文案一一对应。
+5. **§19 Tab 复位按钮复用 slash 候选集的同一份 provider。** `getTabView` 接受 `resume: (changeId) => Promise<{anchor, candidates}>`，provider 内部调 `pipelineFor(cwd).resumeOptions(changeId)`——`pipeline.driveResumeStage` 与 Tab 的「重置」按钮读的是**同一份** `earliestAffectedNode(status, signals)`。slash / CLI / Tab 三处候选集永远一致：避免「slash 里列 open/plan，Tab 里只剩 open」的隐性分叉。
+
+**三条工具坑（不是代码问题，但会误导后来人）**
+
+- **`stale src/*.js` 把 vitest 引入歧路。** 老旧的 `packages/*/src/*.js`（gitignored，但本地残留）在 Vite 解析下比 `.ts` 优先级更高——本节落地初期 lanes 测试全 9 例因 `gateToTabView is not a function` 红屏，根因是 `baf-core/src/tab-view.ts` 旁边的 `tab-view.js` 是上一轮的产物。清掉 `src/**/*.js` + `src/**/*.d.ts` + `src/**/*.js.map` + `src/**/*.d.ts.map`（共 115 文件）后立刻恢复。**怎么判定**：同一个测试在仓库根 `vitest run` 下报错，在已删 `.js` 的 git stash 下干净——就是 stale shadow。**记入[[baf-dsh-stale-src-js-shadowing]]**。
+- **`tsc -b` 报 TS5055「Cannot write file '.../lib/types/types.d.ts' because it would overwrite input file」**——根因是 host (`tsconfig.host.json`) 与 client (`tsconfig.client.json`) 共用同一 `outDir: lib/types`，上一轮的 buildinfo 把 host 输出的 `types.d.ts` 标记为 client 的 dirty input。修法：删 `lib/tsconfig.client.tsbuildinfo` + `lib/` 整目录，再补 `src/types.ts` / `src/invariant.ts` 到 client 的 `files` 列表（`remote-types.ts` 引用它们）。
+- **`.tsx` 模板字面量类型 = `WorkflowTabKey`**，无需 `as WorkflowTabKey` 断言——TS 已经把 `` `node.${WorkflowNodeId}` `` 收窄成 `WorkflowTabKey`，断言是 lint 上的噪音。本节落地时连带修了 `WorkflowView.tsx` 的 7 条诊断：`arrow-parens` × 1、`no-confusing-void-expression` × 4、`no-unnecessary-type-assertion` × 4、`no-unnecessary-type-conversion` × 2。
+
+**未落地项（明确记账，别当成已完成）**
+
+- 桌面首屏的真实观感（卡片在 GUI 里的折行、`↳` 引导行是否够醒目）：要出包后在桌面里看，与 §8.7.8 同批。
+- §20.7 i18n key 与 `baf-welcome` 卡片的 i18n 化：16 条 lane/gate/resume key 已登记到 `packages/client/ui-baf-workflow` 字典；`session-gate.ts` 里的卡片文案仍是字面量（属 §8.10 的下一批）。
+- 升级边当前**不带 stage 标签**（只标 from/to）；要不要按 §18.4.5 在边上画「fast-path 走 N0→N5、升级后走 N2→N7」的节奏条——属于视觉细节，等首屏观感回来再决定。
+- `gen-tsconfig-paths` 下次被谁调用时仍会报告 stale（它不认手工补的三条）——§18.10 第 7 条已说明取舍。
+
+---
+
+
+## 19. `/baf-workflow-resume`：drift 之后的交互式复位
+
+> **本章补的是一条曾经完全缺失的出口**。落地前的事实核对：
+> - `packages/baf/baf-workflow/src/stages/drift.ts` 的 `detectAndRecord()` 会把 `drift-detected` 写进 projection，replay 后 `state.current = 'drift'`、被影响节点标 `drifted`；
+> - `WorkflowService.transition()`（`workflow-service.ts`）在 T13 上允许 `drift → 最早受影响节点`；
+> - `TransitionService` 之前的出口**没有任何 slash / CLI / Tab / Remote 入口暴露 T13**——`commands.ts` 注册的 11 个驱动器里没有 drift 或 resume；
+> - `stages/pipeline.ts:480` 的 JSDoc 写着 `{@link driveResumeStage}`，但该方法**不存在**（失效引用）。
+>
+> 结果曾是：一旦 drift，客户在 UI 上**无路可走**，只能手工编辑 `.baf/projection/*.jsonl`。
+>
+> **现状（Phase 8.9 已落地）**：drive / slash / CLI 三层出口已接通，`driveResumeStage` 已存在且 JSDoc 引用有效；Tab 与 Remote 的入口见 §19.5 的「待完成」。
+
+### 19.1 语义与边界
+
+- 只解决 **N8 drift 的出口**（T13），**不引入第四条回环**；`verify → implement`（T11）与 `fast-path → full-go`（T15）各走既有入口。
+- 目标节点**由 drift evidence 决定候选集**，客户在候选集内选；**不允许跳到「尚未完成或已失效」的阶段**（§5.2 T13 原文约束）。
+- 复位写 `stage-entered`（附客户选择理由与触发信号），**不删除**任何已完成产物；已完成但失效的节点保持 `drifted` 标注。
+- **与 `resume`（自动恢复）区分**：`resume` 是崩溃/重开后的**自动**恢复，阶段不变；drift 复位是**客户决策**，阶段可能回退。两者不能互相替代（§5.3）。
+
+### 19.2 候选集怎么算出来
+
+复用 `stages/drift.ts` 已有的纯函数 `earliestAffectedNode(status, signals)`，它已经实现了下面这张表；命令把它当**默认项**：
+
+| 触发信号 | 最早受影响节点 |
+| --- | --- |
+| `artifact-missing`（如 `design.md` 被删） | 该产物所属节点（按 `STAGE_ORDER` 找最早的那个） |
+| `git-revision-changed` / `baseline-id-changed` / `baseline-content-changed` | 在途节点（`status.current`）；已终态则 `verify` |
+| `verify-report-stale` | `verify` |
+
+候选集 = `earliestAffectedNode()` 及其**之前**的已完成节点（客户可以退得更早、不能跳得更晚），去掉不可重跑的 `intake` / `open`（这两步的记录不会被漂移作废），按**从晚到早**排列，第 0 项是推荐默认。`open` 时就被影响的退化场景里候选集退化为 `[anchor]`。
+
+**已落地（Phase 8.9）**，三条落地时才暴露出来、文档必须记住的规则：
+
+1. **锚点可复原**：`drift-detected` 落库后 `status.current` 被停到伪节点 `drift`，此时再调 `earliestAffectedNode()` 必须**从被标 `drifted` 的节点反查锚点**（`nodes[anchor] === 'drifted'`），否则会算出 `drift` 本身。函数已按「artifact-missing → 被标 drifted 的节点 → 在途节点 → `verify`」四段判定，**记录路径与复位路径共用同一个函数**（§21.5）。
+2. **两条写 `drift-detected` 的路径已合并为一条**：`workflow-service.ts` 里 `to === 'drift'` 的那条分支**已删除**，`decideTransition()` 直接以 `invalid_transition` 拒绝调用方发起的 `transition({to:'drift'})`，调用方被指向 `driveDriftStage()` → `detectAndRecord()`。T12 的锚点算法全仓只有一份。
+3. **所有比较都是「两侧都能观测」才成立**：`compareToLocked()` 在 `observation.baseline === undefined` 时**不再报 `baseline-id-changed`**。原先那条会把「探测方没挂 baseline」误判成「baseline 被删」，于是任何没有 baseline 的入口（如 `pipelineFor()` 在缺 `.baf/baseline.yml` 的目录里）都会把健康变更判成漂移。同理 `baseline-locked` 现在**记录 `contentHash`**（取自 manifest，而不是取自只存身份字段的 lock），否则内容哈希永远对不上，同样造成「每次都漂移」的假阳性；旧日志没有该字段时**跳过内容比较**而不是报警。
+
+### 19.3 交互协议
+
+`/baf-workflow-resume`（**无参数**）：
+
+1. 先跑一次**只读**检测（`pipeline.resumeOptions(changeId)`，内部 `detectDrift(..., {record:false})`）——**不写事件**。
+2. 无信号 → 卡片「当前无漂移，无需复位」+ 当前节点；`projectionVersion` 不变。
+3. 有信号 → 卡片列出候选节点 + 每个候选的「为什么」（触发信号）+ 回退后需要重跑的阶段：
+
+```
+✗ drift detected · chg-0007 · 当前节点失效 · 请选择复位目标 · 点本行展开/折叠指令全文
+────────────────────────────────
+类型：系统斜杠指令（不是大模型回复）
+
+【漂移证据】
+  git-revision-changed  HEAD 从 4f2c1ab 移到 9d3e802（open 时锁定）
+  verify-report-stale   verify-report.json 绑定 4f2c1ab，现为 9d3e802
+
+【候选复位目标】（只能往更早选，不能跳过未完成阶段）
+  /baf-workflow-resume verify     ← 默认 · 只重跑 verify
+  /baf-workflow-resume plan       重跑 plan → implement → verify
+  /baf-workflow-resume design     重跑 design → plan → implement → verify
+
+【不做任何事的后果】
+  流程停在 drift，所有 mutating 工具被 guard 拒绝
+```
+
+> **证据行的回退**：漂移是**早先**记录的时候，重新检测可能**一个信号都复现不出来**（它要比较的锚点正是它自己作废掉的那批）。这种情况下证据区**回退到 `drift-detected` 事件里记下的 `cause`**（`status.annotations.drift.detail`），卡片绝不允许出现「声称有漂移但不给理由」的空证据区。
+
+4. 客户回一条带节点的命令（`/baf-workflow-resume verify`）→ 校验目标 ∈ 候选集（否则 `invalid_transition`）→ `pipeline.driveResumeStage(changeId, target)` → `WorkflowService.transition` 裁决 T13（`findRule` 里 T13 的判定**先于**通用 `to` 过滤，因此 `drift → <任意候选>` 都合法；终态目标仍归 T14/T16 自己的规则，证据检查不被跳过）→ 落 `stage-entered`（`cause = "drift-resume: <anchor> → <target> (<触发信号>)"`）→ coordinator 把 `current=<node>` 交回 §18.4.2 继续。
+5. **幂等**：已在目标节点 in-progress 时返回「已在 `<node>`」卡，不重复写事件。
+6. **不允许模型替客户选节点**——沿用 §5.6「多 change 强制选择」的同一原则：候选集由机器算，选择由客户做。
+
+**复位同时清掉「停在 drift」这个状态**：`stage-entered` 会在 replay 时删掉 `nodes.drift`（它表示「当前停在 drift」，不是「历史上漂过」——审计靠 projection 里的 `drift-detected` 事件）。`WorkflowService.resume().drifted` 因此只看 `status.current === 'drift'`。被漂移作废的那个节点**保持 `drifted` 标注**，作为「它的产物已失效」的痕迹。
+
+### 19.4 `baf-go` 的自动映射
+
+- drift 状态下敲 `/baf-go` **不报错**，而是直接执行 19.3 的检测 + 候选卡片（这就是「`baf-go` 在 drift 状态下自动映射触发 resume」）。
+- **`baf-go` 永不自动选节点**。原因：回退到哪个节点，等于客户在回答「哪些已做过的工作算作废」——这是产品决策，不能由模型或 coordinator 代答（§17.7 R18）。
+- 客户在候选卡上选完节点后，再敲一次 `/baf-go` 即从该节点继续自动推进。
+
+### 19.5 入口与落点
+
+| 形态 | 调用 |
+| --- | --- |
+| slash | `/baf-workflow-resume [节点]` |
+| standalone CLI | `dsh … -- workflow-resume [节点]` |
+| desktop Tab | drift 节点上的「复位到…」按钮 → 候选下拉 |
+| Remote（Typert） | `BafWorkflowTabRemote.resume(node?)` |
+
+落点：`command-drives.ts` 新增 `driveResume`（组合只读检测 + 候选卡 + `pipeline.driveResumeStage`）；`stages/pipeline.ts` 新增公开只读 `resumeOptions(changeId)` 与写路径 `driveResumeStage(changeId, target, observation?)`（顺带改正原 480 行的失效 JSDoc）；`stages/drift.ts` 新增 `resumeCandidates()` 与 `rerunChain()`；`commands.ts` 注册 `/baf-workflow-resume`、`cmdline.ts` 注册 `baf workflow-resume`；`tab-remote` 加 `resume()`。
+
+**已完成**：drive / slash / CLI 三层已接通（`surface-parity.spec.ts` + `cmdline.spec.ts` 快照同步更新）。
+**待完成**：§19.5 表里的 Tab 按钮与 `BafWorkflowTabRemote.resume()` 仍是空缺——Tab 侧目前只能靠 slash/CLI 复位。
+
+### 19.6 输出与错误
+
+| 场景 | 卡片 | 错误码 |
+| --- | --- | --- |
+| 无 drift | `当前无漂移，无需复位` | — |
+| 有 drift，列出候选 | `drift detected · 请选择复位目标节点` | — |
+| 参数不在候选集 | `目标节点不在候选集内` | `invalid_transition` |
+| 已在目标节点 in-progress | `已在 <节点>`（幂等，不写事件） | — |
+| change 已是终态 | `当前 change 已终态，无需复位` | — |
+| projection 损坏 | `projection_corrupted · 停在 seq <n>` | `projection_corrupted` |
+
+---
+
+## 20. BAF 工作流输出规范（状态行 / 卡片 / 日志）
+
+> 需求：「工作流的日志打印需要标准和规范，需要明确状态等有用信息，要求打印关键信息，直观，易读，醒目，完整。」本章把这条需求落成**可执行的格式约定**；所有 `/baf-*`、`baf *`、Tab、Remote 输出共用同一套，不新增第四套输出通道。
+
+### 20.1 三层输出，各司其职
+
+| 层 | 谁看 | 载体 | 硬约束 |
+| --- | --- | --- | --- |
+| **L1 状态行** | 客户扫一眼 | CLI 末行 / Tab 顶栏 | ≤ 120 字符、单行、恒含 `change · 节点 · 下一步` |
+| **L2 卡片** | 客户读 | `formatCommandReport()` 文本 | 首行 = 折叠态标题；展开 = 固定顺序分段正文 |
+| **L3 日志** | 排障 / 审计 | `ctx.logger` + projection 事件 | 结构化 `key=value`、只打元数据、与 projection 同源 |
+
+模型自然语言回复**不算** BAF 输出（§5.6：自然语言不是转换证据，也不是状态展示）。
+
+### 20.2 L2 卡片统一骨架
+
+沿用既有 `formatCommandReport(ok, headline, sections)`：
+
+```
+✓ <headline>                              ← 折叠态只看这一行
+────────────────────────────────
+类型：系统斜杠指令（不是大模型回复）
+
+【状态】
+【本次动作】
+【产物】
+【下一步】
+【可用指令】
+```
+
+- section **顺序固定**、按需裁剪；**不许**自创 section 名。
+- **标题（headline）约定**（沿用 2026-09-14 commit 的 tier-prefix 约定）：
+  - 成功：`自动驱动 · <阶段> 已完成 · 下一步 <节点> · 点本行展开/折叠指令全文`
+  - 待确认：`自动驱动 · <阶段> 已完成 · awaiting_customer_confirm · 点本行展开/折叠指令全文`
+  - 错误：`<错误码> · <一句话结论> · 下一步 <客户动作> · 点本行展开/折叠指令全文`
+- `【状态】`恒含五项：change id、mode、当前节点、节点状态、「距离完成还差 N 步」。
+- `【下一步】`必须写成**客户能照做的动作**（「回复 `/baf-go`」「回复 `/baf-workflow-resume verify`」），不写「继续工作」这类空话。
+
+### 20.3 会话启动卡（欢迎语）模板
+
+§18.3 的启动门输出，固定用这个骨架：
+
+```
+✓ BAF 模式已就绪 · <workspace 名> · 无未完成工作流 · 点本行展开/折叠指令全文
+────────────────────────────────
+类型：系统斜杠指令（不是大模型回复）
+
+【环境体检】
+  ✓ workspace      D:\Source\...\deepseek-harness
+  ✓ baseline       baf-baseline-c@1.2.0（2026-09-01 冻结）
+  ✓ Git            4f2c1ab（drift 锚点）
+  ✓ OpenSpec       1.4.2 · openspec/changes 存在
+  ? C 工具链        未探测 · 首次进入 verify 时检查
+  ✓ guard/quality  已挂载
+  版本             baf-dsh 0.0.15 · dsh 0.1.5-alpha.1 · baf-* 0.1.5-alpha.1
+
+【本会话绑定】
+  无 —— 直接描述你的需求即可开始（intake 分类卡会自动弹出）
+
+【下一步】
+  直接描述你的需求（自动进入 intake 分类）；也可回复 /baf-go 重新查看本卡。
+
+【可用指令】
+  /baf-welcome                 重印本卡（绑定 + 体检）
+  /baf-go                      推进当前工作流到下一个需要你确认的点
+  /baf-workflow-resume [节点]   drift 后复位到合法节点
+  /baf-status                  完整状态 · /baf-doctor 体检明细
+  /baf-help                    全部指令与用法
+```
+
+- 首行结论随绑定分支变化：`无未完成工作流` / `检测到未完成工作流 <id>（当前 N<x>）· 继续还是新开？` / `检测到 <n> 条未完成工作流 · 请选择`。
+- 缺件行 `✗` + 一行**可直接照做**的安装引导（缩进 `↳`）；未探测到用 `?`，**不伪装成 ✓**。
+- `版本` 是**体检行的最后一行**（`info` 态、**不带符号**），不再另起一个同名分区——同一张卡里同一个数字出现两次违反「醒目、易读」。
+
+### 20.4 L3 结构化日志行
+
+```
+[baf] <iso8601> <changeId> <node> <event> key=value key=value …
+```
+
+例：
+
+```
+[baf] 2026-09-17T10:22:03Z chg-0007 design  stage-completed        artifacts=design.md
+[baf] 2026-09-17T10:22:03Z chg-0007 design  awaiting-customer-confirm gate=A
+[baf] 2026-09-17T10:23:41Z chg-0007 plan    stage-entered          source=user-confirm
+[baf] 2026-09-17T10:31:10Z chg-0007 drift   drift-detected         trigger=git-revision-changed from=4f2c1ab to=9d3e802
+```
+
+规则：
+
+- **一行一事**；`key=value` 不引号、不嵌套、值内不含空格（需要空格时转 `_`）。
+- **永不打印**：文件内容、prompt、token、凭证、绝对路径之外的私有信息——受 `secret-scan` / `secret_detected` 门禁。
+- 日志是 projection 事件的**投影**，不是第二权威（§5.7）：`projection` 决定状态，日志只解释状态。
+
+### 20.5 醒目度约定
+
+| 符号 | 固定语义 | 不许挪用 |
+| --- | --- | --- |
+| `✓` | 成功 / 就绪 | 不用来表示「有内容」 |
+| `✗` | 失败 / 缺失 | — |
+| `?` | 未探测 / 未知 | 不许写成 ✓ |
+| `■` | 停下等客户 | 不使用在自动推进路径 |
+| `→` | 下一步 | — |
+
+- **结论永远在第一行**（折叠态可读）。
+- **需要客户动作的卡片，首行必须出现动作词**（「请确认」「请选择」「请新开 session」）。
+- **无颜色依赖**（§14.3：非色彩状态表达），颜色只是增强。
+
+### 20.6 i18n
+
+所有 L1 / L2 / L3 文案（含卡片标题、体检行、引导语、Tab 泳道标签）走既有 i18n（§10.2），禁止硬编码——`verify-client-ui-i18n` 门禁会拦。
+
+- 门禁的实际覆盖范围是**客户端面**（`packages/client/ui-*/src`、`packages/*/*/src/client/**`、`apps/web/src`、`apps/desktop` 渲染层），域层卡片文案不在它的 glob 里。因此域层（如 `session-gate.ts`）的中文字面量**目前不会被这条门禁拦下**——它是一条待办，不是已生效的保证（见 §18.10 未落地项）。
+
+### 20.7 新增 i18n key 清单（Phase 8.7–8.10 冻结）
+
+| key | zh | 用在哪 |
+| --- | --- | --- |
+| `baf.sessionGate.noActive` | 无未完成工作流 · 请描述需求 | §18.3 启动卡 |
+| `baf.sessionGate.oneActive` | 检测到未完成工作流 {changeId}（当前 {node} · {mode}）· 继续还是新开？ | 同上 |
+| `baf.sessionGate.multiActive` | 检测到 {count} 条未完成工作流 · 请选择一条继续，或选择新开 | 同上 |
+| `baf.sessionGate.choiceContinue` / `.choiceNew` | 继续 / 新开 | 同上 |
+| `baf.probe.ok` / `.missing` / `.unknown` | 就绪 / 缺失 / 未探测 | §20.3 体检行 |
+| `baf.probe.hint.openspec` | 安装 OpenSpec CLI 或运行 baf scaffold | §18.3.2 |
+| `baf.probe.hint.baseline` | 运行 baf scaffold 或导入企业 baseline | §18.3.2 |
+| `baf.gate.awaitingCustomerConfirm` | 待客户确认 | §18.5 |
+| `baf.gate.designDone` | 设计文档已实现 · 请确认是否进入 plan | §18.5 门 A |
+| `baf.gate.verifyPassed` | verify 已通过 · 请确认是否归档 | §18.5 门 B |
+| `baf.gate.replyToContinue` | 回复 /baf-go 继续 | §20.5 |
+| `baf.go.cardTitle.continue` | 自动驱动 · {node} 已完成 · 下一步 {next} | §20.2 |
+| `baf.resume.noDrift` | 当前无漂移，无需复位 | §19.3 |
+| `baf.resume.candidates` | 检测到漂移 · 请选择复位目标节点 | §19.3 |
+| `baf.resume.invalidTarget` | 目标节点不在候选集内 | §19.6 |
+| `baf.binding.newSessionRequired` | 当前 session 已有工作流 · 请新开一个会话 | §18.6 |
+| `baf.tab.lane.fastpath` / `.lane.fullgo` | 缺陷快路径（升级前） / 完整流程（升级后） | §18.4.3 |
+| `baf.tab.edge.upgraded` | T15 升级：{from} → {to} | §18.4.3 |
+
+---
+
+## 21. 已拍板事项（Phase 8.7–8.10，2026-09-17 确认）
+
+> 21.1–21.5 已由产品负责人确认；21.6 / 21.7 是 Phase 8.9 落地时才暴露、按同一原则（单一算法、不留分叉）就地拍板的补充项；21.8 / 21.9 分别是 Phase 8.7 / 8.8 的落地补充（细节记在 §18.9 / §18.10，本表只登记「有这件事」）。均按「结论」一栏实施；原始取舍记录保留在下面，便于日后回溯为什么这么定。
+
+| # | 结论 | 影响 |
+| --- | --- | --- |
+| 21.1 | **复用 `intake_confirmation_required`**，不新增错误码 | 不动 Phase 0 冻结的错误码 contract；卡片中文文案负责把「没有工作流」说清楚 |
+| 21.2 | **硬拦**：启动门选「新开」且 cwd 仍有未终态 change → 拒绝并提示新开会话 | §18.3.1 的「新开」分支改为硬拦；与 §18.6 守卫 5 合流 |
+| 21.3 | **保留** `/baf-go <描述>` 边缘形式（未绑定时等价于说需求） | CLI / 脚本一次性投喂可用 |
+| 21.4 | **C 工具链不进首屏**：显示 `? 未探测 · 首次进入 verify 时检查` | §18.3.2 检查表首屏只探低成本项 |
+| 21.5 | **删掉** `transition({to:'drift'})` 分支，只留 `earliestAffectedNode()` 一条算法 | Phase 8.9 改 `workflow-service.ts` + `transition.ts` |
+| 21.6 | drift 信号**两侧都能观测**才判定；`baseline-locked` 增补 `contentHash` | 修掉「每次检测都报漂移」的两个假阳性 |
+| 21.7 | drift 锚点可从 `nodes[*] === 'drifted'` 反查；`nodes.drift` 只表示「当前停在 drift」 | 复位能算出候选集；复位后 `resume().drifted` 正确归 false |
+| 21.8 | Phase 8.7 落地期五处原文未覆盖的细节，按「单一判定点 / 幂等 / 不猜」就地拍板 | 见 §18.9；只影响 `go-coordinator.ts` 内部，不改 §18 规范 |
+| 21.9 | Phase 8.8 落地期八处原文未覆盖的细节（探针缓存键与 TTL / 门只读不代绑 / shell 拉 CLI + 超时记 `?` / doctor 反向复用探针 / 卡片经 `/baf-welcome` 投递 / 同步 section 读快照 / 三条 tsconfig 映射手工补 / 卡片上 `版本` 只出现一次） | 见 §18.10；不改 §18.3 规范，只有 §18.3.2 的 OpenSpec 行与 §20.3 样张按实现收紧 |
+
+### 21.1 「未绑定工作流」是否单列错误码
+
+- **现状**：`baf-guard` 的 `adjudicateFsWrite()` 在 `!state.active` 时直接 `deny('intake_confirmation_required', 'no active change: start and confirm one in the workflow tab first')`——**「必须依托工作流才能落代码」这条硬门禁今天就已经生效**。
+- **问题**：`intake_confirmation_required` 的语义是「分类未确认」，实际含义是「压根没有工作流」，reason code 名不达意。
+- **选项 A（采纳）**：复用现有码。零改动；卡片首行的中文文案把话说清楚即可。
+- **选项 B（未采纳）**：在冻结的 `overlay/docs/baf/error-codes.md` 增补 `workflow_binding_required`。语义准确；代价是动一次 Phase 0 冻结清单 + guard 分支 + 测试 + i18n。
+- **理由**：Phase 0 错误码清单是给企业看的 contract，为命名美感动一次冻结清单不划算。
+
+### 21.2 启动门选「新开」但 cwd 仍有未终态 change 时，硬拦还是提示
+
+- **冲突点**：需求 3 要求「一个对话条目下仅支持一个工作流」，而 §18.6 守卫 5 只在「session 已有**绑定**的 active change」时硬拦。启动门选「新开」会把焦点置空，于是客户可以在同一 session 里建第二条 active change（cwd 里就同时挂着两条）。
+- **选项 A（采纳）**：**硬拦**。选「新开」且 cwd 存在未终态 change → 卡片拒绝并提示「请新开一个会话」，与需求 3 的原意一致。
+- **选项 B（未采纳）**：允许，只在卡上提示「旧的 `<id>` 仍 active，建议新开会话」。灵活，但会在 cwd 里堆 active change，dashboard 视图变吵。
+- **理由**：如果客户确实要在同一会话里换工作流，让他先 `abandon` 旧的——这个动作本身也是显式决策。
+
+### 21.3 `/baf-go <描述>` 边缘形式是否保留
+
+- **选项 A（采纳）**：保留。只在「未绑定」时等价于说需求；已绑定时拒绝。CLI / 脚本一次性投喂需要它，且不破坏主路径。
+- **选项 B（未采纳）**：彻底删除，`/baf-go` 只接受零参数。语义最干净，但 CLI 自动化只能靠「先启动门、再走 intake」两步。
+
+### 21.4 启动门体检范围：C 工具链是否进首屏
+
+- **问题**：C 编译 / 测试 / 覆盖率 / 静态分析要 spawn 多个外部进程（gcc / gcovr / cppcheck…），全部放进首屏体检会让欢迎卡慢几秒，且大部分会话在 clarify/design 阶段根本用不到。
+- **选项 A（采纳）**：首屏只探测**低成本项**（workspace / baseline / Git / OpenSpec / guard 与 quality 挂载 / 版本）；C 工具链那一行显示 `? 未探测 · 首次进入 verify 时检查`，真正的逐项探测交给 Phase 7 的 QualityRunner。
+- **选项 B（未采纳）**：全部进首屏，逐项 1.5s 超时。体检最全，代价是首屏最慢。
+
+### 21.5 drift 的两条写入路径统一口径
+
+- **问题**：`stages/drift.ts` 与 `workflow-service.ts` 各有一条写 `drift-detected` 的路径，算「最早受影响节点」的算法不同（详见 §19.2 的告警框）。
+- **选项 A（采纳）**：`transition({to:'drift'})` 那条分支**删掉**（当前无用户入口），只保留 `driveDriftStage` → `detectAndRecord` → `earliestAffectedNode` 一条算法；`WorkflowService` 若仍需暴露 drift，改为转调同一函数。
+- **选项 B（未采纳）**：两条都保留，但都改调 `earliestAffectedNode()`。
+- **理由**：少一条路径就少一处分叉——这正好是 §17.7 R11「coordinator 不许自建第二套转换规则」的同一个道理。
+- **落地补充**：拒绝点放在 `decideTransition()`（唯一决策点），而不是 `applyAcceptedTransition()`；`workflow-service.ts` 只删掉旧的 `drift-detected` 写入分支。见 §21.7。
+
+### 21.6 drift 信号的判定口径：「两侧都能观测」才成立
+
+- **问题**（Phase 8.9 落地时才暴露，是**两个真 bug**，不是文档笔误）：
+  1. `baseline-locked` 只记 `baselineId` / `sourceRevision` / `lockedAt`，而 `lockedFromStatus()` 拿 `hashCanonical(status.baseline)`——**拿 lock 去比 manifest 的哈希，永远不相等**，于是任何有 baseline 的变更**每次检测都报 `baseline-content-changed`**。
+  2. `compareToLocked()` 把 `observation.baseline === undefined` 解读成「baseline 被删了」。但探测方没挂 baseline（如 `pipelineFor()` 跑在没有 `.baf/baseline.yml` 的目录）与 baseline 真的被删，在这里**无法区分**——结果是把健康变更判成漂移。
+- **选项 A（采纳）**：
+  - `BaselineLock` 增补可选字段 `contentHash`，在 open 时**从 manifest 取值**落库；旧日志没有该字段时**跳过内容比较**（而不是报警，否则归档日志会永远自报漂移）。
+  - `compareToLocked()` 的 baseline 分支加 `observation.baseline !== undefined` 前置条件，与 git revision、verify report 两条比较的既有口径（都是「两侧都有才比」）**对齐**。
+- **选项 B（未采纳）**：把「baseline 缺失」当硬漂移，靠调用方保证探测完整。语义更严，但每个入口都得记住挂 baseline，漏一个就把健康变更钉死在 drift。
+- **理由**：检测器的契约是「比较我**能**观测到的东西」。观测不到的事实不是变更证据。而「文件真被删」的场景在 Git 侧已经由 `git-revision-changed` 覆盖。
+
+### 21.7 drift 锚点的可复原性与 park 语义
+
+- **问题**：
+  1. `drift-detected` 落库后 `status.current === 'drift'`，此时再调 `earliestAffectedNode()` 会返回 `drift` 本身——复位命令算不出候选集。
+  2. `nodes.drift === 'drifted'` 在复位后**永不清除**，于是 `WorkflowService.resume().drifted` 仍报 `true`，session 启动门会把已复位的变更判成漂移状态。
+- **选项 A（采纳）**：
+  - `earliestAffectedNode()` 增补一段「从 `nodes[anchor] === 'drifted'` 反查锚点」，置于「在途节点」判定**之前**；记录路径与复位路径共用这一个函数（与 §21.5 同一原则）。
+  - `nodes.drift` 语义收窄为「**当前**停在 drift」：`stage-entered` 在 replay 时删除该键；`WorkflowService.resume().drifted` 只看 `status.current === 'drift'`。历史由 projection 里的 `drift-detected` 事件承担。
+  - 被漂移作废的那个节点**保持 `drifted` 标注**（不清），作为「它的产物已失效」的痕迹。
+- **选项 B（未采纳）**：新增一个 `drift-resolved` 事件显式清除。更显式，但多一种事件类型、多一处 replay 分支，而 `stage-entered` 已经蕴含了「离开 park」这个语义。
+
+### 21.8 Phase 8.7 落地期的五处实现细节
+
+- **来源**：写 `go-coordinator.ts` 时暴露的边界，§18 原文没写到。与 21.6 / 21.7 同类：**规范不动，只把实现的口径钉住**。
+- **五条**：① `intake` 已 confirm 未 open 时用 `driveClassify confirm` 走完，而不是要求客户重敲命令；② 带需求的 `baf-go` 在任何 active change 存在时都拒绝，**先于**焦点判定；③ 焦点变更已终态时仍绑定，渲染「已终态」而非「无未完成工作流」；④ 门解锁靠**读事件尾巴**（`events.at(-1)`），这才保证解锁恰好消耗一次；⑤ `awaiting-confirm` 只做审计，门禁判定一律看 `status.current` + `nodes`。
+- **详细理由与反例**：见 §18.9 —— 那份记录是给日后改 coordinator 的人看的，别只读本节的一行摘要。
+
+---
 
 ## Dev Note（非权威）
 

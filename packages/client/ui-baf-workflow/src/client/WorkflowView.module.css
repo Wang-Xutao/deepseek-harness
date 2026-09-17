@@ -8,6 +8,8 @@
   --wf-line: var(--dsw-alias-border-subtle, #d7dee8);
   --wf-danger: var(--dsw-alias-text-danger, #dc2626);
   --wf-ok: var(--dsw-alias-text-success, #16a34a);
+  /* §18.5 parked gate + §18.4.3 upgrade edge: one "attention, not error" hue. */
+  --wf-gate: var(--dsw-alias-text-warning, #7c5cff);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -692,3 +694,115 @@
 @media (prefers-reduced-motion: reduce) {
   .flowNode, .card, .edge, .edgeActive, .nodeCurrent { animation: none; }
 }
+
+/* §18.5 parked gate: a distinct "waiting on you" state, deliberately not the
+   danger styling — nothing is broken and the highlighted button is the way out. */
+.stripGate { color: var(--wf-gate, #7c5cff); }
+
+.nodeGate {
+  border-color: color-mix(in srgb, var(--wf-gate, #7c5cff) 60%, var(--wf-line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wf-gate, #7c5cff) 35%, transparent),
+    0 12px 24px -20px color-mix(in srgb, #000 35%, transparent);
+}
+
+.statusGate { color: var(--wf-gate, #7c5cff); }
+
+.cardDrift {
+  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #d97706) 45%, var(--wf-line));
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--dsw-alias-text-warning, #d97706) 9%, var(--wf-card)),
+    var(--wf-card));
+}
+
+.resumeSelect {
+  flex: 1 1 9rem;
+  min-width: 7rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--wf-line);
+  background: var(--wf-card);
+  color: var(--wf-ink);
+  font-size: 0.74rem;
+}
+
+/* §18.4.3 dual lanes: both paths stay on screen after a T15 upgrade; the
+   pre-upgrade lane is dimmed, never removed. */
+.lanes {
+  flex: none;
+  padding: 0.55rem 0.7rem 0.6rem;
+  border-bottom: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--wf-card) 70%, transparent);
+}
+
+.lanesHint {
+  margin: 0 0 0.4rem;
+  font-size: 0.68rem;
+  color: var(--wf-muted);
+}
+
+.laneRows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lane {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.laneLabel {
+  flex: none;
+  width: 11rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+}
+
+.lanePreserved .laneLabel,
+.lanePreserved .laneNode { opacity: 0.62; }
+
+.laneTrack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.laneNode {
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--wf-line);
+  font-size: 0.68rem;
+  color: var(--wf-muted);
+  background: var(--wf-card);
+}
+
+.upgradeEdge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--wf-line);
+  font-size: 0.7rem;
+}
+
+.upgradeTitle {
+  font-weight: 700;
+  color: var(--wf-gate, #7c5cff);
+}
+
+.upgradeMeta { color: var(--wf-muted); }
+
+.preserved {
+  margin-top: 0.3rem;
+  font-size: 0.7rem;
+}
+
+.preserved .list { margin-bottom: 0; }

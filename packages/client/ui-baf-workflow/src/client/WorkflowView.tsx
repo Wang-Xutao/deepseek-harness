@@ -9,7 +9,13 @@ import {
 import clsx from 'clsx'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { WorkflowTabView, WorkflowTabNodeView, WorkflowNodeId } from './tab-types.ts'
+import type {
+  TerminalStateId,
+  WorkflowNodeId,
+  WorkflowTabLanesView,
+  WorkflowTabNodeView,
+  WorkflowTabView,
+} from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
 import { CATALOG_ZH } from './catalog-i18n.ts'
 import { buildClientTemplateTabView, withRenderableGraph } from './graph-template.ts'
@@ -22,7 +28,9 @@ export interface WorkflowViewInjected {
   confirmIntake: (changeId: string) => Promise<WorkflowTabView>
   rejectIntake: (changeId: string) => Promise<WorkflowTabView>
   startIntake: (description: string) => Promise<WorkflowTabView>
-  transition: (changeId: string, to: 'open') => Promise<WorkflowTabView>
+  transition: (changeId: string, to: WorkflowNodeId | TerminalStateId) => Promise<WorkflowTabView>
+  /** T13 rollback (§19.5): omit `node` to re-read the freshly detected menu. */
+  resume: (changeId: string, node?: WorkflowNodeId) => Promise<WorkflowTabView>
 }
 
 export type WorkflowViewProps =
@@ -65,6 +73,27 @@ function statusClass(status: WorkflowTabNodeView['status']): string {
     case 'skipped': return css.statusDrifted ?? ''
     default: return css.statusIdle ?? ''
   }
+}
+
+/**
+ * Substitute `{name}` placeholders in a dictionary entry.
+ *
+ * The locale dictionaries are flat strings, so the few entries that carry
+ * runtime values (`edge.upgraded`, …) declare them inline and fill here rather
+ * than concatenating fragments at the call site — that keeps the whole sentence
+ * in the dictionary where a translator can reorder it.
+ * @param template - dictionary entry with `{name}` placeholders.
+ * @param values - substitution table.
+ * @returns filled text.
+ */
+function fillTemplate(template: string, values: Record<string, string>): string {
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match)
+}
+
+/** Trim a recorded artifact path down to its file name for display. */
+function artifactName(path: string): string {
+  const parts = path.split(/[\\/]/)
+  return parts[parts.length - 1] || path
 }
 
 function modeLabel(mode: string, t: (key: WorkflowTabKey) => string): string {
@@ -137,7 +166,7 @@ function RailSplitter(props: {
  * @param props - conversation view props + inject face.
  */
 export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
-  const { t, refresh, confirmIntake, rejectIntake, startIntake, transition, useProjection } = props
+  const { t, refresh, confirmIntake, rejectIntake, startIntake, transition, resume, useProjection } = props
   const preset = useProjection('agentPreset')
   const [view, setView] = useState<WorkflowTabView>(() => withRenderableGraph(buildClientTemplateTabView()))
   const [selected, setSelected] = useState<WorkflowNodeId | null>(null)
@@ -148,6 +177,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [resumeTarget, setResumeTarget] = useState<WorkflowNodeId | null>(null)
   const panDrag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const panned = useRef(false)
 
@@ -190,6 +220,19 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
       ?? view.graph.edges.find(e => e.from === view.current)
       ?? null
   }, [view])
+
+  // Keep the rollback picker on a legal target: the menu is re-read from the
+  // server on every refresh, so a target that dropped out must not linger.
+  useEffect(() => {
+    const candidates = view.resume?.candidates
+    if (candidates === undefined || candidates.length === 0) {
+      setResumeTarget(null)
+      return
+    }
+    setResumeTarget(current => (
+      current !== null && candidates.includes(current) ? current : (candidates[0] ?? null)
+    ))
+  }, [view.resume])
 
   const nodeById = useMemo(() => {
     const map = new Map<string, WorkflowTabNodeView>()
@@ -288,6 +331,14 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
             {t('strip.empty')}
           </span>
         )}
+        {view.gate !== undefined && (
+          <span className={clsx(css.stripItem, css.stripGate)} title={t('gate.replyToContinue')}>
+            <span className={css.stripLabel}>{t('status.awaiting')}</span>
+            <span className={css.stripValue}>
+              {t(view.gate.id === 'design-to-plan' ? 'gate.designDone' : 'gate.verifyPassed')}
+            </span>
+          </span>
+        )}
         {busy && (
           <span className={clsx(css.stripItem, css.stripMuted)}>{t('action.refresh')}…</span>
         )}
@@ -323,6 +374,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
 
       <div className={css.body}>
         <div className={css.main}>
+          {view.lanes !== undefined && <LanePanel lanes={view.lanes} t={t} />}
           <div
             className={css.graphWrap}
             onContextMenu={event => event.preventDefault()}
@@ -403,10 +455,16 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                   const isTerminal = placement.id === 'completed' || placement.id === 'abandoned'
                   const isCurrent = view.current === placement.id
                   const isSelected = selected === placement.id
+                  // §18.5: a parked gate is its own visual state — deliberately
+                  // not the `blocked` styling, because nothing is wrong and the
+                  // customer's one action is the way forward.
+                  const isGate = view.gate?.node === placement.id
                   const label = t(`node.${placement.id}` as WorkflowTabKey)
-                  const statusLabel = node === undefined
-                    ? t('status.template')
-                    : t(`status.${node.status}` as WorkflowTabKey)
+                  const statusLabel = isGate
+                    ? t('status.awaiting')
+                    : node === undefined
+                      ? t('status.template')
+                      : t(`status.${node.status}` as WorkflowTabKey)
 
                   return (
                     <div
@@ -415,6 +473,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                         css.flowNode,
                         isCurrent && css.nodeCurrent,
                         isSelected && css.nodeSelected,
+                        isGate && css.nodeGate,
                         !placement.onPath && css.nodeOffPath,
                       )}
                       style={{
@@ -438,7 +497,12 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                         <span className={css.nodeIcon}><NodeIcon id={placement.id} /></span>
                         <div className={css.flowNodeTitles}>
                           <span className={css.nodeLabel}>{label}</span>
-                          <span className={clsx(css.nodeBadge, node ? statusClass(node.status) : css.statusIdle)}>
+                          <span
+                            className={clsx(
+                              css.nodeBadge,
+                              isGate ? css.statusGate : node ? statusClass(node.status) : css.statusIdle,
+                            )}
+                          >
                             {statusLabel}
                           </span>
                         </div>
@@ -545,6 +609,46 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               </section>
             )}
 
+            {view.resume !== undefined && (
+              <section className={clsx(css.card, css.cardDrift)} aria-label={t('action.resume')}>
+                <h3 className={css.cardTitle}>{t('action.resume')}</h3>
+                <p className={css.hint}>{t('action.resumeHelp')}</p>
+                <div className={css.metaRow}>
+                  <span className={css.metaKey}>{t('detail.status')}</span>
+                  <span>{t('status.drifted')}</span>
+                  <span className={css.metaKey}>{t('card.current')}</span>
+                  <span>{t(`node.${view.resume.anchor}`)}</span>
+                </div>
+                <div className={css.actions}>
+                  <select
+                    className={css.resumeSelect}
+                    value={resumeTarget ?? ''}
+                    disabled={busy || view.changeId === null}
+                    aria-label={t('action.resume')}
+                    onChange={(event) => { setResumeTarget(event.target.value as WorkflowNodeId) }}
+                  >
+                    {view.resume.candidates.map(candidate => (
+                      <option key={candidate} value={candidate}>
+                        {t(`node.${candidate}`)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className={clsx(css.btn, css.btnPrimary)}
+                    disabled={busy || view.changeId === null || resumeTarget === null}
+                    onClick={() => {
+                      const changeId = view.changeId
+                      const node = resumeTarget
+                      if (changeId !== null && node !== null) void run(() => resume(changeId, node))
+                    }}
+                  >
+                    {t('action.resume')}
+                  </button>
+                </div>
+              </section>
+            )}
+
             <section className={css.card} aria-label={t('detail.title')}>
               <h3 className={css.cardTitle}>{t('detail.title')}</h3>
               {selectedNode === null ? (
@@ -558,19 +662,21 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               <p className={css.hint}>{t('action.newChangeHelp')}</p>
               <div className={css.actions}>
                 {view.actions.map((action) => {
+                  // Intake actions have their own card; the rollback has the
+                  // drift card above (it needs a target picker, not a button).
                   if (action.id === 'confirm-intake' || action.id === 'reject-intake'
-                    || action.id === 'supplement-intake') {
+                    || action.id === 'supplement-intake' || action.id === 'resume') {
                     return null
                   }
-                  const label = t(
-                    action.id === 'transition'
-                      ? 'action.enterOpen'
-                      : action.id === 'start-stage'
-                        ? 'action.startStage'
-                        : action.id === 'confirm-archive'
-                          ? 'action.confirmArchive'
-                          : 'action.newChange',
-                  )
+                  const label = action.id === 'transition'
+                    ? t('action.enterOpen')
+                    : action.id === 'start-stage'
+                      ? t('action.startStage')
+                      : action.id === 'confirm-archive'
+                        ? t('action.confirmArchive')
+                        : action.id === 'confirm-gate'
+                          ? t((view.gate?.actionKey ?? 'gate.confirmIntoPlan') as WorkflowTabKey)
+                          : t('action.newChange')
                   return (
                     <button
                       key={`${action.id}-${action.target ?? ''}`}
@@ -580,8 +686,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                       title={action.reason}
                       onClick={() => {
                         const changeId = view.changeId
-                        if (action.id === 'transition' && changeId !== null) {
+                        if (changeId === null) return
+                        if (action.id === 'transition') {
                           void run(() => transition(changeId, 'open'))
+                        } else if (action.id === 'confirm-gate' && action.target !== undefined) {
+                          void run(() => transition(changeId, action.target as WorkflowNodeId | TerminalStateId))
                         }
                       }}
                     >
@@ -650,6 +759,70 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         </div>
       )}
     </div>
+  )
+}
+
+function LanePanel(props: {
+  lanes: WorkflowTabLanesView
+  t: (key: WorkflowTabKey) => string
+}): React.ReactElement {
+  const { lanes, t } = props
+  const { upgrade } = lanes
+  return (
+    <section className={css.lanes} aria-label={t('lane.help')}>
+      <p className={css.lanesHint}>{t('lane.help')}</p>
+      <div className={css.laneRows}>
+        {lanes.lanes.map(lane => (
+          <div
+            key={lane.id}
+            className={clsx(css.lane, lane.id === 'bug-fast-path' && css.lanePreserved)}
+          >
+            <span className={css.laneLabel}>
+              {t(lane.id === 'bug-fast-path' ? 'lane.fastpath' : 'lane.fullgo')}
+            </span>
+            <ol className={css.laneTrack}>
+              {lane.nodes.map((node) => {
+                const status = lane.status[node]
+                return (
+                  <li
+                    key={node}
+                    className={clsx(css.laneNode, status !== undefined && statusClass(status))}
+                  >
+                    {t(`node.${node}`)}
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        ))}
+      </div>
+      <div className={css.upgradeEdge}>
+        <span className={css.upgradeTitle}>
+          {fillTemplate(t('edge.upgraded'), {
+            from: t(`node.${upgrade.from}`),
+            to: t(`node.${upgrade.to}`),
+          })}
+        </span>
+        <span className={css.upgradeMeta}>
+          <span className={css.metaKey}>{t('edge.cause')}</span> {upgrade.cause}
+        </span>
+        <span className={css.upgradeMeta}>
+          <span className={css.metaKey}>{t('edge.at')}</span> {upgrade.at}
+        </span>
+      </div>
+      <div className={css.preserved}>
+        <span className={css.metaKey}>{t('edge.preserved')}</span>
+        {lanes.preservedArtifacts.length === 0 ? (
+          <span className={css.hint}>{t('edge.preservedEmpty')}</span>
+        ) : (
+          <ul className={css.list}>
+            {lanes.preservedArtifacts.map(artifact => (
+              <li key={artifact}>{artifactName(artifact)}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   )
 }
 

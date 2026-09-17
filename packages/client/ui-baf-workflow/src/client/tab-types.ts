@@ -15,6 +15,35 @@ export type WorkflowNodeId =
 
 export type TerminalStateId = 'completed' | 'abandoned'
 
+/** Mandatory customer-confirmation gate the change is parked on (§18.5). */
+export type ConfirmGateId = 'design-to-plan' | 'verify-to-archive'
+
+/** One path lane in the §18.4.3 dual-lane view. */
+export interface WorkflowTabLaneView {
+  readonly id: 'bug-fast-path' | 'full-go'
+  readonly nodes: readonly WorkflowNodeId[]
+  /** Status **within this lane's slice** of the event log, not the live one. */
+  readonly status: Readonly<Partial<Record<WorkflowNodeId, NodeStatusId>>>
+  readonly labelKey: string
+}
+
+/** The T15 escalation edge joining the two lanes (§18.4.3). */
+export interface WorkflowTabUpgradeEdgeView {
+  readonly from: WorkflowNodeId
+  readonly to: WorkflowNodeId
+  readonly at: string
+  readonly cause: string
+  readonly labelKey: string
+}
+
+/** Dual-lane payload; present only after a `mode-upgraded` event. */
+export interface WorkflowTabLanesView {
+  readonly lanes: readonly WorkflowTabLaneView[]
+  readonly upgrade: WorkflowTabUpgradeEdgeView
+  /** Pre-upgrade artifacts, kept for traceability (§18.4.3). */
+  readonly preservedArtifacts: readonly string[]
+}
+
 export type NodeStatusId =
   | 'locked'
   | 'available'
@@ -117,6 +146,20 @@ export interface WorkflowTabView {
     readonly totalDurationMs?: number
     readonly totalInputTokens?: number
     readonly totalOutputTokens?: number
+  }
+  /** Set while the change is parked on gate A/B (§18.5). */
+  readonly gate?: {
+    readonly id: ConfirmGateId
+    readonly node: WorkflowNodeId
+    readonly actionKey: string
+  }
+  /** Set after a T15 escalation, so the Tab draws both paths (§18.4.3). */
+  readonly lanes?: WorkflowTabLanesView
+  /** Set while the change is parked in drift, so the Tab offers a rollback (§19.5). */
+  readonly resume?: {
+    readonly anchor: WorkflowNodeId
+    /** Legal targets, latest-first; index 0 is the recommended default. */
+    readonly candidates: readonly WorkflowNodeId[]
   }
 }
 

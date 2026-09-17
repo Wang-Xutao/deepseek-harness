@@ -2,9 +2,16 @@
  * Slash commands for BAF sessions (`/baf-help`, `/baf-status`, …).
  *
  * Naming follows a two-tier scheme:
- *   - **Core** (no middle segment): `/baf-help`, `/baf-version`, `/baf-status`,
- *     `/baf-doctor`, `/baf-list` — entry / discovery / view surfaces used
- *     across every session.
+ *   - **Core** (no middle segment): `/baf-help`, `/baf-welcome`,
+ *     `/baf-version`, `/baf-status`, `/baf-doctor`, `/baf-list` — entry /
+ *     discovery / view surfaces used across every session. `/baf-welcome` is
+ *     the §18.3 startup card (binding + toolchain probe); the preset's
+ *     `baf-session-gate` row fires it once at session open, and the customer
+ *     can reprint it any time.
+ *   - **Go** (no middle segment): `/baf-go` — the single auto-drive entry
+ *     (§18). Pushes the session to its next customer-action point; the two
+ *     mandatory confirmation gates are its stop points, and there is
+ *     deliberately no `/baf-go confirm`.
  *   - **Workflow** (`baf-workflow-*`): the go-workflow stage commands
  *     (open / classify / clarify / design / plan / implement / verify /
  *     archive / abandon).
@@ -41,8 +48,18 @@ import {
   driveOpen,
   drivePlan,
   driveQuality,
+  driveResume,
   driveVerify,
 } from './command-drives.ts'
+import { driveGo } from './go-coordinator.ts'
+import { focusFor } from './session-focus.ts'
+import {
+  probeMountFlags,
+  probeToolchain,
+  renderProbeLines,
+  renderWelcomeCard,
+  resolveStartupBinding,
+} from './session-gate.ts'
 
 export const name = 'baf-commands'
 export const inject = ['commands']
@@ -62,13 +79,15 @@ type SlashHandlerArgs = {
 
 const HELP_CORE = [
   '/baf-help           列出全部指令与用法 · ★★',
+  '/baf-welcome        会话启动卡：绑定 + 工具链体检 · ★★',
   '/baf-status         查看当前变更：模式/阶段/intake · ★★★',
   '/baf-version        查看桌面/插件版本（对齐设置页） · ★',
-  '/baf-doctor         工作流自检：cwd/注册/页签 · ★',
+  '/baf-doctor         工作流自检：cwd/工具链/注册 · ★',
   '/baf-list           列出工作区全部变更（含已归档/已放弃） · ★★',
 ] as const
 
 const HELP_FLOW = [
+  '/baf-go                     自动驱动到下一个客户确认点 · ★★★',
   '/baf-workflow-open         启动变更：intake 分类 · ★★★',
   '/baf-workflow-classify     分类确认 / 拒绝 · ★★',
   '/baf-workflow-clarify      澄清阶段（N2） · ★★',
@@ -78,6 +97,7 @@ const HELP_FLOW = [
   '/baf-workflow-verify       验证阶段（N6） · ★★★',
   '/baf-workflow-archive      归档变更（N7/T14，需 confirm） · ★★★',
   '/baf-workflow-abandon      放弃变更（T16，需 confirm） · ★',
+  '/baf-workflow-resume       drift 复位（T13，需选目标节点） · ★★★',
 ] as const
 
 const HELP_CHECK = [
@@ -120,6 +140,40 @@ export function apply(ctx: Context): void {
           { title: '模式说明', lines: MODE_LINES },
         ]),
       }),
+    }),
+    ctx.commands.register({
+      name: 'baf-welcome',
+      description: '会话启动卡：绑定 + 工具链体检 · ★★',
+      handler: async ({ agent }: SlashHandlerArgs): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-welcome')
+        // Read-only by construction: the card reports the candidates and never
+        // binds one (§18.6 guard 4 — adoption is the customer's call, and the
+        // gate is exactly where they make it).
+        const [probe, binding] = await Promise.all([
+          probeToolchain(cwd, probeMountFlags(ctx)),
+          resolveStartupBinding(cwd),
+        ])
+        return renderWelcomeCard({ cwd, probe, binding })
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-go',
+      description: '自动驱动到下一个客户确认点 · ★★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-go')
+        const { stack, guard } = resolveAdapters(ctx, cwd)
+        return driveGo({
+          cwd,
+          rawInput,
+          focus: focusFor(cwd),
+          adapters: {
+            ...(stack === undefined ? {} : { stack }),
+            ...(guard === undefined ? {} : { guard }),
+          },
+        })
+      },
     }),
     ctx.commands.register({
       name: 'baf-version',
@@ -263,15 +317,19 @@ export function apply(ctx: Context): void {
     }),
     ctx.commands.register({
       name: 'baf-doctor',
-      description: '工作流自检：cwd/注册/页签 · ★',
-      handler: ({ agent }): CommandResult => {
+      description: '工作流自检：cwd/工具链/注册 · ★',
+      handler: async ({ agent }): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         const cwdOk = cwd !== undefined && cwd !== ''
+        // Same probe and same renderer as the welcome card (§18.3.2), so
+        // "doctor disagrees with the startup card" cannot happen. The probe
+        // cache makes the second call free within one session open.
+        const probe = cwdOk ? await probeToolchain(cwd, probeMountFlags(ctx)) : undefined
         return {
           kind: cwdOk ? 'success' : 'error',
           text: formatCommandReport(
             cwdOk,
-            withHint('工作流自检：cwd/注册/页签 · ★', cwdOk ? '通过' : '缺少工作区'),
+            withHint('工作流自检：cwd/工具链/注册 · ★', cwdOk ? '通过' : '缺少工作区'),
             [
               {
                 title: '检查项',
@@ -281,6 +339,7 @@ export function apply(ctx: Context): void {
                   'workflow tab: 请打开会话「工作流」页签核对流程图',
                 ],
               },
+              ...(probe === undefined ? [] : [{ title: '工具链体检', lines: renderProbeLines(probe) }]),
               {
                 title: '续跑提示',
                 lines: [
@@ -373,6 +432,15 @@ export function apply(ctx: Context): void {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-abandon')
         return driveAbandon(cwd, rawInput)
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-workflow-resume',
+      description: 'drift 复位（T13，需选目标节点） · ★★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-resume')
+        return driveResume(cwd, rawInput)
       },
     }),
     ctx.commands.register({

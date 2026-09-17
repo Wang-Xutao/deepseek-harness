@@ -38,6 +38,15 @@ export function decideTransition(request: TransitionRequest): TransitionDecision
   const { status, to } = request
   const from = currentAsFrom(status)
 
+  // §21.5: `drift-detected` has exactly one writer (`driveDriftStage` →
+  // `detectAndRecord` → `earliestAffectedNode`). A caller-initiated
+  // `transition({to:'drift'})` used to fabricate a *different* anchor
+  // (`status.current`), so the edge is refused here and the caller is pointed
+  // at the detector.
+  if (to === 'drift') {
+    return { accepted: false, reason: 'invalid_transition' }
+  }
+
   if (to === 'implement' && intakeBlocksImplement(status.intake)) {
     return { accepted: false, reason: 'intake_confirmation_required' }
   }
@@ -79,8 +88,20 @@ function findRule(
   mode: WorkflowMode,
 ): TransitionRule | undefined {
   return TRANSITIONS.find((rule) => {
-    if (rule.to !== to) return false
     if (rule.modes.length > 0 && !rule.modes.includes(mode)) return false
+
+    // T13 (drift exit): the table records `intake` as the canonical target,
+    // but §5.2 / §19.2 make the real target evidence-derived (the earliest
+    // affected node). The check therefore runs *before* the generic `to`
+    // filter, and the caller validates the target against
+    // `resumeCandidates()` before calling. Terminal targets keep their own
+    // rules (T14 archive / T16 abandon) so evidence checks are not skipped.
+    if (rule.id === 'T13') {
+      if (from !== 'drift') return false
+      return to !== 'drift' && to !== 'abandoned' && to !== 'completed'
+    }
+
+    if (rule.to !== to) return false
 
     // Cross-cutting: drift / abandon from any active node.
     if (rule.id === 'T12' || rule.id === 'T16') return from !== null

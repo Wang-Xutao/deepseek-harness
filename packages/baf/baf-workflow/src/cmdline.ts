@@ -2,10 +2,11 @@
  * `baf-cli` Commander tree — the standalone mirror of `/baf-*` slash commands.
  *
  * One process per `dsh --profile baf-cli -- <subcommand>…` invocation. The
- * subcommand name matches the slash name 1:1 (`help`, `version`, `status`,
- * `list`, `doctor`, `workflow-open`, `workflow-classify`, `workflow-clarify`,
- * `workflow-design`, `workflow-plan`, `workflow-implement`, `workflow-verify`,
- * `workflow-archive`, `workflow-abandon`, `check-quality`, `check-guard`)
+ * subcommand name matches the slash name 1:1 (`help`, `welcome`, `version`,
+ * `status`, `list`, `go`, `doctor`, `workflow-open`, `workflow-classify`,
+ * `workflow-clarify`, `workflow-design`, `workflow-plan`,
+ * `workflow-implement`, `workflow-verify`, `workflow-archive`,
+ * `workflow-abandon`, `check-quality`, `check-guard`)
  * and the output goes through the same `formatCommandReport` formatter the
  * slash handlers use, so the Terminal card and the slash card read
  * identically.
@@ -40,8 +41,12 @@ import {
   driveOpen,
   drivePlan,
   driveQuality,
+  driveResume,
   driveVerify,
 } from './command-drives.ts'
+import { driveGo } from './go-coordinator.ts'
+import { focusFor } from './session-focus.ts'
+import { probeMountFlags, probeToolchain, renderProbeLines, renderWelcomeCard, resolveStartupBinding } from './session-gate.ts'
 import { ProjectionStore } from './projection.ts'
 import { resolveBafProductVersions } from './product-versions.ts'
 
@@ -62,10 +67,12 @@ interface CliResult {
 /** Slash → description map (mirrors the descriptors in `commands.ts`). */
 const SLASH_DESC: Record<string, string> = {
   '/baf-help': '列出全部指令与用法 · ★★',
+  '/baf-welcome': '会话启动卡：绑定 + 工具链体检 · ★★',
   '/baf-version': '查看桌面/插件版本（对齐设置页） · ★',
   '/baf-status': '查看当前变更：模式/阶段/intake · ★★★',
-  '/baf-doctor': '工作流自检：cwd/注册/页签 · ★',
+  '/baf-doctor': '工作流自检：cwd/工具链/注册 · ★',
   '/baf-list': '列出工作区全部变更（含已归档/已放弃） · ★★',
+  '/baf-go': '自动驱动到下一个客户确认点 · ★★★',
   '/baf-workflow-open': '启动变更：intake 分类 · ★★★',
   '/baf-workflow-classify': '分类确认 / 拒绝 · ★★',
   '/baf-workflow-clarify': '澄清阶段（N2） · ★★',
@@ -75,6 +82,7 @@ const SLASH_DESC: Record<string, string> = {
   '/baf-workflow-verify': '验证阶段（N6） · ★★★',
   '/baf-workflow-archive': '归档变更（N7/T14，需 confirm） · ★★★',
   '/baf-workflow-abandon': '放弃变更（T16，需 confirm） · ★',
+  '/baf-workflow-resume': 'drift 复位（T13，需选目标节点） · ★★★',
   '/baf-check-quality': '基线 C 栈质量检查 · ★★',
   '/baf-check-guard': '安全门禁（verify + secret-scan） · ★★',
 }
@@ -97,13 +105,15 @@ function cardTitle(slash: string, runtime?: string): string {
 
 const HELP_CORE = [
   'baf help       列出全部指令与用法 · ★★',
+  'baf welcome    会话启动卡：绑定 + 工具链体检 · ★★',
   'baf status     查看当前变更：模式/阶段/intake · ★★★',
   'baf version    查看桌面/插件版本（对齐设置页） · ★',
-  'baf doctor     工作流自检：cwd/注册/页签 · ★',
+  'baf doctor     工作流自检：cwd/工具链/注册 · ★',
   'baf list       列出工作区全部变更（含已归档/已放弃） · ★★',
 ] as const
 
 const HELP_FLOW = [
+  'baf go                   自动驱动到下一个客户确认点 · ★★★',
   'baf workflow-open        启动变更：intake 分类 · ★★★',
   'baf workflow-classify    分类确认 / 拒绝 · ★★',
   'baf workflow-clarify     澄清阶段（N2） · ★★',
@@ -113,6 +123,7 @@ const HELP_FLOW = [
   'baf workflow-verify      验证阶段（N6） · ★★★',
   'baf workflow-archive     归档变更（N7/T14，需 confirm） · ★★★',
   'baf workflow-abandon     放弃变更（T16，需 confirm） · ★',
+  'baf workflow-resume      drift 复位（T13，需选目标节点） · ★★★',
 ] as const
 
 const HELP_CHECK = [
@@ -249,6 +260,22 @@ export function buildBafProgram(): Command {
       ]
     })()) + '\n', 0))
 
+  program.command('welcome')
+    .description(`${slashDesc('/baf-welcome')}（与 /baf-welcome 同源渲染）`)
+    .action(async () => {
+      const opts = program.opts<{ cwd?: string }>()
+      const cwd = readCwd(opts)
+      if (cwd === undefined) fromDrive(missingCwd('baf welcome'))
+      const ctx = getCtx()
+      // Same three calls as the slash handler, in the same order, so the
+      // Terminal card and the in-session card cannot drift (§9.1).
+      const [probe, binding] = await Promise.all([
+        probeToolchain(cwd, ctx === undefined ? {} : probeMountFlags(ctx)),
+        resolveStartupBinding(cwd),
+      ])
+      fromDrive(toCli(renderWelcomeCard({ cwd, probe, binding })))
+    })
+
   program.command('doctor')
     .description(slashDesc('/baf-doctor'))
     .action(async () => {
@@ -256,6 +283,8 @@ export function buildBafProgram(): Command {
       const cwd = readCwd(opts)
       const cwdOk = cwd !== undefined
       const ok = cwdOk
+      const ctx = getCtx()
+      const probe = cwd === undefined ? undefined : await probeToolchain(cwd, ctx === undefined ? {} : probeMountFlags(ctx))
       emit(ok, formatCommandReport(
         ok,
         cardTitle('/baf-doctor', ok ? '通过' : '缺少工作区'),
@@ -265,11 +294,12 @@ export function buildBafProgram(): Command {
             lines: [
               `cwd: ${ok ? cwd : '（missing）'}`,
               'profile: baf-cli（当前 dsh 会话）',
-              'commands: help/version/doctor/status/list 可见',
-              'drives: workflow-open/classify/clarify/design/plan/implement/verify/archive/abandon + check-quality/guard',
+              'commands: help/welcome/version/doctor/status/list 可见',
+              'drives: go + workflow-open/classify/clarify/design/plan/implement/verify/archive/abandon/resume + check-quality/guard',
               'workflow tab: 请打开桌面「工作流」页签核对流程图',
             ],
           },
+          ...(probe === undefined ? [] : [{ title: '工具链体检', lines: renderProbeLines(probe) }]),
           {
             title: '续跑提示',
             lines: [
@@ -372,6 +402,34 @@ export function buildBafProgram(): Command {
       })
   }
 
+  // `baf go` needs the same adapter wiring as `baf workflow-verify`: the
+  // coordinator runs verify when it chains into it, so a CLI invocation must
+  // see the wired StackAdapter / GuardPolicy rows too.
+  program.command('go')
+    .description(`${slashDesc('/baf-go')}（与 /baf-go 同源 drive；自动推进到下一个确认点）`)
+    .allowUnknownOption(true)
+    .argument('[args...]', 'key=value pairs (change=…, continue, 或漂移复位目标节点)')
+    .action(async (args: string[]) => {
+      const opts = program.opts<{ cwd?: string }>()
+      const cwd = readCwd(opts)
+      if (cwd === undefined) {
+        emit(false, missingCwd('baf go').text, 1)
+        return
+      }
+      const ctx = getCtx()
+      const { stack, guard } = ctx === undefined ? {} : resolveAdapters(ctx, cwd)
+      const r = toCli(await driveGo({
+        cwd,
+        rawInput: args.join(' '),
+        focus: focusFor(cwd),
+        adapters: {
+          ...(stack === undefined ? {} : { stack }),
+          ...(guard === undefined ? {} : { guard }),
+        },
+      }))
+      emit(r.ok, r.text, r.ok ? 0 : 1)
+    })
+
   driveCommand('workflow-open', '/baf-workflow-open', driveOpen)
   driveCommand('workflow-classify', '/baf-workflow-classify', driveClassify)
   driveCommand('workflow-clarify', '/baf-workflow-clarify', driveClarify)
@@ -405,6 +463,7 @@ export function buildBafProgram(): Command {
 
   driveCommand('workflow-archive', '/baf-workflow-archive', driveArchive)
   driveCommand('workflow-abandon', '/baf-workflow-abandon', driveAbandon)
+  driveCommand('workflow-resume', '/baf-workflow-resume', driveResume)
 
   program.command('check-quality')
     .description(`${slashDesc('/baf-check-quality')}（与 /baf-check-quality 同源 drive）`)

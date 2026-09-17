@@ -27,6 +27,12 @@ export interface BafWorkflowTransitionRequest {
   readonly evidence?: Readonly<Record<string, unknown>>
 }
 
+export interface BafWorkflowResumeRequest {
+  readonly sessionId: SessionId
+  readonly changeId: string
+  readonly node?: string
+}
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$bafWorkflowView {
     getTabView: (request: BafWorkflowSessionRequest) => Promise<RemoteResult<unknown>>
@@ -34,6 +40,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     confirmIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<unknown>>
     rejectIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<unknown>>
     transition: (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<unknown>>
+    resume: (request: BafWorkflowResumeRequest) => Promise<RemoteResult<unknown>>
   }
   interface TypertRemoteMap {
     'bafWorkflowView/getTabView': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<unknown>>
@@ -41,6 +48,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'bafWorkflowView/confirmIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<unknown>>
     'bafWorkflowView/rejectIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<unknown>>
     'bafWorkflowView/transition': (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<unknown>>
+    'bafWorkflowView/resume': (request: BafWorkflowResumeRequest) => Promise<RemoteResult<unknown>>
   }
   interface TypertRemoteNamespaceMap {
     bafWorkflowView: TypertRemoteNamespace$bafWorkflowView

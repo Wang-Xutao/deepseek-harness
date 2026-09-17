@@ -7,6 +7,7 @@ import type {
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {
   BafWorkflowChangeRequest,
+  BafWorkflowResumeRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
   BafWorkflowTransitionRequest,
@@ -22,6 +23,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     confirmIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     rejectIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     transition: (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
+    resume: (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
   }
   interface TypertRemoteMap {
     'bafWorkflowView/getTabView': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
@@ -29,6 +31,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'bafWorkflowView/confirmIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/rejectIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/transition': (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
+    'bafWorkflowView/resume': (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
   }
   interface TypertRemoteNamespaceMap {
     bafWorkflowView: TypertRemoteNamespace$bafWorkflowView
@@ -101,6 +104,7 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
     remoteDescriptor('confirmIntake', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowChangeRequest'),
     remoteDescriptor('rejectIntake', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowChangeRequest'),
     remoteDescriptor('transition', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowTransitionRequest'),
+    remoteDescriptor('resume', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowResumeRequest'),
   ],
 }
 

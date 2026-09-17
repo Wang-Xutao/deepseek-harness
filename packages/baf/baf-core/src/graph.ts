@@ -41,11 +41,13 @@ export interface WorkflowGraphModel {
   readonly edges: readonly GraphEdge[]
 }
 
-const FULL_GO_ROWS: readonly WorkflowNode[] = [
+/** Node ids on the full-go path, top → bottom. Also the §18.4.3 full-go lane. */
+export const FULL_GO_ROWS: readonly WorkflowNode[] = [
   'intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive',
 ]
 
-const FAST_PATH_ROWS: readonly WorkflowNode[] = [
+/** Node ids on the bug-fast-path. Also the §18.4.3 pre-upgrade lane. */
+export const FAST_PATH_ROWS: readonly WorkflowNode[] = [
   'intake', 'open', 'implement', 'verify', 'archive',
 ]
 

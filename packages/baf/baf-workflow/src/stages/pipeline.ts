@@ -39,7 +39,15 @@ import {
 } from './implement.ts'
 import { driveVerify, type VerifyStageResult } from './verify.ts'
 import { driveArchive, type ArchiveStageResult } from './archive.ts'
-import { detectAndRecord, type DriftObservation, type DriftSignal } from './drift.ts'
+import {
+  detectAndRecord,
+  detectDrift,
+  earliestAffectedNode,
+  hashCanonical,
+  resumeCandidates,
+  type DriftObservation,
+  type DriftSignal,
+} from './drift.ts'
 import { clarifyGate, designGate, planGate } from './gates.ts'
 import { stageArtifactPaths } from './artifacts.ts'
 import { writeArtifact } from './write.ts'
@@ -81,6 +89,24 @@ export interface DriftStageResult {
   readonly recorded: boolean
 }
 
+/** Result of {@link StagePipeline.resumeOptions} — the T13 candidate card. */
+export interface ResumeOptionsResult {
+  readonly status: WorkflowStatus
+  readonly signals: readonly DriftSignal[]
+  /** Legal T13 targets, latest-first; index 0 is the recommended default. */
+  readonly candidates: readonly WorkflowNode[]
+  /** The evidence-derived anchor (`earliestAffectedNode`). */
+  readonly anchor: WorkflowNode
+}
+
+/** Result of {@link StagePipeline.driveResumeStage}. */
+export interface ResumeStageResult {
+  readonly target: WorkflowNode
+  readonly anchor: WorkflowNode
+  readonly signals: readonly DriftSignal[]
+  readonly candidates: readonly WorkflowNode[]
+}
+
 /** Discriminated drive results per node. */
 export type DriveResult =
   | { readonly node: 'open'; readonly result: OpenStageResult; readonly status: WorkflowStatus }
@@ -88,6 +114,7 @@ export type DriveResult =
   | { readonly node: 'design'; readonly result: DesignStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'plan'; readonly result: PlanStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'drift'; readonly result: DriftStageResult; readonly status: WorkflowStatus }
+  | { readonly node: 'resume'; readonly result: ResumeStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'abandon'; readonly result: AbandonStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'implement'; readonly result: ImplementStageResult; readonly status: WorkflowStatus }
   | { readonly node: 'escalate'; readonly result: EscalateStageResult; readonly status: WorkflowStatus }
@@ -176,6 +203,10 @@ export class StagePipeline {
           baselineId: baseline.baselineId,
           sourceRevision: revision,
           lockedAt: meta.at,
+          // The content hash must be taken from the *manifest* here, while the
+          // full manifest is in hand — the lock only stores identity fields,
+          // so hashing it later can never reproduce this value.
+          contentHash: hashCanonical(baseline),
         },
         ...meta,
       }))
@@ -216,6 +247,7 @@ export class StagePipeline {
           baselineId: baseline.baselineId,
           sourceRevision: revision,
           lockedAt: meta.at,
+          contentHash: hashCanonical(baseline),
         },
         ...meta,
       }))
@@ -488,17 +520,79 @@ export class StagePipeline {
     observation?: DriftObservation,
   ): Promise<DriveResult> {
     const status = await this.store.readStatus(changeId)
-    const observed: DriftObservation = observation ?? {
-      ...(this.ctx.workspace.git?.revision === undefined
-        ? {}
-        : { gitRevision: this.ctx.workspace.git.revision }),
-      ...(this.ctx.baseline === undefined ? {} : { baseline: this.ctx.baseline }),
-    }
-    const signals = await detectAndRecord(this.ctx, status, observed, { record: true })
+    const signals = await detectAndRecord(this.ctx, status, this.observe(observation), { record: true })
     const recorded = signals.length > 0
     const next = recorded ? await this.store.readStatus(changeId) : status
     const result: DriftStageResult = { signals, recorded }
     return { node: 'drift', result, status: next }
+  }
+
+  /**
+   * Compute the T13 candidate set for a drifted change **without** touching
+   * the projection (§19.2). Read-only: safe to call from a card render, from
+   * `/baf-go`'s drift route, or from the session gate's state check.
+   * @param changeId - change id.
+   * @param observation - optional override for current Git/baseline facts.
+   * @returns status, signals, evidence-derived anchor and legal targets.
+   */
+  async resumeOptions(
+    changeId: string,
+    observation?: DriftObservation,
+  ): Promise<ResumeOptionsResult> {
+    const status = await this.store.readStatus(changeId)
+    const signals = await detectDrift(this.ctx, status, this.observe(observation))
+    const anchor = earliestAffectedNode(status, signals)
+    const candidates = resumeCandidates(status, signals)
+    return { status, signals, candidates, anchor }
+  }
+
+  /**
+   * Drive the T13 drift exit: re-enter the customer-chosen node (§19.3).
+   *
+   * The target is validated against the evidence-derived candidate set, so a
+   * customer can roll back *earlier* than the anchor but never skip forward
+   * past it. An already-resolved change (not parked on `drift`) is refused —
+   * there is nothing to resume.
+   * @param changeId - change id.
+   * @param target - chosen candidate node.
+   * @param observation - optional override for current Git/baseline facts.
+   * @returns drive result with the entered node.
+   */
+  async driveResumeStage(
+    changeId: string,
+    target: WorkflowNode,
+    observation?: DriftObservation,
+  ): Promise<DriveResult> {
+    const options = await this.resumeOptions(changeId, observation)
+    const { status } = options
+    if (status.current !== 'drift') {
+      throw new BafError('invalid_transition', 'change is not parked in drift', {
+        changeId,
+        current: status.current,
+      })
+    }
+    if (!options.candidates.includes(target)) {
+      await this.recordRejection(changeId, status, target, 'invalid_transition')
+      throw new BafError('invalid_transition', `resume target ${target} outside the candidate set`, {
+        changeId,
+        target,
+        anchor: options.anchor,
+        candidates: [...options.candidates],
+      })
+    }
+    const signals = options.signals
+    const primary = signals[0]
+    const cause = primary === undefined
+      ? `drift-resume: ${options.anchor} → ${target}`
+      : `drift-resume: ${options.anchor} → ${target} (${primary.trigger})`
+    const entered = await this.enterStage(changeId, target, undefined, cause)
+    const result: ResumeStageResult = {
+      target,
+      anchor: options.anchor,
+      signals,
+      candidates: options.candidates,
+    }
+    return { node: 'resume', result, status: entered }
   }
 
   /**
@@ -513,16 +607,37 @@ export class StagePipeline {
   }
 
   /**
+   * Resolve the drift observation: the caller override **merged over** the
+   * pipeline's own Git/baseline binding, so a caller may override one field
+   * (e.g. simulate a moved HEAD) without the other being read as "now
+   * unavailable", which would fabricate a signal.
+   * @param observation - optional caller override.
+   * @returns observation.
+   */
+  private observe(observation?: DriftObservation): DriftObservation {
+    const bound: DriftObservation = {
+      ...(this.ctx.workspace.git?.revision === undefined
+        ? {}
+        : { gitRevision: this.ctx.workspace.git.revision }),
+      ...(this.ctx.baseline === undefined ? {} : { baseline: this.ctx.baseline }),
+    }
+    if (observation === undefined) return bound
+    return { ...bound, ...observation }
+  }
+
+  /**
    * Adjudicate and record entry into a node (stage-entered).
    * @param changeId - change id.
    * @param to - target node.
    * @param evidence - optional machine evidence for evidence-gated edges.
+   * @param cause - optional reason recorded on the event (§19.3).
    * @returns status before entering (for evidence).
    */
   private async enterStage(
     changeId: string,
     to: WorkflowNode,
     evidence?: Readonly<Record<string, unknown>>,
+    cause?: string,
   ): Promise<WorkflowStatus> {
     const status = await this.store.readStatus(changeId)
     // Idempotent resume: the node is already in-progress (e.g. clarify was
@@ -544,6 +659,7 @@ export class StagePipeline {
     const { status: next } = await this.store.append(changeId, status.projectionVersion, meta => ({
       type: 'stage-entered',
       node: to,
+      ...(cause === undefined ? {} : { cause }),
       ...meta,
     }))
     return next

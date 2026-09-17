@@ -66,6 +66,20 @@ export type WorkflowTabKey =
   | 'status.drifted'
   | 'status.skipped'
   | 'status.template'
+  | 'status.awaiting'
+  | 'gate.designDone'
+  | 'gate.verifyPassed'
+  | 'gate.confirmIntoPlan'
+  | 'gate.confirmArchive'
+  | 'gate.replyToContinue'
+  | 'lane.fastpath'
+  | 'lane.fullgo'
+  | 'lane.help'
+  | 'edge.upgraded'
+  | 'edge.cause'
+  | 'edge.at'
+  | 'edge.preserved'
+  | 'edge.preservedEmpty'
   | 'node.intake'
   | 'node.open'
   | 'node.clarify'
@@ -80,6 +94,8 @@ export type WorkflowTabKey =
   | 'action.enterOpen'
   | 'action.startStage'
   | 'action.confirmArchive'
+  | 'action.resume'
+  | 'action.resumeHelp'
   | 'action.refresh'
   | 'action.dashboard'
   | 'action.newChange'
@@ -165,6 +181,20 @@ export const en: Record<WorkflowTabKey, string> = {
   'status.drifted': 'Drifted',
   'status.skipped': 'Skipped',
   'status.template': 'Idle',
+  'status.awaiting': 'Awaiting customer',
+  'gate.designDone': 'Design is done — confirm to enter plan',
+  'gate.verifyPassed': 'Verify passed — confirm to archive',
+  'gate.confirmIntoPlan': 'Confirm and continue',
+  'gate.confirmArchive': 'Confirm archive',
+  'gate.replyToContinue': 'Run /baf-go again to continue',
+  'lane.fastpath': 'Bug fast-path (before the upgrade)',
+  'lane.fullgo': 'Full-go (after the upgrade)',
+  'lane.help': 'A fast-path change that escalated keeps both paths: the earlier lane is greyed but never deleted.',
+  'edge.upgraded': 'T15 upgrade: {from} → {to}',
+  'edge.cause': 'Cause',
+  'edge.at': 'When',
+  'edge.preserved': 'Pre-upgrade artifacts (no OpenSpec)',
+  'edge.preservedEmpty': 'No artifacts were produced before the upgrade',
   'node.intake': 'Intake',
   'node.open': 'Open',
   'node.clarify': 'Clarify',
@@ -179,6 +209,8 @@ export const en: Record<WorkflowTabKey, string> = {
   'action.enterOpen': 'Enter open',
   'action.startStage': 'Start stage',
   'action.confirmArchive': 'Confirm archive',
+  'action.resume': 'Roll back to…',
+  'action.resumeHelp': 'Drift never clears itself. Pick the stage to re-enter — everything after it is re-run.',
   'action.refresh': 'Refresh',
   'action.dashboard': 'Changes',
   'action.newChange': 'New change',
@@ -262,6 +294,20 @@ export const zh: Record<WorkflowTabKey, string> = {
   'status.drifted': '漂移',
   'status.skipped': '已跳过',
   'status.template': '空闲',
+  'status.awaiting': '待客户确认',
+  'gate.designDone': '设计文档已实现 · 请确认是否进入 plan',
+  'gate.verifyPassed': 'verify 已通过 · 请确认是否归档',
+  'gate.confirmIntoPlan': '确认进入下一阶段',
+  'gate.confirmArchive': '确认归档',
+  'gate.replyToContinue': '再敲一次 /baf-go 继续',
+  'lane.fastpath': '缺陷快路径（升级前）',
+  'lane.fullgo': '完整流程（升级后）',
+  'lane.help': '快路径中途升级后，两条 path 都保留：升级前那条置灰，但不删除。',
+  'edge.upgraded': 'T15 升级：{from} → {to}',
+  'edge.cause': '原因',
+  'edge.at': '时间',
+  'edge.preserved': '升级前产物（未走 OpenSpec）',
+  'edge.preservedEmpty': '升级前没有产生产物',
   'node.intake': '分类',
   'node.open': '建立变更',
   'node.clarify': '澄清',
@@ -276,6 +322,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   'action.enterOpen': '进入建立变更',
   'action.startStage': '开始阶段',
   'action.confirmArchive': '确认归档',
+  'action.resume': '复位到…',
+  'action.resumeHelp': '漂移不会自行消失。请选择要重新进入的阶段——它之后的阶段会重跑。',
   'action.refresh': '刷新',
   'action.dashboard': '变更总览',
   'action.newChange': '新建变更',

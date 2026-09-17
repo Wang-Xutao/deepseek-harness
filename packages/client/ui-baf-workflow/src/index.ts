@@ -13,9 +13,10 @@ import {
   buildWorkflowTabView,
   confirmIntake,
   createWorkflowService,
+  pipelineFor,
   rejectIntake,
 } from '@deepseek-ai/dsh-baf-workflow'
-import type { WorkflowTabView } from '@deepseek-ai/dsh-baf-core'
+import type { WorkflowTabResume, WorkflowTabView } from '@deepseek-ai/dsh-baf-core'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
@@ -23,6 +24,7 @@ import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typer
 import type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowResumeRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
   BafWorkflowTransitionRequest,
@@ -49,6 +51,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 export type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowResumeRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
   BafWorkflowTransitionRequest,
@@ -71,9 +74,13 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('getTabView')
   async getTabView(request: BafWorkflowSessionRequest): Promise<WorkflowTabView> {
-    const store = await this.storeFor(request.sessionId)
-    // Skip full-log metrics on the interactive path so the Tab paints quickly.
-    return buildWorkflowTabView(store, request.changeId, { includeMetrics: false })
+    const { cwd, store } = await this.contextFor(request.sessionId)
+    // Skip the full-log metrics fold on the interactive path so the Tab paints
+    // quickly; the dual-lane view still comes through, it only needs the events.
+    return buildWorkflowTabView(store, request.changeId, {
+      includeMetrics: false,
+      resume: this.resumeProvider(cwd),
+    })
   }
 
   /**
@@ -83,7 +90,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('startIntake')
   async startIntake(request: BafWorkflowStartIntakeRequest): Promise<WorkflowTabView> {
-    const store = await this.storeFor(request.sessionId)
+    const { store } = await this.contextFor(request.sessionId)
     const service = createWorkflowService({ store })
     const cwd = await this.requireCwd(request.sessionId)
     const result = await this.guardDomain(() => service.intake({
@@ -100,7 +107,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('confirmIntake')
   async confirmIntake(request: BafWorkflowChangeRequest): Promise<WorkflowTabView> {
-    const store = await this.storeFor(request.sessionId)
+    const { store } = await this.contextFor(request.sessionId)
     await this.guardDomain(() => confirmIntake(store, request.changeId, 'user'))
     return buildWorkflowTabView(store, request.changeId)
   }
@@ -112,7 +119,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('rejectIntake')
   async rejectIntake(request: BafWorkflowChangeRequest): Promise<WorkflowTabView> {
-    const store = await this.storeFor(request.sessionId)
+    const { store } = await this.contextFor(request.sessionId)
     await this.guardDomain(() => rejectIntake(store, request.changeId))
     return buildWorkflowTabView(store, request.changeId)
   }
@@ -124,7 +131,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('transition')
   async transition(request: BafWorkflowTransitionRequest): Promise<WorkflowTabView> {
-    const store = await this.storeFor(request.sessionId)
+    const { store } = await this.contextFor(request.sessionId)
     const service = createWorkflowService({ store })
     const status = await store.readStatus(request.changeId)
     await this.guardDomain(() => service.transition({
@@ -139,6 +146,31 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   }
 
   /**
+   * Drift rollback (§19.5 / T13).
+   *
+   * Without `node` this only re-reads: the Tab opens its 「复位到…」菜单, and the
+   * returned view carries candidates recomputed from live drift evidence. With
+   * `node` it drives the rollback — the pipeline re-validates the target
+   * against that same candidate set and refuses an illegal one, so the Tab can
+   * never roll a change back to a stage the evidence does not support (§19.4:
+   * the model must not pick the node, and neither may the UI).
+   * @param request - session + change (+ chosen rollback target).
+   * @returns updated tab view.
+   */
+  @Remote('resume')
+  async resume(request: BafWorkflowResumeRequest): Promise<WorkflowTabView> {
+    const { cwd, store } = await this.contextFor(request.sessionId)
+    const options = { includeMetrics: false, resume: this.resumeProvider(cwd) }
+    const target = request.node
+    if (target === undefined) {
+      return buildWorkflowTabView(store, request.changeId, options)
+    }
+    const pipeline = await pipelineFor(cwd)
+    await this.guardDomain(() => pipeline.driveResumeStage(request.changeId, target))
+    return buildWorkflowTabView(store, request.changeId, options)
+  }
+
+  /**
    * Read every change in the workspace (Dashboard list view).
    *
    * Returns the full derived index: one row per change with its current stage,
@@ -149,7 +181,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('listChanges')
   async listChanges(request: BafWorkflowSessionRequest): Promise<readonly BafWorkflowChangeRow[]> {
-    const store = await this.storeFor(request.sessionId)
+    const { store } = await this.contextFor(request.sessionId)
     const index = await store.readIndex()
     return index.changes.map(c => ({
       changeId: c.changeId,
@@ -160,9 +192,30 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     }))
   }
 
-  private async storeFor(sessionId: SessionId): Promise<ProjectionStore> {
+  private async contextFor(sessionId: SessionId): Promise<{ cwd: string; store: ProjectionStore }> {
     const cwd = await this.requireCwd(sessionId)
-    return new ProjectionStore({ workspaceRoot: cwd })
+    return { cwd, store: new ProjectionStore({ workspaceRoot: cwd }) }
+  }
+
+  /**
+   * Rollback menu for a change parked in drift (§19.5).
+   *
+   * `detectDrift` probes Git and the stage artifacts, so this is deliberately
+   * *not* run on every Tab paint — `buildWorkflowTabView` only calls it once
+   * the change is actually parked in `drift`. The anchors and targets come from
+   * `StagePipeline.resumeOptions`, the same read the `/baf-workflow-resume`
+   * card uses, so the menu and the card can never disagree.
+   * @param cwd - session workspace root.
+   * @returns provider for {@link buildWorkflowTabView}.
+   */
+  private resumeProvider(
+    cwd: string,
+  ): (changeId: string) => Promise<WorkflowTabResume | undefined> {
+    return async (changeId: string) => {
+      const pipeline = await pipelineFor(cwd)
+      const options = await pipeline.resumeOptions(changeId)
+      return { anchor: options.anchor, candidates: options.candidates }
+    }
   }
 
   private async requireCwd(sessionId: SessionId): Promise<string> {

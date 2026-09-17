@@ -39,6 +39,25 @@ export interface ProjectionIndex {
   readonly changes: readonly ProjectionIndexEntry[]
 }
 
+/**
+ * Whether an index row is still unfinished (§18.3.1).
+ *
+ * The definition lives here, next to the index type, because three surfaces
+ * ask the same question — the `baf-go` coordinator (binding), the session gate
+ * (startup card) and `/baf-status` — and a second copy of "what counts as
+ * unfinished" is exactly the kind of split that makes those surfaces disagree.
+ *
+ * The parameter is the row's minimum shape rather than the full
+ * {@link ProjectionIndexEntry}: resolvers that only need `current` (see
+ * `command-drives.ts`) declare a `Pick` of it, and a predicate that demanded
+ * the whole row would force them to carry fields they never read.
+ * @param entry - projection index row (or any subset carrying `current`).
+ * @returns true when the change has neither archived nor been abandoned.
+ */
+export function isActiveChange(entry: { readonly current: WorkflowNode | TerminalState }): boolean {
+  return entry.current !== 'completed' && entry.current !== 'abandoned'
+}
+
 /** Mutable fold state while replaying events. */
 interface FoldState {
   changeId: string
@@ -131,6 +150,10 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
     case 'stage-entered':
       state.current = event.node
       state.nodes[event.node] = 'in-progress'
+      // §19.3: `nodes.drift` tracks "currently parked in drift", not "has
+      // ever drifted". Any entry — normal progression or a T13 resume —
+      // resolves the park; the `drift-detected` audit events stay in the log.
+      if (state.nodes.drift === 'drifted') Reflect.deleteProperty(state.nodes, 'drift')
       break
     case 'baseline-locked':
       state.baseline = event.lock
@@ -180,6 +203,12 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
       break
     case 'transition-rejected':
       // Audit-only; status unchanged.
+      break
+    case 'awaiting-confirm':
+      // Audit-only; status unchanged. The gate is *derived* from the node
+      // status (`design` completed → gate A, `verify` completed → gate B), so
+      // recording it must not move `current` or `nodes` — the coordinator
+      // re-reads status to decide (§18.5).
       break
     default: {
       const _exhaustive: never = event

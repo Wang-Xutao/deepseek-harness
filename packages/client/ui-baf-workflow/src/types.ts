@@ -40,6 +40,20 @@ export interface BafWorkflowTransitionRequest {
 }
 
 /**
+ * Drift rollback (§19.5 / T13).
+ *
+ * Omitting `node` re-reads the candidate set — the Tab calls it that way when
+ * the customer opens the 「复位到…」菜单, so the list on screen is the freshly
+ * detected one. Passing `node` drives the rollback; the pipeline re-validates
+ * the target against its own candidate set and rejects an illegal one.
+ */
+export interface BafWorkflowResumeRequest {
+  readonly sessionId: SessionId
+  readonly changeId: string
+  readonly node?: WorkflowNode
+}
+
+/**
  * One row of the workspace change Dashboard (`listChanges` Remote return).
  *
  * Mirrors `ProjectionIndexEntry` from baf-workflow; declared here as the

@@ -88,6 +88,14 @@ export interface BaselineLock {
   readonly baselineId: string
   readonly sourceRevision: string
   readonly lockedAt: string
+  /**
+   * Content hash of the locked baseline manifest (`hashCanonical`), which is
+   * what the drift detector compares to spot "same id, different content".
+   * Optional: logs written before Phase 8.9 did not record it, and the
+   * detector then skips the content comparison rather than reporting a
+   * permanent false drift.
+   */
+  readonly contentHash?: string
 }
 
 /** Per-node skip / block annotation for Tab and diagnostics. */

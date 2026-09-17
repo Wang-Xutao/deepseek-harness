@@ -6,6 +6,8 @@
     "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
   },
   "files": [
+    "src/types.ts",
+    "src/invariant.ts",
     "src/client/index.ts",
     "src/client/locales.ts",
     "src/client/remote-types.ts",

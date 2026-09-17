@@ -32,4 +32,14 @@ export default defineConfig([
     dts: false,
     clean: false,
   },
+  {
+    entry: { 'session-gate': 'lib/types/session-gate.js' },
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'node',
+    target: 'es2024',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+  },
 ])

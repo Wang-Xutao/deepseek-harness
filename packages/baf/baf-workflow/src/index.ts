@@ -50,6 +50,7 @@ export * from './transition.ts'
 export * from './intake.ts'
 export * from './workflow-service.ts'
 export * from './tab-view.ts'
+export * from './lanes.ts'
 export * from './metrics.ts'
 export * from './stages/context.ts'
 export * from './stages/artifacts.ts'
@@ -68,6 +69,7 @@ export * from './stages/archive.ts'
 export * from './stages/drift.ts'
 export * from './stages/abandon.ts'
 export * from './stages/pipeline.ts'
+export * from './pipeline-factory.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

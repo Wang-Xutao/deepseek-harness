@@ -8,6 +8,10 @@
  *   3. Typert Remote (`bafWorkflowView.getTabView`/`startIntake`/`...`),
  *   4. drives (`driveOpen`/`driveClarify`/`...` in `command-drives.ts`).
  *
+ * `/baf-go` (§18) deliberately spans all four without becoming a fifth: it
+ * composes the drives behind one entry and owns no transition of its own, so
+ * it is pinned here as an entry point rather than as a drive export.
+ *
  * Each surface must agree on the names of its operations, otherwise a user
  * moving between surfaces (slash → Remote, or CLI → Remote) silently loses
  * a stage. This snapshot pins the four-entry set and is reviewed when a
@@ -47,6 +51,8 @@ const REMOTE_METHODS = [
 // apply()).
 const SLASH_NAMES = [
   'baf-help',
+  'baf-welcome',
+  'baf-go',
   'baf-version',
   'baf-status',
   'baf-list',
@@ -60,6 +66,7 @@ const SLASH_NAMES = [
   'baf-workflow-verify',
   'baf-workflow-archive',
   'baf-workflow-abandon',
+  'baf-workflow-resume',
   'baf-check-quality',
   'baf-check-guard',
 ]
@@ -78,6 +85,7 @@ const DRIVE_TO_SLASH: Record<string, string> = {
   driveVerify: 'baf-workflow-verify',
   driveArchive: 'baf-workflow-archive',
   driveAbandon: 'baf-workflow-abandon',
+  driveResume: 'baf-workflow-resume',
   driveQuality: 'baf-check-quality',
   driveGuard: 'baf-check-guard',
 }
@@ -112,12 +120,18 @@ describe('BAF surface parity (Phase 8.5)', () => {
   })
 
   it('CLI subcommands map back to drive exports (no orphan subcommands)', () => {
-    // `list`, `help`, `version`, `doctor`, `status` are CLI-/slash-only
-    // surfaces that read the projection store directly; drives handle the
+    // `list`, `help`, `version`, `doctor`, `status`, `welcome` are CLI-/slash-
+    // only surfaces that read the projection store directly; drives handle the
     // mutating operations. Both sets are listed here so a future addition
     // to either side must update this snapshot.
+    //
+    // `go` is the third kind and the reason this test lists it explicitly:
+    // the §18 coordinator lives in `go-coordinator.ts` (not `command-drives.ts`)
+    // *on purpose*, so DRIVE_TO_SLASH stays strictly "one drive = one stage
+    // transition" and the coordinator's chaining never looks like a transition
+    // of its own. It composes drives; it owns none.
     const cliSubcommandSet = new Set(CLI_NAMES)
-    const direct = new Set(['list', 'help', 'version', 'doctor', 'status'])
+    const direct = new Set(['list', 'help', 'version', 'doctor', 'status', 'welcome', 'go'])
     for (const sub of CLI_NAMES) {
       const slash = `baf-${sub}`
       const isDirect = direct.has(sub)
