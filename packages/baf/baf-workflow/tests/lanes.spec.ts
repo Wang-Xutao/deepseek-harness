@@ -132,8 +132,8 @@ describe('Tab payload for an escalated change', () => {
         rootCause: 'Missing length guard before the token loop in parse().',
         affectedFiles: ['src/parser.c'],
         regressionTest: { file: 'tests/test_parser_empty.c', command: 'ctest -R parser_empty' },
-      })
-      await pipeline.enterImplementStage(intake.changeId)
+      }, 'slash')
+      await pipeline.enterImplementStage(intake.changeId, 'slash')
       const escalated = await pipeline.driveEscalateStage({
         changeId: intake.changeId,
         cause: 'public-API impact discovered',
@@ -227,7 +227,7 @@ describe('resume exposure', () => {
         rootCause: 'Missing length guard before the token loop in parse().',
         affectedFiles: ['src/parser.c'],
         regressionTest: { file: 'tests/test_parser_empty.c', command: 'ctest -R parser_empty' },
-      })
+      }, 'slash')
       await pipeline.driveDriftStage(intake.changeId, { gitRevision: 'rev-r2' })
 
       const after = await buildWorkflowTabView(store, intake.changeId, { resume })

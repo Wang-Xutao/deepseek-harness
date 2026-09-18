@@ -64,8 +64,8 @@ async function reachImplementInProgress(
   root: string,
   changeId: string,
 ): Promise<void> {
-  await pipeline.driveFastPathOpenStage(bugInput(changeId))
-  await pipeline.enterImplementStage(changeId)
+  await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
+  await pipeline.enterImplementStage(changeId, 'slash')
   await recordTouched(root, { changeId, file: REGRESSION_FILE })
   await completeTask(root, changeId, 'regression-test')
   await recordTouched(root, { changeId, file: FIX_FILE })
@@ -91,7 +91,7 @@ describe('fast-path happy path', () => {
       expect(status.openspecSkipped?.skipped).toBe(true)
       expect(status.nodes.clarify).toBe('skipped')
 
-      await pipeline.driveFastPathOpenStage(bugInput(changeId))
+      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
       status = await store.readStatus(changeId)
       expect(status.current).toBe('open')
       expect(status.nodes.open).toBe('completed')
@@ -117,12 +117,12 @@ describe('fast-path happy path', () => {
       })).rejects.toMatchObject({ code: 'invalid_transition' })
 
       // T5: root cause recorded → implement entry carries machine evidence.
-      await pipeline.enterImplementStage(changeId)
+      await pipeline.enterImplementStage(changeId, 'slash')
       await recordTouched(root, { changeId, file: REGRESSION_FILE })
       await completeTask(root, changeId, 'regression-test')
       await recordTouched(root, { changeId, file: FIX_FILE })
       await completeTask(root, changeId, 'fix-root-cause')
-      await pipeline.driveImplementStage(changeId)
+      await pipeline.driveImplementStage(changeId, 'slash')
 
       const verify = await pipeline.driveVerifyStage(changeId)
       if (verify.node !== 'verify') throw new Error('expected a verify drive')
@@ -134,7 +134,7 @@ describe('fast-path happy path', () => {
       const specRow = verify.result.report.checks.find(c => c.name === 'openspec-validate')
       expect(specRow?.required).toBe(false)
 
-      await pipeline.driveArchiveStage(changeId, true)
+      await pipeline.driveArchiveStage(changeId, true, 'slash')
       status = await store.readStatus(changeId)
       expect(status.terminal).toBe('completed')
       const archived = await readFile(
@@ -150,7 +150,7 @@ describe('fast-path happy path', () => {
   it('fast-path open warns but does not block without a git revision', async () => {
     const { root, pipeline, store, changeId } = await setupFastPath({ withGit: false })
     try {
-      await pipeline.driveFastPathOpenStage(bugInput(changeId))
+      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
       const status = await store.readStatus(changeId)
       expect(status.nodes.open).toBe('completed')
 
@@ -172,13 +172,13 @@ describe('fast-path gates', () => {
   it('T5 refuses implement entry when the bug record lacks a root cause', async () => {
     const { root, pipeline, store, changeId } = await setupFastPath()
     try {
-      await pipeline.driveFastPathOpenStage(bugInput(changeId))
+      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
       await writeFile(
         join(root, 'openspec', 'changes', changeId, 'bug-record.md'),
         '# Bug record\n\n## Problem\n\nParser crashes.\n',
         'utf8',
       )
-      await expect(pipeline.enterImplementStage(changeId))
+      await expect(pipeline.enterImplementStage(changeId, 'slash'))
         .rejects.toMatchObject({ code: 'invalid_transition' })
       const status = await store.readStatus(changeId)
       expect(status.current).toBe('open')
@@ -190,7 +190,7 @@ describe('fast-path gates', () => {
   it('refuses the full-go open drive on a fast-path change', async () => {
     const { root, pipeline, changeId } = await setupFastPath()
     try {
-      await expect(pipeline.driveOpenStage(changeId, 'Fix parser crash'))
+      await expect(pipeline.driveOpenStage(changeId, 'Fix parser crash', 'slash'))
         .rejects.toMatchObject({ code: 'invalid_transition' })
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -200,8 +200,8 @@ describe('fast-path gates', () => {
   it('refuses fix-file writes before the regression test is done (regression-test-first)', async () => {
     const { root, pipeline, changeId } = await setupFastPath()
     try {
-      await pipeline.driveFastPathOpenStage(bugInput(changeId))
-      await pipeline.enterImplementStage(changeId)
+      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
+      await pipeline.enterImplementStage(changeId, 'slash')
 
       // Fix file is inside the allowlist but the regression task is not done.
       await expect(recordTouched(root, { changeId, file: FIX_FILE }))
@@ -212,14 +212,14 @@ describe('fast-path gates', () => {
 
       // Completion gate also refuses when the regression test is not done.
       await recordTouched(root, { changeId, file: REGRESSION_FILE })
-      await expect(pipeline.driveImplementStage(changeId))
+      await expect(pipeline.driveImplementStage(changeId, 'slash'))
         .rejects.toMatchObject({ code: 'invalid_transition' })
 
       // Satisfying test-first unblocks the rest of the chain.
       await completeTask(root, changeId, 'regression-test')
       await recordTouched(root, { changeId, file: FIX_FILE })
       await completeTask(root, changeId, 'fix-root-cause')
-      await pipeline.driveImplementStage(changeId)
+      await pipeline.driveImplementStage(changeId, 'slash')
       const status = await pipeline.context().store.readStatus(changeId)
       expect(status.nodes.implement).toBe('completed')
     } finally {
@@ -240,7 +240,7 @@ describe('T15 escalation', () => {
       ledger.touched.push('src/other-module.c')
       await writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8')
 
-      const drive = await pipeline.driveImplementStage(changeId)
+      const drive = await pipeline.driveImplementStage(changeId, 'slash')
       if (drive.node !== 'implement') throw new Error('expected an implement drive')
       expect(drive.result.escalated).toBeDefined()
 
@@ -273,7 +273,7 @@ describe('T15 escalation', () => {
   it('refuses escalation outside fast-path implement', async () => {
     const { root, pipeline, store, changeId } = await setupFastPath()
     try {
-      await pipeline.driveFastPathOpenStage(bugInput(changeId))
+      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
       await expect(pipeline.driveEscalateStage({ changeId, cause: 'premature' }))
         .rejects.toMatchObject({ code: 'invalid_transition' })
       const status = await store.readStatus(changeId)
@@ -321,25 +321,25 @@ describe('T15 escalation', () => {
           rollback: 'git revert HEAD',
         }],
         allowlist: [FIX_FILE, REGRESSION_FILE],
-      })
+      }, 'slash')
       await writeFile(
         join(root, 'openspec', 'changes', changeId, ARTIFACT_FILES.tasks),
         '# Tasks\n\n- [x] t1 Guard token loop and cover regression\n',
         'utf8',
       )
 
-      await pipeline.enterImplementStage(changeId)
+      await pipeline.enterImplementStage(changeId, 'slash')
       await recordTouched(root, { changeId, file: FIX_FILE })
       await recordTouched(root, { changeId, file: REGRESSION_FILE })
       await completeTask(root, changeId, 't1')
-      await pipeline.driveImplementStage(changeId)
+      await pipeline.driveImplementStage(changeId, 'slash')
 
       const verify = await pipeline.driveVerifyStage(changeId)
       if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(false)
       expect(verify.result.report.mode).toBe('full-go')
 
-      await pipeline.driveArchiveStage(changeId, true)
+      await pipeline.driveArchiveStage(changeId, true, 'slash')
       const status = await store.readStatus(changeId)
       expect(status.terminal).toBe('completed')
       // Completed fast-path stages survive the upgrade.

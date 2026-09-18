@@ -22,6 +22,7 @@ export const BAF_ERROR_CODES = [
   'projection_corrupted',
   'scope_exceeded',
   'writer_conflict',
+  'gate_confirmation_required',
 ] as const
 
 /** One stable BAF error code. */

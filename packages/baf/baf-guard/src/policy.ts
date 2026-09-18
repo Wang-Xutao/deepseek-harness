@@ -95,6 +95,26 @@ function isProtected(rel: string, config: GuardPolicyConfig): boolean {
     : matchesPathEntry(rel, entry)))
 }
 
+/**
+ * Built-in protected paths the guard enforces even when the baseline omits them
+ * (§22.15 D). The list is additive — baselines may only **add** paths, never
+ * widen these. `.baf/**` is already covered by {@link isSystemResource};
+ * `openspec/**` lives in this list because the docs the model authors through
+ * guarded writes sit under the active change's `openspec/changes/<id>/` and
+ * must remain writable, while every *other* `openspec/**` (older changes,
+ * archive targets, the spec/ folder) is forbidden from being touched.
+ *
+ * The check is applied only by {@link adjudicateFsWrite} (after the change-dir
+ * allowance) — placing it in {@link adjudicateStructuralPath} would also flag
+ * the verify-time `GuardPolicy.check('verify', …)` action, which scans the
+ * historical touched set including legitimate openspec change-dir artifacts.
+ */
+export const BAF_CONTROLLED_PATHS: readonly string[] = ['.baf/**', 'openspec/**']
+
+function isBafControlled(rel: string): boolean {
+  return BAF_CONTROLLED_PATHS.some(entry => matchesPathEntry(rel, entry))
+}
+
 function isSystemResource(rel: string): boolean {
   return rel === '.git' || rel.startsWith('.git/')
     || rel === '.baf' || rel.startsWith('.baf/')
@@ -189,6 +209,17 @@ export function adjudicateFsWrite(
   const inChangeDir = state.changeDirRel !== undefined && matchesPathEntry(rel, state.changeDirRel)
   const stage = state.stage ?? 'intake'
   if (inChangeDir && (DOC_STAGES.has(stage) || stage === 'implement')) return allow
+  // §22.15 D: built-in protected paths apply even when the baseline omits
+  // them. Once the change-dir allowance above has cleared the active change's
+  // docs/implement artifacts, every other path under `.baf/**` / `openspec/**`
+  // (older changes, archive targets, the spec folder, the baseline file
+  // itself) must be touched only through the workflow drives — even an
+  // allowlist entry pointing into `openspec/**` is rejected here, because the
+  // allowlist is for *new* writes inside the active change, not rewrites of
+  // historical artifacts.
+  if (isBafControlled(rel)) {
+    return deny('protected_path', `${rel} is owned by the workflow; edit through /baf-* drives`)
+  }
   if (stage === 'implement') {
     const withinAllowlist = state.allowlist.some(entry => matchesPathEntry(rel, entry))
     if (withinAllowlist) return allow

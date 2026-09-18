@@ -76,6 +76,35 @@ describe('policy: filesystem writes', () => {
     ])
   })
 
+  // §22.15 D: the guard refuses model writes into other changes' dirs,
+  // historical openspec/** artifacts, the spec/ folder, and the baseline
+  // file itself — these are owned by the workflow, not the model.
+  it('blocks openspec/** writes outside the active change dir even when allowlisted', () => {
+    const otherChange = adjudicateFsWrite(CONFIG, state({}), {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-99', 'design.md'),
+    })
+    expect(otherChange).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    const specFolder = adjudicateFsWrite(CONFIG, state({}), {
+      root: ROOT, path: join(ROOT, 'openspec', 'spec', 'parser', 'spec.md'),
+    })
+    expect(specFolder).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    const archivedChange = adjudicateFsWrite(CONFIG, state({}), {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'archive', 'change-1.md'),
+    })
+    expect(archivedChange).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    const baseline = adjudicateFsWrite(CONFIG, state({}), {
+      root: ROOT, path: join(ROOT, '.baf', 'baseline.yml'),
+    })
+    expect(baseline).toMatchObject({ allowed: false, reasonCode: 'system_resource_conflict' })
+  })
+
+  it('still allows openspec writes inside the active change dir on doc stages', () => {
+    const inside = adjudicateFsWrite(CONFIG, state({ stage: 'design' }), {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'design.md'),
+    })
+    expect(inside.allowed).toBe(true)
+  })
+
   it('fails closed without an active change or with unconfirmed intake', () => {
     const noChange = adjudicateFsWrite(CONFIG, state({ active: false }), {
       root: ROOT, path: 'src/x.c',
@@ -241,7 +270,7 @@ describe('sync disk state', () => {
       affectedScopeHint: 'small-local',
     })
     await confirmIntake(store, intake.changeId, 'user')
-    await pipeline.driveOpenStage(intake.changeId, 'Serializer')
+    await pipeline.driveOpenStage(intake.changeId, 'Serializer', 'slash')
     await pipeline.driveClarifyStage({
       changeId: intake.changeId,
       questions: [{ question: 'Q?', answer: 'A', status: 'decided' }],
@@ -256,8 +285,8 @@ describe('sync disk state', () => {
       changeId: intake.changeId,
       tasks: [{ id: 't1', title: 'T', files: ['src/ser.c'], verify: ['make test'], rollback: 'git revert HEAD' }],
       allowlist: ['src/ser.c'],
-    })
-    await pipeline.enterImplementStage(intake.changeId)
+    }, 'slash')
+    await pipeline.enterImplementStage(intake.changeId, 'slash')
     return intake.changeId
   }
 

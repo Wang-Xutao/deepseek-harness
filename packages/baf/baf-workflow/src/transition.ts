@@ -126,6 +126,14 @@ function findRule(
 
 /**
  * Extra evidence checks beyond the table mode filter.
+ *
+ * §22.15 B: confirm edges (T2/T3/T7/T7a/T13/T14/T16) require a human-originated
+ * `source` in evidence. A model-driven surface (the `baf_*` model tool layer)
+ * stamps `'model-tool'`, which is refused here so a tool call cannot unlock a
+ * customer confirmation gate. The check runs before the switch so every
+ * confirm-edge arm inherits it for free — adding a new arm and forgetting to
+ * gate it would still pass this guard if the rule id sits inside
+ * {@link CONFIRM_EDGES}.
  * @param rule - matched rule.
  * @param status - status.
  * @param evidence - caller evidence.
@@ -136,6 +144,9 @@ function checkEvidence(
   status: WorkflowStatus,
   evidence: Readonly<Record<string, unknown>> | undefined,
 ): string | undefined {
+  if (CONFIRM_EDGES.has(rule.id) && !isHumanSource(evidence?.source)) {
+    return 'gate_confirmation_required'
+  }
   switch (rule.id) {
     case 'T2':
     case 'T3':
@@ -171,15 +182,19 @@ export function assertTransitionAccepted(
   to: WorkflowNode | TerminalState,
 ): asserts decision is TransitionDecision & { accepted: true } {
   if (decision.accepted) return
-  const code = decision.reason === 'intake_confirmation_required'
-    ? 'intake_confirmation_required'
-    : decision.reason === 'verify_required'
-      ? 'verify_required'
-      : 'invalid_transition'
+  const reason = decision.reason ?? 'invalid_transition'
+  const code =
+    reason === 'intake_confirmation_required'
+      ? 'intake_confirmation_required'
+      : reason === 'verify_required'
+        ? 'verify_required'
+        : reason === 'gate_confirmation_required'
+          ? 'gate_confirmation_required'
+          : 'invalid_transition'
   throw new BafError(code, `transition rejected: ${from ?? '∅'} → ${to}`, {
     from,
     to,
-    reason: decision.reason ?? 'invalid_transition',
+    reason,
   })
 }
 

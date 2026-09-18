@@ -64,7 +64,7 @@ describe('stage pipeline happy path', () => {
   it('runs open → clarify → design → plan → implement → verify → archive', async () => {
     const { root, pipeline, changeId } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
       let status = await pipeline.context().store.readStatus(changeId)
       expect(status.current).toBe('open')
       expect(status.nodes.open).toBe('completed')
@@ -93,7 +93,7 @@ describe('stage pipeline happy path', () => {
           rollback: 'git revert HEAD',
         }],
         allowlist: [allowlistFile],
-      })
+      }, 'slash')
 
       // Fill the proposal/tasks skeleton sections the openspec structural
       // gate requires (model-authored content in a real run).
@@ -110,15 +110,15 @@ describe('stage pipeline happy path', () => {
       )
 
       // implement: enter stage, record touched, finish tasks, gate T9.
-      await pipeline.enterImplementStage(changeId)
+      await pipeline.enterImplementStage(changeId, 'slash')
       await recordTouched(root, { changeId, file: allowlistFile })
       await completeTask(root, changeId, 't1')
-      await pipeline.driveImplementStage(changeId)
+      await pipeline.driveImplementStage(changeId, 'slash')
 
       const verify = await pipeline.driveVerifyStage(changeId)
       expect(verify.node).toBe('verify')
 
-      const archive = await pipeline.driveArchiveStage(changeId, true)
+      const archive = await pipeline.driveArchiveStage(changeId, true, 'slash')
       expect(archive.node).toBe('archive')
       status = await pipeline.context().store.readStatus(changeId)
       expect(status.terminal).toBe('completed')
@@ -131,14 +131,14 @@ describe('stage pipeline happy path', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  })
+  }, 'slash')
 })
 
 describe('gate failures', () => {
   it('clarify gate rejects a template-only artifact', async () => {
     const { root, pipeline, changeId } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
       // The open skeleton installs the unfilled template; a clarify drive
       // that leaves it unfilled (empty questions + criteria) must be gated.
       await expect(pipeline.driveClarifyStage({
@@ -154,7 +154,7 @@ describe('gate failures', () => {
   it('implement gate rejects out-of-allowlist touched files', async () => {
     const { root, pipeline, changeId } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
       await pipeline.driveClarifyStage({
         changeId,
         questions: [],
@@ -175,21 +175,24 @@ describe('gate failures', () => {
           rollback: 'git revert HEAD',
         }],
         allowlist: ['src/a.ts'],
-      })
-      await pipeline.enterImplementStage(changeId)
+      }, 'slash')
+      await pipeline.enterImplementStage(changeId, 'slash')
       await expect(recordTouched(root, { changeId, file: 'src/other.ts' }))
         .rejects.toMatchObject({ code: 'scope_exceeded' })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  })
+  }, 'slash')
 
   it('archive refuses without human confirmation and without a passing report', async () => {
     const { root, pipeline, changeId } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
+      // §22.15 B: driveArchiveStage guards the confirm-edge source first, so
+      // an unsourced call is refused with `gate_confirmation_required` before
+      // the humanConfirmed check (which fires inside driveArchive → T14 evidence).
       await expect(pipeline.driveArchiveStage(changeId, false))
-        .rejects.toMatchObject({ code: 'invalid_transition' })
+        .rejects.toMatchObject({ code: 'gate_confirmation_required' })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -215,7 +218,7 @@ describe('illegal entry', () => {
   it('open blocks without a git revision', async () => {
     const { root, pipeline, changeId } = await setup({ withGit: false })
     try {
-      await expect(pipeline.driveOpenStage(changeId, 'Add API'))
+      await expect(pipeline.driveOpenStage(changeId, 'Add API', 'slash'))
         .rejects.toMatchObject({ code: 'invalid_transition' })
       const status = await pipeline.context().store.readStatus(changeId)
       expect(status.current).toBe('intake')
@@ -235,7 +238,7 @@ describe('verify Phase 7 wiring', () => {
       ...(stack === undefined ? {} : { stack }),
       ...(guard === undefined ? {} : { guard }),
     })
-    await harness.pipeline.driveOpenStage(harness.changeId, 'Add report export API')
+    await harness.pipeline.driveOpenStage(harness.changeId, 'Add report export API', 'slash')
     await harness.pipeline.driveClarifyStage({
       changeId: harness.changeId,
       questions: [{ question: 'Format?', answer: 'CSV (user call 2026-09-08)', status: 'decided' }],
@@ -257,7 +260,7 @@ describe('verify Phase 7 wiring', () => {
         rollback: 'git revert HEAD',
       }],
       allowlist: [allowlistFile],
-    })
+    }, 'slash')
     const changeDirAbs = join(harness.root, 'openspec', 'changes', harness.changeId)
     await writeFile(
       join(changeDirAbs, ARTIFACT_FILES.proposal),
@@ -272,7 +275,7 @@ describe('verify Phase 7 wiring', () => {
     await harness.pipeline.enterImplementStage(harness.changeId)
     await recordTouched(harness.root, { changeId: harness.changeId, file: allowlistFile })
     await completeTask(harness.root, harness.changeId, 't1')
-    await harness.pipeline.driveImplementStage(harness.changeId)
+    await harness.pipeline.driveImplementStage(harness.changeId, 'slash')
     return harness
   }
 
@@ -305,7 +308,7 @@ describe('verify Phase 7 wiring', () => {
     } finally {
       await rm(harness.root, { recursive: true, force: true })
     }
-  })
+  }, 'slash')
 
   it('wired guard policy gates verify via reason codes', async () => {
     const guard: import('@deepseek-ai/dsh-baf-core').GuardPolicy = {
@@ -362,7 +365,7 @@ describe('verify T11', () => {
   it('failing openspec-validate sends verify → implement with a stage-failed record', async () => {
     const { root, pipeline, store, changeId } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
       await pipeline.driveClarifyStage({
         changeId,
         questions: [{ question: 'Format?', answer: 'CSV (user call 2026-09-08)', status: 'decided' }],
@@ -384,7 +387,7 @@ describe('verify T11', () => {
           rollback: 'git revert HEAD',
         }],
         allowlist: [allowlistFile],
-      })
+      }, 'slash')
       const changeDirAbs = join(root, 'openspec', 'changes', changeId)
       await writeFile(
         join(changeDirAbs, ARTIFACT_FILES.proposal),
@@ -397,10 +400,10 @@ describe('verify T11', () => {
         'utf8',
       )
 
-      await pipeline.enterImplementStage(changeId)
+      await pipeline.enterImplementStage(changeId, 'slash')
       await recordTouched(root, { changeId, file: allowlistFile })
       await completeTask(root, changeId, 't1')
-      await pipeline.driveImplementStage(changeId)
+      await pipeline.driveImplementStage(changeId, 'slash')
 
       // Force verify to fail by emptying proposal.md (adapter validate then
       // flags the missing "## Why" section as an unfilled template).
@@ -418,14 +421,14 @@ describe('verify T11', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  })
+  }, 'slash')
 })
 
 describe('drift detection (Phase 5.8)', () => {
   it('writes drift-detected when an artifact owned by a completed stage is deleted', async () => {
     const { root, pipeline, store, changeId } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
       await pipeline.driveClarifyStage({
         changeId,
         questions: [{ question: 'Format?', answer: 'CSV (user call 2026-09-08)', status: 'decided' }],
@@ -455,7 +458,7 @@ describe('drift detection (Phase 5.8)', () => {
   it('detects baseline id change without recording when record=false', async () => {
     const { root, pipeline, changeId, baseline } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
       const status = await pipeline.context().store.readStatus(changeId)
       const observation: DriftObservation = {
         baseline: { ...baseline, baselineId: 'replacement-baseline' },
@@ -474,8 +477,9 @@ describe('abandon (Phase 5.8)', () => {
   it('refuses without human confirmation', async () => {
     const { root, pipeline, changeId } = await setup()
     try {
+      // §22.15 B: the source guard runs before the humanConfirmed check.
       await expect(pipeline.driveAbandonStage({ changeId, humanConfirmed: false }))
-        .rejects.toMatchObject({ code: 'invalid_transition' })
+        .rejects.toMatchObject({ code: 'gate_confirmation_required' })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -484,8 +488,8 @@ describe('abandon (Phase 5.8)', () => {
   it('records change-abandoned after confirmation and stays idempotent on retry', async () => {
     const { root, pipeline, store, changeId } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
-      const first = await pipeline.driveAbandonStage({ changeId, humanConfirmed: true })
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
+      const first = await pipeline.driveAbandonStage({ changeId, humanConfirmed: true, source: 'slash' })
       if (first.node !== 'abandon') throw new Error('expected abandon node')
       expect(first.result.recorded).toBe(true)
       expect(first.result.status.terminal === 'abandoned').toBe(true)
@@ -493,7 +497,7 @@ describe('abandon (Phase 5.8)', () => {
       const events = await store.readEvents(changeId)
       expect(events.events.some(e => e.type === 'change-abandoned')).toBe(true)
 
-      const second = await pipeline.driveAbandonStage({ changeId, humanConfirmed: true })
+      const second = await pipeline.driveAbandonStage({ changeId, humanConfirmed: true, source: 'slash' })
       if (second.node !== 'abandon') throw new Error('expected abandon node')
       expect(second.result.recorded).toBe(false)
       expect(second.result.status.terminal === 'abandoned').toBe(true)

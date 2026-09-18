@@ -11,7 +11,12 @@
  * @module @deepseek-ai/dsh-baf-workflow/stages/abandon
  */
 
-import { BafError, type TransitionSource, type WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
+import {
+  BafError,
+  isHumanSource,
+  type TransitionSource,
+  type WorkflowStatus,
+} from '@deepseek-ai/dsh-baf-core'
 import type { StageContext } from './context.ts'
 
 /** Result of a successful abandon drive. */
@@ -44,6 +49,18 @@ export async function driveAbandon(
   ctx: StageContext,
   options: AbandonOptions,
 ): Promise<AbandonStageResult> {
+  // §22.15 B: T16 (change-abandoned) is appended raw and never enters
+  // `decideTransition`, so the confirm-edge source guard must run here. The
+  // source check runs first so a caller missing both gates surfaces the
+  // upstream error (gate_confirmation_required) rather than the lower one
+  // (invalid_transition for missing humanConfirmed).
+  if (!isHumanSource(options.source)) {
+    throw new BafError(
+      'gate_confirmation_required',
+      'abandon (T16) requires a human-originated drive; use /baf-workflow-abandon confirm or the 工作流 Tab',
+      { changeId: options.changeId, source: options.source ?? null },
+    )
+  }
   if (!options.humanConfirmed) {
     throw new BafError('invalid_transition', 'abandon requires explicit human confirmation', {
       changeId: options.changeId,

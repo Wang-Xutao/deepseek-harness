@@ -10,6 +10,7 @@ import {
   BafError,
   type BaselineManifest,
   type GuardPolicy,
+  isHumanSource,
   type StackAdapter,
   type TransitionSource,
   type WorkflowStatus,
@@ -509,6 +510,16 @@ export class StagePipeline {
     humanConfirmed: boolean,
     source?: TransitionSource,
   ): Promise<DriveResult> {
+    // §22.15 B: archive never passes through `decideTransition` (the
+    // change-archived event is appended raw), so the confirm-edge source
+    // guard cannot reach it from `checkEvidence`. Re-check here.
+    if (!isHumanSource(source)) {
+      throw new BafError(
+        'gate_confirmation_required',
+        'archive (T14) requires a human-originated drive; use /baf-workflow-archive confirm or the 工作流 Tab',
+        { changeId, source: source ?? null },
+      )
+    }
     // T10 requires the verify gate's machine evidence, not narration.
     await this.enterStage(changeId, 'archive', { checksPassed: true }, undefined, source)
     const result = await driveArchive(this.ctx, changeId, humanConfirmed)
@@ -663,10 +674,17 @@ export class StagePipeline {
     // entered by a T15 escalation) — re-adjudicating would reject on the
     // self-edge that does not exist in the table.
     if (status.current === to && status.nodes[to] === 'in-progress') return status
+    // §22.15 B: the confirm-edge source guard runs inside `checkEvidence`,
+    // which reads `evidence.source`. Forward `source` so the guard sees the
+    // drive origin; non-confirm edges ignore the field.
+    const evidenceWithSource: Record<string, unknown> = {
+      ...(evidence ?? {}),
+      ...(source === undefined ? {} : { source }),
+    }
     const decision = decideTransition({
       status,
       to,
-      ...(evidence === undefined ? {} : { evidence }),
+      evidence: evidenceWithSource,
     })
     if (!decision.accepted) {
       await this.recordRejection(changeId, status, to, decision.reason ?? 'invalid_transition')

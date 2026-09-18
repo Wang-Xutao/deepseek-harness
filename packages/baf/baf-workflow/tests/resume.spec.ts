@@ -45,7 +45,7 @@ async function touchReference(root: string, rel: string): Promise<string> {
 
 /** Advance a change to `design` in-progress, the anchor for most cases here. */
 async function driveToDesign(root: string, pipeline: StagePipeline, changeId: string): Promise<void> {
-  await pipeline.driveOpenStage(changeId, 'Add report export API')
+  await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
   await pipeline.driveClarifyStage({
     changeId,
     questions: [{ question: 'Format?', answer: 'CSV (user call 2026-09-08)', status: 'decided' }],
@@ -83,7 +83,7 @@ describe('resume candidates (§19.2)', () => {
   it('always includes the anchor and never the entry stages', async () => {
     const { root, pipeline, changeId } = await setup()
     try {
-      await pipeline.driveOpenStage(changeId, 'Add report export API')
+      await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')
       const drift = await pipeline.driveDriftStage(changeId, { gitRevision: 'rev-2' })
       if (drift.node !== 'drift') throw new Error('expected a drift drive')
       // Open-time drift: only `open` is upstream and it is not re-runnable.
@@ -101,7 +101,7 @@ describe('driveResumeStage (§19.3)', () => {
       await driveToDesign(root, pipeline, changeId)
       await pipeline.driveDriftStage(changeId, { gitRevision: 'rev-2' })
 
-      const resumed = await pipeline.driveResumeStage(changeId, 'clarify')
+      const resumed = await pipeline.driveResumeStage(changeId, 'clarify', undefined, 'slash')
       if (resumed.node !== 'resume') throw new Error('expected a resume drive')
       expect(resumed.result.anchor).toBe('design')
       expect(resumed.result.target).toBe('clarify')
@@ -134,7 +134,7 @@ describe('driveResumeStage (§19.3)', () => {
       await pipeline.driveDriftStage(changeId, { gitRevision: 'rev-2' })
       const before = await store.readStatus(changeId)
 
-      await expect(pipeline.driveResumeStage(changeId, 'plan'))
+      await expect(pipeline.driveResumeStage(changeId, 'plan', undefined, 'slash'))
         .rejects.toMatchObject({ code: 'invalid_transition' })
 
       const after = await store.readStatus(changeId)
@@ -155,7 +155,7 @@ describe('driveResumeStage (§19.3)', () => {
     const { root, pipeline, changeId } = await setup()
     try {
       await driveToDesign(root, pipeline, changeId)
-      await expect(pipeline.driveResumeStage(changeId, 'design'))
+      await expect(pipeline.driveResumeStage(changeId, 'design', undefined, 'slash'))
         .rejects.toMatchObject({ code: 'invalid_transition' })
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -179,13 +179,16 @@ describe('drift-detected has one writer (§21.5)', () => {
     try {
       await driveToDesign(root, pipeline, changeId)
       await pipeline.driveDriftStage(changeId, { gitRevision: 'rev-2' })
+      // §22.15 B: T16 now refuses without a human-originated source. The
+      // evidence still requires `humanConfirmed`, but the upstream guard
+      // surfaces first.
       await expect(service.transition({ changeId, from: 'drift', to: 'abandoned' }))
-        .rejects.toMatchObject({ code: 'invalid_transition' })
+        .rejects.toMatchObject({ code: 'gate_confirmation_required' })
       const abandoned = await service.transition({
         changeId,
         from: 'drift',
         to: 'abandoned',
-        evidence: { humanConfirmed: true },
+        evidence: { humanConfirmed: true, source: 'slash' },
       })
       expect(abandoned.accepted).toBe(true)
       expect(abandoned.status.terminal).toBe('abandoned')
