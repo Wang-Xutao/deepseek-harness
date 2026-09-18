@@ -41,7 +41,9 @@ const REMOTE_METHODS = [
   'confirmIntake',
   'rejectIntake',
   'transition',
+  'resume',
   'listChanges',
+  'gateResolve',
 ] as const
 
 // The slash handlers register through `ctx.commands.register`; their `name`
@@ -57,6 +59,7 @@ const SLASH_NAMES = [
   'baf-status',
   'baf-list',
   'baf-doctor',
+  'baf-scaffold',
   'baf-workflow-open',
   'baf-workflow-classify',
   'baf-workflow-clarify',
@@ -88,6 +91,10 @@ const DRIVE_TO_SLASH: Record<string, string> = {
   driveResume: 'baf-workflow-resume',
   driveQuality: 'baf-check-quality',
   driveGuard: 'baf-check-guard',
+  driveScaffold: 'baf-scaffold',
+  // §22.14 Tab gate-card resolve: dispatched from BafWorkflowTabRemote only
+  // (no slash / CLI entry — the Tab is the single resolver surface).
+  driveGateResolve: '__gate-resolve-only__',
 }
 
 const SLASH_TO_DRIVE: Record<string, string> = Object.fromEntries(
@@ -102,14 +109,21 @@ describe('BAF surface parity (Phase 8.5)', () => {
     expect(CLI_NAMES).toEqual(slashStripped)
   })
 
-  it('every drive export has a corresponding CLI subcommand', () => {
+  it('every drive export has a corresponding CLI subcommand (except Remote-only drives)', () => {
     // Drives map 1:1 to slash names via DRIVE_TO_SLASH; the CLI subcommand
     // is the slash name with the `baf-` prefix stripped. A rename in either
     // surface is the trigger for reviewing this snapshot.
+    //
+    // `driveGateResolve` is the one exception: it is dispatched only by the
+    // Tab Remote (no slash / CLI), so its DRIVE_TO_SLASH entry uses a
+    // sentinel and is skipped here. Listed separately to keep the rule
+    // visible: drives without a slash backing must be intentional, not drift.
     for (const [drive, slash] of Object.entries(DRIVE_TO_SLASH)) {
+      if (slash === '__gate-resolve-only__') continue
       const subcommand = slash.replace(/^baf-/, '')
       expect(CLI_NAMES, `drive ${drive} -> subcommand ${subcommand}`).toContain(subcommand)
     }
+    expect(DRIVE_TO_SLASH['driveGateResolve']).toBe('__gate-resolve-only__')
   })
 
   it('DRIVE_TO_SLASH covers every drive export (no orphan drives)', () => {

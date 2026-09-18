@@ -33,6 +33,7 @@ describe('baf-cli Commander tree', () => {
       'go',
       'help',
       'list',
+      'scaffold',
       'status',
       'version',
       'welcome',
@@ -87,5 +88,8 @@ describe('baf-cli Commander tree', () => {
     expect(quality?.description()).toContain('与 /baf-check-quality 同源 drive')
     const guard = program.commands.find(c => c.name() === 'check-guard')
     expect(guard?.description()).toContain('与 /baf-check-guard 同源 drive')
+    // §22.4: scaffold surfaces slash + CLI in lockstep so §9.2 parity holds.
+    const scaffold = program.commands.find(c => c.name() === 'scaffold')
+    expect(scaffold?.description()).toContain('与 /baf-scaffold 同源 drive')
   })
 })

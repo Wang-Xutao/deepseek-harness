@@ -42,6 +42,7 @@ import {
   drivePlan,
   driveQuality,
   driveResume,
+  driveScaffold,
   driveVerify,
 } from './command-drives.ts'
 import { driveGo } from './go-coordinator.ts'
@@ -85,6 +86,7 @@ const SLASH_DESC: Record<string, string> = {
   '/baf-workflow-resume': 'drift 复位（T13，需选目标节点） · ★★★',
   '/baf-check-quality': '基线 C 栈质量检查 · ★★',
   '/baf-check-guard': '安全门禁（verify + secret-scan） · ★★',
+  '/baf-scaffold': '初始化工作区（与 §22 scaffold 门同源） · ★★',
 }
 
 /**
@@ -106,6 +108,7 @@ function cardTitle(slash: string, runtime?: string): string {
 const HELP_CORE = [
   'baf help       列出全部指令与用法 · ★★',
   'baf welcome    会话启动卡：绑定 + 工具链体检 · ★★',
+  'baf scaffold   初始化工作区（与 §22 scaffold 门同源） · ★★',
   'baf status     查看当前变更：模式/阶段/intake · ★★★',
   'baf version    查看桌面/插件版本（对齐设置页） · ★',
   'baf doctor     工作流自检：cwd/工具链/注册 · ★',
@@ -274,6 +277,28 @@ export function buildBafProgram(): Command {
         resolveStartupBinding(cwd),
       ])
       fromDrive(toCli(renderWelcomeCard({ cwd, probe, binding })))
+    })
+
+  program.command('scaffold')
+    .description(`${slashDesc('/baf-scaffold')}（与 /baf-scaffold 同源 drive）`)
+    .allowUnknownOption(true)
+    .argument('[baseline-id]', 'optional enterprise baseline id (defaults to baf-baseline-init)')
+    .action(async (baselineId: string | undefined) => {
+      const opts = program.opts<{ cwd?: string }>()
+      const cwd = readCwd(opts)
+      if (cwd === undefined) fromDrive(missingCwd('baf scaffold'))
+      const ctx = getCtx()
+      const scaffoldService = ctx?.get('bafScaffold')
+      if (scaffoldService === undefined) {
+        emit(false, formatCommandReport(false, cardTitle('/baf-scaffold', 'scaffold 服务未挂载'), [
+          { title: '原因', lines: ['当前 composition 未安装 baf-scaffold（ScaffoldAdapter 不可用）'] },
+        ]) + '\n', 1)
+        return
+      }
+      const r = toCli(await driveScaffold(cwd, {
+        scaffold: { scaffold: opts => scaffoldService.scaffold(opts) },
+      }, baselineId ?? 'baf-baseline-init'))
+      emit(r.ok, r.text, r.ok ? 0 : 1)
     })
 
   program.command('doctor')

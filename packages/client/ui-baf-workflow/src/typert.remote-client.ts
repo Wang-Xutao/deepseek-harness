@@ -7,6 +7,7 @@ import type {
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {
   BafWorkflowChangeRequest,
+  BafWorkflowGateResolveRequest,
   BafWorkflowResumeRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
@@ -24,6 +25,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     rejectIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     transition: (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     resume: (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
+    gateResolve: (request: BafWorkflowGateResolveRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
   }
   interface TypertRemoteMap {
     'bafWorkflowView/getTabView': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
@@ -32,6 +34,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'bafWorkflowView/rejectIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/transition': (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/resume': (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
+    'bafWorkflowView/gateResolve': (request: BafWorkflowGateResolveRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
   }
   interface TypertRemoteNamespaceMap {
     bafWorkflowView: TypertRemoteNamespace$bafWorkflowView
@@ -105,6 +108,7 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
     remoteDescriptor('rejectIntake', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowChangeRequest'),
     remoteDescriptor('transition', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowTransitionRequest'),
     remoteDescriptor('resume', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowResumeRequest'),
+    remoteDescriptor('gateResolve', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowGateResolveRequest'),
   ],
 }
 

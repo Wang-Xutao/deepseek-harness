@@ -21,7 +21,9 @@ import {
 } from '@deepseek-ai/dsh-baf-core'
 import { isActiveChange, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
 import { rerunChain } from './stages/drift.ts'
+import { GATE_REGISTRY, type GateOptionSpec, type GateSpec } from './gate-cards.ts'
 import { confirmIntake, createWorkflowService, rejectIntake } from './workflow-service.ts'
+import { driveGo } from './go-coordinator.ts'
 import { readLedger } from './stages/implement.ts'
 import { formatCommandReport, modeZh } from './command-format.ts'
 import { parseArgs, valueOf, valuesOf } from './cli-args.ts'
@@ -40,6 +42,9 @@ export {
   loadWorkspaceBaseline,
   pipelineFor,
   type DriveAdapters,
+  type ScaffoldAdapter,
+  type ScaffoldAdapterOptions,
+  type ScaffoldAdapterOutcome,
 } from './pipeline-factory.ts'
 
 /** Slash → description map (mirrors the descriptors in `commands.ts`). */
@@ -57,6 +62,7 @@ const SLASH_DESC: Record<string, string> = {
   '/baf-workflow-resume': 'drift 复位（T13，需选目标节点） · ★★★',
   '/baf-check-quality': '基线 C 栈质量检查 · ★★',
   '/baf-check-guard': '安全门禁（verify + secret-scan） · ★★',
+  '/baf-scaffold': '初始化工作区（scaffold） · ★★（与 §22 scaffold 门同源）',
 }
 
 /**
@@ -848,6 +854,182 @@ export async function driveGuard(cwd: string, adapters: DriveAdapters): Promise<
       { title: 'verify', lines: verifyReport.reasonCodes.length === 0 ? ['within policy'] : verifyReport.reasonCodes },
       { title: 'secret-scan', lines: secretReport.reasonCodes.length === 0 ? ['no secrets detected'] : secretReport.reasonCodes },
       { title: '受检文件', lines: paths.length === 0 ? ['（无 touched 记录）'] : paths },
+    ]),
+  }
+}
+
+/**
+ * `/baf-scaffold` — init the workspace skeleton (baseline template + openspec
+ * layout, Phase 8.11 / §22.4).
+ *
+ * Human confirmation is implied by the entry surface itself: the slash is
+ * only dispatched after the customer typed `/baf-scaffold` (or the Tab button
+ * dispatched the same slash through the gate resolver), so `humanConfirmed:
+ * true` is unconditional at this layer. The refusal branch in
+ * {@link ScaffoldAdapter.scaffold} is kept for symmetry with `baf-scaffold`'s
+ * own refusal-as-value contract — drives never fabricate a refusal but a
+ * missing adapter still surfaces as a clear "服务未挂载" card.
+ *
+ * @param cwd - workspace root.
+ * @param adapters - must carry a scaffold adapter (resolved by the entry
+ *   surface via `ctx.get('bafScaffold')`).
+ * @param baselineId - optional enterprise baseline id; defaults to
+ *   `baf-baseline-init` (matches `baf-scaffold`'s `planScaffold` default).
+ * @returns result card.
+ */
+export async function driveScaffold(
+  cwd: string,
+  adapters: DriveAdapters,
+  baselineId: string = 'baf-baseline-init',
+): Promise<CommandResult> {
+  if (adapters.scaffold === undefined) {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('/baf-scaffold', 'scaffold 服务未挂载'), [
+        { title: '原因', lines: ['当前 composition 未安装 baf-scaffold（ScaffoldAdapter 不可用）'] },
+        { title: '处理', lines: ['确认 preset/agent.cordis.yml 加载了 baf-scaffold 行后重试'] },
+      ]),
+    }
+  }
+  const outcome = adapters.scaffold.scaffold({
+    workspaceRoot: cwd,
+    baselineId,
+    humanConfirmed: true,
+  })
+  if (outcome.kind === 'refused') {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('/baf-scaffold', '需人工确认'), [
+        { title: '原因', lines: ['scaffold 在 `requireHumanConfirmation` 名单内，未提供确认'] },
+        { title: '处理', lines: ['在 Tab 上点「初始化工作区」按钮，或直接敲 /baf-scaffold'] },
+      ]),
+    }
+  }
+  const { created, skipped, backedUp } = outcome.changes
+  const allEmpty = created.length === 0 && skipped.length === 0 && backedUp.length === 0
+  const titleSuffix = allEmpty
+    ? '无变化'
+    : `+${created.length} 创建 · ${skipped.length} 一致 · ${backedUp.length} 备份重写`
+  return {
+    kind: 'success',
+    text: formatCommandReport(true, cardTitle('/baf-scaffold', titleSuffix), [
+      { title: '工作区', lines: [`cwd: ${cwd}`, `baselineId: ${baselineId}`] },
+      ...(created.length === 0 ? [] : [{ title: '已创建', lines: created } as const]),
+      ...(skipped.length === 0 ? [] : [{ title: '已跳过（内容一致）', lines: skipped } as const]),
+      ...(backedUp.length === 0 ? [] : [{ title: '已备份并重写', lines: backedUp } as const]),
+      { title: '下一步', lines: ['/baf-workflow-open <需求> 启动第一条变更', '或重新敲 /baf-status 查看绑定'] },
+    ]),
+  }
+}
+
+/**
+ * §22.14 Tab resolve channel (`BafWorkflowTabRemote.gateResolve`). The Tab
+ * dispatches a `(gateId, optionId)` pair picked from a `WorkflowTabGate` or
+ * `WorkflowTabPendingGate` it rendered. The drive validates the pair against
+ * the §22 registry and re-dispatches the corresponding slash command —
+ * tabs cannot invent a path that does not exist in the registry, because the
+ * resolved `command` is the slash the registry itself advertises.
+ *
+ * `__noop__` is the "dismiss" sentinel (cancel / no-op). For those, no
+ * command is dispatched and the drive returns a calm dismissal card so the
+ * Tab can refresh. Unknown `gateId` / `optionId` returns a refusal card —
+ * `gateId must be a registered GateId` is the only contract callers need
+ * to satisfy; everything else is verified here.
+ *
+ * @param cwd - workspace root.
+ * @param gateId - §22 gate id from the Tab payload.
+ * @param optionId - registered option id (or `resume-<node>` for the dynamic resume gate).
+ * @param adapters - drive adapters (scaffold / guard / stack as needed by the dispatched slash).
+ * @param resumeCandidates - required when `gateId === 'resume'`; the Tab supplies them from the drift payload.
+ * @returns the dispatched slash's card, the dismissal card, or a refusal.
+ */
+export async function driveGateResolve(
+  cwd: string,
+  gateId: string,
+  optionId: string,
+  adapters: DriveAdapters,
+  resumeCandidates?: readonly WorkflowNode[],
+): Promise<CommandResult> {
+  const spec: GateSpec | undefined = (GATE_REGISTRY as Record<string, GateSpec | undefined>)[gateId]
+  if (spec === undefined) {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('gateResolve', `未知确认门 ${JSON.stringify(gateId)} · unknown_gate`), [
+        { title: '原因', lines: [`gateId 不在 §22 GATE_REGISTRY（合法值：${Object.keys(GATE_REGISTRY).join(' | ')}）`] },
+        { title: '处理', lines: ['让 coordinator 重算当前门（重跑 /baf-go）或查 /baf-help 命令表'] },
+      ]),
+    }
+  }
+
+  // §22.5: dynamic options (resume) are derived from the caller's payload
+  // because the registry cannot enumerate them at definition time. We
+  // re-validate against the supplied candidates so a stale Tab can't drive
+  // a node that the projection no longer considers legal.
+  const options: readonly GateOptionSpec[] = spec.dynamicOptions === 'resume-targets'
+    ? (resumeCandidates ?? []).map(node => ({
+      id: `resume-${node}`,
+      label: `复位到 ${node}`,
+      command: '/baf-workflow-resume',
+      args: [node],
+    }))
+    : spec.options
+
+  const opt = options.find(o => o.id === optionId)
+  if (opt === undefined) {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('gateResolve', `未知选项 ${JSON.stringify(optionId)}`), [
+        { title: '门', lines: [`${spec.title} (gateId=${gateId})`] },
+        { title: '合法选项', lines: options.map(o => `${o.id} → ${o.command}${o.args ? ' ' + o.args.join(' ') : ''}`) },
+        { title: '处理', lines: ['刷新 Tab 后重选（projection 已更新）'] },
+      ]),
+    }
+  }
+
+  // Dismissal = no-op. The Tab will re-render and the gate's condition
+  // (e.g. "no baseline") still holds, so the pendingGate stays visible.
+  if (opt.command === '__noop__') {
+    return {
+      kind: 'success',
+      text: formatCommandReport(true, cardTitle('gateResolve', '已收起确认门'), [
+        { title: '状态', lines: ['取消未动作；门条件未解除，Tab 仍保留此卡'] },
+        { title: '重弹方式', lines: ['在 Tab 上重选，或敲 /baf-go 让协调器重渲染'] },
+      ]),
+    }
+  }
+
+  // Re-dispatch the registered slash drive. We rebuild the rawInput the
+  // handler would have received and call the same drive surface — no
+  // second copy of the transition logic.
+  const invocations = [opt.command, ...(opt.args ?? [])].join(' ').trim()
+  if (opt.command === '/baf-scaffold') {
+    return driveScaffold(cwd, adapters, opt.args?.[0] ?? 'baf-baseline-init')
+  }
+  if (opt.command === '/baf-workflow-classify') {
+    return driveClassify(cwd, invocations.replace('/baf-workflow-classify', '').trim())
+  }
+  if (opt.command === '/baf-workflow-clarify') {
+    return driveClarify(cwd, invocations.replace('/baf-workflow-clarify', '').trim())
+  }
+  if (opt.command === '/baf-workflow-implement') {
+    return driveImplement(cwd, invocations.replace('/baf-workflow-implement', '').trim())
+  }
+  if (opt.command === '/baf-workflow-abandon') {
+    return driveAbandon(cwd, invocations.replace('/baf-workflow-abandon', '').trim())
+  }
+  if (opt.command === '/baf-workflow-resume') {
+    return driveResume(cwd, invocations.replace('/baf-workflow-resume', '').trim())
+  }
+  if (opt.command === '/baf-go') {
+    // §18 coordinator — gates A/B re-fire through the same surface the
+    // slash handler uses; no separate drive needed.
+    return driveGo({ cwd, adapters, rawInput: invocations.replace('/baf-go', '').trim() })
+  }
+  return {
+    kind: 'error',
+    text: formatCommandReport(false, cardTitle('gateResolve', `未实现派发 ${opt.command}`), [
+      { title: '门', lines: [`${spec.title} (gateId=${gateId})`] },
+      { title: '处理', lines: ['此命令尚未接入 gateResolve 派发表'] },
     ]),
   }
 }

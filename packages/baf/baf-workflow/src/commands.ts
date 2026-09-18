@@ -49,6 +49,7 @@ import {
   drivePlan,
   driveQuality,
   driveResume,
+  driveScaffold,
   driveVerify,
 } from './command-drives.ts'
 import { driveGo } from './go-coordinator.ts'
@@ -80,6 +81,7 @@ type SlashHandlerArgs = {
 const HELP_CORE = [
   '/baf-help           列出全部指令与用法 · ★★',
   '/baf-welcome        会话启动卡：绑定 + 工具链体检 · ★★',
+  '/baf-scaffold       初始化工作区（与 §22 scaffold 门同源） · ★★',
   '/baf-status         查看当前变更：模式/阶段/intake · ★★★',
   '/baf-version        查看桌面/插件版本（对齐设置页） · ★',
   '/baf-doctor         工作流自检：cwd/工具链/注册 · ★',
@@ -461,6 +463,29 @@ export function apply(ctx: Context): void {
         if (cwd === undefined || cwd === '') return missingCwd('/baf-check-guard')
         const { guard } = resolveAdapters(ctx, cwd)
         return driveGuard(cwd, { ...(guard === undefined ? {} : { guard }) })
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-scaffold',
+      description: '初始化工作区（与 §22 scaffold 门同源） · ★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-scaffold')
+        // Per §22.4: this slash is the human-confirmation trigger; the drive
+        // is unconditional at humanConfirmed:true. The scaffold adapter is
+        // resolved from the host ctx the same way bafQuality / bafGuard are.
+        const scaffold = ctx.get('bafScaffold')
+        if (scaffold === undefined) {
+          return {
+            kind: 'error',
+            text: formatCommandReport(false, withHint('初始化工作区（与 §22 scaffold 门同源） · ★★', 'scaffold 服务未挂载'), [
+              { title: '原因', lines: ['当前 composition 未安装 baf-scaffold（ScaffoldAdapter 不可用）'] },
+              { title: '处理', lines: ['确认 preset/agent.cordis.yml 加载了 baf-scaffold 行后重试'] },
+            ]),
+          }
+        }
+        const baselineId = rawInput.trim() === '' ? 'baf-baseline-init' : rawInput.trim()
+        return driveScaffold(cwd, { scaffold: { scaffold: opts => scaffold.scaffold(opts) } }, baselineId)
       },
     }),
   ]

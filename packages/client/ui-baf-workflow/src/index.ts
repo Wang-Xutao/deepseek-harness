@@ -13,8 +13,13 @@ import {
   buildWorkflowTabView,
   confirmIntake,
   createWorkflowService,
+  driveGateResolve,
+  isActiveChange,
   pipelineFor,
   rejectIntake,
+  type ScaffoldAdapter,
+  type ScaffoldAdapterOptions,
+  type ScaffoldAdapterOutcome,
 } from '@deepseek-ai/dsh-baf-workflow'
 import type { WorkflowTabResume, WorkflowTabView } from '@deepseek-ai/dsh-baf-core'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -24,6 +29,7 @@ import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typer
 import type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowGateResolveRequest,
   BafWorkflowResumeRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
@@ -51,6 +57,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 export type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowGateResolveRequest,
   BafWorkflowResumeRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
@@ -190,6 +197,104 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       seq: c.seq,
       updatedAt: c.updatedAt,
     }))
+  }
+
+  /**
+   * §22.14 Tab gate-card resolve: dispatch the registered command for a
+   * chosen `(gateId, optionId)` pair.
+   *
+   * The Tab's gate cards (`WorkflowTabGate.options`,
+   * `WorkflowTabPendingGate.options`) come straight from §22 GATE_REGISTRY;
+   * this method is the **only** entry that can resolve them. The
+   * `driveGateResolve` host function re-validates the pair against the
+   * registry (unknown `gateId` / `optionId` → refusal), then dispatches the
+   * slash command the option's `command` field advertises — so the Tab
+   * cannot bypass the registry, and the same transition logic serves every
+   * surface.
+   *
+   * Resume (drift) gates derive options live from the projection, so the
+   * Tab posts `optionId` of the form `resume-<node>` and the host fetches
+   * the current candidate set to re-validate before dispatching.
+   * @param request - session + gate id + chosen option id (+ optional change id).
+   * @returns updated tab view.
+   */
+  @Remote('gateResolve')
+  async gateResolve(request: BafWorkflowGateResolveRequest): Promise<WorkflowTabView> {
+    const { cwd, store } = await this.contextFor(request.sessionId)
+    let resumeCandidates: readonly import('@deepseek-ai/dsh-baf-core').WorkflowNode[] | undefined
+    if (request.gateId === 'resume') {
+      // The Tab's `gate.options` for a resume gate are already pinned from
+      // the projection, but the host re-derives them so a stale tab cannot
+      // dispatch to a node the projection no longer considers legal.
+      const changeId = request.changeId ?? await this.resolveActiveChangeId(store)
+      if (changeId === undefined) {
+        return buildWorkflowTabView(store, null)
+      }
+      const pipeline = await pipelineFor(cwd)
+      const options = await pipeline.resumeOptions(changeId)
+      resumeCandidates = options.candidates
+    }
+    const scaffoldAdapter = this.tryGetScaffoldAdapter()
+    await this.guardDomain(() =>
+      driveGateResolve(
+        cwd,
+        request.gateId,
+        request.optionId,
+        {
+          // The host composition may have baf-scaffold mounted; pass through
+          // if so. Other gates don't need an adapter, and driveGateResolve
+          // ignores absent ones silently.
+          ...(scaffoldAdapter === undefined ? {} : { scaffold: scaffoldAdapter }),
+        },
+        resumeCandidates,
+      ),
+    )
+    const changeId = request.changeId ?? await this.resolveActiveChangeId(store)
+    return buildWorkflowTabView(store, changeId)
+  }
+
+  /**
+   * Resolve the active change id from the projection index. Used by
+   * workspace-scope gate resolves (e.g. scaffold) that have no `changeId`.
+   * Mirrors `resolveChange` in command-drives but stays on the public
+   * surface so this package does not import private helpers. Picks the
+   * highest-seq active row (ties broken by stable lexical order), which
+   * is what `/baf-go` would focus.
+   * @param store - workspace projection store.
+   * @returns change id, or undefined when no active change exists.
+   */
+  private async resolveActiveChangeId(store: ProjectionStore): Promise<string | undefined> {
+    const index = await store.readIndex()
+    let best: string | undefined
+    let bestSeq = -1
+    for (const entry of index.changes) {
+      if (!isActiveChange(entry)) continue
+      if (entry.seq > bestSeq || (entry.seq === bestSeq && (best === undefined || entry.changeId < best))) {
+        best = entry.changeId
+        bestSeq = entry.seq
+      }
+    }
+    return best
+  }
+
+  /**
+   * Wrap the host-plane `bafScaffold` service as a `ScaffoldAdapter`. The
+   * service exposes `scaffold(opts)`; the adapter interface is the same
+   * shape so the drive layer is unchanged. Returns undefined when the
+   * composition does not mount the scaffold service — callers (gateResolve)
+   * simply skip the adapter in that case.
+   * @returns adapter for {@link driveGateResolve}, or undefined.
+   */
+  private tryGetScaffoldAdapter(): ScaffoldAdapter | undefined {
+    let svc: { scaffold: (opts: ScaffoldAdapterOptions) => ScaffoldAdapterOutcome } | undefined
+    try {
+      svc = this.ctx.get('bafScaffold') as { scaffold: (opts: ScaffoldAdapterOptions) => ScaffoldAdapterOutcome }
+    } catch {
+      return undefined
+    }
+    if (svc === undefined) return undefined
+    const bound = svc
+    return { scaffold: opts => bound.scaffold(opts) }
   }
 
   private async contextFor(sessionId: SessionId): Promise<{ cwd: string; store: ProjectionStore }> {

@@ -26,7 +26,37 @@ export const WORKSPACE_BASELINE_PATH = '.baf/baseline.yml'
 export interface DriveAdapters {
   readonly stack?: StackAdapter
   readonly guard?: GuardPolicy
+  /**
+   * Scaffold adapter (Phase 8.11 / §22.4) — wraps `baf-scaffold`'s
+   * `scaffoldWorkspace`. Optional because the CLI / single-step drivers may
+   * run in a composition that does not mount `baf-scaffold`; drives tolerate
+   * the absence and surface a clear "服务未挂载" card.
+   */
+  readonly scaffold?: ScaffoldAdapter
 }
+
+/**
+ * Adapter contract for the `baf-scaffold` workspace init (§22.4). The host
+ * resolves the actual implementation through the cordis `bafScaffold`
+ * service; tests pass a stub. The adapter is intentionally tiny so a stub
+ * takes two lines and matches the rest of the `DriveAdapters` pattern.
+ */
+export interface ScaffoldAdapter {
+  readonly scaffold: (options: ScaffoldAdapterOptions) => ScaffoldAdapterOutcome
+}
+
+/** Mirror of `ScaffoldOptions` from `baf-scaffold` — kept local to avoid coupling. */
+export interface ScaffoldAdapterOptions {
+  readonly workspaceRoot: string
+  readonly baselineId?: string
+  readonly humanConfirmed: boolean
+  readonly at?: Date
+}
+
+/** Mirror of `ScaffoldOutcome` — `kind: 'done' | 'refused'`. */
+export type ScaffoldAdapterOutcome =
+  | { readonly kind: 'refused'; readonly reason: 'human_confirmation_required' }
+  | { readonly kind: 'done'; readonly changes: { readonly created: readonly string[]; readonly skipped: readonly string[]; readonly backedUp: readonly string[] } }
 
 /**
  * Load the workspace's governing baseline.

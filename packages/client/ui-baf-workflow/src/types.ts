@@ -66,3 +66,23 @@ export interface BafWorkflowChangeRow {
   readonly seq: number
   readonly updatedAt: string
 }
+
+/**
+ * §22.14 Tab gate-card resolve: dispatch the registered command for a chosen
+ * `(gateId, optionId)` pair. The Tab renders the options straight from
+ * `WorkflowTabGate.options` / `WorkflowTabPendingGate.options` and posts the
+ * customer click back as this request.
+ *
+ * `changeId` is required for change-scoped gates (intake-classify,
+ * design-confirm, verify-archive, abandon, resume) and unused for the
+ * workspace-scoped scaffold gate — passing it for scaffold is harmless.
+ * The host validates the pair against §22 GATE_REGISTRY; unknown `gateId` /
+ * `optionId` returns a refusal card (the workflow never re-dispatches
+ * something the registry did not advertise).
+ */
+export interface BafWorkflowGateResolveRequest {
+  readonly sessionId: SessionId
+  readonly changeId?: string
+  readonly gateId: string
+  readonly optionId: string
+}

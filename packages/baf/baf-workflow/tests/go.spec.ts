@@ -480,8 +480,16 @@ describe('confirmation gates (§18.5)', () => {
       const changeId = await reachDesign(root, focus)
       await author(root, changeId, 'design.md', '# Design\n\n## Approach\n\nAdd src/export.ts.\n')
       const gateA = await driveGo({ cwd: root, focus })
-      expect((gateA.text ?? '').split('\n')[0]).toContain('自动驱动 · 设计文档已实现 · awaiting_customer_confirm')
-      expect((gateA.text ?? '').split('\n')[0]).toContain('点本行展开/折叠指令全文')
+      // §22.14-D: gate A now renders the registered §22 card verbatim. The
+      // headline is `需客户确认 · <title> · 点本行展开/折叠指令全文` and the
+      // body lists the registered options. The customer-facing card no
+      // longer needs the `awaiting_customer_confirm` marker as a separate
+      // token — it is the registered `设计确认门` card itself.
+      expect(gateA.kind).toBe('success')
+      expect(gateA.text).toContain('需客户确认')
+      expect(gateA.text).toContain('N3 design 已实现')
+      expect(gateA.text).toContain('【选项】')
+      expect(gateA.text).toContain('/baf-go')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

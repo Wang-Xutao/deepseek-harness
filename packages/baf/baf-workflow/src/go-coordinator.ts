@@ -46,6 +46,7 @@ import {
   statusLines,
   type DriveAdapters,
 } from './command-drives.ts'
+import { renderGate } from './gate-cards.ts'
 import type { FocusStore } from './session-focus.ts'
 
 /** Node names `baf-go` accepts as an explicit drift-resume target. */
@@ -344,25 +345,11 @@ async function route(context: {
       // **Gate A** (§18.5). The unlock is the customer typing `baf-go` once
       // more, observed as the matching `awaiting-confirm` at the log tail.
       if (!(await gateUnlocked(store, changeId, 'design-to-plan'))) {
-        const parked = await parkOnGate(store, changeId, 'design-to-plan')
-        return errorCard(
-          '自动驱动 · 设计文档已实现',
-          [
-            { title: '状态', lines: statusLines(parked) },
-            {
-              title: '确认门 A（需求 2）',
-              lines: [
-                'design.md 已过裁决门；plan 不会自动开始',
-                '确认设计无误 → 再敲一次 /baf-go（没有 confirm 子命令）',
-              ],
-            },
-            {
-              title: '要改设计',
-              lines: [`/baf-workflow-design change=${changeId} approach="..." ref="..." 重跑后再 /baf-go`],
-            },
-          ],
-          'awaiting_customer_confirm',
-        )
+        await parkOnGate(store, changeId, 'design-to-plan')
+        // §22.14-D: render the registered §22 card verbatim so slash, Tab,
+        // and the coordinator agree on options / commands. The card is
+        // `kind: 'error'` so the surface still renders it as a stop.
+        return renderGate('design-confirm', { cwd, changeId })
       }
       const next = await pipeline.beginDocStage(changeId, 'plan')
       return successCard('门 A 已确认 · plan 已进入', [
@@ -437,25 +424,9 @@ async function route(context: {
       // **Gate B** (§18.5) — archiving is the customer's call, not the
       // coordinator's. Same unlock rule as gate A.
       if (!(await gateUnlocked(store, changeId, 'verify-to-archive'))) {
-        const parked = await parkOnGate(store, changeId, 'verify-to-archive')
-        return errorCard(
-          '自动驱动 · verify 已通过',
-          [
-            { title: '状态', lines: statusLines(parked) },
-            {
-              title: '确认门 B（需求 2）',
-              lines: [
-                '必需检查全部通过；归档不会自动发生',
-                '确认无误 → 再敲一次 /baf-go（没有 confirm 子命令）',
-              ],
-            },
-            {
-              title: '要改',
-              lines: [`/baf-workflow-implement change=${changeId} … 或 /baf-workflow-resume 处理后重跑 verify`],
-            },
-          ],
-          'awaiting_customer_confirm',
-        )
+        await parkOnGate(store, changeId, 'verify-to-archive')
+        // §22.14-D: render the registered §22 card verbatim.
+        return renderGate('verify-archive', { cwd, changeId })
       }
       const driven = await pipeline.driveArchiveStage(changeId, true)
       if (driven.node !== 'archive') throw new Error(`expected an archive drive, got ${driven.node}`)

@@ -52,6 +52,7 @@ import { isBafError } from '@deepseek-ai/dsh-baf-core'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
 import { createLocalOpenSpecAdapter } from '@deepseek-ai/dsh-baf-openspec'
 import { formatCommandReport, modeZh } from './command-format.ts'
+import { gateCardSections, GATE_REGISTRY } from './gate-cards.ts'
 import { isActiveChange, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
 import { resolveBafProductVersions, type BafProductVersions } from './product-versions.ts'
 
@@ -233,7 +234,27 @@ export function renderWelcomeCard(input: {
       ],
     },
   ]
+  // §22.14-D: when the workspace has no baseline, splice the §22 scaffold
+  // card fragment into the welcome so the customer sees the registered
+  // options verbatim. The card is the same one the Tab pendingGate and the
+  // `baf_gate_ask` tool render — no third option can sneak in here.
+  const baselineItem = probe.items.find(i => i.key === 'baseline')
+  if (baselineItem !== undefined && baselineItem.state === 'missing') {
+    sections.splice(sections.length - 2, 0, ...scaffoldCardFragment())
+  }
   return { kind: 'success', text: formatCommandReport(true, headline, sections) }
+}
+
+/**
+ * §22.14-D: render the registered scaffold gate card as raw `formatCommandReport`
+ * sections so the welcome card can splice it in alongside its own prose.
+ * The headline + framing box of the welcome card stays; only the question /
+ * options / footer (verbatim from the §22 registry) is appended.
+ * @returns report sections to splice.
+ */
+function scaffoldCardFragment(): readonly { title: string; lines: readonly string[] }[] {
+  const spec = GATE_REGISTRY['scaffold']
+  return gateCardSections(spec) ?? []
 }
 
 /**
@@ -267,6 +288,12 @@ export function sessionGateSection(cwd: string): string {
     '分类确认前不得修改源码；实现阶段只改 allowlist 内文件。',
     '阶段推进只经 /baf-go 或工作流页签，自然语言不是转换证据。',
     '两个确认门（design 完成 → plan、verify 通过 → archive）只认客户再敲一次 /baf-go。',
+    // §22 rule #4: when blocked by a gate, the only action is to call
+    // `baf_gate_ask(gateId)` (§22.9) and read the registered gate card
+    // verbatim — never invent a third option, never propose "模型手写 scaffold"
+    // or any other path outside the registry. Customer's typed agreement is
+    // not evidence; point them at the Tab button or the mapped slash command.
+    '被确认门挡住时，唯一动作是调用 baf_gate_ask(gateId) 弹标准选项卡；选项由注册表决定，不得自创、改写或在卡外建议其他路径；客户口头同意不是证据。',
   ]
   if (snapshot === undefined) {
     return [

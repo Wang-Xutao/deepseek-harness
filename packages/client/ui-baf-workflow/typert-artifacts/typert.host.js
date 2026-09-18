@@ -60,6 +60,9 @@ export const TYPERT = {
     remoteInvocation('confirmIntake'),
     remoteInvocation('rejectIntake'),
     remoteInvocation('transition'),
+    remoteInvocation('resume'),
+    remoteInvocation('listChanges'),
+    remoteInvocation('gateResolve'),
   ],
   model: {
     services: [
@@ -105,6 +108,27 @@ export const TYPERT = {
             signature: "@Remote('transition') transition(request: BafWorkflowTransitionRequest): Promise<WorkflowTabView>",
             summary: 'Request a legal stage transition.',
             jsDoc: '/** Request a legal stage transition. */',
+          },
+          {
+            kind: 'method',
+            name: 'resume',
+            signature: "@Remote('resume') resume(request: BafWorkflowResumeRequest): Promise<WorkflowTabView>",
+            summary: 'Drift rollback (§19.5).',
+            jsDoc: '/** Drift rollback (§19.5). */',
+          },
+          {
+            kind: 'method',
+            name: 'listChanges',
+            signature: "@Remote('listChanges') listChanges(request: BafWorkflowSessionRequest): Promise<readonly BafWorkflowChangeRow[]>",
+            summary: 'Read every change in the workspace (Dashboard list view).',
+            jsDoc: '/** Read every change in the workspace (Dashboard list view). */',
+          },
+          {
+            kind: 'method',
+            name: 'gateResolve',
+            signature: "@Remote('gateResolve') gateResolve(request: BafWorkflowGateResolveRequest): Promise<WorkflowTabView>",
+            summary: '§22.14 Tab gate-card resolve: dispatch the registered command for a chosen (gateId, optionId) pair.',
+            jsDoc: '/** §22.14 Tab gate-card resolve: dispatch the registered command for a chosen (gateId, optionId) pair. */',
           },
         ],
         types: [],

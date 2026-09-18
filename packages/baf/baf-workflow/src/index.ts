@@ -70,6 +70,19 @@ export * from './stages/drift.ts'
 export * from './stages/abandon.ts'
 export * from './stages/pipeline.ts'
 export * from './pipeline-factory.ts'
+export * from './gate-cards.ts'
+/**
+ * Host-facing re-exports of selected drives and adapter contracts. Only
+ * those entries the Tab Remote (or other host-plane consumers outside the
+ * `commands`/`cmdline` packages) legitimately need are surfaced here; the
+ * full `command-drives` module is package-private to slash / CLI wiring.
+ */
+export {
+  driveGateResolve,
+  driveScaffold,
+  type DriveAdapters,
+} from './command-drives.ts'
+export { isActiveChange } from './projection.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

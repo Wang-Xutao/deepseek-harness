@@ -57,6 +57,18 @@ export interface WorkflowTabGate {
   readonly node: WorkflowNode
   /** i18n key for the button that confirms this gate. */
   readonly actionKey: string
+  /**
+   * §22 `GateId` (registered gate card id) — `design-confirm` for
+   * `design-to-plan`, `verify-archive` for `verify-to-archive`. Carried as a
+   * string (not the workflow-only union) so baf-core stays independent of
+   * baf-workflow's gate-cards registry; consumers in baf-workflow map it back
+   * to the registry to render options / dispatch resolves.
+   */
+  readonly gateId?: string
+  /** §22 registered question (verbatim from the registry) — Tab card body. */
+  readonly question?: string
+  /** §22 registered options, in registry order — Tab button row. */
+  readonly options?: readonly { readonly id: string; readonly label: string }[]
 }
 
 /** One path lane in the §18.4.3 dual-lane view. */
@@ -137,10 +149,26 @@ export interface WorkflowTabView {
   readonly metrics?: WorkflowTabMetrics
   /** Set while the change is parked on gate A/B (§18.5). */
   readonly gate?: WorkflowTabGate
+  /**
+   * Workspace-level gate (§22.4 scaffold). Set when the Tab's owning workspace
+   * has no `.baf/baseline.yml` — only the template / pre-bootstrap view can
+   * hold it (scaffold is workspace scope, not change scope; see §22.6).
+   */
+  readonly pendingGate?: WorkflowTabPendingGate
   /** Set after a T15 escalation, so the Tab draws both paths (§18.4.3). */
   readonly lanes?: WorkflowTabLanes
   /** Set while the change is parked in drift, so the Tab offers a rollback (§19.5). */
   readonly resume?: WorkflowTabResume
+}
+
+/**
+ * Workspace-level pending gate payload — currently just `scaffold`. Carried
+ * alongside `gate` (change-level) so the Tab renders both views from one shape.
+ */
+export interface WorkflowTabPendingGate {
+  readonly gateId: 'scaffold'
+  readonly question: string
+  readonly options: readonly { readonly id: string; readonly label: string }[]
 }
 
 /**

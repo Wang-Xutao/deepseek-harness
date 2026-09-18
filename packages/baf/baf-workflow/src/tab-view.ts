@@ -5,11 +5,17 @@
 
 import {
   buildEmptyTabView,
+  confirmGateOf,
   statusToTabView,
+  type WorkflowTabGate,
   type WorkflowTabLanes,
+  type WorkflowTabPendingGate,
   type WorkflowTabResume,
   type WorkflowTabView,
 } from '@deepseek-ai/dsh-baf-core'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { GATE_REGISTRY } from './gate-cards.ts'
 import { deriveLanes } from './lanes.ts'
 import { deriveWorkflowMetrics } from './metrics.ts'
 import type { ProjectionStore } from './projection.ts'
@@ -21,6 +27,59 @@ export type {
 } from '@deepseek-ai/dsh-baf-core'
 
 export { buildEmptyTabView, statusToTabView } from '@deepseek-ai/dsh-baf-core'
+
+/** Workspace path where the governing baseline is expected. */
+const WORKSPACE_BASELINE_PATH = '.baf/baseline.yml'
+
+/**
+ * Read a gate spec from the §22 registry as a `WorkflowTabGate` payload.
+ * Pure projection — no I/O, no workflow state mutation. Falls back to the
+ * `gateToTabView()` shape if the registry lacks the §22 fields (e.g. the
+ * caller omits `gateId` in its gate payload, which only happens for
+ * pre-P1 fixtures).
+ * @param confirmId - the change-level confirm gate id from `confirmGateOf`.
+ * @returns Tab gate payload, or undefined if registry has no mapping.
+ */
+function enrichTabGate(confirmId: WorkflowTabGate['id']): WorkflowTabGate | undefined {
+  const gateId = confirmId === 'design-to-plan' ? 'design-confirm'
+    : confirmId === 'verify-to-archive' ? 'verify-archive'
+      : undefined
+  if (gateId === undefined) return undefined
+  const spec = GATE_REGISTRY[gateId]
+  if (spec === undefined) return undefined
+  const node = confirmId === 'design-to-plan' ? 'design' as const
+    : 'verify' as const
+  const actionKey = confirmId === 'design-to-plan' ? 'gate.confirmIntoPlan'
+    : 'gate.confirmArchive'
+  return {
+    id: confirmId,
+    node,
+    actionKey,
+    gateId,
+    question: spec.question,
+    options: spec.options
+      .filter(opt => opt.command !== '__noop__')
+      .map(opt => ({ id: opt.id, label: opt.label })),
+  }
+}
+
+/**
+ * Build the workspace-level `pendingGate` payload when `.baf/baseline.yml`
+ * is missing. Reads the registry's `scaffold` spec verbatim so the Tab
+ * renders the same question/options the session card and CLI do (§22.4).
+ * @param cwd - workspace root.
+ * @returns pendingGate payload, or undefined if baseline is present.
+ */
+function deriveWorkspacePendingGate(cwd: string): WorkflowTabPendingGate | undefined {
+  const present = existsSync(join(cwd, WORKSPACE_BASELINE_PATH))
+  if (present) return undefined
+  const spec = GATE_REGISTRY['scaffold']
+  return {
+    gateId: 'scaffold',
+    question: spec.question,
+    options: spec.options.map(opt => ({ id: opt.id, label: opt.label })),
+  }
+}
 
 /** Assembly options for {@link buildWorkflowTabView}. */
 export interface BuildWorkflowTabViewOptions {
@@ -64,12 +123,14 @@ export async function buildWorkflowTabView(
   }))
 
   if (changes.length === 0) {
-    return buildEmptyTabView([])
+    const empty = buildEmptyTabView([])
+    return attachWorkspaceGates(empty, store.workspaceRoot())
   }
 
   const fallback = changes.slice().sort((a, b) => a.changeId.localeCompare(b.changeId)).at(-1)
   if (fallback === undefined) {
-    return buildEmptyTabView([])
+    const empty = buildEmptyTabView([])
+    return attachWorkspaceGates(empty, store.workspaceRoot())
   }
   const selected = selectedChangeId ?? fallback.changeId
 
@@ -85,12 +146,35 @@ export async function buildWorkflowTabView(
       ...(resume === undefined ? {} : { resume }),
     }
     const derived = includeMetrics ? deriveWorkflowMetrics(events) : undefined
-    return statusToTabView(status, changes, derived, extras)
+    const view = statusToTabView(status, changes, derived, extras)
+    return attachWorkspaceGates(view, store.workspaceRoot())
   } catch (error) {
-    return {
+    return attachWorkspaceGates({
       ...buildEmptyTabView(changes),
       selectedChangeId: selected,
       blockedReason: error instanceof Error ? error.message : String(error),
-    }
+    }, store.workspaceRoot())
+  }
+}
+
+/**
+ * Augment a tab view with workspace-level gates derived from the §22
+ * registry. The change-level `gate` field stays the source of truth for
+ * change-parked confirmations; `pendingGate` only carries workspace-scope
+ * gates (currently scaffold), keeping the two scopes distinguishable.
+ * @param view - tab view to enrich.
+ * @param cwd - workspace root for the `.baf/baseline.yml` probe.
+ * @returns view with `pendingGate` (and an enriched `gate` if parked).
+ */
+function attachWorkspaceGates(view: WorkflowTabView, cwd: string): WorkflowTabView {
+  const pendingGate = deriveWorkspacePendingGate(cwd)
+  const parked = confirmGateOf({ current: view.current ?? 'intake', nodes: {} })
+  const enrichedGate = parked === undefined
+    ? view.gate
+    : enrichTabGate(parked) ?? view.gate
+  return {
+    ...view,
+    ...(enrichedGate === undefined ? {} : { gate: enrichedGate }),
+    ...(pendingGate === undefined ? {} : { pendingGate }),
   }
 }

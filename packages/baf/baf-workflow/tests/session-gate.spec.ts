@@ -295,6 +295,30 @@ describe('BAF session gate · startup binding (§18.3.1)', () => {
     expect(card.text).toContain('BAF 模式已就绪')
     // The card always ends with something the customer can actually do.
     expect(card.text).toContain('【下一步】')
+    // §22.14-D: when baseline is missing the welcome card splices the
+    // registered §22 scaffold card verbatim — the same options the Tab
+    // pendingGate and the `baf_gate_ask` tool render.
+    expect(card.text).toContain('【问题】')
+    expect(card.text).toContain('【选项】')
+    expect(card.text).toMatch(/初始化工作区（执行 scaffold）/)
+    expect(card.text).toContain('暂不初始化')
+  })
+
+  it('omits the §22 scaffold fragment when the workspace has a baseline', async () => {
+    const root = await emptyWorkspace()
+    try {
+      await mkdir(join(root, '.baf'), { recursive: true })
+      await writeFile(join(root, '.baf', 'baseline.yml'), await readFile(FIXTURE_BASELINE, 'utf8'), 'utf8')
+      resetSessionGateCache()
+      const probe = await probeToolchain(root)
+      const binding: Awaited<ReturnType<typeof resolveStartupBinding>> = { actives: [] }
+      const card = renderWelcomeCard({ cwd: root, probe, binding })
+      // With a real baseline, the §22 fragment must NOT splice in.
+      expect(card.text).not.toContain('【问题】')
+      expect(card.text).not.toContain('初始化工作区（执行 scaffold）')
+    } finally {
+      await cleanup(root)
+    }
   })
 })
 
@@ -337,6 +361,11 @@ describe('BAF session gate · two channels (§18.3.3)', () => {
       // Policy travels with the facts: the model is told the gates exist.
       expect(settled).toContain('两个确认门')
       expect(settled).toContain('分类确认前不得修改源码')
+      // §22 rule #4 — model must call baf_gate_ask(gateId) and read the
+      // registered gate card; never invent a third option ("模型手写 scaffold"
+      // 等等).
+      expect(settled).toContain('baf_gate_ask')
+      expect(settled).toContain('不得自创')
     } finally {
       await cleanup(root)
     }

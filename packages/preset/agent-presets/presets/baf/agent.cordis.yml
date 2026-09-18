@@ -304,6 +304,16 @@
 - id: baf-guard-install
   name: '@deepseek-ai/dsh-baf-guard/install'
 
+# Phase 8.12 (§22.9 / §22.14 E): model-facing `baf_gate_ask` tool. Sits
+# outside the baf-domain isolate like baf-commands / baf-session-gate because
+# the `tools` registry is a host-plane service (same pattern as `tool-bash` /
+# `tool-fs` above). The tool is the model's *only* authorized way to render
+# a §22 gate card; it does not touch any drive, only `renderGate()` (P0
+# registry + unknown_gate refusal), so a missing tool is a soft degradation,
+# not a session-opener failure (§17.7 R19).
+- id: baf-gate-ask
+  name: '@deepseek-ai/dsh-baf-workflow/gate-ask'
+
 # ── BAF domain（entry-local realm；桌面/CLI 经 session projection 读取状态）──
 - id: baf-domain
   name: cordis:group

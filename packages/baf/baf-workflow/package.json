@@ -32,6 +32,10 @@
       "types": "./lib/types/session-gate.d.ts",
       "default": "./lib/session-gate.js"
     },
+    "./gate-ask": {
+      "types": "./lib/types/gate-ask.d.ts",
+      "default": "./lib/gate-ask.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -40,6 +44,7 @@
     "lib/commands.js",
     "lib/cmdline.js",
     "lib/session-gate.js",
+    "lib/gate-ask.js",
     "lib/types/**/*.d.ts"
   ],
   "scripts": {
@@ -52,6 +57,7 @@
     "@deepseek-ai/dsh-baf-openspec": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
     "commander": "^15.0.0"
   },

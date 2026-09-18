@@ -74,6 +74,10 @@ export function apply(ctx: ClientContext): void {
           changeId,
           ...(node === undefined ? {} : { node }),
         })) as WorkflowTabView,
+        gateResolve: async request => unwrap(await remote.gateResolve({
+          sessionId,
+          ...request,
+        })) as WorkflowTabView,
       }
     },
   }, WorkflowView)

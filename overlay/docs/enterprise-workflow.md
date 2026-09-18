@@ -797,6 +797,8 @@ bug-fast-path 主链（低风险 Bug）：
 - 仅凭 prompt/skill 软约束当作门禁；
 - 旁路 ToolGuard 的 filesystem/shell/MCP 写入（见 8.6、17.2）。
 
+> **被确认门挡住时的唯一动作**：调用 `baf_gate_ask(gateId)` 弹 §22 注册表里的标准选项卡；选项由注册表决定，不得自创。详见 §22。
+
 会话内连续对话仍可发生：用户在 clarify/design 阶段用自然语言回答问题；**写入产物与阶段完成判定**仍由 stage handler 在命令/工具路径上执行完成条件检查。
 
 ### 5.7 Session 事件与 workspace projection 双轨
@@ -1073,7 +1075,7 @@ slash command 复用 `@deepseek-ai/dsh-commands`（`CommandRuntime.register()`�
 | `status`                  | 展示 preset、Git、OpenSpec、workflow（含分类和当前阶段）、quality、guard 状态 | 否           |
 | `doctor`                  | 诊断 composition、工具、目录、权限、配置和更新元数据                           | 否           |
 | `docs`                    | 打开或输出企业文档和基线引用                                             | 否           |
-| `init`                    | 初始化 BAF/OpenSpec/C 项目骨架                                    | 是，需确认       |
+| `init`                    | 初始化 BAF/OpenSpec/C 项目骨架（与 `/baf-scaffold` 同源；详见 §22）              | 是，需确认       |
 | `open`                    | 新建或选择 change（先走 intake 分类）                                 | 是           |
 | `classify`                | 对当前输入重新执行/查看 intake 分类                                     | 是（重分类需确认）   |
 | `clarify`                 | 记录需求问题和决策                                                  | 是           |
@@ -1139,6 +1141,8 @@ locked / available / in-progress / completed / failed / blocked / drifted / skip
 键盘导航、颜色之外的状态表达、窄窗口和无障碍文本齐备。节点点击展示 5.3 对应的结构化详情。普通用户只能触发 domain 允许的动作；不能点节点跳阶段；不做拖拽编排。视觉跟随 `--dsw-*` 主题。
 
 **Phase 4 半交互**：可「确认分类 / 补充信息 / 拒绝并退出」、查看详情、在前置满足时请求合法 `transition`。archive 确认、阶段「开始执行」等 Phase 5+ 动作展示但禁用并标注原因。没有“跳过 OpenSpec”类绕过按钮。
+
+**Phase 8.11 确认门标准卡**（§22）：Tab 在「无活动变更 / 停靠确认门 / drift」三种状态下额外渲染 **pendingGate 门卡**（与 §18.11 drift 卡同款 `cardDrift` 模式），按 §22 注册表派生选项 + 按钮。点击走 `BafWorkflowTabRemote.gateResolve(gateId, optionId)` → 宿主按 option.command 派发**同名 slash drive**，与 slash 共源，无第二套逻辑。Intake 分类的现有按钮迁移到同一注册表渲染。
 
 **数据和刷新**：Web 经 Typert Remote（`bafWorkflow` 视图 API）按 session `cwd` 读写统一 projection；Electron IPC（`baf:getWorkflowStatus` 等）留 Phase 8。客户端在打开/焦点/操作后刷新；页面显示 `sourceRevision`、baseline lock、projection version 和最后更新时间；无 active change、多 change 未选、baseline 缺失或 projection 损坏时显示明确空态/阻断态。
 
@@ -2748,6 +2752,7 @@ full-go 泳道（从升级落点接续，缺失阶段补走）
 | 21.7 | drift 锚点可从 `nodes[*] === 'drifted'` 反查；`nodes.drift` 只表示「当前停在 drift」 | 复位能算出候选集；复位后 `resume().drifted` 正确归 false |
 | 21.8 | Phase 8.7 落地期五处原文未覆盖的细节，按「单一判定点 / 幂等 / 不猜」就地拍板 | 见 §18.9；只影响 `go-coordinator.ts` 内部，不改 §18 规范 |
 | 21.9 | Phase 8.8 落地期八处原文未覆盖的细节（探针缓存键与 TTL / 门只读不代绑 / shell 拉 CLI + 超时记 `?` / doctor 反向复用探针 / 卡片经 `/baf-welcome` 投递 / 同步 section 读快照 / 三条 tsconfig 映射手工补 / 卡片上 `版本` 只出现一次） | 见 §18.10；不改 §18.3 规范，只有 §18.3.2 的 OpenSpec 行与 §20.3 样张按实现收紧 |
+| 21.10 | 确认门统一走 §22 注册表 + 标准卡；模型被门挡住时只能调 `baf_gate_ask(gateId)`，不得自创选项 | 见 §22；session-gate 规则第 4 条 + SKILL.md Hard rules 第 6 条同步 |
 
 ### 21.1 「未绑定工作流」是否单列错误码
 
@@ -2810,6 +2815,331 @@ full-go 泳道（从升级落点接续，缺失阶段补走）
 - **来源**：写 `go-coordinator.ts` 时暴露的边界，§18 原文没写到。与 21.6 / 21.7 同类：**规范不动，只把实现的口径钉住**。
 - **五条**：① `intake` 已 confirm 未 open 时用 `driveClassify confirm` 走完，而不是要求客户重敲命令；② 带需求的 `baf-go` 在任何 active change 存在时都拒绝，**先于**焦点判定；③ 焦点变更已终态时仍绑定，渲染「已终态」而非「无未完成工作流」；④ 门解锁靠**读事件尾巴**（`events.at(-1)`），这才保证解锁恰好消耗一次；⑤ `awaiting-confirm` 只做审计，门禁判定一律看 `status.current` + `nodes`。
 - **详细理由与反例**：见 §18.9 —— 那份记录是给日后改 coordinator 的人看的，别只读本节的一行摘要。
+
+---
+
+## 22. 确认门标准提问卡（Gate Cards · 2026-09-18 设计）
+
+> 适用范围：BAF 工作流所有需要客户决策的点（intake 分类、design / archive / abandon 确认、drift 复位、**首次进入工作区的 scaffold**）。共六门，统一渲染、统一语义、唯一事实源。本章与 §5.6「阶段如何被驱动」、§9「命令」、§18「baf-go」配套；并对 §17 R12「未来可能被自创选项绕过的风险」打补丁。
+
+### 22.1 三条不变式
+
+1. **每个确认点只有一种提问形态**。问题文案、选项列表、每个选项触发的命令全部由域层注册表定义；会话卡 / 工作流 Tab / CLI 终端从同一份注册表渲染，**逐字一致**。
+2. **Ask 与 Resolve 能力分离**。模型（以及任何自动驱动器）只能**弹卡**（ask）；只有真实人因输入才能**答题**（resolve）——GUI 按钮点击、输入框 slash 键击、Tab 按钮、CLI 键击。**模型侧不存在任何 resolve 工具**——「代答」不是被禁止，而是物理不存在。
+3. **标准外操作不接受 = 机械强制**。confirm 类转换在状态机层校验 `evidence.source`（由宿主入口写死，模型不可传参伪造）；`.baf/` 与 `openspec/` 列入 `baf-guard` 防护路径，**「模型手写 scaffold」物理不可能**。
+
+### 22.2 现状缺口（与本章一起补齐）
+
+| 缺口 | 修复点 |
+| --- | --- |
+| 选项无注册表 → 模型在 system prompt 挡住时自由发挥编出第二路径 | §22.3 域层 `GATE_REGISTRY` 单一事实源 |
+| scaffold 当时没有 slash / CLI 入口 → 模型只能问「请在 GUI 里点」 | §22.4 补 `/baf-scaffold` slash + `baf scaffold` CLI + Tab 按钮（与 §9.2 命令表同步） |
+| 模型可调 `baf_stage_*` 直推 confirm 门（自然语言推动也是其中一种） | §22.7 `checkEvidence` 增加 `source` 白名单校验 |
+| `.baf/baseline.yml` 可被模型用写文件工具伪造 | §22.8 guard `protectedPaths` 默认增 `.baf/**`、`openspec/**` |
+| Tab 缺常驻门卡按钮（仅会话内弹文本卡） | §22.5 `tabView.pendingGate` 派生态，drift 卡同款模式 |
+| 模型对「被门挡住」缺乏唯一动作指引 | §22.9 模型侧规则第 4 条 + `baf_gate_ask` 工具 |
+
+### 22.3 核心：`GATE_REGISTRY`（域层唯一事实源）
+
+新增 `packages/baf/baf-workflow/src/gate-cards.ts`：
+
+```ts
+/** 一个选项 = 一个文案 + 一个既有 slash 派发。模型不可增删。 */
+export interface GateOptionSpec {
+  readonly id: string              // 'init' | 'cancel' | ...
+  readonly label: string           // i18n key（§20.7 体系）
+  readonly command: string         // 只能映射到已注册 slash，如 '/baf-scaffold'
+  readonly args?: readonly string[]
+}
+
+export interface GateSpec {
+  readonly id: GateId
+  readonly title: string           // 卡片标题
+  readonly question: string        // 一句话问题，简洁直观
+  readonly options: readonly GateOptionSpec[]   // 2~3 个；含唯一正向项与取消项
+  readonly dynamicOptions?: 'resume-targets'    // resume 等动态选项：由 projection 派生，仍域层生成
+}
+
+export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>>
+export function renderGateCard(spec: GateSpec, ctx?: GateContext): CommandResult
+// 复用 formatCommandReport；卡片结构固定：标题 → 问题 → 编号选项行 → 「请点击工作流页签按钮，或输入对应命令」
+```
+
+首期注册六门：
+
+| `GateId` | 触发时机 | 选项（→ 派发的 slash） |
+| --- | --- | --- |
+| `scaffold` | 会话绑定的工作区无 `.baf/baseline.yml` | [初始化工作区 → /baf-scaffold] [暂不初始化 → 取消] |
+| `intake-classify` | intake 分类待确认 | [确认分类 → /baf-workflow-classify confirm] [拒绝，重新描述 → /baf-workflow-classify reject] |
+| `design-confirm` | design 完成、T?→plan 门 | [确认设计，进入计划 → /baf-go] [退回澄清 → /baf-workflow-clarify] |
+| `verify-archive` | verify 通过、T14 门 | [确认归档 → /baf-go] [退回实现 → /baf-workflow-implement] |
+| `abandon` | T16 | [确认放弃 → /baf-workflow-abandon] [取消 → 取消] |
+| `resume` | drift（T13） | 目标节点选项由 `resumeCandidates()` 派生，仍域层生成 |
+
+**关键约束**（写进 `gate-cards.ts` 顶部注释）：选项只能映射到已注册 slash 命令；新增门 = 改注册表 + 补测试，三端自动同步，**模型永远只引用 `gateId`**。
+
+### 22.4 scaffold 三入口（解「选项 2：模型手写 scaffold」的痛点）
+
+- **slash** `/baf-scaffold`：[commands.ts](packages/baf/baf-workflow/src/commands.ts) 加一条（tier-1 core，与 §9.2 命令表同步），handler → 新 `driveScaffold`；`humanConfirmed: true` 的依据就是「客户敲了这条命令」。
+- **CLI**：[cmdline.ts](packages/baf/baf-workflow/src/cmdline.ts) 加 `baf scaffold` 子命令，镜像输出（既有 1:1 模式）。
+- **Tab 按钮**：见 §22.5。
+- **包边界**：baf-workflow 不直接依赖 baf-scaffold，沿用 `DriveAdapters` 注入模式，加 `scaffoldWorkspace` adapter（与 stack / guard adapters 同列）。
+
+`scaffold` 命令在 §9.2 命令表的 `init` 行旁补一行；`/baf-scaffold` 是 `/baf-workflow-*` 之外的 tier-1 core 命令（同 `/baf-welcome` / `/baf-status` 同层）。
+
+### 22.5 工作流 Tab 常驻门卡（与流程图分清）
+
+[Tab 视图数据](packages/baf/baf-workflow/src/tab-view.ts)（`tab-view.ts` 的 projection）的门卡分两个作用域（详设见 §22.14）：**change 级门扩展既有 `gate?: WorkflowTabGate` 字段**（`gateToTabView` 单源谓词已存在，§18.11，映射 design 停靠 → `design-confirm`、verify 停靠 → `verify-archive`，并携带注册表的 question + options）；**工作区级门（scaffold）新增 `pendingGate?: { gateId, question, options[] }`**——两者都由域层从注册表+当前状态算出，客户端零判断逻辑，纯渲染按钮。
+
+- **Tab 卡常驻**：「工作区状态 + 注册表」**实时派生**——无 baseline → `scaffold` 门卡；design 停靠 → `design-confirm` 门卡。只要门条件成立，卡就一直在 Tab 上，客户任何时刻切过去都能操作（**不是弹一次就消失的 toast**）。
+- **会话卡一次性**：模型 / 协调器弹到会话里的文本卡会随消息滚走。**找回方式 = `/baf-go`**：go-coordinator 现有幂等语义（「停靠点上重跑 = 重渲染卡片、不写任何状态」）原样覆盖「取消后再弹」场景，**零新逻辑**。
+- **取消 = 关卡不关门**：纯取消类选项（如「暂不初始化」）是 **no-op dismiss**——会话卡收起、状态不动、门条件未解除 → Tab 的 `pendingGate` 仍在。客户改主意有两条路：直接在 Tab 点，或敲 `/baf-go` 让卡重回会话。
+- **真实转换项除外**：「退回实现」「退回澄清」这类选项本身是合法 transition，照常走 `WorkflowService.transition()` 并记 evidence——它们不是取消，是换方向。选项 → 命令的映射必须尊重 §5.2 转换表，注册表只登记表里存在的边。
+
+### 22.6 scaffold 与流程图的关系
+
+**不画进泳道 / 节点，作为「泳道区上方的前置条件卡」展示。**
+
+**不放进流程图的三个理由：**
+
+1. **作用域不同**。流程图画的是「一条变更」的状态机（changeId 作用域）；scaffold 是「一个工作区」的前置条件（workspace 作用域）。一个工作区可有多条变更共享同一份 baseline——把 scaffold 画进任何一条变更的泳道，要么在每条变更里重复出现，要么挂错归属。
+2. **状态机契约不收它**。§5.2 转换表是变更级契约，scaffold 不在表里。硬塞进去要动域层事件、投影、恢复逻辑——而 scaffold 完成与否根本不是变更推进的一个「阶段」，是「能不能有变更」的**入场券**。
+
+**放进 Tab 的折中形态**：Tab 在「无活动变更」时本来就显示模板态（参见 §20.4 「模板 = 尚无活动变更时的参考图」），而这恰好是 scaffold 未完成时的唯一可能状态。在该状态下于泳道区上方渲染前置条件卡（与 drift 卡 [§18.11 实现要点 4](overlay/...) 同款 `cardDrift` 模式）：探测无 `.baf/baseline.yml` → 显示注册表的 `scaffold` 门卡 + 按钮 → 点击走同一 `gateResolve` → 派发 `/baf-scaffold`。客户在 Tab 一步可达，**流程图语义分毫不动**。
+
+> 一句话：**scaffold 是入场券，不是赛程中的一站——票根贴在门口（前置卡），不画进赛道（泳道）。**
+
+### 22.7 转换层的 source 白名单（机械强制第二防线）
+
+- `TransitionInput.evidence` 增加约定字段 `source: 'slash' | 'cli' | 'tab' | 'gate-card' | 'model-tool'`，**由各宿主入口写死**：
+  - `commands.ts` 处理器写 `'slash'`
+  - `cmdline.ts` 写 `'cli'`
+  - Tab Remote 写 `'tab'`
+  - 门卡按钮写 `'gate-card'`
+  - `baf_stage_*` 工具体写 `'model-tool'`
+  - **evidence 是服务端收到的对象，模型无法通过工具参数注入这四个值**
+- [transition.ts](packages/baf/baf-workflow/src/transition.ts) `checkEvidence`：confirm 类转换（T14、T16、design→plan、verify→archive、scaffold）遇 `source === 'model-tool'` 或 source 缺失 → 拒绝，reason `gate_confirmation_required`，返回值非异常（沿用 refusal-as-value）。
+- 自然语言推动：本就不是 evidence（SKILL.md 硬规则 2），source 白名单把这条规则从「约定」变成「校验」。
+
+### 22.8 guard `protectedPaths`（机械强制第三防线）
+
+- 基线 guard 默认 `protectedPaths` 增加 `.baf/**` 与 `openspec/**`（[baseline.schema.yaml](packages/baf/baf-core/schema/baseline.schema.yaml) 默认值 + scaffold 模板同步）。
+- **存量基线兼容修正**（P2 实施要点，详见 §22.15）：工作区的 `protectedPaths` 是从 `.baf/baseline.yml` 读的——只改 schema 默认值**只保护新 scaffold 的工作区**，存量工作区与旧 fixture 不受保护。因此 P2 的正确做法是 guard 代码内置 `BAF_CONTROLLED_PATHS`（`.baf/**`、`openspec/**`）**恒生效**，基线只可在其上**增收**路径、不可减少这两条。
+- baf-guard 是**模型工具写防护层**，宿主服务（scaffold drive、workflow drives）不经过它，所以合法流程不受影响；模型在任何阶段试图直写 `.baf/baseline.yml` 或伪造 `openspec/changes/**` 一律被工具层拦下。
+- 效果：上一轮那个「选项 2」**不仅不该出现，而且做了也做不成**——双重保险。
+
+### 22.9 模型工具 `baf_gate_ask`（模型唯一新增能力 · **P1 落地**）
+
+```ts
+tool: 'baf_gate_ask'
+input: { gateId: string }            // 仅此一参
+行为:
+  - gateId 不在注册表 → 返回结构化拒绝 { ok: false, reason: 'unknown_gate' }（值，不是异常）
+  - 在注册表 → 渲染标准卡投递到会话 + Tab pendingGate，返回卡片全文（含选项原文）给模型
+```
+
+**落地形态**（详设见 §22.14）：新入口 `@deepseek-ai/dsh-baf-workflow/gate-ask`，preset 加行、与 `baf-commands` 同层（isolate 外——工具注册表是宿主服务）。工具**只 ask 不 resolve**：内部只调 `renderGate()`（P0 已实现并含 `unknown_gate` 拒绝值测试），不触碰任何 drive。
+
+配套改三处模型可见文本（**这是防自创选项的第一防线**）：
+
+- [session-gate.ts](packages/baf/baf-workflow/src/session-gate.ts) 规则列表加第 4 条：**「被确认门挡住时，唯一动作是调用 `baf_gate_ask(gateId)` 弹标准选项卡；选项由注册表决定，不得增删、改写或在卡外建议其他路径；客户口头同意不是证据，请其点卡或敲命令」**。
+  - **P0 已落地过渡版**：规则第 4 条已进 section（措辞为「按 §22 注册表弹出标准选项卡」，未点名工具）；P1 工具上线时措辞改为点名 `baf_gate_ask`。
+- [skills/baf-go/SKILL.md](packages/preset/agent-presets/presets/baf/skills/baf-go/SKILL.md) Hard rules 同步加条目（P0 已落规则本体，P1 同步点名工具）。
+- 工具返回给模型的就是卡片全文 —— 模型复述即可，**不组织选项，就没有发挥空间**。
+
+### 22.10 防绕过清单
+
+| 绕过尝试 | 挡在哪层 |
+| --- | --- |
+| 模型散文里自创第三选项 | section / SKILL 规则 + 工具只返回注册表卡片（第一防线，软） |
+| 模型调 `baf_stage_*` 直推 confirm 门 | `checkEvidence` `source='model-tool'` → `gate_confirmation_required`（硬） |
+| 模型直写 `.baf/baseline.yml` 伪造基线 | guard `protectedPaths`（硬） |
+| 客户口头「你直接写吧」 | 模型标准回应 = 重新弹卡；且上两条硬防线兜底 |
+| 客户敲了选项编号（非点击/命令） | 自然语言不是 evidence（既有 §5.6 规则，保持） |
+
+### 22.11 端到端时序（用 §22.2 事故重演验证）
+
+```
+客户: （描述需求）
+模型: 工作区无基线 → 调 baf_gate_ask('scaffold')
+     ← 卡片全文: "## 工作区未初始化
+        需要先创建 .baf/baseline.yml 与 openspec/changes。
+        [1] 初始化工作区（执行 scaffold）  → /baf-scaffold
+        [2] 暂不初始化                     → 取消
+        请点击工作流页签按钮，或输入对应命令"
+     模型复述卡片，然后停住（无事可做）
+客户: 点 Tab 上的「初始化工作区」按钮（或敲 /baf-scaffold）
+宿主: driveScaffold(humanConfirmed: true, source 'gate-card')
+     → baseline.yml / openspec/changes 落盘（备份语义照旧）→ projection 记证
+模型: 下一轮看到绑定事实 → intake 分类 → 又到门 → baf_gate_ask('intake-classify') …
+```
+
+对照旧输出：**没有「选项 2」的位置**——注册表里没有它，模型工具造不出它，guard 也写不进。
+
+### 22.12 分阶段落地
+
+**P0 落地状态（2026-09-18 已合入 baf 分支，25 测试文件 / 197 项全绿，tsc 无新增错误）**：
+
+| P0 交付物 | 状态 |
+| --- | --- |
+| `gate-cards.ts` 注册表 + `renderGateCard` / `renderGate` / `isGateResolvingCommand` | ✅ 已落地（`renderGate` 对未知 id 返回 `unknown_gate` 拒绝值，参数收 `string` 以承接 JSON 入参） |
+| `/baf-scaffold` slash + `baf scaffold` CLI + `driveScaffold`（adapter 注入） | ✅ 已落地（`ScaffoldAdapter` 进 `DriveAdapters`；slash / CLI 均经 `ctx.get('bafScaffold')` 解析，preset 的 `baf-domain` 组已含 `bafScaffold` isolate） |
+| section / SKILL 第 4 条规则 | ✅ 已落地（过渡措辞，见 §22.9） |
+| 测试 | ✅ `gate-cards.spec.ts`（16 项，含未知 gateId 拒绝）、`drive-scaffold.spec.ts`（6 项桩适配器）、surface-parity / cmdline / session-gate 快照同步 |
+| 包边界 | ✅ baf-workflow **零**直接依赖 baf-scaffold（曾误加 dependency，核查时已移除——与 §22.13 取舍 2 对齐） |
+
+**P0 明确未含、归并 P1 的两项**（原表把 `baf_gate_ask` 写进了 P0，实施时移入 P1，理由如下）：
+
+1. `baf_gate_ask` 工具注册 —— 工具是「模型的 ask 面」，与 coordinator 自动弹卡、Tab pendingGate 同属「让注册表卡真正出现在客户眼前」的一批改动；单独上线工具而没有自动弹卡，模型仍无门可弹。P0 先把工具依赖的 `renderGate` 契约（含 `unknown_gate` 拒绝值）做实并测试锁定。
+2. go-coordinator / session-gate 自动弹卡 —— 会话侧弹注册表卡（§18.5 两处停靠点 + 欢迎卡无基线分支），与工具、Tab 同批联调一次到位。
+
+| 阶段 | 内容 | 测试 |
+| --- | --- | --- |
+| **P0**（✅ 已落地，即 Phase 8.11） | `gate-cards.ts` 注册表 + 渲染；`/baf-scaffold` slash + `baf scaffold` CLI + `driveScaffold`（adapter 注入）；section / SKILL 第 4 条规则（过渡措辞） | `gate-cards.spec.ts`（注册表快照 / 未知 gateId 拒绝 / 渲染含选项原文）；`drive-scaffold.spec.ts` |
+| **P1**（Tab 交互 + 全部 ask 面，Phase 8.12，详设 §22.14）✅ | tab-view 门卡字段扩展（`gateId/question/options` + `pendingGate`）+ `driveGateResolve`（注册表派发，Remote 唯一解析面）+ `BafWorkflowTabRemote.gateResolve` + WorkflowView 按钮 + go-coordinator/session-gate 自动弹注册表卡 + `baf_gate_ask` 工具 | `surface-parity` 增加 `gateResolve` + `driveGateResolve` Remote-only 哨兵；`session-gate.spec` 欢迎卡补基线缺失/在场分支；`go.spec` 门 A 改查注册表标题 |
+| **P2**（机械强制，Phase 8.13，详设 §22.15） | evidence.source 白名单 + confirm 门校验；guard `protectedPaths` 内置恒生效 | `transition.spec`：model-tool / 缺失 source 推 confirm 门 → 拒绝值；`tool-guard.spec`：写 `.baf/**` 被拦 |
+| **P3**（完善收口，Phase 8.14，详设 §22.16） | 审计行、i18n key 冻结、resume 动态选项收口、E2E 验收流、文档交叉引用核对 | 全量 + 文档 |
+
+### 22.13 两个明确取舍（通俗版）
+
+1. **一次性 token 不进 P0**：source 白名单已足够挡「模型代答」（source 由宿主写死，不可伪造）；token 防的是卡片重放，本地单机桌面威胁模型里优先级低。若后续要多端 / 远程会话，再补 TTL token（签发 / 消费 / 审计），架构上预留了 `gateId` 维度，不返工。**类比**：source 白名单 = 检票口只认四种真人渠道、且印章由检票口自己盖；token = 给票加防伪码防复制。本地剧场里票没有流通渠道，先不加码。
+2. **scaffold 走 adapter 注入而非直接依赖**：保持 baf-workflow 与 baf-scaffold 的包边界，与既有 `DriveAdapters`（stack / guard）同一模式，测试里可塞桩。**类比**：直接依赖 = 把电器焊死在墙内线路里，换电器要砸墙；adapter = 装个标准插座，官方插头、测试假插头随插随换。
+
+### 22.14 P1 完整设计（Tab 交互 + 全部 ask 面 · Phase 8.12）
+
+> 目标：让注册表卡**真正出现在客户眼前**。P0 交付了注册表与渲染契约；P1 把三个 ask 面（会话 coordinator 弹卡、模型 `baf_gate_ask` 工具、Tab 常驻门卡）全部接到注册表上，并给 Tab 一个 resolve 通道（`gateResolve`）。
+
+#### A. Tab 门卡字段（baf-core 单源扩展，不建第二派生点）
+
+| 落点 | 改动 |
+| --- | --- |
+| [tab-view.ts](packages/baf/baf-core/src/tab-view.ts) `WorkflowTabGate` | 扩展字段：`gateId`（§22 `GateId`）、`question`、`options: { id, label }[]`（注册表原文）。既有 `id`/`node`/`actionKey` 保留（门高亮 Phase 8.10 消费者不受影响） |
+| 同文件 `GATE_NODE` 旁 | 增映射表：`'design-to-plan' → 'design-confirm'`、`'verify-to-archive' → 'verify-archive'`（`confirmGateOf()` 谓词本身不动） |
+| 同文件 `WorkflowTabView` | 新增 `pendingGate?: { gateId: 'scaffold'; question; options[] }` —— 仅工作区级门；`buildEmptyTabView` 分支按「探测无 `.baf/baseline.yml`」挂载（scaffold 未完成时 Tab 只可能是模板态，见 §22.6） |
+| resume 动态门 | 复用既有 `WorkflowTabResume`（anchor + candidates，§19.4）：Tab 上 drift 视图的每个候选节点按钮即 resume 门的动态选项，点击走同一 `gateResolve(gateId='resume', optionId='resume-<node>')` |
+
+#### B. Remote `gateResolve`（resolve 通道，typed 边界变更）
+
+```ts
+// packages/client/ui-baf-workflow/src/client/remote-types.ts
+// + lib/typert.remote-client.d.ts（提交物，需 typert 工件再生成）
+gateResolve: (request: BafWorkflowGateResolveRequest) => Promise<RemoteResult<WorkflowTabView>>
+
+interface BafWorkflowGateResolveRequest {
+  cwd: string
+  changeId?: string          // resume / change 级门需要；scaffold 门为空
+  gateId: string             // §22 GateId（运行时校验）
+  optionId: string           // 必须命中注册表 options（或动态生成的 resume-* id）
+}
+```
+
+宿主行为：① 校验 `gateId` / `optionId` 命中注册表（未命中 → 结构化拒绝值，**不猜最近选项**）；② 按 `option.command` 派发**同名 slash drive**（与 slash 共源，无第二套逻辑；`__noop__` 选项 = 直接返回刷新后的 TabView，不派发）；③ evidence `source='gate-card'`（P2 打点，见 §22.15）；④ 响应返回刷新后的 `WorkflowTabView`（与既有 Remote 方法一致）。**幂等**：门已解锁后再收 `gateResolve` → 返回「门已过」卡 + 当前 TabView，不报错（防双击/迟到点击）。
+
+#### C. WorkflowView 门卡 UI
+
+- 门卡渲染区：change 级挂在停靠节点上方（drift 卡 `cardDrift` 同款模式，§18.11 实现要点 4）；scaffold 前置卡挂在泳道区上方（§22.6）。
+- busy 态：任一选项请求期间禁用整卡按钮（防双击派发两次）；失败显示拒绝卡原文 + 重试按钮。
+- **intake 按钮迁移**：现有 `startIntake` / `confirmIntake` / `rejectIntake` Remote 按钮迁移为按注册表 `intake-classify` 门卡渲染（行为不变，渲染同源）；Remote 方法本身保留（迁移期双通道，P3 复盘收拢，见 §22.16）。
+
+#### D. 会话侧自动弹卡（go-coordinator / session-gate）
+
+| 落点 | 改动 |
+| --- | --- |
+| [go-coordinator.ts](packages/baf/baf-workflow/src/go-coordinator.ts) 门 A 停靠（`case 'design'` 的 `gateUnlocked` 未解锁分支） | 手写 `errorCard`（「确认门 A（需求 2）」段落）改为 `renderGate('design-confirm', { cwd, changeId })` 逐字卡，`statusLines` 段落拼在卡后；幂等重跑 `/baf-go` = 重弹卡（既有语义覆盖「取消后再弹」，零新逻辑） |
+| 同文件门 B 停靠（`case 'verify'` 同构分支） | 改为 `renderGate('verify-archive', …)` 同上 |
+| [session-gate.ts](packages/baf/baf-workflow/src/session-gate.ts) 欢迎卡「无基线」分支 | 现在只有引导文案行；追加 `renderGate('scaffold', { cwd })` 卡片段（与 Tab pendingGate 同文，客户一步可达） |
+
+#### E. `baf_gate_ask` 工具注册
+
+- 新入口 `@deepseek-ai/dsh-baf-workflow/gate-ask`；preset `agent.cordis.yml` 加行，置于 `baf-commands` 同层（**isolate 外**——工具注册表是宿主服务，与 session-gate 同理由）。
+- 工具体：入参 `{ gateId: string }` → `renderGate(gateId, ctx)`（P0 已实现；未知 id 返回 `unknown_gate` 拒绝值）→ 投递会话卡 + 触发 Tab pendingGate 刷新 → 返回卡片全文给模型。**只 ask 不 resolve**——不调用任何 drive，不构造 evidence。
+- section / SKILL 第 4 条规则措辞从「按 §22 注册表弹出标准选项卡」改为点名 `baf_gate_ask`（§22.9）。
+
+#### F. 测试清单
+
+`tab-view.spec`（change 级门扩展字段派生：design 停靠 → `design-confirm` 选项原文；无 baseline → `pendingGate` scaffold；resume 动态选项与 anchor 标注）；`go.spec`（到门即弹注册表卡、重跑重弹、卡文与注册表快照一致）；`gate-ask` 工具单测（渲染 / unknown_gate / 不触碰 drive）；surface-parity 快照 `REMOTE_METHODS` 增 `gateResolve`；e2e：点 Tab 门卡按钮 → 状态推进 → 门卡消失。
+
+#### G. 风险与对策
+
+| 风险 | 对策 |
+| --- | --- |
+| typert 工件（`lib/*.d.ts` 提交物）忘记再生成 → 客户端类型缺方法 | surface-parity 快照 + 构建步骤核对（§18.11 既定流程） |
+| 双击 / 迟到点击派发两次 | busy 禁用整卡 + `gateResolve` 幂等（门已过 → 「门已过」卡，不报错） |
+| intake 双通道（既有按钮 + gateResolve）行为漂移 | 两条入口都走同一 drive、同一 source 打点；迁移期并存，P3 复盘 |
+| `WorkflowTabGate` 扩展是 baf-core 类型变更 | workspace tsconfig 映射既有，下游 ui-baf-workflow 同批编译；旧消费者只读旧字段不受影响 |
+
+### 22.15 P2 完整设计（机械强制 · Phase 8.13）
+
+> 目标：把 §22.1 不变式 3 从「规则约束」变成「校验拒绝」。两条硬防线：转换层 source 白名单（第二防线）+ guard protectedPaths（第三防线）。
+
+#### A. confirm 类转换的精确规则集（以 §5.2 TRANSITIONS 表为准）
+
+`T2`、`T3`（intake 分类确认）、`T7`、`T7a`（design 确认，含合并变体）、`T13`（drift 复位——目标节点由客户选定）、`T14`（archive 人因确认）、`T16`（abandon 人因确认）。共七条边。**scaffold 不在集合内**：它是工作区级操作、不是转换，人因确认由入口本身承担（§22.4）。full-go 的机器门禁转换（T4/T6/T8/T9/T10 等）不是 confirm 类，不受影响、无需 source。
+
+#### B. source 白名单与校验语义
+
+- `TransitionInput.evidence` 增加约定字段 `source: 'slash' | 'cli' | 'tab' | 'gate-card' | 'model-tool'`，**由各宿主入口写死**（evidence 是服务端收到的对象，模型无法经工具参数注入）。
+- [transition.ts](packages/baf/baf-workflow/src/transition.ts) `checkEvidence`：上述七条 confirm 边遇 `source === 'model-tool'` **或 source 缺失** → 拒绝值 `gate_confirmation_required`（refusal-as-value，非异常）。
+
+#### C. 打点清单（与校验同批落地——漏一处即客户操作被误拒，这是 P2 最大回归面）
+
+| 入口 | source |
+| --- | --- |
+| [commands.ts](packages/baf/baf-workflow/src/commands.ts) 全部 slash 处理器 | `'slash'`（含 `/baf-go`——coordinator 从 log tail 观察到的解锁本就源自客户键击） |
+| [cmdline.ts](packages/baf/baf-workflow/src/cmdline.ts) 全部子命令 | `'cli'` |
+| Remote `startIntake` / `confirmIntake` / `rejectIntake` / `transition` | `'tab'` |
+| Remote `gateResolve`（P1 新增） | `'gate-card'` |
+| `baf_stage_*` 模型工具（若/当注册，见 D） | 宿主包装写死 `'model-tool'` |
+
+实施顺序：**先加全部打点（不开校验）跑全量测试 → 再开校验**；两步可拆两个 commit 便于二分定位。
+
+#### D. `baf_stage_*` 现状事实（设计输入）
+
+仓库当前**没有**注册过任何 `baf_stage_*` 模型工具（全仓 grep 验证；仅 §5.6 文档作为远期提及）。因此 P2 的白名单是**前置防御**：若/当 `baf_stage_*` 注册，其宿主包装必须写死 `source='model-tool'`；在此之前，「缺失即拒」已兜底任何未打点路径。
+
+#### E. guard protectedPaths 内置恒生效（存量兼容的正确解法）
+
+- [baf-guard](packages/baf/baf-guard) 代码内置 `BAF_CONTROLLED_PATHS = ['.baf/**', 'openspec/**']`，**无论基线写什么恒生效**；基线 `protectedPaths` 只可在其上**增收**，不可减少这两条（收紧单向）。
+- baseline.schema.yaml 默认值 + scaffold 模板同步更新，仅为文档一致性（不再承担保护职责）。
+- **合法写入不受影响的根据**：clarify/design/plan 阶段产物由宿主 pipeline（drive stage handler）写盘，不经 guard；guard 只拦模型工具写。模型在任何阶段直写 `.baf/**` / `openspec/**` → 工具层拒绝卡 + 指引走 drive。
+
+#### F. 测试清单
+
+`transition.spec`：七条 confirm 边 × `{model-tool, 缺失, slash, cli, tab, gate-card}` 矩阵（合法放行 / 非法拒绝值 `gate_confirmation_required`）；非 confirm 边（T4 等）无 source 照常放行。`tool-guard.spec`：写 `.baf/baseline.yml`、`openspec/changes/x/design.md` 被拦；基线增收路径仍拦；基线试图减少内置路径被拒。既有 transition / go / drives 测试补 source 打点断言；fixture 更新（内置路径对旧基线也生效后，个别直写 fixture 的用例改宿主写或显式豁免）。
+
+#### G. 风险与对策
+
+| 风险 | 对策 |
+| --- | --- |
+| 打点遗漏 → 客户合法操作被误拒 | 打点先行、校验后开的两个 commit；发布说明写明错误码与排查（`evidence.source` 可从审计行直接读） |
+| 事件回放 / 投影重建路径构造 TransitionInput 无 source → 误拒 | replay 构造处显式置 `'slash'`（历史事件本就源自人因入口）；**不**按 projectionVersion 分界——保持规则无时间例外 |
+| 内置路径影响存量测试 fixture | 测试清单 F 已列；一次性迁移，CI 兜底 |
+| guard 错误信息未指引出路 | 拒绝卡文案带「走 /baf-* drive」指引（与 §5.6 唯一动作规则同文） |
+
+### 22.16 P3 完整设计（审计、i18n、E2E 收口 · Phase 8.14）
+
+#### A. 审计行（§20.4 体系）
+
+- 门 resolve 成功记一行：`[baf] <ISO8601> - session baf:gate gateId=<id> option=<optId> change=<id|-> source=<src> baseline=<id>`；`__noop__` 取消不记（无状态变更）。
+- projection evidence 增 `gateId` / `optionId` / `source` 字段——evidence 是 `Record<string, unknown>`，无 schema 破坏；消费方：审计导出、`listChanges` 展示、复盘工具。
+
+#### B. i18n key 冻结（§20.7 体系；Phase 8.10 已建 `ui-baf-workflow` 字典）
+
+- key 规范：`gate.<gateId>.title` / `gate.<gateId>.question` / `gate.<gateId>.option.<optId>`；注册表 label 改存 key，zh 文案为 fallback 源；会话卡 / Tab / CLI 三端读同一字典。
+- 既有 `GATE_ACTION_KEY` 两个 key（`gate.confirmIntoPlan` / `gate.confirmArchive`）并入同一前缀命名。
+- **一次性切换** + 快照测试锁文案（避免迁移期字面量与 key 并存漂移）。
+
+#### C. resume 动态选项收口
+
+candidates 排序 latest-first、index 0 为推荐默认（对齐 `WorkflowTabResume` 语义）；anchor 标注已在 P0 `renderGateCard` 实现；Tab 动态按钮 = `gateResolve(gateId='resume', optionId='resume-<node>')`（P1 通道）。
+
+#### D. E2E 验收流（apps/web 既有基建）
+
+空目录 → Tab `pendingGate`(scaffold) → 点按钮 → baseline 落盘 → intake → design 停靠 → Tab 门卡按钮 → plan → implement → verify → 门 B → completed。每步断言 TabView 快照 + projection 事件序列。以 Remote 层直连为主（不走 GUI，快）、GUI 冒烟一条（真点一次按钮）。
+
+#### E. 收口项
+
+intake 双通道（既有 Remote 按钮 vs `gateResolve`）复盘是否收拢为单通道；§9.2 / §10.3 / §18 与 §22 交叉引用核对；Dev Note 基准更新；`enterprise-workflow.md` 本章随实现收紧（§22.12 P0 状态表即此模式的开始）。
 
 ---
 

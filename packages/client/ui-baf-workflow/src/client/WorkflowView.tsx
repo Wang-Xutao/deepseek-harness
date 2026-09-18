@@ -31,6 +31,12 @@ export interface WorkflowViewInjected {
   transition: (changeId: string, to: WorkflowNodeId | TerminalStateId) => Promise<WorkflowTabView>
   /** T13 rollback (§19.5): omit `node` to re-read the freshly detected menu. */
   resume: (changeId: string, node?: WorkflowNodeId) => Promise<WorkflowTabView>
+  /**
+   * §22.14 Tab gate-card resolve: dispatch the registered command for a
+   * chosen `(gateId, optionId)` pair. The pair is read from a
+   * `WorkflowTabGate.options` / `WorkflowTabPendingGate.options` row.
+   */
+  gateResolve: (request: { changeId?: string; gateId: string; optionId: string }) => Promise<WorkflowTabView>
 }
 
 export type WorkflowViewProps =
