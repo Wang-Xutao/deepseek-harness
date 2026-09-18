@@ -2,7 +2,7 @@
  * Sidebar brand name slot — BAF DSH product name + version badge.
  *
  * Overrides `ui-brand-official`'s "DeepSeek Harness" wordmark so the title row
- * reads "BAF DSH v0.0.14" instead of the upstream product label. The version
+ * reads "BAF DSH v0.0.15" instead of the upstream product label. The version
  * rides the same inverted capsule the official wordmark uses for its build
  * label (`ui-primitives/BrandWordmark`: a `rx=2` pill filled with the label
  * ink, glyphs knocked out in `--dsw-alias-label-primary-inverted`).
@@ -25,7 +25,7 @@ export function SidebarBrandName(_props: SidebarBrandNameProps) {
   return (
     <>
       <span className={css.name}>BAF DSH</span>
-      <span className={css.version}>v0.0.14</span>
+      <span className={css.version}>v0.0.15</span>
     </>
   )
 }
