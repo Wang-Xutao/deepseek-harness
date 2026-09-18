@@ -113,7 +113,7 @@ describe('stage pipeline happy path', () => {
       await pipeline.enterImplementStage(changeId, 'slash')
       await recordTouched(root, { changeId, file: allowlistFile })
       await completeTask(root, changeId, 't1')
-      await pipeline.driveImplementStage(changeId, 'slash')
+      await pipeline.driveImplementStage(changeId)
 
       const verify = await pipeline.driveVerifyStage(changeId)
       expect(verify.node).toBe('verify')
@@ -131,7 +131,7 @@ describe('stage pipeline happy path', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  }, 'slash')
+  })
 })
 
 describe('gate failures', () => {
@@ -182,7 +182,7 @@ describe('gate failures', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  }, 'slash')
+  })
 
   it('archive refuses without human confirmation and without a passing report', async () => {
     const { root, pipeline, changeId } = await setup()
@@ -275,7 +275,7 @@ describe('verify Phase 7 wiring', () => {
     await harness.pipeline.enterImplementStage(harness.changeId)
     await recordTouched(harness.root, { changeId: harness.changeId, file: allowlistFile })
     await completeTask(harness.root, harness.changeId, 't1')
-    await harness.pipeline.driveImplementStage(harness.changeId, 'slash')
+    await harness.pipeline.driveImplementStage(harness.changeId)
     return harness
   }
 
@@ -308,7 +308,7 @@ describe('verify Phase 7 wiring', () => {
     } finally {
       await rm(harness.root, { recursive: true, force: true })
     }
-  }, 'slash')
+  })
 
   it('wired guard policy gates verify via reason codes', async () => {
     const guard: import('@deepseek-ai/dsh-baf-core').GuardPolicy = {
@@ -403,7 +403,7 @@ describe('verify T11', () => {
       await pipeline.enterImplementStage(changeId, 'slash')
       await recordTouched(root, { changeId, file: allowlistFile })
       await completeTask(root, changeId, 't1')
-      await pipeline.driveImplementStage(changeId, 'slash')
+      await pipeline.driveImplementStage(changeId)
 
       // Force verify to fail by emptying proposal.md (adapter validate then
       // flags the missing "## Why" section as an unfilled template).
@@ -421,7 +421,7 @@ describe('verify T11', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  }, 'slash')
+  })
 })
 
 describe('drift detection (Phase 5.8)', () => {

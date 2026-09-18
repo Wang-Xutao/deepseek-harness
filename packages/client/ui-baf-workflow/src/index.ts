@@ -258,7 +258,9 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
         'gate-card',
         {
           // §22.16 P3: emit one structured audit line per dispatched resolve.
-          changeId: request.changeId,
+          // exactOptionalPropertyTypes forbids `changeId: undefined`, so we
+          // conditionally include the field when the host actually carried it.
+          ...(request.changeId === undefined ? {} : { changeId: request.changeId }),
           audit: (line) => {
             auditLines.push(line)
             this.ctx.logger.info(line)

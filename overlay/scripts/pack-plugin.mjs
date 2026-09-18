@@ -28,7 +28,7 @@ const zipName = `baf-plugin-${version}.zip`
 const zipPath = join(outDir, zipName)
 rmSync(zipPath, { force: true })
 
-const tar = spawnSync('tar', ['-a', '-cf', zipPath, '-C', pluginDir, '.'], { stdio: 'inherit' })
+const tar = spawnSync('tar', ['-a', '--force-local', '-cf', zipPath, '-C', pluginDir, '.'], { stdio: 'inherit' })
 if (tar.status !== 0) {
   console.error('pack-plugin: tar failed')
   process.exit(1)

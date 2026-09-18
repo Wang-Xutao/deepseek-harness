@@ -51,7 +51,7 @@ async function afterPack(context) {
   console.log(`afterPack: archiving dsh node_modules -> ${zipOut}`)
   const tar = spawnSync(
     'tar',
-    ['-a', '-cf', zipOut, '-C', join(desktop, 'resources', 'dsh'), 'node_modules'],
+    ['-a', '--force-local', '-cf', zipOut, '-C', join(desktop, 'resources', 'dsh'), 'node_modules'],
     { encoding: 'utf8', windowsHide: true },
   )
   if (tar.status !== 0 || !existsSync(zipOut)) {

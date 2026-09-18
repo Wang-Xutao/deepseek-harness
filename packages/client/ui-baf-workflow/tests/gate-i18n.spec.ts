@@ -22,12 +22,13 @@ describe('gate i18n snapshot freeze (§22.16 P3)', () => {
     for (const gateId of STATIC_GATES) {
       const spec = GATE_REGISTRY[gateId]
       expect(spec, `missing registry entry for ${gateId}`).toBeDefined()
-      expect(zh[`gate.${gateId}.title`]).toBe(spec.title)
-      expect(zh[`gate.${gateId}.question`]).toBe(spec.question)
+      expect(zh[`gate.${gateId}.title` as keyof typeof zh]).toBe(spec.title)
+      expect(zh[`gate.${gateId}.question` as keyof typeof zh]).toBe(spec.question)
       for (const opt of spec.options) {
-        const key = `gate.${gateId}.option.${opt.id}`
+        const key = `gate.${gateId}.option.${opt.id}` as keyof typeof zh
         expect(zh[key], `zh ${key} missing`).toBe(opt.label)
-        expect(en[key], `en ${key} missing`).toBeTruthy()
+        const enKey = `gate.${gateId}.option.${opt.id}` as keyof typeof en
+        expect(en[enKey], `en ${key} missing`).toBeTruthy()
       }
     }
   })

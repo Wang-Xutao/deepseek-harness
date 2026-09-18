@@ -66,7 +66,7 @@ async function lastEventOf<T extends { type: string }>(
   const { events } = await new ProjectionStore({ workspaceRoot: root }).readEvents(changeId)
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]
-    if (e !== undefined && e.type === type) return e as T
+    if (e !== undefined && e.type === type) return e as unknown as T
   }
   return undefined
 }
@@ -101,9 +101,9 @@ describe('source stamping (P2-C1)', () => {
     // the source overload. If the param is ever dropped, this spec stops
     // compiling before it runs.
     const _typecheck: StagePipeline['driveArchiveStage'] = (
-      changeId: string,
-      humanConfirmed: boolean,
-      source?: TransitionSource,
+      _changeId: string,
+      _humanConfirmed: boolean,
+      _source?: TransitionSource,
     ) => Promise.resolve(undefined as never)
     void _typecheck
     expect(true).toBe(true)

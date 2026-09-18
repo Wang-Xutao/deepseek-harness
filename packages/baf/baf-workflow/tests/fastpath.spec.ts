@@ -122,7 +122,7 @@ describe('fast-path happy path', () => {
       await completeTask(root, changeId, 'regression-test')
       await recordTouched(root, { changeId, file: FIX_FILE })
       await completeTask(root, changeId, 'fix-root-cause')
-      await pipeline.driveImplementStage(changeId, 'slash')
+      await pipeline.driveImplementStage(changeId)
 
       const verify = await pipeline.driveVerifyStage(changeId)
       if (verify.node !== 'verify') throw new Error('expected a verify drive')
@@ -212,14 +212,14 @@ describe('fast-path gates', () => {
 
       // Completion gate also refuses when the regression test is not done.
       await recordTouched(root, { changeId, file: REGRESSION_FILE })
-      await expect(pipeline.driveImplementStage(changeId, 'slash'))
+      await expect(pipeline.driveImplementStage(changeId))
         .rejects.toMatchObject({ code: 'invalid_transition' })
 
       // Satisfying test-first unblocks the rest of the chain.
       await completeTask(root, changeId, 'regression-test')
       await recordTouched(root, { changeId, file: FIX_FILE })
       await completeTask(root, changeId, 'fix-root-cause')
-      await pipeline.driveImplementStage(changeId, 'slash')
+      await pipeline.driveImplementStage(changeId)
       const status = await pipeline.context().store.readStatus(changeId)
       expect(status.nodes.implement).toBe('completed')
     } finally {
@@ -240,7 +240,7 @@ describe('T15 escalation', () => {
       ledger.touched.push('src/other-module.c')
       await writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8')
 
-      const drive = await pipeline.driveImplementStage(changeId, 'slash')
+      const drive = await pipeline.driveImplementStage(changeId)
       if (drive.node !== 'implement') throw new Error('expected an implement drive')
       expect(drive.result.escalated).toBeDefined()
 
@@ -332,7 +332,7 @@ describe('T15 escalation', () => {
       await recordTouched(root, { changeId, file: FIX_FILE })
       await recordTouched(root, { changeId, file: REGRESSION_FILE })
       await completeTask(root, changeId, 't1')
-      await pipeline.driveImplementStage(changeId, 'slash')
+      await pipeline.driveImplementStage(changeId)
 
       const verify = await pipeline.driveVerifyStage(changeId)
       if (verify.node !== 'verify') throw new Error('expected a verify drive')

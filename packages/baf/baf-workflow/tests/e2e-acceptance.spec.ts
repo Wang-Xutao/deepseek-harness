@@ -37,7 +37,7 @@ const FIXTURE_BASELINE = fileURLToPath(
 
 function makeStubScaffold(): ScaffoldAdapter {
   return {
-    scaffold: ({ workspaceRoot, baselineId }) => {
+    scaffold: ({ workspaceRoot }) => {
       // Mirror what the real adapter writes — minimal to satisfy the
       // workflow's needs (a baseline + an empty openspec/changes/ dir).
       mkdir(join(workspaceRoot, '.baf'), { recursive: true })
@@ -89,7 +89,7 @@ describe('e2e acceptance (§22.16 P3)', () => {
       // is the gateResolve audit-line shape, which is the §22.16 P3 deliverable.
       const result = await driveGateResolve(
         root, 'design-confirm', 'confirm', {}, undefined, 'gate-card',
-        { changeId, audit: (line) => auditLines.push(line) },
+        { changeId, audit: line => auditLines.push(line) },
       )
       // The dispatched `/baf-go` will surface an error card without a model
       // catalog mounted; that is expected and unrelated to the audit line.

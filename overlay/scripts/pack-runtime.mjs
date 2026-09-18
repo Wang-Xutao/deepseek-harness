@@ -25,7 +25,7 @@ const zipName = `baf-runtime-${version}.zip`
 const zipPath = join(outDir, zipName)
 rmSync(zipPath, { force: true })
 
-const tar = spawnSync('tar', ['-a', '-cf', zipPath, '-C', dshDir, '.'], { stdio: 'inherit' })
+const tar = spawnSync('tar', ['-a', '--force-local', '-cf', zipPath, '-C', dshDir, '.'], { stdio: 'inherit' })
 if (tar.status !== 0) {
   console.error('pack-runtime: tar failed')
   process.exit(1)

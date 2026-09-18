@@ -157,7 +157,7 @@ export function statusLines(status: WorkflowStatus): string[] {
  * @param rawInput - free-form change description.
  * @returns classification card.
  */
-export async function driveOpen(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
+export async function driveOpen(cwd: string, rawInput: string, _source: TransitionSource = 'slash'): Promise<CommandResult> {
   const description = rawInput.trim()
   if (description === '') {
     return {
@@ -345,7 +345,7 @@ async function driveDocStage(
   cwd: string,
   rawInput: string,
   node: 'clarify' | 'design' | 'plan',
-  source: TransitionSource = 'slash',
+  _source: TransitionSource = 'slash',
 ): Promise<CommandResult> {
   const args = parseArgs(rawInput)
   const store = new ProjectionStore({ workspaceRoot: cwd })
