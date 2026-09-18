@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "Phase 7：baseline 驱动的质量门（StackAdapter/QualityReport 占位）+ 工具调用硬门禁（baf-guard：结构路径裁决 + 同步 projection 读 + 密钥扫描，按 mode/adjudicate 拦截）+ 工作区脚手架（baf-scaffold：基线模板 + openspec 目录，人工确认与备份语义）",
-    "notesEn": "Phase 7: baseline-driven quality gate (StackAdapter / QualityReport placeholders) + tool-call hard gate (baf-guard: structural path adjudication + sync projection reads + secret scan, per-mode/adjudicate denial) + workspace scaffold (baf-scaffold: baseline template + openspec layout with human confirmation and backup semantics)"
+    "notesZh": "启动性能优化：splash 提早关闭 + Node 路径缓存 + plugin sync 按 fingerprint 跳过，实测 spawn→shown 中位数 17.7s → 15.1s（-14.9%）；新增 overlay/scripts/bench-spawn-to-shown.mjs A/B bench。",
+    "notesEn": "Startup perf: splash closes on URL ready + Node binary cached + plugin sync skips when fingerprint matches; measured spawn→shown median 17.7s → 15.1s (-14.9%); added overlay/scripts/bench-spawn-to-shown.mjs A/B harness."
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",

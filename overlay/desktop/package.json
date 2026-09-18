@@ -1,6 +1,6 @@
 {
   "name": "baf-dsh",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "baf-dsh desktop shell over DeepSeek Harness web",
   "author": "BAF",
   "private": true,
@@ -10,6 +10,7 @@
     "build": "tsc",
     "test": "vitest run",
     "start": "tsc && electron .",
+    "bench:spawn": "node ../scripts/bench-spawn-to-shown.mjs",
     "dist": "tsc && node ../scripts/electron-builder.mjs",
     "dist:dir": "tsc && node ../scripts/electron-builder.mjs --dir",
     "install-electron": "node node_modules/electron/install.js"

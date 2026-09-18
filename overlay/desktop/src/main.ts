@@ -22,8 +22,10 @@ import {
   shell,
 } from 'electron'
 import { ensureDshModulesExpanded } from './ensure-dsh-modules.ts'
-import { findSupportedNode } from './find-node.ts'
-import { parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './prefs.ts'
+import { findSupportedNode, isSupportedNodeBinary } from './find-node.ts'
+import { enableWrites as enableLaunchTimings, mark as markLaunch } from './launch-timings.ts'
+import { syncSkillTree } from './plugin-sync.ts'
+import { mergePrefs, parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './prefs.ts'
 import { readyTimeoutMs } from './ready-timeout.ts'
 import { parseWebReadyUrl } from './ready-url.ts'
 import { DEFAULT_CHANNEL_TAG, DEFAULT_UPDATE_OWNER, DEFAULT_UPDATE_REPO } from './update/defaults.ts'
@@ -36,6 +38,8 @@ const APP_NAME = 'baf-dsh'
 
 app.setAppUserModelId(APP_USER_MODEL_ID)
 Menu.setApplicationMenu(null)
+
+markLaunch('app-ready')
 
 function desktopRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -189,20 +193,17 @@ function showLaunchError(technical: string): void {
 
 /** Sync optional plugin skills into ~/.dsh/skills. Official BAF presets are
  * shipped inside dsh-agent-presets (system trust) and must NEVER be copied into
- * ~/.dsh/.agent-presets (user trust). */
+ * ~/.dsh/.agent-presets (user trust). The sync is skipped on launches where
+ * the source-tree fingerprint matches the marker recorded on the previous
+ * sync — both avoid the per-launch directory walk and stay honest against
+ * source content even when the installer rewrites mtimes. */
 function syncPluginIntoDshHome(): void {
   const root = pluginDir()
   const dshHome = join(homedir(), '.dsh')
   const from = join(root, 'skills')
   const to = join(dshHome, 'skills')
-  if (!existsSync(from)) return
-  mkdirSync(to, { recursive: true })
-  for (const name of readdirSync(from)) {
-    if (name === '.gitkeep' || name === '.DS_Store') continue
-    const src = join(from, name)
-    const dest = join(to, name)
-    cpSync(src, dest, { recursive: true, force: true })
-  }
+  const marker = join(dshHome, 'plugin-skills-sync.json')
+  syncSkillTree(from, to, marker)
 }
 
 let child: ChildProcess | undefined
@@ -470,9 +471,16 @@ async function createWindow(url: string): Promise<void> {
     return { action: 'deny' }
   })
 
-  await window.loadURL(url)
+  // Reveal the main window as soon as the dsh web child has a URL: the splash
+  // stays up while it can, and the renderer loads the React tree in the
+  // background. Waiting for `loadURL` here would chain the splash onto the
+  // web dist's first-paint, doubling perceived startup time.
   closeSplash()
+  markLaunch('splash-closed')
+  markLaunch('main-shown')
   window.show()
+  markLaunch('main-load-url')
+  await window.loadURL(url)
 }
 
 function githubConfig(): { owner: string, repo: string, channelTag: string } {
@@ -509,8 +517,21 @@ function createUpdateService(): UpdateService {
 }
 
 async function startDshProcess(): Promise<string> {
-  const node = findSupportedNode()
+  // Bypass the candidate walk when a prior launch cached a Node binary that
+  // still satisfies the engines range. The cache is re-probed, not trusted: an
+  // in-place Node upgrade out of range must fall through to the discovery loop
+  // rather than spawn an unsupported interpreter. `BAF_DSH_BENCH_BASELINE=1`
+  // forces that walk so the bench harness can A/B both paths on one machine.
+  const baselineMode = process.env.BAF_DSH_BENCH_BASELINE === '1'
+  const cached = baselineMode ? undefined : prefs.nodeBinary
+  const node = cached !== undefined && isSupportedNodeBinary(cached)
+    ? cached
+    : findSupportedNode()
   if (node === undefined) throw new Error('未找到符合要求的 Node.js')
+  if (cached !== node) {
+    prefs = { ...prefs, nodeBinary: node }
+    savePrefs(prefs)
+  }
   if (app.isPackaged) {
     // NSIS packs node_modules as modules.zip; expand if Setup (or a prior run) did not.
     ensureDshModulesExpanded(join(process.resourcesPath, 'dsh'))
@@ -519,6 +540,7 @@ async function startDshProcess(): Promise<string> {
   if (!existsSync(bin)) throw new Error(`未找到 dsh 入口：${bin}`)
   mkdirSync(pluginDir(), { recursive: true })
   syncPluginIntoDshHome()
+  markLaunch('dsh-spawn')
   child = spawn(node, [bin, 'web', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
     cwd: homedir(),
     env: {
@@ -529,7 +551,9 @@ async function startDshProcess(): Promise<string> {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
-  return waitForReady(child)
+  const url = await waitForReady(child)
+  markLaunch('dsh-ready')
+  return url
 }
 
 async function startDshAndShow(): Promise<void> {
@@ -597,7 +621,7 @@ async function promptUpdateAfterReady(
 ipcMain.handle('prefs:get', () => prefs)
 
 ipcMain.handle('prefs:set', (_event, raw: unknown) => {
-  prefs = parsePrefs(raw)
+  prefs = mergePrefs(prefs, raw)
   savePrefs(prefs)
   return prefs
 })
@@ -654,7 +678,9 @@ ipcMain.on('close-dialog:choice', (_event, payload: { action?: string, remember?
 
 app.whenReady().then(async () => {
   prefs = loadPrefs()
+  enableLaunchTimings(app.getPath('userData'))
   openSplash()
+  markLaunch('splash-shown')
   updateService = createUpdateService()
 
   const seedPlugin = packagedPluginRoot()

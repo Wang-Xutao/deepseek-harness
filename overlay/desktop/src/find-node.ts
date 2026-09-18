@@ -41,6 +41,22 @@ export function collectNodeCandidates(env: NodeJS.ProcessEnv, platform: NodeJS.P
 }
 
 /**
+ * Whether one binary exists and still satisfies the engines range.
+ *
+ * A remembered binary is re-checked through this rather than trusted: an
+ * in-place Node upgrade, downgrade, or replacement at the same path must fall
+ * back to the full search instead of spawning an unsupported interpreter.
+ * @param path - the binary to check.
+ * @param probe - existence and version probe, injectable for tests.
+ * @returns whether the binary is present and supported.
+ */
+export function isSupportedNodeBinary(path: string, probe: NodeProbe = defaultProbe): boolean {
+  if (path.length === 0 || !probe.exists(path)) return false
+  const version = probe.version(path)
+  return version !== undefined && isSupportedNodeVersion(version)
+}
+
+/**
  * First existing candidate whose `node -v` satisfies the harness engines range.
  */
 export function findSupportedNode(
