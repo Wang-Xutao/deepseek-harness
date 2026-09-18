@@ -7,12 +7,26 @@ import {
   BafError,
   TRANSITIONS,
   type ChangeIntake,
+  isHumanSource,
   type TerminalState,
   type TransitionRule,
   type WorkflowMode,
   type WorkflowNode,
   type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
+
+export { isHumanSource }
+
+/** Confirm edges whose transition must be human-originated (§22.15 B). */
+export const CONFIRM_EDGES = new Set<TransitionRule['id']>([
+  'T2',
+  'T3',
+  'T7',
+  'T7a',
+  'T13',
+  'T14',
+  'T16',
+])
 
 /** Transition request against a recovered status. */
 export interface TransitionRequest {

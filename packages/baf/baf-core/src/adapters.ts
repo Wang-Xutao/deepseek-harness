@@ -118,12 +118,39 @@ export interface WorkflowIdentity {
   readonly workspace: WorkspaceIdentity
 }
 
-/** Transition request. */
+/**
+ * Transition request.
+ *
+ * `evidence` is intentionally typed as `Record<string, unknown>`; the convention
+ * field `source` is documented in §22.15 B and carried by callers (slash / CLI /
+ * Tab / Tab gate-resolve / model-tool). It is not a first-class `TransitionInput`
+ * field because the value is a convention set on the wire, not a domain field
+ * the state machine depends on for anything other than the §22.15 source check.
+ */
 export interface TransitionInput {
   readonly changeId: string
   readonly from: WorkflowNode | null
   readonly to: WorkflowNode | TerminalState
   readonly evidence?: Readonly<Record<string, unknown>>
+}
+
+/**
+ * Source that originated a transition (§22.15 B). Whitelist enforced in
+ * `checkEvidence` for the confirm-edge set T2/T3/T7/T7a/T13/T14/T16:
+ * missing or `model-tool` → `gate_confirmation_required`. The four `*Human*`
+ * sources are stamped at the entry surface — see `driveGateResolve`,
+ * `Remote.transition`, and the CLI dispatch in `cmdline.ts`.
+ */
+export type TransitionSource =
+  | 'slash'
+  | 'cli'
+  | 'tab'
+  | 'gate-card'
+  | 'model-tool'
+
+/** Whether a source is human-originated (confirm-edge admissible). */
+export function isHumanSource(source: unknown): source is TransitionSource {
+  return source === 'slash' || source === 'cli' || source === 'tab' || source === 'gate-card'
 }
 
 /** Transition outcome. */

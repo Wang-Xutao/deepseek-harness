@@ -408,7 +408,7 @@ export function buildBafProgram(): Command {
   function driveCommand(
     subcommand: string,
     slash: string,
-    run: (cwd: string, rawInput: string) => Promise<CommandResult>,
+    run: (cwd: string, rawInput: string, source: 'slash' | 'cli' | 'tab' | 'gate-card' | 'model-tool') => Promise<CommandResult>,
   ): void {
     program.command(subcommand)
       .description(`${slashDesc(slash)}（与 ${slash} 同源 drive）`)
@@ -422,7 +422,7 @@ export function buildBafProgram(): Command {
           return
         }
         const raw = args.join(' ')
-        const r = toCli(await run(cwd, raw))
+        const r = toCli(await run(cwd, raw, 'cli'))
         emit(r.ok, r.text, r.ok ? 0 : 1)
       })
   }
@@ -451,6 +451,7 @@ export function buildBafProgram(): Command {
           ...(stack === undefined ? {} : { stack }),
           ...(guard === undefined ? {} : { guard }),
         },
+        source: 'cli',
       }))
       emit(r.ok, r.text, r.ok ? 0 : 1)
     })
@@ -482,7 +483,7 @@ export function buildBafProgram(): Command {
       const r = toCli(await driveVerify(cwd, raw, {
         ...(stack === undefined ? {} : { stack }),
         ...(guard === undefined ? {} : { guard }),
-      }))
+      }, 'cli'))
       emit(r.ok, r.text, r.ok ? 0 : 1)
     })
 

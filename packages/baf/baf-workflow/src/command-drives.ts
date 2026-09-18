@@ -16,6 +16,7 @@
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import {
   isBafError,
+  type TransitionSource,
   type WorkflowNode,
   type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
@@ -156,7 +157,7 @@ export function statusLines(status: WorkflowStatus): string[] {
  * @param rawInput - free-form change description.
  * @returns classification card.
  */
-export async function driveOpen(cwd: string, rawInput: string): Promise<CommandResult> {
+export async function driveOpen(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
   const description = rawInput.trim()
   if (description === '') {
     return {
@@ -210,7 +211,7 @@ export async function driveOpen(cwd: string, rawInput: string): Promise<CommandR
  * @param rawInput - subcommand plus optional key=value fields.
  * @returns result card.
  */
-export async function driveClassify(cwd: string, rawInput: string): Promise<CommandResult> {
+export async function driveClassify(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
   const args = parseArgs(rawInput)
   const store = new ProjectionStore({ workspaceRoot: cwd })
   const index = await store.readIndex()
@@ -313,7 +314,7 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
       rootCause: rootCause as string,
       affectedFiles: files,
       regressionTest: { file: test as string, command: testCmd as string },
-    })
+    }, source)
   } else {
     if (pipeline.context().baseline === undefined) {
       return {
@@ -324,7 +325,7 @@ export async function driveClassify(cwd: string, rawInput: string): Promise<Comm
         ]),
       }
     }
-    await pipeline.driveOpenStage(changeId, valueOf(args, 'title') ?? status.intake?.summary ?? changeId)
+    await pipeline.driveOpenStage(changeId, valueOf(args, 'title') ?? status.intake?.summary ?? changeId, source)
   }
   const after = await store.readStatus(changeId)
   return {
@@ -344,6 +345,7 @@ async function driveDocStage(
   cwd: string,
   rawInput: string,
   node: 'clarify' | 'design' | 'plan',
+  source: TransitionSource = 'slash',
 ): Promise<CommandResult> {
   const args = parseArgs(rawInput)
   const store = new ProjectionStore({ workspaceRoot: cwd })
@@ -435,8 +437,8 @@ function structuredDesign(changeId: string, args: ReturnType<typeof parseArgs>) 
  * @param rawInput - subcommand/fields.
  * @returns result card.
  */
-export async function driveClarify(cwd: string, rawInput: string): Promise<CommandResult> {
-  return driveDocStage('/baf-workflow-clarify', cwd, rawInput, 'clarify')
+export async function driveClarify(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
+  return driveDocStage('/baf-workflow-clarify', cwd, rawInput, 'clarify', source)
 }
 
 /**
@@ -445,8 +447,8 @@ export async function driveClarify(cwd: string, rawInput: string): Promise<Comma
  * @param rawInput - subcommand/fields.
  * @returns result card.
  */
-export async function driveDesign(cwd: string, rawInput: string): Promise<CommandResult> {
-  return driveDocStage('/baf-workflow-design', cwd, rawInput, 'design')
+export async function driveDesign(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
+  return driveDocStage('/baf-workflow-design', cwd, rawInput, 'design', source)
 }
 
 /**
@@ -455,8 +457,8 @@ export async function driveDesign(cwd: string, rawInput: string): Promise<Comman
  * @param rawInput - subcommand/fields.
  * @returns result card.
  */
-export async function drivePlan(cwd: string, rawInput: string): Promise<CommandResult> {
-  return driveDocStage('/baf-workflow-plan', cwd, rawInput, 'plan')
+export async function drivePlan(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
+  return driveDocStage('/baf-workflow-plan', cwd, rawInput, 'plan', source)
 }
 
 /**
@@ -465,7 +467,7 @@ export async function drivePlan(cwd: string, rawInput: string): Promise<CommandR
  * @param rawInput - subcommand.
  * @returns result card.
  */
-export async function driveImplement(cwd: string, rawInput: string): Promise<CommandResult> {
+export async function driveImplement(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
   const args = parseArgs(rawInput)
   const store = new ProjectionStore({ workspaceRoot: cwd })
   const index = await store.readIndex()
@@ -501,7 +503,7 @@ export async function driveImplement(cwd: string, rawInput: string): Promise<Com
       ]),
     }
   }
-  const status = await pipeline.enterImplementStage(resolution.changeId)
+  const status = await pipeline.enterImplementStage(resolution.changeId, source)
   return {
     kind: 'success',
     text: formatCommandReport(true, cardTitle('/baf-workflow-implement', `已进入实现 · 当前 ${String(status.current)}`), [
@@ -525,7 +527,7 @@ export async function driveImplement(cwd: string, rawInput: string): Promise<Com
  * @param adapters - optional stack/guard wiring from the mounted services.
  * @returns result card.
  */
-export async function driveVerify(cwd: string, rawInput: string, adapters: DriveAdapters = {}): Promise<CommandResult> {
+export async function driveVerify(cwd: string, rawInput: string, adapters: DriveAdapters = {}, source: TransitionSource = 'slash'): Promise<CommandResult> {
   const args = parseArgs(rawInput)
   const store = new ProjectionStore({ workspaceRoot: cwd })
   const index = await store.readIndex()
@@ -539,7 +541,7 @@ export async function driveVerify(cwd: string, rawInput: string, adapters: Drive
     }
   }
   const pipeline = await pipelineFor(cwd, adapters)
-  const result = await pipeline.driveVerifyStage(resolution.changeId)
+  const result = await pipeline.driveVerifyStage(resolution.changeId, new AbortController().signal, source)
   if (result.node !== 'verify') return renderDomainError('/baf-workflow-verify', new Error('unexpected drive result'))
   const rows = result.result.report.checks
     .map(row => `${row.ok ? '✓' : '✗'} ${row.name}${row.required ? '' : '（非必需）'} — ${row.diagnostics.join('; ')}`)
@@ -570,7 +572,7 @@ export async function driveVerify(cwd: string, rawInput: string, adapters: Drive
  * @param rawInput - must contain `confirm`.
  * @returns result card.
  */
-export async function driveArchive(cwd: string, rawInput: string): Promise<CommandResult> {
+export async function driveArchive(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
   const args = parseArgs(rawInput)
   if (!args.positionals.includes('confirm')) {
     return {
@@ -590,7 +592,7 @@ export async function driveArchive(cwd: string, rawInput: string): Promise<Comma
     }
   }
   const pipeline = await pipelineFor(cwd)
-  await pipeline.driveArchiveStage(resolution.changeId, true)
+  await pipeline.driveArchiveStage(resolution.changeId, true, source)
   const status = await store.readStatus(resolution.changeId)
   return {
     kind: 'success',
@@ -606,7 +608,7 @@ export async function driveArchive(cwd: string, rawInput: string): Promise<Comma
  * @param rawInput - must contain `confirm`.
  * @returns result card.
  */
-export async function driveAbandon(cwd: string, rawInput: string): Promise<CommandResult> {
+export async function driveAbandon(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
   const args = parseArgs(rawInput)
   if (!args.positionals.includes('confirm')) {
     return {
@@ -626,7 +628,7 @@ export async function driveAbandon(cwd: string, rawInput: string): Promise<Comma
     }
   }
   const pipeline = await pipelineFor(cwd)
-  await pipeline.driveAbandonStage({ changeId: resolution.changeId, humanConfirmed: true })
+  await pipeline.driveAbandonStage({ changeId: resolution.changeId, humanConfirmed: true }, source)
   const status = await store.readStatus(resolution.changeId)
   return {
     kind: 'success',
@@ -647,7 +649,7 @@ export async function driveAbandon(cwd: string, rawInput: string): Promise<Comma
  * @param rawInput - optional target node, optional `change=<id>`.
  * @returns candidate card, resume card, or the no-drift / idempotent card.
  */
-export async function driveResume(cwd: string, rawInput: string): Promise<CommandResult> {
+export async function driveResume(cwd: string, rawInput: string, source: TransitionSource = 'slash'): Promise<CommandResult> {
   const args = parseArgs(rawInput)
   const store = new ProjectionStore({ workspaceRoot: cwd })
   const index = await store.readIndex()
@@ -715,7 +717,7 @@ export async function driveResume(cwd: string, rawInput: string): Promise<Comman
     }
   }
 
-  const resumed = await pipeline.driveResumeStage(changeId, target as WorkflowNode)
+  const resumed = await pipeline.driveResumeStage(changeId, target as WorkflowNode, undefined, source)
   if (resumed.node !== 'resume') throw new Error('expected a resume drive')
   const after = await store.readStatus(changeId)
   return {
@@ -949,6 +951,7 @@ export async function driveGateResolve(
   optionId: string,
   adapters: DriveAdapters,
   resumeCandidates?: readonly WorkflowNode[],
+  source: TransitionSource = 'slash',
 ): Promise<CommandResult> {
   const spec: GateSpec | undefined = (GATE_REGISTRY as Record<string, GateSpec | undefined>)[gateId]
   if (spec === undefined) {
@@ -1000,30 +1003,32 @@ export async function driveGateResolve(
 
   // Re-dispatch the registered slash drive. We rebuild the rawInput the
   // handler would have received and call the same drive surface — no
-  // second copy of the transition logic.
+  // second copy of the transition logic. Inner drives inherit the §22.15
+  // source so every confirm edge below carries the same gate-card origin.
+  const innerSource: TransitionSource = 'gate-card'
   const invocations = [opt.command, ...(opt.args ?? [])].join(' ').trim()
   if (opt.command === '/baf-scaffold') {
     return driveScaffold(cwd, adapters, opt.args?.[0] ?? 'baf-baseline-init')
   }
   if (opt.command === '/baf-workflow-classify') {
-    return driveClassify(cwd, invocations.replace('/baf-workflow-classify', '').trim())
+    return driveClassify(cwd, invocations.replace('/baf-workflow-classify', '').trim(), innerSource)
   }
   if (opt.command === '/baf-workflow-clarify') {
-    return driveClarify(cwd, invocations.replace('/baf-workflow-clarify', '').trim())
+    return driveClarify(cwd, invocations.replace('/baf-workflow-clarify', '').trim(), innerSource)
   }
   if (opt.command === '/baf-workflow-implement') {
-    return driveImplement(cwd, invocations.replace('/baf-workflow-implement', '').trim())
+    return driveImplement(cwd, invocations.replace('/baf-workflow-implement', '').trim(), innerSource)
   }
   if (opt.command === '/baf-workflow-abandon') {
-    return driveAbandon(cwd, invocations.replace('/baf-workflow-abandon', '').trim())
+    return driveAbandon(cwd, invocations.replace('/baf-workflow-abandon', '').trim(), innerSource)
   }
   if (opt.command === '/baf-workflow-resume') {
-    return driveResume(cwd, invocations.replace('/baf-workflow-resume', '').trim())
+    return driveResume(cwd, invocations.replace('/baf-workflow-resume', '').trim(), innerSource)
   }
   if (opt.command === '/baf-go') {
     // §18 coordinator — gates A/B re-fire through the same surface the
     // slash handler uses; no separate drive needed.
-    return driveGo({ cwd, adapters, rawInput: invocations.replace('/baf-go', '').trim() })
+    return driveGo({ cwd, adapters, rawInput: invocations.replace('/baf-go', '').trim(), source: innerSource })
   }
   return {
     kind: 'error',

@@ -11,6 +11,7 @@ import {
   type TerminalState,
   type TransitionInput,
   type TransitionResult,
+  type TransitionSource,
   type WorkflowIdentity,
   type WorkflowNode,
   type WorkflowService,
@@ -101,10 +102,12 @@ async function applyAcceptedTransition(
   evidence: Readonly<Record<string, unknown>> | undefined,
 ): Promise<WorkflowStatus> {
   let version = status.projectionVersion
+  const source = readSource(evidence)
 
   if (to === 'abandoned') {
     const { status: next } = await store.append(status.changeId, version, meta => ({
       type: 'change-abandoned',
+      ...(source === undefined ? {} : { source }),
       ...meta,
     }))
     return next
@@ -113,6 +116,7 @@ async function applyAcceptedTransition(
   if (to === 'completed') {
     const { status: next } = await store.append(status.changeId, version, meta => ({
       type: 'change-archived',
+      ...(source === undefined ? {} : { source }),
       ...meta,
     }))
     return next
@@ -142,9 +146,18 @@ async function applyAcceptedTransition(
     type: 'stage-entered',
     node: to,
     ...(typeof evidence?.cause === 'string' ? { cause: evidence.cause } : {}),
+    ...(source === undefined ? {} : { source }),
     ...meta,
   }))
   return next
+}
+
+/** Read the optional `source` field from evidence (convention, §22.15 B). */
+function readSource(evidence: Readonly<Record<string, unknown>> | undefined): TransitionSource | undefined {
+  const value = evidence?.source
+  return value === 'slash' || value === 'cli' || value === 'tab' || value === 'gate-card' || value === 'model-tool'
+    ? value
+    : undefined
 }
 
 /**

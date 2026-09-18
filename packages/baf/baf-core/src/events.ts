@@ -6,6 +6,7 @@
 import type { ChangeIntake } from './intake.ts'
 import type { BaselineLock } from './workflow.ts'
 import type { TerminalState, WorkflowNode } from './workflow.ts'
+import type { TransitionSource } from './adapters.ts'
 
 /** Common envelope fields on every projection event. */
 export interface ProjectionEventBase {
@@ -25,7 +26,7 @@ export type ProjectionEvent =
   | (ProjectionEventBase & { type: 'intake-classified'; intake: ChangeIntake })
   | (ProjectionEventBase & { type: 'intake-confirmed'; by: 'user' | 'rule' })
   | (ProjectionEventBase & { type: 'baseline-locked'; lock: BaselineLock })
-  | (ProjectionEventBase & { type: 'stage-entered'; node: WorkflowNode; cause?: string })
+  | (ProjectionEventBase & { type: 'stage-entered'; node: WorkflowNode; cause?: string; source?: TransitionSource })
   | (ProjectionEventBase & { type: 'stage-completed'; node: WorkflowNode; artifacts: string[] })
   | (ProjectionEventBase & { type: 'stage-failed'; node: WorkflowNode; reason: string })
   | (ProjectionEventBase & { type: 'drift-detected'; node: WorkflowNode; cause: string })
@@ -40,8 +41,8 @@ export type ProjectionEvent =
     type: 'awaiting-confirm'
     gate: ConfirmGate
   })
-  | (ProjectionEventBase & { type: 'change-archived' })
-  | (ProjectionEventBase & { type: 'change-abandoned' })
+  | (ProjectionEventBase & { type: 'change-archived'; source?: TransitionSource })
+  | (ProjectionEventBase & { type: 'change-abandoned'; source?: TransitionSource })
   | (ProjectionEventBase & {
     type: 'transition-rejected'
     from: WorkflowNode | null

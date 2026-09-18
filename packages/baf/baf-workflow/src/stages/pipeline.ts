@@ -11,6 +11,7 @@ import {
   type BaselineManifest,
   type GuardPolicy,
   type StackAdapter,
+  type TransitionSource,
   type WorkflowStatus,
   type WorkflowNode,
 } from '@deepseek-ai/dsh-baf-core'
@@ -161,7 +162,7 @@ export class StagePipeline {
    * @param title - change title.
    * @returns drive result.
    */
-  async driveOpenStage(changeId: string, title: string): Promise<DriveResult> {
+  async driveOpenStage(changeId: string, title: string, source?: TransitionSource): Promise<DriveResult> {
     // Preconditions (Git/baseline/OpenSpec probe) run before any projection
     // write so a blocked open leaves the change at intake with only a
     // transition-rejected audit event.
@@ -190,7 +191,7 @@ export class StagePipeline {
         )
       }
     }
-    const status = await this.enterStage(changeId, 'open')
+    const status = await this.enterStage(changeId, 'open', undefined, undefined, source)
     const result = await driveOpen(this.ctx, changeId, title)
     // Lock the baseline + source revision the moment open succeeds so drift
     // detection can compare against immutable anchors for the rest of the chain.
@@ -223,7 +224,7 @@ export class StagePipeline {
    * @param input - bug fields (problem/root cause/regression test/scope).
    * @returns drive result.
    */
-  async driveFastPathOpenStage(input: FastPathBugInput): Promise<DriveResult> {
+  async driveFastPathOpenStage(input: FastPathBugInput, source?: TransitionSource): Promise<DriveResult> {
     const pre = await this.store.readStatus(input.changeId)
     if (pre.mode !== 'bug-fast-path') {
       await this.recordRejectionQuiet(input.changeId, pre, 'open', 'invalid_transition')
@@ -233,7 +234,7 @@ export class StagePipeline {
         { changeId: input.changeId },
       )
     }
-    const status = await this.enterStage(input.changeId, 'open')
+    const status = await this.enterStage(input.changeId, 'open', undefined, undefined, source)
     const result = await driveFastPathOpen(this.ctx, input)
     // Same anchor discipline as full-go open: lock the baseline + revision
     // when both are observable; a missing revision only warns (recorded in
@@ -295,8 +296,8 @@ export class StagePipeline {
    * @param input - plan fields.
    * @returns drive result.
    */
-  async drivePlanStage(input: PlanInput): Promise<DriveResult> {
-    const status = await this.enterStage(input.changeId, 'plan')
+  async drivePlanStage(input: PlanInput, source?: TransitionSource): Promise<DriveResult> {
+    const status = await this.enterStage(input.changeId, 'plan', undefined, undefined, source)
     const result = await drivePlan(this.ctx, input)
     await this.completeStage(input.changeId, 'plan', result.artifacts)
     return { node: 'plan', result, status }
@@ -311,14 +312,14 @@ export class StagePipeline {
    * @param changeId - change id.
    * @returns status after entering implement.
    */
-  async enterImplementStage(changeId: string): Promise<WorkflowStatus> {
+  async enterImplementStage(changeId: string, source?: TransitionSource): Promise<WorkflowStatus> {
     const pre = await this.readCurrent(changeId)
     if (pre.mode === 'bug-fast-path') {
       return this.enterStage(changeId, 'implement', {
         rootCauseRecorded: await rootCauseRecorded(this.ctx.workspace.root, changeId),
-      })
+      }, undefined, source)
     }
-    return this.enterStage(changeId, 'implement')
+    return this.enterStage(changeId, 'implement', undefined, undefined, source)
   }
 
   /**
@@ -429,8 +430,12 @@ export class StagePipeline {
    * @returns status after entering the node.
    * @throws {BafError} invalid_transition when the entry edge is illegal.
    */
-  async beginDocStage(changeId: string, node: 'clarify' | 'design' | 'plan'): Promise<WorkflowStatus> {
-    await this.enterStage(changeId, node)
+  async beginDocStage(
+    changeId: string,
+    node: 'clarify' | 'design' | 'plan',
+    source?: TransitionSource,
+  ): Promise<WorkflowStatus> {
+    await this.enterStage(changeId, node, undefined, undefined, source)
     if (node === 'clarify') {
       await writeArtifact(this.ctx.workspace.root, changeId, ARTIFACT_FILES.clarify, renderClarifyBody({
         changeId, questions: [], acceptanceCriteria: [],
@@ -462,6 +467,7 @@ export class StagePipeline {
   async driveVerifyStage(
     changeId: string,
     signal: AbortSignal = new AbortController().signal,
+    source?: TransitionSource,
   ): Promise<DriveResult> {
     const status = await this.enterStage(changeId, 'verify')
     const result = await driveVerify(this.ctx, changeId, signal)
@@ -477,7 +483,12 @@ export class StagePipeline {
         const { status: returned } = await this.store.append(
           changeId,
           statusAfterFail.projectionVersion,
-          meta => ({ type: 'stage-entered', node: 'implement', ...meta }),
+          meta => ({
+            type: 'stage-entered',
+            node: 'implement',
+            ...(source === undefined ? {} : { source }),
+            ...meta,
+          }),
         )
         return { node: 'verify', result, status: returned }
       }
@@ -493,12 +504,17 @@ export class StagePipeline {
    * @param humanConfirmed - explicit user confirmation.
    * @returns drive result.
    */
-  async driveArchiveStage(changeId: string, humanConfirmed: boolean): Promise<DriveResult> {
+  async driveArchiveStage(
+    changeId: string,
+    humanConfirmed: boolean,
+    source?: TransitionSource,
+  ): Promise<DriveResult> {
     // T10 requires the verify gate's machine evidence, not narration.
-    await this.enterStage(changeId, 'archive', { checksPassed: true })
+    await this.enterStage(changeId, 'archive', { checksPassed: true }, undefined, source)
     const result = await driveArchive(this.ctx, changeId, humanConfirmed)
     const { status: final } = await this.store.append(changeId, result.status.projectionVersion, meta => ({
       type: 'change-archived',
+      ...(source === undefined ? {} : { source }),
       ...meta,
     }))
     return { node: 'archive', result, status: final }
@@ -562,6 +578,7 @@ export class StagePipeline {
     changeId: string,
     target: WorkflowNode,
     observation?: DriftObservation,
+    source?: TransitionSource,
   ): Promise<DriveResult> {
     const options = await this.resumeOptions(changeId, observation)
     const { status } = options
@@ -585,7 +602,7 @@ export class StagePipeline {
     const cause = primary === undefined
       ? `drift-resume: ${options.anchor} → ${target}`
       : `drift-resume: ${options.anchor} → ${target} (${primary.trigger})`
-    const entered = await this.enterStage(changeId, target, undefined, cause)
+    const entered = await this.enterStage(changeId, target, undefined, cause, source)
     const result: ResumeStageResult = {
       target,
       anchor: options.anchor,
@@ -601,8 +618,9 @@ export class StagePipeline {
    * @param options - change id and human confirmation.
    * @returns drive result.
    */
-  async driveAbandonStage(options: AbandonOptions): Promise<DriveResult> {
-    const result = await driveAbandon(this.ctx, options)
+  async driveAbandonStage(options: AbandonOptions, source?: TransitionSource): Promise<DriveResult> {
+    const merged: AbandonOptions = source === undefined ? options : { ...options, source }
+    const result = await driveAbandon(this.ctx, merged)
     return { node: 'abandon', result, status: result.status }
   }
 
@@ -638,6 +656,7 @@ export class StagePipeline {
     to: WorkflowNode,
     evidence?: Readonly<Record<string, unknown>>,
     cause?: string,
+    source?: TransitionSource,
   ): Promise<WorkflowStatus> {
     const status = await this.store.readStatus(changeId)
     // Idempotent resume: the node is already in-progress (e.g. clarify was
@@ -660,6 +679,7 @@ export class StagePipeline {
       type: 'stage-entered',
       node: to,
       ...(cause === undefined ? {} : { cause }),
+      ...(source === undefined ? {} : { source }),
       ...meta,
     }))
     return next

@@ -26,6 +26,7 @@ import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import {
   isBafError,
   type ConfirmGate,
+  type TransitionSource,
   type WorkflowNode,
   type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
@@ -71,6 +72,8 @@ export interface GoInput {
   readonly adapters?: DriveAdapters
   /** Session focus cache; omitted in CLI/test contexts (no session). */
   readonly focus?: FocusStore
+  /** Origin of the drive (§22.15 B convention). */
+  readonly source?: TransitionSource
 }
 
 /** One row of the projection index, as far as routing cares. */
@@ -118,7 +121,7 @@ export async function driveGo(input: GoInput): Promise<CommandResult> {
     if (focused === undefined && actives.length === 0 && explicit === undefined
       && requirement !== '') {
       const before = new Set(actives.map(c => c.changeId))
-      const card = await driveOpen(cwd, requirement)
+      const card = await driveOpen(cwd, requirement, input.source ?? 'slash')
       input.focus?.set(await mintedChange(store, before))
       return card
     }
@@ -135,7 +138,14 @@ export async function driveGo(input: GoInput): Promise<CommandResult> {
     input.focus?.set(binding.changeId)
 
     const pipeline = await pipelineFor(cwd, input.adapters ?? {})
-    return await route({ cwd, store, pipeline, changeId: binding.changeId, resumeTarget })
+    return await route({
+      cwd,
+      store,
+      pipeline,
+      changeId: binding.changeId,
+      resumeTarget,
+      source: input.source ?? 'slash',
+    })
   } catch (error) {
     return renderDomainError('/baf-go', error)
   }
@@ -273,8 +283,9 @@ async function route(context: {
   readonly pipeline: StagePipeline
   readonly changeId: string
   readonly resumeTarget: WorkflowNode | undefined
+  readonly source: TransitionSource
 }): Promise<CommandResult> {
-  const { cwd, store, pipeline, changeId, resumeTarget } = context
+  const { cwd, store, pipeline, changeId, resumeTarget, source } = context
   const status = await store.readStatus(changeId)
   const at = (n: WorkflowNode): string | undefined => status.nodes[n]
   // `status.current` is already a `WorkflowNode`; the local exists to give the
@@ -293,7 +304,7 @@ async function route(context: {
   // Auto-picking it would silently invalidate completed work.
   if (node === 'drift') {
     const forward = resumeTarget === undefined ? '' : ` ${resumeTarget}`
-    return driveResume(cwd, `change=${changeId}${forward}`)
+    return driveResume(cwd, `change=${changeId}${forward}`, source)
   }
 
   switch (node) {
@@ -303,23 +314,23 @@ async function route(context: {
       // only replays it, because §18.2 reserves "baf-go means confirm" for the
       // two gates, not for intake.
       if (status.intake?.confirmation !== 'confirmed') {
-        return driveClassify(cwd, `change=${changeId}`)
+        return driveClassify(cwd, `change=${changeId}`, source)
       }
       // Confirmed but never opened: no customer decision is pending — every
       // other surface treats confirm + open as one action, so finish it here
       // rather than asking the customer to retype the command.
-      return driveClassify(cwd, `confirm change=${changeId}`)
+      return driveClassify(cwd, `confirm change=${changeId}`, source)
     }
 
     case 'open': {
       if (status.mode === 'bug-fast-path') {
-        const next = await pipeline.enterImplementStage(changeId)
+        const next = await pipeline.enterImplementStage(changeId, source)
         return successCard('已进入 implement', [
           { title: '状态', lines: statusLines(next) },
           { title: '纪律', lines: ['先补回归测试，再改代码', '只允许 plan.json allowlist 内文件'] },
         ])
       }
-      const next = await pipeline.beginDocStage(changeId, 'clarify')
+      const next = await pipeline.beginDocStage(changeId, 'clarify', source)
       return successCard('clarify 已进入 · 模板已装', [
         { title: '状态', lines: statusLines(next) },
         {
@@ -330,9 +341,9 @@ async function route(context: {
     }
 
     case 'clarify': {
-      const prep = await prepareDoc(pipeline, changeId, 'clarify', at('clarify'))
+      const prep = await prepareDoc(pipeline, changeId, 'clarify', at('clarify'), source)
       if (prep.kind === 'card') return prep.card
-      const next = await pipeline.beginDocStage(changeId, 'design')
+      const next = await pipeline.beginDocStage(changeId, 'design', source)
       return successCard('clarify 已裁决通过 · design 已进入', [
         { title: '状态', lines: statusLines(next) },
         { title: '接下来', lines: ['模型填 design.md，填完敲 /baf-go'] },
@@ -340,7 +351,7 @@ async function route(context: {
     }
 
     case 'design': {
-      const prep = await prepareDoc(pipeline, changeId, 'design', at('design'))
+      const prep = await prepareDoc(pipeline, changeId, 'design', at('design'), source)
       if (prep.kind === 'card') return prep.card
       // **Gate A** (§18.5). The unlock is the customer typing `baf-go` once
       // more, observed as the matching `awaiting-confirm` at the log tail.
@@ -351,7 +362,7 @@ async function route(context: {
         // `kind: 'error'` so the surface still renders it as a stop.
         return renderGate('design-confirm', { cwd, changeId })
       }
-      const next = await pipeline.beginDocStage(changeId, 'plan')
+      const next = await pipeline.beginDocStage(changeId, 'plan', source)
       return successCard('门 A 已确认 · plan 已进入', [
         { title: '状态', lines: statusLines(next) },
         { title: '接下来', lines: ['模型填 plan.md / plan.json，填完敲 /baf-go'] },
@@ -359,9 +370,9 @@ async function route(context: {
     }
 
     case 'plan': {
-      const prep = await prepareDoc(pipeline, changeId, 'plan', at('plan'))
+      const prep = await prepareDoc(pipeline, changeId, 'plan', at('plan'), source)
       if (prep.kind === 'card') return prep.card
-      const next = await pipeline.enterImplementStage(changeId)
+      const next = await pipeline.enterImplementStage(changeId, source)
       return successCard('plan 已裁决通过 · implement 已进入', [
         { title: '状态', lines: statusLines(next) },
         {
@@ -372,7 +383,7 @@ async function route(context: {
     }
 
     case 'implement': {
-      if (at('implement') === 'completed') return driveVerifyNow(cwd, store, pipeline, changeId)
+      if (at('implement') === 'completed') return driveVerifyNow(cwd, store, pipeline, changeId, source)
       const ledger = await readLedger(cwd, changeId)
       const gate = await implementGate(
         {
@@ -416,11 +427,11 @@ async function route(context: {
           },
         ])
       }
-      return driveVerifyNow(cwd, store, pipeline, changeId)
+      return driveVerifyNow(cwd, store, pipeline, changeId, source)
     }
 
     case 'verify': {
-      if (at('verify') !== 'completed') return driveVerifyNow(cwd, store, pipeline, changeId)
+      if (at('verify') !== 'completed') return driveVerifyNow(cwd, store, pipeline, changeId, source)
       // **Gate B** (§18.5) — archiving is the customer's call, not the
       // coordinator's. Same unlock rule as gate A.
       if (!(await gateUnlocked(store, changeId, 'verify-to-archive'))) {
@@ -428,7 +439,7 @@ async function route(context: {
         // §22.14-D: render the registered §22 card verbatim.
         return renderGate('verify-archive', { cwd, changeId })
       }
-      const driven = await pipeline.driveArchiveStage(changeId, true)
+      const driven = await pipeline.driveArchiveStage(changeId, true, source)
       if (driven.node !== 'archive') throw new Error(`expected an archive drive, got ${driven.node}`)
       const after = await store.readStatus(changeId)
       return successCard('门 B 已确认 · 已归档', [
@@ -441,7 +452,7 @@ async function route(context: {
     case 'archive': {
       // Only reachable when an earlier archive attempt entered the node but
       // did not finish (e.g. the atomic move failed).
-      const driven = await pipeline.driveArchiveStage(changeId, true)
+      const driven = await pipeline.driveArchiveStage(changeId, true, source)
       if (driven.node !== 'archive') throw new Error(`expected an archive drive, got ${driven.node}`)
       const after = await store.readStatus(changeId)
       return successCard('已归档', [
@@ -478,10 +489,11 @@ async function prepareDoc(
   changeId: string,
   node: 'clarify' | 'design' | 'plan',
   nodeStatus: string | undefined,
+  source: TransitionSource,
 ): Promise<{ kind: 'completed' } | { kind: 'card'; card: CommandResult }> {
   if (nodeStatus === 'completed') return { kind: 'completed' }
   if (nodeStatus !== 'in-progress') {
-    const next = await pipeline.beginDocStage(changeId, node)
+    const next = await pipeline.beginDocStage(changeId, node, source)
     return {
       kind: 'card',
       card: successCard(`${node} 已进入 · 模板已装`, [
@@ -528,8 +540,9 @@ async function driveVerifyNow(
   store: ProjectionStore,
   pipeline: StagePipeline,
   changeId: string,
+  source: TransitionSource,
 ): Promise<CommandResult> {
-  const driven = await pipeline.driveVerifyStage(changeId)
+  const driven = await pipeline.driveVerifyStage(changeId, new AbortController().signal, source)
   if (driven.node !== 'verify') throw new Error(`expected a verify drive, got ${driven.node}`)
   const rows = driven.result.report.checks.map(
     row => `${row.ok ? '✓' : '✗'} ${row.name}${row.required ? '' : '（非必需）'}`,
@@ -546,7 +559,7 @@ async function driveVerifyNow(
     ])
   }
   // Verify passed → re-route so gate B owns the next move (single source).
-  return route({ cwd, store, pipeline, changeId, resumeTarget: undefined })
+  return route({ cwd, store, pipeline, changeId, resumeTarget: undefined, source })
 }
 
 /**

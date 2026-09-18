@@ -11,7 +11,7 @@
  * @module @deepseek-ai/dsh-baf-workflow/stages/abandon
  */
 
-import { BafError, type WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
+import { BafError, type TransitionSource, type WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
 import type { StageContext } from './context.ts'
 
 /** Result of a successful abandon drive. */
@@ -26,6 +26,8 @@ export interface AbandonOptions {
   readonly changeId: string
   /** Explicit user confirmation (T16 evidence). */
   readonly humanConfirmed: boolean
+  /** Origin of the drive (§22.15 B convention). */
+  readonly source?: TransitionSource
 }
 
 /**
@@ -59,6 +61,7 @@ export async function driveAbandon(
   }
   const { status: next } = await ctx.store.append(options.changeId, status.projectionVersion, meta => ({
     type: 'change-abandoned',
+    ...(options.source === undefined ? {} : { source: options.source }),
     ...meta,
   }))
   return { status: next, recorded: true }

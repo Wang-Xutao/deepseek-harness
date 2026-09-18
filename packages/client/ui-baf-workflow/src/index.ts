@@ -141,13 +141,20 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     const { store } = await this.contextFor(request.sessionId)
     const service = createWorkflowService({ store })
     const status = await store.readStatus(request.changeId)
+    // §22.15 B: the host is the source-of-truth for the source field. Any
+    // value the client forwards in `request.evidence.source` is overwritten
+    // — the Tab is the entry surface for every interactive confirm edge.
+    const hostEvidence: Readonly<Record<string, unknown>> = {
+      ...(request.evidence ?? {}),
+      source: 'tab',
+    }
     await this.guardDomain(() => service.transition({
       changeId: request.changeId,
       from: status.current === 'completed' || status.current === 'abandoned'
         ? null
         : status.current,
       to: request.to,
-      ...(request.evidence === undefined ? {} : { evidence: request.evidence }),
+      evidence: hostEvidence,
     }))
     return buildWorkflowTabView(store, request.changeId)
   }
@@ -173,7 +180,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       return buildWorkflowTabView(store, request.changeId, options)
     }
     const pipeline = await pipelineFor(cwd)
-    await this.guardDomain(() => pipeline.driveResumeStage(request.changeId, target))
+    await this.guardDomain(() => pipeline.driveResumeStage(request.changeId, target, undefined, 'tab'))
     return buildWorkflowTabView(store, request.changeId, options)
   }
 
@@ -247,6 +254,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
           ...(scaffoldAdapter === undefined ? {} : { scaffold: scaffoldAdapter }),
         },
         resumeCandidates,
+        'gate-card',
       ),
     )
     const changeId = request.changeId ?? await this.resolveActiveChangeId(store)
