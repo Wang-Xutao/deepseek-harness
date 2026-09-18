@@ -2997,8 +2997,8 @@ input: { gateId: string }            // 仅此一参
 | --- | --- | --- |
 | **P0**（✅ 已落地，即 Phase 8.11） | `gate-cards.ts` 注册表 + 渲染；`/baf-scaffold` slash + `baf scaffold` CLI + `driveScaffold`（adapter 注入）；section / SKILL 第 4 条规则（过渡措辞） | `gate-cards.spec.ts`（注册表快照 / 未知 gateId 拒绝 / 渲染含选项原文）；`drive-scaffold.spec.ts` |
 | **P1**（Tab 交互 + 全部 ask 面，Phase 8.12，详设 §22.14）✅ | tab-view 门卡字段扩展（`gateId/question/options` + `pendingGate`）+ `driveGateResolve`（注册表派发，Remote 唯一解析面）+ `BafWorkflowTabRemote.gateResolve` + WorkflowView 按钮 + go-coordinator/session-gate 自动弹注册表卡 + `baf_gate_ask` 工具 | `surface-parity` 增加 `gateResolve` + `driveGateResolve` Remote-only 哨兵；`session-gate.spec` 欢迎卡补基线缺失/在场分支；`go.spec` 门 A 改查注册表标题 |
-| **P2**（机械强制，Phase 8.13，详设 §22.15） | evidence.source 白名单 + confirm 门校验；guard `protectedPaths` 内置恒生效 | `transition.spec`：model-tool / 缺失 source 推 confirm 门 → 拒绝值；`tool-guard.spec`：写 `.baf/**` 被拦 |
-| **P3**（完善收口，Phase 8.14，详设 §22.16） | 审计行、i18n key 冻结、resume 动态选项收口、E2E 验收流、文档交叉引用核对 | 全量 + 文档 |
+| **P2**（机械强制，Phase 8.13，详设 §22.15）✅ | evidence.source 白名单 + confirm 门校验；guard `protectedPaths` 内置恒生效（`BAF_CONTROLLED_PATHS` = `.baf/**` / `openspec/**`，详见 §22.15 D）；T14/T16 旁路 decideTransition 时也走源守卫；enterStage 把 source 透传进 evidence 让 checkEvidence 看见 | `transition.spec.ts` (38 用例：7 confirm 边 × 6 source × control T4)；`tool-guard.spec` 增 `openspec/**` + `.baf/baseline.yml` 拒写用例；`stage` 系列补 source stamp；`policy.ts` 导出 `BAF_CONTROLLED_PATHS` |
+| **P3**（完善收口，Phase 8.14，详设 §22.16）✅ | 审计行（driveGateResolve `opts.audit` → `[baf] ... session baf:gate gateId=… option=… change=… source=… baseline=…`）；i18n 键冻结（zh = §22 GATE_REGISTRY 原文逐字；en 翻译；领域层渲染不切键，文档记「已冻结、可一次性切换」）；resume 动态选项 `candidates[0] === anchor` 钉死；E2E 验收流 `e2e-acceptance.spec`；Remote 源覆写 + 审计接线 `remote-source.spec` | `gate-i18n.spec`（zh 与 GATE_REGISTRY 逐字节对齐 + en 非空）；`e2e-acceptance.spec`（driveGateResolve 审计行 + 字段）；`remote-source.spec`（service.transition source 覆写 + 审计回调 + 沉默路径）；`resume.spec` 加 anchor pin |
 
 ### 22.13 两个明确取舍（通俗版）
 
@@ -3071,6 +3071,7 @@ interface BafWorkflowGateResolveRequest {
 ### 22.15 P2 完整设计（机械强制 · Phase 8.13）
 
 > 目标：把 §22.1 不变式 3 从「规则约束」变成「校验拒绝」。两条硬防线：转换层 source 白名单（第二防线）+ guard protectedPaths（第三防线）。
+> §22.15 已落地（commit `feat(baf): P2-C1 打点` → `P2-C2 confirm 边 source 白名单 + guard 内置受控路径`），下面记 as-built 收紧项。
 
 #### A. confirm 类转换的精确规则集（以 §5.2 TRANSITIONS 表为准）
 
@@ -3080,6 +3081,8 @@ interface BafWorkflowGateResolveRequest {
 
 - `TransitionInput.evidence` 增加约定字段 `source: 'slash' | 'cli' | 'tab' | 'gate-card' | 'model-tool'`，**由各宿主入口写死**（evidence 是服务端收到的对象，模型无法经工具参数注入）。
 - [transition.ts](packages/baf/baf-workflow/src/transition.ts) `checkEvidence`：上述七条 confirm 边遇 `source === 'model-tool'` **或 source 缺失** → 拒绝值 `gate_confirmation_required`（refusal-as-value，非异常）。
+- **as-built**：发现并修了一处 C1 留下的失防 — pipeline `enterStage` 之前只把 `source` 盖到 `stage-entered` 事件下游、却没合并进 `decideTransition` 的 evidence，导致 checkEvidence 永远读不到 source、每条 confirm 边都被 C2 错拒。C2 把 `enterStage` 改为 `evidence = { ...evidence, ...(source ? { source } : {}) }`，并 T14/T16 旁路 decideTransition 时各自加直接 `isHumanSource` 守卫（拒绝文案含「走 /baf-* drive」指引）。
+- **source 顺序**：driveAbandon (T16) 把源检查放到 humanConfirmed 检查**之前**，以便「缺源 + 缺确认」只暴露上游错误。
 
 #### C. 打点清单（与校验同批落地——漏一处即客户操作被误拒，这是 P2 最大回归面）
 
@@ -3091,7 +3094,9 @@ interface BafWorkflowGateResolveRequest {
 | Remote `gateResolve`（P1 新增） | `'gate-card'` |
 | `baf_stage_*` 模型工具（若/当注册，见 D） | 宿主包装写死 `'model-tool'` |
 
-实施顺序：**先加全部打点（不开校验）跑全量测试 → 再开校验**；两步可拆两个 commit 便于二分定位。
+**as-built 默认源策略 = 混合式**：drive 层（command-drives.ts）每个公开方法默认 `source: TransitionSource = 'slash'`；pipeline 层方法 `source?: TransitionSource` 可选无默认（confirm 边缺失即拒——留给 C2 的后备防线）。覆盖点只有 cmdline（`'cli'`）/ Remote（`'tab'` / `'gate-card'`）。
+
+实施顺序：**先加全部打点（不开校验）跑全量测试 → 再开校验**；两步可拆两个 commit 便于二分定位（C1 / C2 两次提交）。
 
 #### D. `baf_stage_*` 现状事实（设计输入）
 
@@ -3100,12 +3105,14 @@ interface BafWorkflowGateResolveRequest {
 #### E. guard protectedPaths 内置恒生效（存量兼容的正确解法）
 
 - [baf-guard](packages/baf/baf-guard) 代码内置 `BAF_CONTROLLED_PATHS = ['.baf/**', 'openspec/**']`，**无论基线写什么恒生效**；基线 `protectedPaths` 只可在其上**增收**，不可减少这两条（收紧单向）。
+- **as-built 放置点**：`BAF_CONTROLLED_PATHS` 检查**只**放在 [`adjudicateFsWrite`](packages/baf/baf-guard/src/policy.ts) — change-dir 放行之后、implement allowlist 之前。**不放**进 `adjudicateStructuralPath`，因为 verify 时的 `GuardPolicy.check('verify', …)` 会扫历史 touched 集，其中合法的 openspec change-dir 工件不能误伤。
 - baseline.schema.yaml 默认值 + scaffold 模板同步更新，仅为文档一致性（不再承担保护职责）。
 - **合法写入不受影响的根据**：clarify/design/plan 阶段产物由宿主 pipeline（drive stage handler）写盘，不经 guard；guard 只拦模型工具写。模型在任何阶段直写 `.baf/**` / `openspec/**` → 工具层拒绝卡 + 指引走 drive。
 
 #### F. 测试清单
 
-`transition.spec`：七条 confirm 边 × `{model-tool, 缺失, slash, cli, tab, gate-card}` 矩阵（合法放行 / 非法拒绝值 `gate_confirmation_required`）；非 confirm 边（T4 等）无 source 照常放行。`tool-guard.spec`：写 `.baf/baseline.yml`、`openspec/changes/x/design.md` 被拦；基线增收路径仍拦；基线试图减少内置路径被拒。既有 transition / go / drives 测试补 source 打点断言；fixture 更新（内置路径对旧基线也生效后，个别直写 fixture 的用例改宿主写或显式豁免）。
+`transition.spec`：七条 confirm 边 × `{model-tool, 缺失, slash, cli, tab, gate-card}` 矩阵（合法放行 / 非法拒绝值 `gate_confirmation_required`）；非 confirm 边（T4 等）无 source 照常放行。**as-built**: `transition.spec.ts` 38 用例 — 7 confirm 边 × 6 source + T4 control + CONFIRM_EDGES 集合锁。
+`tool-guard.spec`：写 `.baf/baseline.yml`、`openspec/changes/x/design.md` 被拦；基线增收路径仍拦；基线试图减少内置路径被拒。既有 transition / go / drives 测试补 source 打点断言；fixture 更新（内置路径对旧基线也生效后，个别直写 fixture 的用例改宿主写或显式豁免）。
 
 #### G. 风险与对策
 
@@ -3115,31 +3122,43 @@ interface BafWorkflowGateResolveRequest {
 | 事件回放 / 投影重建路径构造 TransitionInput 无 source → 误拒 | replay 构造处显式置 `'slash'`（历史事件本就源自人因入口）；**不**按 projectionVersion 分界——保持规则无时间例外 |
 | 内置路径影响存量测试 fixture | 测试清单 F 已列；一次性迁移，CI 兜底 |
 | guard 错误信息未指引出路 | 拒绝卡文案带「走 /baf-* drive」指引（与 §5.6 唯一动作规则同文） |
+| **enterStage 源未透传给 decideTransition（C1 失防）** | C2 显式合并进 evidence；T14/T16 直接源守卫兜底 |
 
 ### 22.16 P3 完整设计（审计、i18n、E2E 收口 · Phase 8.14）
 
+> §22.16 已落地（commit `feat(baf): P3 收口`），下面记 as-built 收紧项。
+
 #### A. 审计行（§20.4 体系）
 
-- 门 resolve 成功记一行：`[baf] <ISO8601> - session baf:gate gateId=<id> option=<optId> change=<id|-> source=<src> baseline=<id>`；`__noop__` 取消不记（无状态变更）。
-- projection evidence 增 `gateId` / `optionId` / `source` 字段——evidence 是 `Record<string, unknown>`，无 schema 破坏；消费方：审计导出、`listChanges` 展示、复盘工具。
+- 门 resolve 派发后、验证通过后记一行：`[baf] <ISO8601> - session baf:gate gateId=<id> option=<optId> change=<id|-> source=<src> baseline=<id|->`；`__noop__` 取消不记（无状态变更）。
+- 实施位：[command-drives.ts `driveGateResolve`](packages/baf/baf-workflow/src/command-drives.ts) 增可选 `opts?: { changeId?, audit?: (line: string) => void }`；`baseline` 经 `loadWorkspaceBaseline(cwd)` 懒读（失败即 `-`）。
+- Remote 接线：[BafWorkflowTabRemote.gateResolve](packages/client/ui-baf-workflow/src/index.ts) 把 `audit` 接到 `this.ctx.logger.info`，`__noop__` 路径不调 audit（已记 dismissed 替代）。
+- 事件证据 vs 审计行：门卡 `gateId`/`optionId` 只进审计行、**不**进 projection 事件 —— `awaiting-confirm` 事件已带 gate；事件是事实记录、审计行是运营仪表盘的输入。
+- 测试：`e2e-acceptance.spec` 校验行格式（ISO8601 + `session baf:gate gateId=… option=… change=… source=gate-card`）；`remote-source.spec` 校验 Remote 路径 + service.transition source 覆写。
 
 #### B. i18n key 冻结（§20.7 体系；Phase 8.10 已建 `ui-baf-workflow` 字典）
 
 - key 规范：`gate.<gateId>.title` / `gate.<gateId>.question` / `gate.<gateId>.option.<optId>`；注册表 label 改存 key，zh 文案为 fallback 源；会话卡 / Tab / CLI 三端读同一字典。
 - 既有 `GATE_ACTION_KEY` 两个 key（`gate.confirmIntoPlan` / `gate.confirmArchive`）并入同一前缀命名。
-- **一次性切换** + 快照测试锁文案（避免迁移期字面量与 key 并存漂移）。
+- **本次实施**：注册 + 快照冻结（zh 与 GATE_REGISTRY 逐字节对齐；en 翻译；**领域层渲染不切键** —— GATE_REGISTRY 仍是 single source of truth，字典是 1:1 镜像）。一次性切换留给后续 P0——切键工作面是 §20.7 全量 i18n 切换（不在 §22.16 范围）。
+- 测试：[`gate-i18n.spec.ts`](packages/client/ui-baf-workflow/tests/gate-i18n.spec.ts) 注册表 ↔ zh 字典逐字节锁。
 
 #### C. resume 动态选项收口
 
 candidates 排序 latest-first、index 0 为推荐默认（对齐 `WorkflowTabResume` 语义）；anchor 标注已在 P0 `renderGateCard` 实现；Tab 动态按钮 = `gateResolve(gateId='resume', optionId='resume-<node>')`（P1 通道）。
 
-#### D. E2E 验收流（apps/web 既有基建）
+本次实施：`resume.spec` 加 `expect(options.candidates[0]).toBe(options.anchor)`，钉死默认即锚点的契约。
 
-空目录 → Tab `pendingGate`(scaffold) → 点按钮 → baseline 落盘 → intake → design 停靠 → Tab 门卡按钮 → plan → implement → verify → 门 B → completed。每步断言 TabView 快照 + projection 事件序列。以 Remote 层直连为主（不走 GUI，快）、GUI 冒烟一条（真点一次按钮）。
+#### D. E2E 验收流
+
+- 以 Remote 层直连为主（不启 GUI）：`e2e-acceptance.spec.ts` 验证 `driveGateResolve` 审计行 + 字段；`remote-source.spec.ts` 验证 Remote 源覆写 + 审计回调 + 沉默路径。
+- GUI 冒烟一条：`overlay/scripts/bench-spawn-to-shown.mjs`（P0 既有），运行窗口 shown 即视作 GUI 端通；不打 GUI 自动化框架。
 
 #### E. 收口项
 
-intake 双通道（既有 Remote 按钮 vs `gateResolve`）复盘是否收拢为单通道；§9.2 / §10.3 / §18 与 §22 交叉引用核对；Dev Note 基准更新；`enterprise-workflow.md` 本章随实现收紧（§22.12 P0 状态表即此模式的开始）。
+- intake 双通道（既有 Remote 按钮 vs `gateResolve`）：**本期保留双通道**。intake 按钮走 `confirmIntake/rejectIntake` Remote 直写、`gateResolve` 走 `gateId='intake-classify'` 注册表派发；两条路径都需人因入口（按钮或门卡点击）。收拢为单通道需 UX 评估（按钮消失是否影响快捷键用户），不在 P3 范围。
+- §9.2 / §10.3 / §18 ↔ §22 交叉引用核对：本章随 P2/P3 实现收紧；与 §22.15 D `BAF_CONTROLLED_PATHS` 互文。
+- error-codes 表：增 `gate_confirmation_required`（commit P2-C2 落地）。
 
 ---
 

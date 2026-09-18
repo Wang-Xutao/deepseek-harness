@@ -88,6 +88,11 @@ describe('resume candidates (§19.2)', () => {
       if (drift.node !== 'drift') throw new Error('expected a drift drive')
       // Open-time drift: only `open` is upstream and it is not re-runnable.
       expect(resumeCandidates(drift.status, drift.result.signals)).toEqual(['open'])
+      // §22.16 P3: anchor pin — candidates[0] === anchor so the dynamic
+      // resume gate can render the default target identically to the
+      // registry-driven gates.
+      const options = await pipeline.resumeOptions(changeId)
+      expect(options.candidates[0]).toBe(options.anchor)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

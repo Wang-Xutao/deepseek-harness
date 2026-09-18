@@ -242,6 +242,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       resumeCandidates = options.candidates
     }
     const scaffoldAdapter = this.tryGetScaffoldAdapter()
+    const auditLines: string[] = []
     await this.guardDomain(() =>
       driveGateResolve(
         cwd,
@@ -255,8 +256,21 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
         },
         resumeCandidates,
         'gate-card',
+        {
+          // §22.16 P3: emit one structured audit line per dispatched resolve.
+          changeId: request.changeId,
+          audit: (line) => {
+            auditLines.push(line)
+            this.ctx.logger.info(line)
+          },
+        },
       ),
     )
+    if (auditLines.length === 0) {
+      this.ctx.logger.info(
+        `[baf] ${new Date().toISOString()} - session baf:gate gateId=${request.gateId} option=${request.optionId} change=${request.changeId ?? '-'} source=gate-card action=dismissed`,
+      )
+    }
     const changeId = request.changeId ?? await this.resolveActiveChangeId(store)
     return buildWorkflowTabView(store, changeId)
   }

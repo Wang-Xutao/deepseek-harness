@@ -952,6 +952,12 @@ export async function driveGateResolve(
   adapters: DriveAdapters,
   resumeCandidates?: readonly WorkflowNode[],
   source: TransitionSource = 'slash',
+  opts?: {
+    /** Active change id for the audit line; falls back to the projection index. */
+    changeId?: string
+    /** Audit-line emitter; omitted callers get silent runs (e.g. CLI smoke). */
+    audit?: (line: string) => void
+  },
 ): Promise<CommandResult> {
   const spec: GateSpec | undefined = (GATE_REGISTRY as Record<string, GateSpec | undefined>)[gateId]
   if (spec === undefined) {
@@ -991,6 +997,7 @@ export async function driveGateResolve(
 
   // Dismissal = no-op. The Tab will re-render and the gate's condition
   // (e.g. "no baseline") still holds, so the pendingGate stays visible.
+  // No audit line: dismissal is a UI event, not a workflow drive.
   if (opt.command === '__noop__') {
     return {
       kind: 'success',
@@ -999,6 +1006,25 @@ export async function driveGateResolve(
         { title: '重弹方式', lines: ['在 Tab 上重选，或敲 /baf-go 让协调器重渲染'] },
       ]),
     }
+  }
+
+  // §22.16 P3: gate-resolve audit line — one structured log per dispatched
+  // resolution. Format mirrors sessionGateLogLine (key=value metadata only,
+  // no prose) so log scrapers can build dashboards without parsing Chinese.
+  // `change` and `baseline` are best-effort: the change id may be absent
+  // for workspace-scope gates (scaffold) and the baseline may not be on
+  // disk yet during intake.
+  if (opts?.audit !== undefined) {
+    let baselineId: string | undefined
+    try {
+      baselineId = (await loadWorkspaceBaseline(cwd))?.baselineId
+    } catch {
+      baselineId = undefined
+    }
+    const change = opts.changeId ?? '-'
+    const baseline = baselineId ?? '-'
+    const line = `[baf] ${new Date().toISOString()} - session baf:gate gateId=${gateId} option=${optionId} change=${change} source=${source} baseline=${baseline}`
+    opts.audit(line)
   }
 
   // Re-dispatch the registered slash drive. We rebuild the rawInput the
