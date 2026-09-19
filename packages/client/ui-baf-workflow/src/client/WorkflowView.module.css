@@ -478,6 +478,12 @@
   background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 10%, var(--wf-card)), var(--wf-card));
 }
 
+/* §22.14 P3 — workspace-level pendingGate card highlight (scaffold today). */
+.cardGate {
+  border-color: color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--wf-accent) 14%, var(--wf-card)), var(--wf-card));
+}
+
 .metaRow {
   display: grid;
   grid-template-columns: 5.2rem 1fr;
@@ -806,3 +812,46 @@
 }
 
 .preserved .list { margin-bottom: 0; }
+
+/* §13 R3 — fast-path Tab form: 5-field structured dispatch. */
+.fastPathForm {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.fastPathLabel {
+  display: grid;
+  gap: 0.18rem;
+  font-size: 0.72rem;
+  color: var(--wf-muted);
+}
+
+.fastPathInput {
+  width: 100%;
+  border: 1px solid var(--wf-line);
+  border-radius: 6px;
+  padding: 0.32rem 0.5rem;
+  font-size: 0.74rem;
+  background: var(--wf-bg, transparent);
+  color: var(--wf-ink);
+  font-family: inherit;
+  resize: vertical;
+}
+
+.fastPathInput:focus {
+  outline: 2px solid color-mix(in srgb, var(--wf-accent) 60%, transparent);
+  outline-offset: 1px;
+}
+
+.fastPathTextarea { min-height: 4.2rem; }
+
+.fastPathHelp {
+  font-size: 0.66rem;
+  color: var(--wf-muted);
+}
+
+.fastPathWarn {
+  font-size: 0.68rem;
+  color: var(--wf-danger, #c33);
+}

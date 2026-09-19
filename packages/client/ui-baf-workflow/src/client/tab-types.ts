@@ -152,6 +152,27 @@ export interface WorkflowTabView {
     readonly id: ConfirmGateId
     readonly node: WorkflowNodeId
     readonly actionKey: string
+    /** §22 registered gateId (`design-confirm` / `verify-archive`) — lets the
+     * Tab dispatch the click back through `gateResolve`. */
+    readonly gateId?: string
+    /** §22 question, verbatim from the registry — Tab card body. */
+    readonly question?: string
+    /** §22 registered options, in registry order — rendered as one button each
+     * so the Tab is equivalent to the slash/CLI option list (each option maps
+     * to a single registered slash command; the host validates the pair). */
+    readonly options?: readonly { readonly id: string; readonly label: string }[]
+  }
+  /**
+   * Workspace-level gate (§22.4 scaffold). Set when the Tab's owning workspace
+   * has no `.baf/baseline.yml` — only the template / pre-bootstrap view can
+   * hold it (scaffold is workspace scope, not change scope). The Tab renders
+   * one button per option, mirroring the slash card so the two surfaces are
+   * equivalent (§22.14 principle: card = button row).
+   */
+  readonly pendingGate?: {
+    readonly gateId: 'scaffold'
+    readonly question: string
+    readonly options: readonly { readonly id: string; readonly label: string }[]
   }
   /** Set after a T15 escalation, so the Tab draws both paths (§18.4.3). */
   readonly lanes?: WorkflowTabLanesView

@@ -37,6 +37,16 @@ export type WorkflowTabKey =
   | 'intake.supplement'
   | 'intake.required'
   | 'intake.notRequired'
+  | 'intake.fastPath.title'
+  | 'intake.fastPath.help'
+  | 'intake.fastPath.problem'
+  | 'intake.fastPath.rootCause'
+  | 'intake.fastPath.file'
+  | 'intake.fastPath.fileHelp'
+  | 'intake.fastPath.test'
+  | 'intake.fastPath.testCmd'
+  | 'intake.fastPath.submit'
+  | 'intake.fastPath.required'
   | 'detail.title'
   | 'detail.empty'
   | 'detail.checklist'
@@ -67,35 +77,24 @@ export type WorkflowTabKey =
   | 'status.skipped'
   | 'status.template'
   | 'status.awaiting'
+  // §22 — pendingGate card (workspace-level gate, scaffold only today).
+  | 'pendingGate.title'
+  | 'pendingGate.action'
+  // §22.14 — abandon gate (change-level) Tab button label.
+  | 'action.abandon'
+  | 'abandon.confirmHelp'
   | 'gate.designDone'
   | 'gate.verifyPassed'
   | 'gate.confirmIntoPlan'
   | 'gate.confirmArchive'
   | 'gate.replyToContinue'
-  // §22.16 P3: per-gate i18n keys. zh strings are pinned verbatim from the
-  // §22 GATE_REGISTRY (single source of truth — do not translate); en values
-  // are translated. The render path still reads the registry directly, so
-  // these keys are the freeze contract for the eventual cut-over.
-  | 'gate.scaffold.title'
-  | 'gate.scaffold.question'
-  | 'gate.scaffold.option.init'
-  | 'gate.scaffold.option.cancel'
-  | 'gate.intake-classify.title'
-  | 'gate.intake-classify.question'
-  | 'gate.intake-classify.option.confirm'
-  | 'gate.intake-classify.option.reject'
-  | 'gate.design-confirm.title'
-  | 'gate.design-confirm.question'
-  | 'gate.design-confirm.option.confirm'
-  | 'gate.design-confirm.option.back'
-  | 'gate.verify-archive.title'
-  | 'gate.verify-archive.question'
-  | 'gate.verify-archive.option.confirm'
-  | 'gate.verify-archive.option.back'
-  | 'gate.abandon.title'
-  | 'gate.abandon.question'
-  | 'gate.abandon.option.confirm'
-  | 'gate.abandon.option.cancel'
+  // §22 GATE_REGISTRY is the single source of truth for gate card text
+  // (`renderGate` reads it directly). Earlier we kept a frozen zh/en copy
+  // here as a "future i18n migration anchor"; it was never rendered and
+  // drifted risk (a §22 edit here had to be mirrored there by hand).
+  // §22.16 P3 freeze contract removed 2026-09; if a future phase needs
+  // i18n for gate cards, read GATE_REGISTRY and project per-locale at
+  // render time, do not re-introduce dead dictionaries.
   | 'lane.fastpath'
   | 'lane.fullgo'
   | 'lane.help'
@@ -176,6 +175,16 @@ export const en: Record<WorkflowTabKey, string> = {
   'intake.supplement': 'Add details in chat',
   'intake.required': 'Required',
   'intake.notRequired': 'Not required',
+  'intake.fastPath.title': 'Fast-path Bug fields',
+  'intake.fastPath.help': 'Five required fields gate the fast-path ledger. They map 1:1 to the slash form.',
+  'intake.fastPath.problem': 'Problem',
+  'intake.fastPath.rootCause': 'Root cause',
+  'intake.fastPath.file': 'Affected files (one per line)',
+  'intake.fastPath.fileHelp': 'Repeat or list — each line becomes one `file=` argument.',
+  'intake.fastPath.test': 'Regression test file',
+  'intake.fastPath.testCmd': 'Regression test command',
+  'intake.fastPath.submit': 'Submit fast-path',
+  'intake.fastPath.required': 'All five fields are required before fast-path can dispatch.',
   'detail.title': 'Stage detail',
   'detail.empty': 'Select a stage on the graph',
   'detail.checklist': 'Stage checklist',
@@ -206,32 +215,17 @@ export const en: Record<WorkflowTabKey, string> = {
   'status.skipped': 'Skipped',
   'status.template': 'Idle',
   'status.awaiting': 'Awaiting customer',
+  // §22 — pendingGate card.
+  'pendingGate.title': 'Workspace bootstrap required',
+  'pendingGate.action': 'Resolve in Tab',
+  // §22.14 — abandon change-level gate button label.
+  'action.abandon': 'Abandon this change',
+  'abandon.confirmHelp': 'Abandoning ends this change and keeps only the audit trail. The slash form /baf-workflow-abandon confirm has the same effect.',
   'gate.designDone': 'Design is done — confirm to enter plan',
   'gate.verifyPassed': 'Verify passed — confirm to archive',
   'gate.confirmIntoPlan': 'Confirm and continue',
   'gate.confirmArchive': 'Confirm archive',
   'gate.replyToContinue': 'Run /baf-go again to continue',
-  // §22.16 P3 — per-gate snapshot freeze.
-  'gate.scaffold.title': 'Workspace not initialised · awaiting_customer_confirm',
-  'gate.scaffold.question': 'The workspace is missing `.baf/baseline.yml` and `openspec/changes/`. Initialise the scaffold before starting the workflow.',
-  'gate.scaffold.option.init': 'Initialise the workspace (run scaffold)',
-  'gate.scaffold.option.cancel': 'Do not initialise yet',
-  'gate.intake-classify.title': 'Intake classification pending · awaiting_customer_confirm',
-  'gate.intake-classify.question': 'The intake classifier has produced a result. Confirm or reject to continue.',
-  'gate.intake-classify.option.confirm': 'Confirm the classification',
-  'gate.intake-classify.option.reject': 'Reject and re-describe',
-  'gate.design-confirm.title': 'Automated run · design is done · awaiting_customer_confirm',
-  'gate.design-confirm.question': 'N3 design is complete. Per §18.5 gate A, you must run /baf-go again to enter plan.',
-  'gate.design-confirm.option.confirm': 'Confirm design, enter plan',
-  'gate.design-confirm.option.back': 'Roll back to clarify',
-  'gate.verify-archive.title': 'Automated run · verify passed · awaiting_customer_confirm',
-  'gate.verify-archive.question': 'N6 verify has passed all required checks. Per §18.5 gate B, you must run /baf-go again to archive.',
-  'gate.verify-archive.option.confirm': 'Confirm archive',
-  'gate.verify-archive.option.back': 'Roll back to implement',
-  'gate.abandon.title': 'Abandon change · awaiting_customer_confirm',
-  'gate.abandon.question': 'The active change will be abandoned and the audit trail preserved. Requires your second confirmation.',
-  'gate.abandon.option.confirm': 'Confirm abandon',
-  'gate.abandon.option.cancel': 'Cancel',
   'lane.fastpath': 'Bug fast-path (before the upgrade)',
   'lane.fullgo': 'Full-go (after the upgrade)',
   'lane.help': 'A fast-path change that escalated keeps both paths: the earlier lane is greyed but never deleted.',
@@ -310,6 +304,16 @@ export const zh: Record<WorkflowTabKey, string> = {
   'intake.supplement': '在对话中补充',
   'intake.required': '需要',
   'intake.notRequired': '不需要',
+  'intake.fastPath.title': 'fast-path Bug 字段',
+  'intake.fastPath.help': '5 字段是 fast-path 账本的硬性前置；与 slash 的 key=value 一一对应。',
+  'intake.fastPath.problem': '现象',
+  'intake.fastPath.rootCause': '根因',
+  'intake.fastPath.file': '受影响文件（每行一个）',
+  'intake.fastPath.fileHelp': '可重复也可换行 — 每行就是一个 file= 参数。',
+  'intake.fastPath.test': '回归测试文件',
+  'intake.fastPath.testCmd': '回归测试命令',
+  'intake.fastPath.submit': '提交 fast-path',
+  'intake.fastPath.required': 'fast-path 必须填齐 5 字段后才能提交。',
   'detail.title': '阶段详情',
   'detail.empty': '在流程图中选择一个阶段',
   'detail.checklist': '本阶段清单',
@@ -340,32 +344,18 @@ export const zh: Record<WorkflowTabKey, string> = {
   'status.skipped': '已跳过',
   'status.template': '空闲',
   'status.awaiting': '待客户确认',
+  // §22 — pendingGate card.
+  'pendingGate.title': '工作区需要先初始化',
+  'pendingGate.action': '在 Tab 解决',
+  // §22.14 — abandon change-level gate button label.
+  'action.abandon': '放弃此变更',
+  'abandon.confirmHelp': '放弃将结束此变更并仅保留审计轨迹。slash 形式 /baf-workflow-abandon confirm 效果相同。',
   'gate.designDone': '设计文档已实现 · 请确认是否进入 plan',
   'gate.verifyPassed': 'verify 已通过 · 请确认是否归档',
   'gate.confirmIntoPlan': '确认进入下一阶段',
   'gate.confirmArchive': '确认归档',
   'gate.replyToContinue': '再敲一次 /baf-go 继续',
-  // §22.16 P3 — zh 字典与 §22 GATE_REGISTRY 原文逐字对齐（single source of truth）。
-  'gate.scaffold.title': '工作区未初始化 · awaiting_customer_confirm',
-  'gate.scaffold.question': '当前工作区缺少 `.baf/baseline.yml` 与 `openspec/changes/` 目录。需要先做 init 骨架才能走工作流。',
-  'gate.scaffold.option.init': '初始化工作区（执行 scaffold）',
-  'gate.scaffold.option.cancel': '暂不初始化',
-  'gate.intake-classify.title': 'intake 分类待确认 · awaiting_customer_confirm',
-  'gate.intake-classify.question': 'intake 分类器已生成结果，请确认或拒绝后继续。',
-  'gate.intake-classify.option.confirm': '确认分类',
-  'gate.intake-classify.option.reject': '拒绝并重新描述',
-  'gate.design-confirm.title': '自动驱动 · 设计文档已完成 · awaiting_customer_confirm',
-  'gate.design-confirm.question': 'N3 design 已实现。按 §18.5 门 A，必须由客户再敲一次 /baf-go 才能进入 plan。',
-  'gate.design-confirm.option.confirm': '确认设计，进入计划',
-  'gate.design-confirm.option.back': '退回澄清',
-  'gate.verify-archive.title': '自动驱动 · verify 已通过 · awaiting_customer_confirm',
-  'gate.verify-archive.question': 'N6 verify 全部必需检查通过。按 §18.5 门 B，必须由客户再敲一次 /baf-go 才能归档。',
-  'gate.verify-archive.option.confirm': '确认归档',
-  'gate.verify-archive.option.back': '退回实现',
-  'gate.abandon.title': '放弃变更 · awaiting_customer_confirm',
-  'gate.abandon.question': '将放弃当前 active change 并保留审计。需要客户二次确认。',
-  'gate.abandon.option.confirm': '确认放弃',
-  'gate.abandon.option.cancel': '取消',
+  // §22.16 P3 freeze contract removed 2026-09 — see WorkflowTabKey.
   'lane.fastpath': '缺陷快路径（升级前）',
   'lane.fullgo': '完整流程（升级后）',
   'lane.help': '快路径中途升级后，两条 path 都保留：升级前那条置灰，但不删除。',

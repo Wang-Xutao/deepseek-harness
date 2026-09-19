@@ -77,6 +77,53 @@ html, body {
 .logo-sora {
   width: 60px;
   height: 60px;
+  color: var(--accent);
+}
+
+/*
+ * Splash two-ring mark auto-rotation.
+ *
+ * Mirrors packages/client/ui-baf-desktop/src/client/HeroTrailingMark.module.css
+ * but with the hover trigger dropped — the splash is a frameless 380x300
+ * surface where hover rarely applies, so the lobes spin from the moment the
+ * window appears. `prefers-reduced-motion: no-preference` still gates the
+ * animation so users who opt out of motion get a static mark.
+ *
+ * transform-box: view-box pins the inline transform-origin (in source-raster
+ * user units, 0..942) to the SVG's own viewBox so each lobe spins about its
+ * true centre rather than the bounding-box origin.
+ */
+.spinCw,
+.spinCcw {
+  transform-box: view-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .logo-sora .spinCw {
+    animation: baf-ring-spin-cw 1600ms linear infinite;
+  }
+
+  .logo-sora .spinCcw {
+    animation: baf-ring-spin-ccw 1600ms linear infinite;
+  }
+}
+
+@keyframes baf-ring-spin-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes baf-ring-spin-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
 }
 
 .logo-deepseek {

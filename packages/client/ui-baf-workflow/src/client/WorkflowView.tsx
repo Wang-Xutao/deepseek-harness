@@ -28,7 +28,19 @@ export interface WorkflowViewInjected {
   confirmIntake: (changeId: string) => Promise<WorkflowTabView>
   rejectIntake: (changeId: string) => Promise<WorkflowTabView>
   startIntake: (description: string) => Promise<WorkflowTabView>
-  transition: (changeId: string, to: WorkflowNodeId | TerminalStateId) => Promise<WorkflowTabView>
+  /**
+   * §13 R3 — fast-path Tab dispatch. The `evidence` payload is flattened on
+   * the host into `key=value` pairs the same way the slash parser reads
+   * them, so submitting a 5-field form from the Tab reaches the same
+   * `driveClassify(..., 'confirm problem=… root-cause=… file=… test=… test-cmd=…')`
+   * path that the slash command does. Arrays (e.g. multiple `file=…`)
+   * become repeated keys.
+   */
+  transition: (
+    changeId: string,
+    to: WorkflowNodeId | TerminalStateId,
+    evidence?: Readonly<Record<string, string | number | boolean | null | readonly (string | number | boolean | null)[]>>,
+  ) => Promise<WorkflowTabView>
   /** T13 rollback (§19.5): omit `node` to re-read the freshly detected menu. */
   resume: (changeId: string, node?: WorkflowNodeId) => Promise<WorkflowTabView>
   /**
@@ -122,6 +134,137 @@ function stageActionsDone(status: WorkflowTabNodeView['status'] | undefined): bo
   return status === 'completed' || status === 'skipped'
 }
 
+/**
+ * §13 R3 — fast-path Tab form. Five required fields mirror the slash
+ * `confirm problem=… root-cause=… file=… test=… test-cmd=…` shape verbatim,
+ * so the host's `evidenceToRawInput` flattens this dict straight into the
+ * `driveClassify` parser. `file` is multi-line: each non-empty line becomes
+ * one `file=` argument, matching the slash behaviour where `file=a file=b`
+ * repeats the key.
+ *
+ * Empty / whitespace-only fields disable the submit button and surface a
+ * helper line, mirroring `command-drives.ts:missing` so the customer sees
+ * the same diagnostic they'd get from the slash card.
+ */
+function FastPathForm(props: {
+  busy: boolean
+  changeId: string | null
+  value: {
+    problem: string
+    rootCause: string
+    file: string
+    test: string
+    testCmd: string
+  }
+  onChange: (next: FastPathFormProps['value']) => void
+  onSubmit: () => void
+  t: (key: WorkflowTabKey) => string
+}): React.ReactElement {
+  const { busy, changeId, value, onChange, onSubmit, t } = props
+  const problemTrimmed = value.problem.trim()
+  const rootCauseTrimmed = value.rootCause.trim()
+  const fileLines = value.file.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0)
+  const testTrimmed = value.test.trim()
+  const testCmdTrimmed = value.testCmd.trim()
+  const missing: string[] = []
+  if (problemTrimmed.length === 0) missing.push(t('intake.fastPath.problem'))
+  if (rootCauseTrimmed.length === 0) missing.push(t('intake.fastPath.rootCause'))
+  if (fileLines.length === 0) missing.push(t('intake.fastPath.file'))
+  if (testTrimmed.length === 0) missing.push(t('intake.fastPath.test'))
+  if (testCmdTrimmed.length === 0) missing.push(t('intake.fastPath.testCmd'))
+  const ready = missing.length === 0 && changeId !== null
+  return (
+    <div className={css.fastPathForm} aria-label={t('intake.fastPath.title')}>
+      <p className={css.hint}>{t('intake.fastPath.help')}</p>
+      <label className={css.fastPathLabel}>
+        {t('intake.fastPath.problem')}
+        <textarea
+          className={clsx(css.fastPathInput, css.fastPathTextarea)}
+          value={value.problem}
+          onChange={event => onChange({ ...value, problem: event.target.value })}
+          rows={2}
+          disabled={busy}
+        />
+      </label>
+      <label className={css.fastPathLabel}>
+        {t('intake.fastPath.rootCause')}
+        <textarea
+          className={clsx(css.fastPathInput, css.fastPathTextarea)}
+          value={value.rootCause}
+          onChange={event => onChange({ ...value, rootCause: event.target.value })}
+          rows={2}
+          disabled={busy}
+        />
+      </label>
+      <label className={css.fastPathLabel}>
+        {t('intake.fastPath.file')}
+        <textarea
+          className={clsx(css.fastPathInput, css.fastPathTextarea)}
+          value={value.file}
+          onChange={event => onChange({ ...value, file: event.target.value })}
+          rows={3}
+          placeholder={'src/foo.ts\nsrc/bar.ts'}
+          disabled={busy}
+        />
+        <span className={css.fastPathHelp}>{t('intake.fastPath.fileHelp')}</span>
+      </label>
+      <label className={css.fastPathLabel}>
+        {t('intake.fastPath.test')}
+        <input
+          type="text"
+          className={css.fastPathInput}
+          value={value.test}
+          onChange={event => onChange({ ...value, test: event.target.value })}
+          placeholder="tests/foo.spec.ts"
+          disabled={busy}
+        />
+      </label>
+      <label className={css.fastPathLabel}>
+        {t('intake.fastPath.testCmd')}
+        <input
+          type="text"
+          className={css.fastPathInput}
+          value={value.testCmd}
+          onChange={event => onChange({ ...value, testCmd: event.target.value })}
+          placeholder="pnpm test foo"
+          disabled={busy}
+        />
+      </label>
+      {missing.length > 0 && (
+        <p className={css.fastPathWarn} role="status">{t('intake.fastPath.required')}</p>
+      )}
+      <div className={css.actions}>
+        <button
+          type="button"
+          className={clsx(css.btn, css.btnPrimary)}
+          disabled={busy || !ready}
+          onClick={onSubmit}
+        >
+          {t('intake.fastPath.submit')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Type alias extracted so the `WorkflowView` parent and the form agree. */
+type FastPathFormProps = {
+  readonly value: {
+    readonly problem: string
+    readonly rootCause: string
+    readonly file: string
+    readonly test: string
+    readonly testCmd: string
+  }
+  readonly onChange: (next: {
+    readonly problem: string
+    readonly rootCause: string
+    readonly file: string
+    readonly test: string
+    readonly testCmd: string
+  }) => void
+}
+
 function RailSplitter(props: {
   width: number
   onChange: (next: number) => void
@@ -172,7 +315,7 @@ function RailSplitter(props: {
  * @param props - conversation view props + inject face.
  */
 export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
-  const { t, refresh, confirmIntake, rejectIntake, startIntake, transition, resume, useProjection } = props
+  const { t, refresh, confirmIntake, rejectIntake, startIntake, transition, resume, gateResolve, useProjection } = props
   const preset = useProjection('agentPreset')
   const [view, setView] = useState<WorkflowTabView>(() => withRenderableGraph(buildClientTemplateTabView()))
   const [selected, setSelected] = useState<WorkflowNodeId | null>(null)
@@ -184,6 +327,29 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   const [zoom, setZoom] = useState(1)
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [resumeTarget, setResumeTarget] = useState<WorkflowNodeId | null>(null)
+  // §13 R1 — gate destructive actions (archive / abandon) behind a confirm
+  // modal so a misclick on the verify-archive gate's 「确认归档」 button
+  // does not atomically move the change into the archive folder. The drive
+  // layer still requires `confirm` as a defence-in-depth guardrail, but the
+  // user-facing mistake-prevention belongs here in the view.
+  const [pendingArchive, setPendingArchive] = useState<{ changeId: string; title: string } | null>(null)
+  // §22.14 P3 — abandon-gate destructive confirm modal. Mirrors §13 R1's
+  // pattern for archive: the Tab button opens the modal; only the modal's
+  // primary action runs `gateResolve('abandon', 'confirm')`, which the host
+  // re-dispatches to /baf-workflow-abandon confirm (driveAbandon). The drive
+  // layer's own `confirm` requirement is defence-in-depth, but the user-facing
+  // mistake-prevention lives here in the view.
+  const [pendingAbandon, setPendingAbandon] = useState<{ changeId: string } | null>(null)
+  // §13 R3 — fast-path Tab form state. Five required fields, kept as
+  // plain strings so the textarea and inputs share a `useState<string>` shape.
+  // `file` is multi-line; each line becomes one `file=` argument on submit.
+  const [fastPath, setFastPath] = useState({
+    problem: '',
+    rootCause: '',
+    file: '',
+    test: '',
+    testCmd: '',
+  })
   const panDrag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const panned = useRef(false)
 
@@ -213,6 +379,31 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   useEffect(() => {
     if (preset !== 'baf') return
     void run(() => refresh())
+  }, [preset, refresh, run])
+
+  // §13 R8 — stale gate-card defense. The Tab paints whatever the host
+  // last returned; if another channel (CLI, slash, another Tab) parks
+  // or resolves a confirm gate while this view is idle, the painted
+  // `gate` / `pendingGate` can drift from the projection log. We re-read
+  // on (a) document/window focus — the user just alt-tabbed back into the
+  // IDE — and (b) `visibilitychange` to visible — the panel was hidden
+  // behind a different conversation. We deliberately skip a polling
+  // timer: every other entry surface goes through the same projection
+  // store, and the host remote re-derives the view from a fresh log on
+  // every transition call, so the only gap is "another channel acted
+  // while the Tab was unfocused". Focus + visibilitychange covers that.
+  useEffect(() => {
+    if (preset !== 'baf') return
+    const onFocus = () => { void run(() => refresh()) }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') onFocus()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [preset, refresh, run])
 
   const selectedNode = useMemo(
@@ -370,12 +561,70 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         >
           {t('action.refresh')}
         </button>
+        {/* §22.14 P3 — abandon gate Tab surface. The abandon gate only ever
+            fires when an active change is parked on a non-terminal node; the
+            slash form is /baf-workflow-abandon confirm, gated by a Tab
+            confirm modal (matches §13 R1 spirit: destructive → modal). The
+            strip button mirrors that flow on the Tab side so the principle
+            "card ≡ button" holds for abandon too. */}
+        {view.changeId !== null
+          && view.current !== null
+          && view.current !== 'completed'
+          && view.current !== 'abandoned' ? (
+            <button
+              type="button"
+              className={clsx(css.btn, css.btnGhost)}
+              disabled={busy}
+              onClick={() => {
+                const changeId = view.changeId
+                if (changeId === null) return
+                setPendingAbandon({ changeId })
+              }}
+            >
+              {t('action.abandon')}
+            </button>
+          ) : null}
       </div>
 
       {view.openspecSkipped?.skipped === true && (
         <div className={css.banner}>
           {t('openspec.skipped')}: {view.openspecSkipped.reasonCodes.join(', ')}
         </div>
+      )}
+
+      {/* §22.14 P3 — workspace-level pendingGate card. The host computes this
+          when `.baf/baseline.yml` is missing; the Tab renders the registered
+          question and one button per option, so the workspace-bootstrap gate
+          is reachable as a Tab button row (equivalent to the slash card).
+          `cancel` is the `__noop__` sentinel — `gateResolve` returns a calm
+          dismissal card and the host keeps `pendingGate` because the gate's
+          condition (no baseline) still holds. */}
+      {view.pendingGate !== undefined && (
+        <section className={clsx(css.card, css.cardGate)} aria-label={t('pendingGate.title')}>
+          <div className={css.cardTitle}>{t('pendingGate.title')}</div>
+          <p className={css.hint}>{view.pendingGate.question}</p>
+          <div className={css.actions}>
+            {view.pendingGate.options.map((opt) => {
+              const isCancel = opt.id === 'cancel'
+              return (
+                <button
+                  key={`pending-${opt.id}`}
+                  type="button"
+                  className={clsx(css.btn, isCancel ? css.btnGhost : css.btnPrimary)}
+                  disabled={busy}
+                  onClick={() => {
+                    void run(() => gateResolve({
+                      gateId: view.pendingGate?.gateId ?? 'scaffold',
+                      optionId: opt.id,
+                    }))
+                  }}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        </section>
       )}
 
       <div className={css.body}>
@@ -557,7 +806,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
 
         <aside className={css.rail} style={{ width: railWidth }}>
           <div className={css.railScroll}>
-            {view.intake !== undefined && view.intake.confirmation === 'pending' && (
+            {view.intake !== undefined && (
               <section className={clsx(css.card, css.cardAccent)} aria-label={t('intake.title')}>
                 <h3 className={css.cardTitle}>{t('intake.title')}</h3>
                 <p className={css.hint}>{t('intake.help')}</p>
@@ -573,33 +822,67 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                   <span className={css.metaKey}>{t('intake.summary')}</span>
                   <span>{view.intake.summary}</span>
                 </div>
-                <div className={css.actions}>
-                  <button
-                    type="button"
-                    className={clsx(css.btn, css.btnPrimary)}
-                    disabled={busy || view.changeId === null}
-                    onClick={() => {
-                      const changeId = view.changeId
-                      if (changeId !== null) void run(() => confirmIntake(changeId))
-                    }}
-                  >
-                    {t('intake.confirm')}
-                  </button>
-                  <button type="button" className={clsx(css.btn, css.btnGhost)} disabled={busy}>
-                    {t('intake.supplement')}
-                  </button>
-                  <button
-                    type="button"
-                    className={clsx(css.btn, css.btnDanger)}
-                    disabled={busy || view.changeId === null}
-                    onClick={() => {
-                      const changeId = view.changeId
-                      if (changeId !== null) void run(() => rejectIntake(changeId))
-                    }}
-                  >
-                    {t('intake.reject')}
-                  </button>
-                </div>
+                {/* §13 R9 — keep the classification metadata visible after
+                    confirm so the customer can re-check what was agreed.
+                    Action buttons stay gated on `pending` because they only
+                    make sense before intake is decided. */}
+                {view.intake.confirmation === 'pending' && (
+                  view.intake.mode === 'bug-fast-path'
+                    ? (
+                      <FastPathForm
+                        busy={busy}
+                        changeId={view.changeId}
+                        value={fastPath}
+                        onChange={setFastPath}
+                        onSubmit={() => {
+                          const changeId = view.changeId
+                          if (changeId === null) return
+                          const files = fastPath.file
+                            .split(/\r?\n/)
+                            .map(line => line.trim())
+                            .filter(line => line.length > 0)
+                          void run(() => transition(changeId, 'open', {
+                            problem: fastPath.problem.trim(),
+                            'root-cause': fastPath.rootCause.trim(),
+                            file: files,
+                            test: fastPath.test.trim(),
+                            'test-cmd': fastPath.testCmd.trim(),
+                          }))
+                          setFastPath({ problem: '', rootCause: '', file: '', test: '', testCmd: '' })
+                        }}
+                        t={t}
+                      />
+                    )
+                    : (
+                      <div className={css.actions}>
+                        <button
+                          type="button"
+                          className={clsx(css.btn, css.btnPrimary)}
+                          disabled={busy || view.changeId === null}
+                          onClick={() => {
+                            const changeId = view.changeId
+                            if (changeId !== null) void run(() => confirmIntake(changeId))
+                          }}
+                        >
+                          {t('intake.confirm')}
+                        </button>
+                        <button type="button" className={clsx(css.btn, css.btnGhost)} disabled={busy}>
+                          {t('intake.supplement')}
+                        </button>
+                        <button
+                          type="button"
+                          className={clsx(css.btn, css.btnDanger)}
+                          disabled={busy || view.changeId === null}
+                          onClick={() => {
+                            const changeId = view.changeId
+                            if (changeId !== null) void run(() => rejectIntake(changeId))
+                          }}
+                        >
+                          {t('intake.reject')}
+                        </button>
+                      </div>
+                    )
+                )}
               </section>
             )}
 
@@ -693,6 +976,22 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                       onClick={() => {
                         const changeId = view.changeId
                         if (changeId === null) return
+                        // §13 R1 — destructive target surfaces go through a
+                        // confirm modal first. The modal re-uses the drive
+                        // layer's source-stamping (`'tab'`); cancelling
+                        // dismisses the modal without writing any event.
+                        if (action.id === 'confirm-gate'
+                          && (action.target === 'archive' || action.target === 'completed')) {
+                          // The client-side `view.gate` type strips the live
+                          // `question` (only the action key + id survive the
+                          // typert wire), so we lean on the i18n hint that
+                          // already names the verify-archive scenario.
+                          setPendingArchive({
+                            changeId,
+                            title: t('gate.verifyPassed'),
+                          })
+                          return
+                        }
                         if (action.id === 'transition') {
                           void run(() => transition(changeId, 'open'))
                         } else if (action.id === 'confirm-gate' && action.target !== undefined) {
@@ -705,6 +1004,41 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                   )
                 })}
               </div>
+              {/* §22.14 P3 — change-level gate registry options. The single
+                  primary confirm button above stays (it owns the destructive
+                  confirm modal and the i18n-keyed label); the registry's
+                  other options — currently `back` for design-confirm /
+                  verify-archive, taking them to /baf-workflow-clarify /
+                  /baf-workflow-implement — render below it as ghost-style
+                  buttons. Each click goes through `gateResolve`, the same
+                  Tab resolve channel the slash card uses; the host validates
+                  `(gateId, optionId)` against §22 GATE_REGISTRY and dispatches
+                  the registered slash command. */}
+              {view.gate?.options !== undefined
+                && view.gate.options.length > 0
+                && view.gate.gateId !== undefined
+                && view.changeId !== null ? (
+                  <div className={css.actions}>
+                    {view.gate.options
+                      .filter(opt => opt.id !== 'confirm')
+                      .map(opt => (
+                        <button
+                          key={`gate-opt-${opt.id}`}
+                          type="button"
+                          className={clsx(css.btn, css.btnGhost)}
+                          disabled={busy}
+                          onClick={() => {
+                            const changeId = view.changeId
+                            const gateId = view.gate?.gateId
+                            if (changeId === null || gateId === undefined) return
+                            void run(() => gateResolve({ changeId, gateId, optionId: opt.id }))
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                  </div>
+                ) : null}
             </section>
           </div>
         </aside>
@@ -761,6 +1095,122 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               </ul>
             )}
             <p className={css.hint}>{t('dashboard.note')}</p>
+          </div>
+        </div>
+      )}
+
+      {/* §13 R1 — destructive-action confirm modal. Triggered by the
+          「确认归档」 button on the verify-archive gate card; prevents the
+          atomic move into the archive folder from happening on a single
+          misclick. Escape and backdrop click cancel; only the explicit
+          「确认归档」 button runs the transition. */}
+      {pendingArchive !== null && (
+        <div
+          className={css.dashboardBackdrop}
+          role="presentation"
+          onClick={() => setPendingArchive(null)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setPendingArchive(null)
+          }}
+        >
+          <div
+            className={css.dashboardPanel}
+            role="alertdialog"
+            aria-modal="true"
+            aria-label={t('action.confirmArchive')}
+            onClick={event => event.stopPropagation()}
+          >
+            <div className={css.dashboardHead}>
+              <h2 className={css.dashboardTitle}>{t('action.confirmArchive')}</h2>
+            </div>
+            <p className={css.hint}>
+              {t('gate.verifyPassed')}
+              {' · '}
+              {pendingArchive.changeId}
+            </p>
+            <p className={css.hint}>{pendingArchive.title}</p>
+            <div className={css.actions}>
+              <button
+                type="button"
+                className={clsx(css.btn, css.btnGhost)}
+                disabled={busy}
+                onClick={() => setPendingArchive(null)}
+              >
+                {t('dashboard.close')}
+              </button>
+              <button
+                type="button"
+                className={clsx(css.btn, css.btnDanger)}
+                disabled={busy}
+                onClick={() => {
+                  const target = pendingArchive
+                  setPendingArchive(null)
+                  void run(() => transition(target.changeId, 'archive'))
+                }}
+              >
+                {t('action.confirmArchive')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* §22.14 P3 — abandon-gate destructive confirm modal. Mirrors the
+          archive modal: backdrop / Escape cancels, the primary action runs
+          `gateResolve('abandon', 'confirm')` → host dispatches
+          /baf-workflow-abandon confirm → driveAbandon → projection
+          `transition → 'abandoned'` event. */}
+      {pendingAbandon !== null && (
+        <div
+          className={css.dashboardBackdrop}
+          role="presentation"
+          onClick={() => setPendingAbandon(null)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setPendingAbandon(null)
+          }}
+        >
+          <div
+            className={css.dashboardPanel}
+            role="alertdialog"
+            aria-modal="true"
+            aria-label={t('action.abandon')}
+            onClick={event => event.stopPropagation()}
+          >
+            <div className={css.dashboardHead}>
+              <h2 className={css.dashboardTitle}>{t('action.abandon')}</h2>
+            </div>
+            <p className={css.hint}>
+              {t('abandon.confirmHelp')}
+            </p>
+            <p className={css.hint}>
+              {pendingAbandon.changeId}
+            </p>
+            <div className={css.actions}>
+              <button
+                type="button"
+                className={clsx(css.btn, css.btnGhost)}
+                disabled={busy}
+                onClick={() => setPendingAbandon(null)}
+              >
+                {t('dashboard.close')}
+              </button>
+              <button
+                type="button"
+                className={clsx(css.btn, css.btnDanger)}
+                disabled={busy}
+                onClick={() => {
+                  const target = pendingAbandon
+                  setPendingAbandon(null)
+                  void run(() => gateResolve({
+                    changeId: target.changeId,
+                    gateId: 'abandon',
+                    optionId: 'confirm',
+                  }))
+                }}
+              >
+                {t('action.abandon')}
+              </button>
+            </div>
           </div>
         </div>
       )}

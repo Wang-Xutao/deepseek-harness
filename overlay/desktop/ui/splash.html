@@ -11,7 +11,37 @@
     <div class="panel">
       <div class="main">
         <div class="logos" aria-hidden="true">
-          <img class="logo logo-sora" src="sora.png" alt="" />
+          <!--
+            Auto-spinning two-ring mark. Mirrors packages/client/ui-baf-desktop/
+            src/client/HeroTrailingMark.tsx, but without a hover trigger — the
+            splash is a 380x300 frameless surface, hover rarely applies, so the
+            lobes turn from the moment the window appears (still gated on
+            prefers-reduced-motion in splash.css).
+          -->
+          <svg
+            class="logo logo-sora"
+            viewBox="0 0 942 942"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              <clipPath id="baf-splash-mark-lower-left">
+                <circle cx="275.5" cy="666" r="278" />
+              </clipPath>
+              <clipPath id="baf-splash-mark-upper-right">
+                <circle cx="665.5" cy="276" r="278" />
+              </clipPath>
+            </defs>
+            <g class="spinCw" style="transform-origin: 275.5px 666px;">
+              <g clip-path="url(#baf-splash-mark-lower-left)">
+                <image href="sora.png" x="0" y="0" width="942" height="942" />
+              </g>
+            </g>
+            <g class="spinCcw" style="transform-origin: 665.5px 276px;">
+              <g clip-path="url(#baf-splash-mark-upper-right)">
+                <image href="sora.png" x="0" y="0" width="942" height="942" />
+              </g>
+            </g>
+          </svg>
         </div>
         <h1 class="brand">BAF DSH</h1>
         <p id="status">正在启动服务…</p>
