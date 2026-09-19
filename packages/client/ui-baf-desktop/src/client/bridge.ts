@@ -5,6 +5,25 @@
 export type BafDesktopBridge = {
   isDesktop: true
   openExternal?: (url: string) => Promise<{ ok: boolean; error?: string }>
+  /**
+   * Single source of truth for the running desktop shell's version. The
+   * Settings page consumes the same call, so the sidebar wordmark cannot
+   * drift from the Settings UI without the bridge breaking too.
+   */
+  getVersions?: () => Promise<DesktopVersions>
+}
+
+export type DesktopVersions = {
+  bafDsh: string
+  dsh: string
+  bafPlugin?: string
+  bafCore?: string
+  bafWorkflow?: string
+  bafOpenspec?: string
+  bafStandard?: string
+  bafQuality?: string
+  bafGuard?: string
+  bafScaffold?: string
 }
 
 declare global {
@@ -24,6 +43,26 @@ export function readDesktopBridge(): BafDesktopBridge | undefined {
   const bridge = window.bafDesktop
   if (bridge === undefined || bridge.isDesktop !== true) return undefined
   return bridge as BafDesktopBridge
+}
+
+/**
+ * Read the running desktop shell version (`baf-dsh`) from the Electron bridge.
+ * Falls back to `undefined` when running outside Electron (web build) or when
+ * the bridge does not expose `getVersions`; consumers must handle that case
+ * (the sidebar shows no version capsule; the settings page shows '—').
+ * @returns version string, or undefined when unavailable.
+ */
+export async function readBafDshVersion(): Promise<string | undefined> {
+  const bridge = readDesktopBridge()
+  if (bridge?.getVersions === undefined) return undefined
+  try {
+    const versions = await bridge.getVersions()
+    return typeof versions.bafDsh === 'string' && versions.bafDsh.length > 0
+      ? versions.bafDsh
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
