@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "0.0.15：启动性能优化（splash 提早关闭 + Node 路径缓存 + plugin sync fingerprint 跳过；spawn→shown 中位数 17.7s → 15.1s / -14.9%；新增 overlay/scripts/bench-spawn-to-shown.mjs A/B bench）+ P1 Phase 8.12 门卡 Tab 交互（tab-view.pendingGate + Remote.gateResolve 注册表派发 + WorkflowView 按钮 + baf_gate_ask 模型工具）+ P2 Phase 8.13 机械强制（confirm 边 source 白名单 'slash'/'cli'/'tab'/'gate-card' vs 'model-tool'/缺失 → gate_confirmation_required；guard 内置 BAF_CONTROLLED_PATHS = ['.baf/**','openspec/**'] 恒生效）+ P3 Phase 8.14 收口（gate-resolve 审计行 [baf] … session baf:gate gateId=… option=… change=… source=… baseline=…；i18n 键冻结 zh 与 §22 GATE_REGISTRY 逐字节对齐；resume candidates[0] === anchor；E2E 验收 + Remote 源覆写 spec）",
-    "notesEn": "0.0.15: Startup perf (splash closes on URL ready + Node binary cached + plugin sync skips when fingerprint matches; spawn→shown median 17.7s → 15.1s / -14.9%; added overlay/scripts/bench-spawn-to-shown.mjs A/B harness) + P1 Phase 8.12 gate-card Tab interaction (tab-view.pendingGate + Remote.gateResolve registry dispatch + WorkflowView buttons + baf_gate_ask model tool) + P2 Phase 8.13 mechanical enforcement (confirm-edge source whitelist 'slash'/'cli'/'tab'/'gate-card' vs 'model-tool'/missing → gate_confirmation_required; guard built-in BAF_CONTROLLED_PATHS = ['.baf/**','openspec/**'] always-on) + P3 Phase 8.14 close-out (gate-resolve audit line [baf] … session baf:gate gateId=… option=… change=… source=… baseline=…; i18n key freeze zh ↔ §22 GATE_REGISTRY byte-aligned; resume candidates[0] === anchor pin; E2E acceptance + Remote source-override spec)"
+    "notesZh": "0.0.16：弹窗可靠性四连修——①跨 isolate 服务解析（agentPresets.serviceFor 唯一读通道；弹窗点「初始化工作区」后派发真能拿到服务；提示语去术语；卡片首行统一「点本行展开/折叠详情」）；②分类弹窗明选 + baf_gate_ask requirement 引导（系统初步判断/需求摘要进弹窗；客户陈述需求一调铸变更+弹分类卡；未初始化自动改弹初始化卡；题卡说明行渲染内缩修复）；③两路径改道可点 + 缺陷草案进弹窗（确认 · 完整流程 / 确认 · 缺陷修复路径直接点选，改判落 intake-mode-set 事件审计；problem/root-cause/files/test/testCmd 草案带进弹窗，一次点击定路径+交字段）；④宿主面自动弹 + 通用提问硬拦（空闲工作区直接说需求 → 预问卡 → 分类卡，平台保证不再依赖模型；有未决门时 ask_user_question 被 guard 拦下 gate_pending_ask_blocked 指路 baf_gate_ask）；另修 Windows 并发读竞态（projection 原子写 rename EPERM 短重试，客户确认点击不再被 Tab 刷新误杀）",
+    "notesEn": "0.0.16: Popup-reliability quadruple fix — (1) cross-isolate service resolution (agentPresets.serviceFor as the only read channel; the scaffold-dialog click dispatch now actually reaches its services; de-jargoned hints; unified card first line '· 点本行展开/折叠详情'); (2) informed classify dialog + baf_gate_ask requirement bootstrap (system judgment & summary rendered in the dialog; one call mints the change and pops classify; uninitialized workspaces redirect to the scaffold gate; composer detail-line inset fix); (3) clickable path re-routing + bug draft in the dialog (确认 · 完整流程 / 确认 · 缺陷修复路径 as direct buttons with the override audited as an intake-mode-set event; problem/rootCause/files/test/testCmd draft rides the dialog — one click settles path + fields); (4) host-plane auto-pop + generic-question hard block (stating a requirement in an idle workspace pops the pre-question then the classify card as a platform guarantee; ask_user_question is guard-blocked with gate_pending_ask_blocked while a gate is pending, pointing at baf_gate_ask); plus a Windows concurrent-reader race fix (projection atomic-write rename EPERM short retry — a customer's confirm click can no longer be killed by a Tab refresh)"
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
@@ -9,12 +9,12 @@
   },
   "packages": {
     "@deepseek-ai/dsh-baf-core": {
-      "notesZh": "baseline loader、adapter stub、bafCore isolate 挂载",
+      "notesZh": "baseline loader、adapter stub、bafCore isolate 挂载；§22.17 J intake-mode-set 分类改判事件",
       "notesEn": "Baseline loader, adapter stubs, bafCore isolate mount"
     },
     "@deepseek-ai/dsh-baf-workflow": {
-      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级；Phase 7 verify CheckRunner 接入 stack/guard adapter",
-      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation; Phase 7 verify CheckRunner wires stack/guard adapters"
+      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go-path 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级；Phase 7 verify CheckRunner 接入 stack/guard adapter；§22.17 J：分类弹窗两路径改道（intake-mode-set）+ 缺陷草案五字段 + auto-pop 宿主行（状态驱动自动弹）+ 门弹窗通道",
+      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go-path seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation; Phase 7 verify CheckRunner wires stack/guard adapters; §22.17 J: clickable path re-routing in the classify dialog (intake-mode-set) + five-field bug draft + auto-pop host row (state-driven auto popup) + gate dialog channel"
     },
     "@deepseek-ai/dsh-baf-openspec": {
       "notesZh": "OpenSpec 本地文件适配器：骨架、校验、原子归档",
@@ -29,7 +29,7 @@
       "notesEn": "C stack quality executor: build/test/coverage/analyzer command injection; placeholder state returns policy_missing and tool versions"
     },
     "@deepseek-ai/dsh-baf-guard": {
-      "notesZh": "工具调用硬门禁：fs/shell 同步裁决 + projection 重读 + 密钥扫描 + 危险/间接 shell 模式识别；install row 注入每个 agent 的 tools.guard",
+      "notesZh": "工具调用硬门禁：fs/shell 同步裁决 + projection 重读 + 密钥扫描 + 危险/间接 shell 模式识别；install row 注入每个 agent 的 tools.guard；§22.17 J 未决门期间拦截通用提问工具（gate_pending_ask_blocked）",
       "notesEn": "Tool-call hard gate: synchronous fs/shell adjudication + projection re-read + secret scan + dangerous/indirect shell pattern detection; install row hooks tools.guard for every agent"
     },
     "@deepseek-ai/dsh-baf-scaffold": {

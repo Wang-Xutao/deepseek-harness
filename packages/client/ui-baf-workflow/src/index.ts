@@ -7,23 +7,35 @@ import { Context } from '@deepseek-ai/cordis'
 import {
   BafError,
   isBafError,
+  type GuardPolicy,
+  type StackAdapter,
 } from '@deepseek-ai/dsh-baf-core'
 import {
   ProjectionStore,
   buildWorkflowTabView,
   confirmIntake,
   createWorkflowService,
+  driveAbandon,
+  driveArchive,
+  driveClarify,
+  driveClassify,
+  driveDesign,
   driveGateResolve,
-  isActiveChange,
+  driveImplement,
+  drivePlan,
+  driveVerify,
   pipelineFor,
   rejectIntake,
+  resolveActiveChange,
+  resolveIsolateService,
+  resolveScaffoldService,
+  type DriveAdapters,
   type ScaffoldAdapter,
-  type ScaffoldAdapterOptions,
-  type ScaffoldAdapterOutcome,
 } from '@deepseek-ai/dsh-baf-workflow'
 import type { WorkflowTabResume, WorkflowTabView } from '@deepseek-ai/dsh-baf-core'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
@@ -50,6 +62,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'baf-workflow/session-not-found': { readonly sessionId: string }
     'baf-workflow/no-cwd': { readonly sessionId: string }
     'baf-workflow/domain': { readonly code: string; readonly message: string }
+    'baf-workflow/transition': { readonly code: string; readonly message: string }
   }
 }
 
@@ -133,30 +146,133 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
 
   /**
    * Request a legal stage transition.
+   *
+   * Routes every transition through the same drive layer the slash handlers
+   * and the CLI use (`driveClassify`, `drivePlan`, `driveArchive`, …), so the
+   * Tab cannot fabricate a state that bypasses StagePipeline's side effects:
+   * Tab `transition → 'open'` now actually creates the OpenSpec skeleton and
+   * locks the baseline; `transition → 'archive'` runs the atomic move; and so
+   * on. Before this rewrite the handler only ran `service.transition`, which
+   * writes events but skips stage handlers — the user clicked 「进入建立变更」
+   * and got a `current=open` row with no skeleton, no baseline lock, no
+   * artifacts (§13 issue #2, three surfaces giving different behavior for the
+   * same intent).
+   *
+   * Source is host-stamped as `'tab'` (the same rule §22.15 B enforces for
+   * confirm-edge evidence). Drives surface domain errors as `CommandResult`
+   * `kind: 'error'`; we re-throw them as `RemoteError` so the Tab UI
+   * surfaces the message verbatim instead of swallowing it.
    * @param request - transition request.
    * @returns updated tab view.
    */
   @Remote('transition')
   async transition(request: BafWorkflowTransitionRequest): Promise<WorkflowTabView> {
-    const { store } = await this.contextFor(request.sessionId)
-    const service = createWorkflowService({ store })
-    const status = await store.readStatus(request.changeId)
-    // §22.15 B: the host is the source-of-truth for the source field. Any
-    // value the client forwards in `request.evidence.source` is overwritten
-    // — the Tab is the entry surface for every interactive confirm edge.
-    const hostEvidence: Readonly<Record<string, unknown>> = {
-      ...(request.evidence ?? {}),
-      source: 'tab',
+    const { cwd, store } = await this.contextFor(request.sessionId)
+    const adapters = this.resolveAdapters(request.sessionId, cwd)
+    const target = request.to
+    const evidence = request.evidence ?? {}
+    const rawInput = this.evidenceToRawInput(request.changeId, evidence)
+    const source = 'tab' as const
+
+    const result = await this.guardDomain(async () => {
+      switch (target) {
+        case 'open':
+          // Slash behaviour: `confirm change=<id>` chains confirm-intake +
+          // drive-open in one call. If intake is already confirmed (the
+          // usual Tab path: confirm-intake button then enter-open button),
+          // confirmIntake is a no-op and driveOpenStage runs the open drive.
+          return driveClassify(cwd, `confirm ${rawInput}`, source)
+        case 'intake':
+          // Re-render the classification card (slash `/baf-workflow-classify`
+          // with no positionals). Drives are idempotent here.
+          return driveClassify(cwd, rawInput, source)
+        case 'clarify':
+          return driveClarify(cwd, rawInput, source)
+        case 'design':
+          return driveDesign(cwd, rawInput, source)
+        case 'plan':
+          return drivePlan(cwd, rawInput, source)
+        case 'implement':
+          return driveImplement(cwd, rawInput, source)
+        case 'verify':
+          return driveVerify(cwd, rawInput, adapters, source)
+        case 'archive':
+        case 'completed':
+          // T14: archive writes `change-archived`; the projection fold
+          // sets `current=completed`. driveArchive carries the confirm
+          // positional; the host-stamped `source='tab'` satisfies the
+          // confirm-edge source guard (§22.15 B).
+          return driveArchive(cwd, `confirm ${rawInput}`, source)
+        case 'abandoned':
+          // T16: driveAbandon appends `change-abandoned` raw (no
+          // decideTransition), source check runs in the drive.
+          return driveAbandon(cwd, `confirm ${rawInput}`, source)
+        default:
+          throw new BafError(
+            'invalid_transition',
+            `Tab transition: unsupported target ${String(target)}`,
+            { target, changeId: request.changeId },
+          )
+      }
+    })
+    if (result.kind === 'error') {
+      throw new RemoteError('baf-workflow/transition', result.text, {
+        code: 'drive_error',
+        message: result.text,
+      })
     }
-    await this.guardDomain(() => service.transition({
-      changeId: request.changeId,
-      from: status.current === 'completed' || status.current === 'abandoned'
-        ? null
-        : status.current,
-      to: request.to,
-      evidence: hostEvidence,
-    }))
     return buildWorkflowTabView(store, request.changeId)
+  }
+
+  /**
+   * Convert structured Tab evidence into a `key=value` rawInput string the
+   * drive layer (`command-drives.ts`) already parses. Mirrors what
+   * `parseArgs` expects: positional-and-key=value pairs joined by spaces;
+   * arrays become repeated keys.
+   */
+  private evidenceToRawInput(changeId: string, evidence: Readonly<Record<string, unknown>>): string {
+    const parts: string[] = [`change=${changeId}`]
+    for (const [key, value] of Object.entries(evidence)) {
+      if (key === 'change') continue
+      if (value === undefined || value === null) continue
+      if (Array.isArray(value)) {
+        for (const v of value) {
+          if (v === undefined || v === null) continue
+          parts.push(`${key}=${String(v)}`)
+        }
+      } else if (typeof value === 'object') {
+        // Nested evidence (e.g. {regressionTest: {file, command}}) — flatten
+        // one level so the existing parser sees plain values.
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+          if (v === undefined || v === null) continue
+          parts.push(`${k}=${String(v)}`)
+        }
+      } else {
+        parts.push(`${key}=${String(value)}`)
+      }
+    }
+    return parts.join(' ')
+  }
+
+  /**
+   * Resolve the mounted `bafQuality` / `bafGuard` services into the
+   * {@link DriveAdapters} shape `driveVerify` and `driveGuard` consume. Both
+   * live in the baf-domain isolate, whose realms are invisible to a host
+   * `ctx.get` — including the agent realm — so they resolve through
+   * {@link resolveIsolateService} (`agentPresets.serviceFor`, driven by the
+   * session's live agent from {@link liveAgentFor}); plain host-ctx lookup is
+   * the fallback for compositions without the isolate. Absent services are
+   * silently omitted — the drives then surface their own 「服务未挂载」 cards
+   * instead of failing here.
+   */
+  private resolveAdapters(sessionId: SessionId, cwd: string): DriveAdapters {
+    const agent = this.liveAgentFor(sessionId)
+    const quality = resolveIsolateService<{ adapter(): StackAdapter }>(this.ctx, agent, 'bafQuality')
+    const guard = resolveIsolateService<{ policy(root: string): GuardPolicy }>(this.ctx, agent, 'bafGuard')
+    return {
+      ...(quality === undefined ? {} : { stack: quality.adapter() }),
+      ...(guard === undefined ? {} : { guard: guard.policy(cwd) }),
+    }
   }
 
   /**
@@ -199,7 +315,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     const index = await store.readIndex()
     return index.changes.map(c => ({
       changeId: c.changeId,
-      mode: c.mode as 'full-go' | 'bug-fast-path' | 'clarify-required',
+      mode: c.mode as 'full-go-path' | 'bug-fix-path' | 'clarify-required',
       current: c.current,
       seq: c.seq,
       updatedAt: c.updatedAt,
@@ -229,19 +345,23 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   async gateResolve(request: BafWorkflowGateResolveRequest): Promise<WorkflowTabView> {
     const { cwd, store } = await this.contextFor(request.sessionId)
     let resumeCandidates: readonly import('@deepseek-ai/dsh-baf-core').WorkflowNode[] | undefined
+    let resolvedChangeId: string | undefined = request.changeId
+    if (request.changeId === undefined) {
+      const picked = await resolveActiveChange(store)
+      resolvedChangeId = picked.kind === 'one' ? picked.changeId : undefined
+    }
     if (request.gateId === 'resume') {
       // The Tab's `gate.options` for a resume gate are already pinned from
       // the projection, but the host re-derives them so a stale tab cannot
       // dispatch to a node the projection no longer considers legal.
-      const changeId = request.changeId ?? await this.resolveActiveChangeId(store)
-      if (changeId === undefined) {
+      if (resolvedChangeId === undefined) {
         return buildWorkflowTabView(store, null)
       }
       const pipeline = await pipelineFor(cwd)
-      const options = await pipeline.resumeOptions(changeId)
+      const options = await pipeline.resumeOptions(resolvedChangeId)
       resumeCandidates = options.candidates
     }
-    const scaffoldAdapter = this.tryGetScaffoldAdapter()
+    const scaffoldAdapter = this.tryGetScaffoldAdapter(request.sessionId)
     const auditLines: string[] = []
     await this.guardDomain(() =>
       driveGateResolve(
@@ -249,9 +369,10 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
         request.gateId,
         request.optionId,
         {
-          // The host composition may have baf-scaffold mounted; pass through
-          // if so. Other gates don't need an adapter, and driveGateResolve
-          // ignores absent ones silently.
+          // The scaffold adapter is resolved through the session's agent
+          // realm (isolate-mounted); pass through when found. Other gates
+          // don't need an adapter, and driveGateResolve ignores absent ones
+          // silently.
           ...(scaffoldAdapter === undefined ? {} : { scaffold: scaffoldAdapter }),
         },
         resumeCandidates,
@@ -273,52 +394,43 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
         `[baf] ${new Date().toISOString()} - session baf:gate gateId=${request.gateId} option=${request.optionId} change=${request.changeId ?? '-'} source=gate-card action=dismissed`,
       )
     }
-    const changeId = request.changeId ?? await this.resolveActiveChangeId(store)
-    return buildWorkflowTabView(store, changeId)
+    return buildWorkflowTabView(store, resolvedChangeId)
   }
 
   /**
-   * Resolve the active change id from the projection index. Used by
-   * workspace-scope gate resolves (e.g. scaffold) that have no `changeId`.
-   * Mirrors `resolveChange` in command-drives but stays on the public
-   * surface so this package does not import private helpers. Picks the
-   * highest-seq active row (ties broken by stable lexical order), which
-   * is what `/baf-go` would focus.
-   * @param store - workspace projection store.
-   * @returns change id, or undefined when no active change exists.
+   * The session's live agent — the handle `agentPresets.serviceFor` needs to
+   * reach baf-domain isolate services (`bafScaffold`, `bafQuality`,
+   * `bafGuard`). Isolate realms are invisible to a host `ctx.get` and even to
+   * the agent realm itself, so the two-scope `get` this class used before
+   * could never see them in the real desktop; the sanctioned cross-isolate
+   * read is `ctx.get('agentPresets').serviceFor(agent, name)`, which is what
+   * {@link resolveIsolateService} drives. Returns undefined for a dead or
+   * unknown session; callers then fall back to plain host-ctx lookups,
+   * matching dev/test compositions that mount the rows without an isolate.
+   * @param sessionId - the session whose agent to fetch.
+   * @returns the live agent, or undefined when no agent holds the session.
    */
-  private async resolveActiveChangeId(store: ProjectionStore): Promise<string | undefined> {
-    const index = await store.readIndex()
-    let best: string | undefined
-    let bestSeq = -1
-    for (const entry of index.changes) {
-      if (!isActiveChange(entry)) continue
-      if (entry.seq > bestSeq || (entry.seq === bestSeq && (best === undefined || entry.changeId < best))) {
-        best = entry.changeId
-        bestSeq = entry.seq
-      }
-    }
-    return best
-  }
-
-  /**
-   * Wrap the host-plane `bafScaffold` service as a `ScaffoldAdapter`. The
-   * service exposes `scaffold(opts)`; the adapter interface is the same
-   * shape so the drive layer is unchanged. Returns undefined when the
-   * composition does not mount the scaffold service — callers (gateResolve)
-   * simply skip the adapter in that case.
-   * @returns adapter for {@link driveGateResolve}, or undefined.
-   */
-  private tryGetScaffoldAdapter(): ScaffoldAdapter | undefined {
-    let svc: { scaffold: (opts: ScaffoldAdapterOptions) => ScaffoldAdapterOutcome } | undefined
+  private liveAgentFor(sessionId: SessionId): { ctx?: Context } | undefined {
     try {
-      svc = this.ctx.get('bafScaffold') as { scaffold: (opts: ScaffoldAdapterOptions) => ScaffoldAdapterOutcome }
+      return this.ctx.agents.get(sessionId)
     } catch {
       return undefined
     }
+  }
+
+  /**
+   * Wrap the `bafScaffold` service as a `ScaffoldAdapter`. The service is
+   * mounted inside the baf-domain isolate, so it resolves through
+   * {@link resolveScaffoldService} with the session's live agent (see
+   * {@link liveAgentFor}). Returns undefined when no realm defines it —
+   * callers (gateResolve) simply skip the adapter in that case.
+   * @param sessionId - the session whose agent may hold the service.
+   * @returns adapter for {@link driveGateResolve}, or undefined.
+   */
+  private tryGetScaffoldAdapter(sessionId: SessionId): ScaffoldAdapter | undefined {
+    const svc = resolveScaffoldService(this.ctx, this.liveAgentFor(sessionId))
     if (svc === undefined) return undefined
-    const bound = svc
-    return { scaffold: opts => bound.scaffold(opts) }
+    return { scaffold: opts => svc.scaffold(opts) }
   }
 
   private async contextFor(sessionId: SessionId): Promise<{ cwd: string; store: ProjectionStore }> {

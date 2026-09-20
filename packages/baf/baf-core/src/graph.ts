@@ -41,13 +41,13 @@ export interface WorkflowGraphModel {
   readonly edges: readonly GraphEdge[]
 }
 
-/** Node ids on the full-go path, top → bottom. Also the §18.4.3 full-go lane. */
-export const FULL_GO_ROWS: readonly WorkflowNode[] = [
+/** Node ids on the full-go-path path, top → bottom. Also the §18.4.3 full-go-path lane. */
+export const FULL_GO_PATH_ROWS: readonly WorkflowNode[] = [
   'intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive',
 ]
 
-/** Node ids on the bug-fast-path. Also the §18.4.3 pre-upgrade lane. */
-export const FAST_PATH_ROWS: readonly WorkflowNode[] = [
+/** Node ids on the bug-fix-path. Also the §18.4.3 pre-upgrade lane. */
+export const BUG_FIX_PATH_ROWS: readonly WorkflowNode[] = [
   'intake', 'open', 'implement', 'verify', 'archive',
 ]
 
@@ -76,9 +76,9 @@ function edgeKind(
  * @returns placements.
  */
 export function placementsForMode(mode: WorkflowMode | 'template'): readonly GraphNodePlacement[] {
-  if (mode === 'bug-fast-path') {
+  if (mode === 'bug-fix-path') {
     return [
-      ...FAST_PATH_ROWS.map((id, row) => ({ id, column: 0, row, onPath: true })),
+      ...BUG_FIX_PATH_ROWS.map((id, row) => ({ id, column: 0, row, onPath: true })),
       { id: 'clarify', column: 1, row: 1, onPath: false },
       { id: 'design', column: 2, row: 1, onPath: false },
       { id: 'plan', column: 1, row: 2, onPath: false },
@@ -87,9 +87,9 @@ export function placementsForMode(mode: WorkflowMode | 'template'): readonly Gra
       { id: 'abandoned', column: 1, row: 5, onPath: true },
     ]
   }
-  // full-go and template (clarify-required uses full-go visual until confirmed)
+  // full-go-path and template (clarify-required uses full-go-path visual until confirmed)
   return [
-    ...FULL_GO_ROWS.map((id, row) => ({ id, column: 0, row, onPath: true })),
+    ...FULL_GO_PATH_ROWS.map((id, row) => ({ id, column: 0, row, onPath: true })),
     { id: 'drift', column: 1, row: 4, onPath: true },
     { id: 'completed', column: 0, row: 8, onPath: true },
     { id: 'abandoned', column: 1, row: 8, onPath: true },
@@ -97,18 +97,18 @@ export function placementsForMode(mode: WorkflowMode | 'template'): readonly Gra
 }
 
 /**
- * Edges visible for a mode. Template shows both full-go and fast-path edges.
+ * Edges visible for a mode. Template shows both full-go-path and fast-path edges.
  * @param mode - workflow mode or template.
  * @returns edges.
  */
 export function edgesForMode(mode: WorkflowMode | 'template'): readonly GraphEdge[] {
   const wanted = new Set<string>()
-  if (mode === 'template' || mode === 'full-go' || mode === 'clarify-required') {
+  if (mode === 'template' || mode === 'full-go-path' || mode === 'clarify-required') {
     for (const id of ['T1', 'T2', 'T4', 'T4a', 'T6', 'T7', 'T7a', 'T8', 'T9', 'T10', 'T11', 'T12', 'T13', 'T14', 'T16']) {
       wanted.add(id)
     }
   }
-  if (mode === 'template' || mode === 'bug-fast-path') {
+  if (mode === 'template' || mode === 'bug-fix-path') {
     for (const id of ['T1', 'T3', 'T5', 'T9', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16']) {
       wanted.add(id)
     }

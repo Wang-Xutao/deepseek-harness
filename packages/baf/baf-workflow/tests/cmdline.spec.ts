@@ -30,7 +30,9 @@ describe('baf-cli Commander tree', () => {
       'check-guard',
       'check-quality',
       'doctor',
+      'gate',
       'go',
+      'go-confirm',
       'help',
       'list',
       'scaffold',
@@ -52,7 +54,7 @@ describe('baf-cli Commander tree', () => {
 
   it('mirrors /baf-status wording in the status subcommand description', () => {
     const status = program.commands.find(c => c.name() === 'status')
-    expect(status?.description()).toBe('查看当前变更：模式/阶段/intake · ★★★')
+    expect(status?.description()).toBe('查看当前变更：模式/阶段/分类 · ★★★')
   })
 
   it('mirrors /baf-welcome wording in the welcome subcommand description', () => {
@@ -60,6 +62,13 @@ describe('baf-cli Commander tree', () => {
     // user can read the same binding + toolchain report the desktop prints.
     const welcome = program.commands.find(c => c.name() === 'welcome')
     expect(welcome?.description()).toContain('与 /baf-welcome 同源渲染')
+  })
+
+  it('mirrors /baf-gate wording in the gate subcommand description', () => {
+    // §22.14-D: the env gate card pops after the welcome; the CLI mirror
+    // renders the same registry card for terminal-only customers.
+    const gate = program.commands.find(c => c.name() === 'gate')
+    expect(gate?.description()).toContain('与 /baf-gate 同源渲染')
   })
 
   it('declares drive-style subcommands with the new tier-prefixed names', () => {

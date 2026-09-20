@@ -92,27 +92,6 @@ export function versionsPath(userData: string): string {
 }
 
 /**
- * Compare two `MAJOR.MINOR.PATCH` semver strings (no pre-release).
- * Returns negative if `a < b`, 0 if equal, positive if `a > b`.
- * Non-numeric / malformed segments fall back to `0` so a corrupt value
- * never blocks a newer embed from advancing the stored version.
- * @param a - left version.
- * @param b - right version.
- */
-function compareSemver(a: string, b: string): number {
-  const parse = (v: string): [number, number, number] => {
-    const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v)
-    if (m === null) return [0, 0, 0]
-    return [Number(m[1]), Number(m[2]), Number(m[3])]
-  }
-  const [a1, a2, a3] = parse(a)
-  const [b1, b2, b3] = parse(b)
-  if (a1 !== b1) return a1 - b1
-  if (a2 !== b2) return a2 - b2
-  return a3 - b3
-}
-
-/**
  * Load versions from disk, or seed from packaged defaults when missing.
  *
  * Re-seeding policy (single source of truth for `baf-dsh` desktop bump):
@@ -120,13 +99,16 @@ function compareSemver(a: string, b: string): number {
  *   version the user sees in Settings must be the binary they are running;
  *   persisting a stale value across upgrades was the root cause of
  *   `baf-dsh-Setup-0.0.15.exe` reporting `0.0.11` after upgrade.
- * - `dsh` and the 7 BAF package versions — taken from the embed whenever
- *   the embedded value advances (semver greater-than) over the persisted
- *   one, so a re-bumped package propagates without nuking other state.
- *   When the persisted value is newer (e.g. user side-loaded a preview
- *   build) we keep it.
- * - `bafPlugin` and `*Notes` — preserved as-is; notes only ship with
- *   bumps and are append-only history.
+ * - `dsh` and the 7 BAF package versions — also taken from the embed
+ *   whenever it provides the field: they all ship inside THIS exe
+ *   (`baf-product-versions.json` is written by pack-dsh from the workspace),
+ *   so the running binary is the only authority. A persisted snapshot must
+ *   never mask them — a 0.0.11-era file once outranked the embed via
+ *   semver-max (pinning `bafCore` at `0.1.3-alpha.1`) and left the five
+ *   sub-package rows blank in Settings.
+ * - `bafPlugin` — preserved as-is: the plugin zip updates on its own channel
+ *   without an exe bump, so the persisted identity stays authoritative.
+ * - `*Notes` — seed-first; notes only ship with bumps.
  * @param userData - userData directory.
  * @param seed - values written on first launch (from package embeds).
  */
@@ -144,24 +126,21 @@ export function loadVersions(userData: string, seed: AppVersions = DEFAULT_VERSI
   }
   // `bafDsh` is the desktop shell — always reflect the running binary.
   const bafDsh = seed.bafDsh
-  const dsh = compareSemver(seed.dsh, parsed.dsh) > 0 ? seed.dsh : parsed.dsh
-  const pickAdvanced = (next: string | undefined, prev: string | undefined): string | undefined => {
-    if (next === undefined) return prev
-    if (prev === undefined) return next
-    return compareSemver(next, prev) > 0 ? next : prev
-  }
+  // Build-embedded facts win over the persisted snapshot (see doc comment):
+  // `dsh` + the 7 BAF packages ship inside this exe, so the embed overrides;
+  // only `bafPlugin` keeps its persisted identity.
   return {
     ...parsed,
     bafDsh,
-    dsh,
+    dsh: seed.dsh ?? parsed.dsh,
     bafPlugin: parsed.bafPlugin,
-    bafCore: pickAdvanced(seed.bafCore, parsed.bafCore),
-    bafWorkflow: pickAdvanced(seed.bafWorkflow, parsed.bafWorkflow),
-    bafOpenspec: pickAdvanced(seed.bafOpenspec, parsed.bafOpenspec),
-    bafStandard: pickAdvanced(seed.bafStandard, parsed.bafStandard),
-    bafQuality: pickAdvanced(seed.bafQuality, parsed.bafQuality),
-    bafGuard: pickAdvanced(seed.bafGuard, parsed.bafGuard),
-    bafScaffold: pickAdvanced(seed.bafScaffold, parsed.bafScaffold),
+    bafCore: seed.bafCore ?? parsed.bafCore,
+    bafWorkflow: seed.bafWorkflow ?? parsed.bafWorkflow,
+    bafOpenspec: seed.bafOpenspec ?? parsed.bafOpenspec,
+    bafStandard: seed.bafStandard ?? parsed.bafStandard,
+    bafQuality: seed.bafQuality ?? parsed.bafQuality,
+    bafGuard: seed.bafGuard ?? parsed.bafGuard,
+    bafScaffold: seed.bafScaffold ?? parsed.bafScaffold,
     bafDshNotes: seed.bafDshNotes ?? parsed.bafDshNotes,
     dshNotes: seed.dshNotes ?? parsed.dshNotes,
     bafCoreNotes: seed.bafCoreNotes ?? parsed.bafCoreNotes,

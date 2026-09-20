@@ -3,7 +3,7 @@
  * regression-test-first enforcement in implement, and T5 root-cause
  * evidence. OpenSpec artifacts are skipped on this mode; the projection's
  * `openspecSkipped` annotation carries the reason codes.
- * @module @deepseek-ai/dsh-baf-workflow/stages/fastpath
+ * @module @deepseek-ai/dsh-baf-workflow/stages/bug-fix-path
  */
 
 import { readFile } from 'node:fs/promises'
@@ -18,7 +18,7 @@ import { stageArtifactPaths } from './artifacts.ts'
 export const BUG_RECORD_FILE = 'bug-record.md'
 
 /** Preserved fast-path ledger name after a T15 upgrade (audit trail). */
-export const FASTPATH_LEDGER_FILE = 'fastpath-ledger.json'
+export const BUG_FIX_PATH_LEDGER_FILE = 'bug-fix-path-ledger.json'
 
 /** Ledger task id that must be written and completed first in fast path. */
 export const REGRESSION_TASK_ID = 'regression-test'
@@ -27,15 +27,15 @@ export const REGRESSION_TASK_ID = 'regression-test'
 export const FIX_TASK_ID = 'fix-root-cause'
 
 /** One regression-test declaration recorded at fast-path open. */
-export interface FastPathRegressionTest {
+export interface BugFixPathRegressionTest {
   /** Workspace-relative test file to write before any fix file. */
   readonly file: string
   /** Command that executes the regression test (Phase 7 runs it live). */
   readonly command: string
 }
 
-/** Input for {@link driveFastPathOpen} (T3 entry, minimal bug record). */
-export interface FastPathBugInput {
+/** Input for {@link driveBugFixPathOpen} (T3 entry, minimal bug record). */
+export interface BugFixPathBugInput {
   readonly changeId: string
   readonly title: string
   /** Observed problem behavior. */
@@ -44,11 +44,11 @@ export interface FastPathBugInput {
   readonly rootCause: string
   /** Files the fix is expected to touch (seeds the implement allowlist). */
   readonly affectedFiles: readonly string[]
-  readonly regressionTest: FastPathRegressionTest
+  readonly regressionTest: BugFixPathRegressionTest
 }
 
 /** Result of a successful fast-path open drive. */
-export interface FastPathOpenResult {
+export interface BugFixPathOpenResult {
   readonly status: WorkflowStatus
   readonly artifacts: readonly string[]
   /** Whether the bug record carries a real root cause (T5 evidence). */
@@ -62,9 +62,9 @@ interface TaskRowView {
   readonly done?: boolean
 }
 
-/** Ledger shape {@link driveFastPathOpen} writes and gates read back. */
-export interface FastPathLedgerView {
-  readonly fastPath?: boolean
+/** Ledger shape {@link driveBugFixPathOpen} writes and gates read back. */
+export interface BugFixPathLedgerView {
+  readonly bugFixPath?: boolean
   readonly tasks: readonly TaskRowView[]
   readonly allowlist: readonly string[]
   readonly touched: readonly string[]
@@ -77,7 +77,7 @@ export interface FastPathLedgerView {
  * @returns markdown body.
  */
 export function renderBugRecordBody(
-  input: FastPathBugInput,
+  input: BugFixPathBugInput,
   workspace: { readonly gitRevision?: string; readonly baselineId?: string },
 ): string {
   const lines: string[] = [
@@ -107,13 +107,13 @@ export function renderBugRecordBody(
     '## Workspace',
     '',
     ...(workspace.gitRevision === undefined
-      ? ['- Git revision unavailable — warning recorded; fast path proceeds (full-go would block)']
+      ? ['- Git revision unavailable — warning recorded; fast path proceeds (full-go-path would block)']
       : [`- Git revision: ${workspace.gitRevision}`]),
     ...(workspace.baselineId === undefined
       ? ['- Baseline unavailable at open (intake approved this fast path)']
       : [`- Baseline: ${workspace.baselineId}`]),
     '',
-    '- Mode: bug-fast-path (OpenSpec skipped; see projection reason codes)',
+    '- Mode: bug-fix-path (OpenSpec skipped; see projection reason codes)',
     '',
   )
   return lines.join('\n')
@@ -128,10 +128,10 @@ export function renderBugRecordBody(
  * @returns artifacts plus the T5 evidence verdict.
  * @throws {BafError} invalid_transition when required fields are empty.
  */
-export async function driveFastPathOpen(
+export async function driveBugFixPathOpen(
   ctx: StageContext,
-  input: FastPathBugInput,
-): Promise<FastPathOpenResult> {
+  input: BugFixPathBugInput,
+): Promise<BugFixPathOpenResult> {
   if (input.problem.trim() === '' || input.rootCause.trim() === '') {
     throw new BafError('invalid_transition', 'fast-path open requires problem and root cause', {
       changeId: input.changeId,
@@ -156,8 +156,8 @@ export async function driveFastPathOpen(
   })
   await writeArtifact(ctx.workspace.root, input.changeId, BUG_RECORD_FILE, body)
 
-  const ledger: FastPathLedgerView = {
-    fastPath: true,
+  const ledger: BugFixPathLedgerView = {
+    bugFixPath: true,
     tasks: [
       {
         id: REGRESSION_TASK_ID,
@@ -252,7 +252,7 @@ export async function rootCauseRecorded(
  * @param ledger - implement ledger view.
  * @returns task row or undefined.
  */
-export function regressionTaskOf(ledger: FastPathLedgerView): TaskRowView | undefined {
+export function regressionTaskOf(ledger: BugFixPathLedgerView): TaskRowView | undefined {
   return ledger.tasks.find(task => task.id === REGRESSION_TASK_ID)
 }
 
@@ -261,7 +261,7 @@ export function regressionTaskOf(ledger: FastPathLedgerView): TaskRowView | unde
  * @param ledger - implement ledger view.
  * @returns workspace-relative file or undefined.
  */
-export function regressionFileOf(ledger: FastPathLedgerView): string | undefined {
+export function regressionFileOf(ledger: BugFixPathLedgerView): string | undefined {
   return regressionTaskOf(ledger)?.files?.[0]
 }
 
@@ -275,8 +275,8 @@ export function regressionFileOf(ledger: FastPathLedgerView): string | undefined
  * @throws {BafError} invalid_transition (regression_test_required) when a
  * non-regression file is recorded before the regression task is done.
  */
-export function assertRegressionFirst(ledger: FastPathLedgerView, file: string): void {
-  if (ledger.fastPath !== true) return
+export function assertRegressionFirst(ledger: BugFixPathLedgerView, file: string): void {
+  if (ledger.bugFixPath !== true) return
   const regressionFile = regressionFileOf(ledger)
   if (regressionFile !== undefined && file === regressionFile) return
   const task = regressionTaskOf(ledger)
@@ -295,8 +295,8 @@ export function assertRegressionFirst(ledger: FastPathLedgerView, file: string):
  * @param ledger - implement ledger view.
  * @returns true when satisfied.
  */
-export function regressionSatisfied(ledger: FastPathLedgerView): boolean {
-  if (ledger.fastPath !== true) return true
+export function regressionSatisfied(ledger: BugFixPathLedgerView): boolean {
+  if (ledger.bugFixPath !== true) return true
   const task = regressionTaskOf(ledger)
   const file = task?.files?.[0]
   return task !== undefined && task.done === true && file !== undefined

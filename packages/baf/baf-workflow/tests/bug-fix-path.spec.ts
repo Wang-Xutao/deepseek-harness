@@ -1,5 +1,5 @@
 /**
- * Phase 6 bug-fast-path tests: low-risk bug chain, regression-test-first
+ * Phase 6 bug-fix-path tests: low-risk bug chain, regression-test-first
  * refusals, T15 escalation (auto + explicit), and post-upgrade backfill
  * (§12 Phase 6 acceptance).
  */
@@ -24,8 +24,8 @@ const REGRESSION_FILE = 'tests/test_parser_empty.c'
 const FIX_FILE = 'src/parser.c'
 
 /** Create a temp workspace with a confirmed low-risk-bug change (T3 ready). */
-async function setupFastPath(options: { readonly withGit?: boolean } = {}) {
-  const root = await mkdtemp(join(tmpdir(), 'baf-fastpath-'))
+async function setupBugFixPath(options: { readonly withGit?: boolean } = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'baf-bug-fix-path-'))
   const store = new ProjectionStore({ workspaceRoot: root })
   const baseline = await loadBaselineFile(FIXTURE_BASELINE)
   const gitRevision = options.withGit === false ? undefined : 'rev-fp-1'
@@ -64,7 +64,7 @@ async function reachImplementInProgress(
   root: string,
   changeId: string,
 ): Promise<void> {
-  await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
+  await pipeline.driveBugFixPathOpenStage(bugInput(changeId), 'slash')
   await pipeline.enterImplementStage(changeId, 'slash')
   await recordTouched(root, { changeId, file: REGRESSION_FILE })
   await completeTask(root, changeId, 'regression-test')
@@ -83,15 +83,17 @@ async function touchReference(root: string, rel: string): Promise<string> {
 }
 
 describe('fast-path happy path', () => {
-  it('runs intake → fast-path open → implement → verify → archive without OpenSpec artifacts', async () => {
-    const { root, pipeline, store, changeId } = await setupFastPath()
+  // Full fast-path pipeline × git+fs; under full-suite parallel load the default
+  // 5s budget intermittently expires mid-pipeline (hunt 2026-09-20: 5072ms).
+  it('runs intake → fast-path open → implement → verify → archive without OpenSpec artifacts', { timeout: 60_000 }, async () => {
+    const { root, pipeline, store, changeId } = await setupBugFixPath()
     try {
       let status = await store.readStatus(changeId)
-      expect(status.mode).toBe('bug-fast-path')
+      expect(status.mode).toBe('bug-fix-path')
       expect(status.openspecSkipped?.skipped).toBe(true)
       expect(status.nodes.clarify).toBe('skipped')
 
-      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
+      await pipeline.driveBugFixPathOpenStage(bugInput(changeId), 'slash')
       status = await store.readStatus(changeId)
       expect(status.current).toBe('open')
       expect(status.nodes.open).toBe('completed')
@@ -102,14 +104,14 @@ describe('fast-path happy path', () => {
       )
       expect(bugRecord).toContain('## Root cause')
 
-      // No full-go skeleton templates: fast path created only the bug record
+      // No full-go-path skeleton templates: fast path created only the bug record
       // and the implement ledger.
       await expect(readFile(
         join(root, 'openspec', 'changes', changeId, ARTIFACT_FILES.clarify),
         'utf8',
       )).rejects.toThrow()
 
-      // Full-go-only edges stay illegal in fast-path mode (T4 is full-go).
+      // Full-go-only edges stay illegal in fast-path mode (T4 is full-go-path).
       await expect(pipeline.driveClarifyStage({
         changeId,
         questions: [],
@@ -127,7 +129,7 @@ describe('fast-path happy path', () => {
       const verify = await pipeline.driveVerifyStage(changeId)
       if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(false)
-      expect(verify.result.report.mode).toBe('bug-fast-path')
+      expect(verify.result.report.mode).toBe('bug-fix-path')
       const regressionRow = verify.result.report.checks.find(c => c.name === 'regression-test')
       expect(regressionRow?.required).toBe(true)
       expect(regressionRow?.ok).toBe(true)
@@ -148,9 +150,9 @@ describe('fast-path happy path', () => {
   })
 
   it('fast-path open warns but does not block without a git revision', async () => {
-    const { root, pipeline, store, changeId } = await setupFastPath({ withGit: false })
+    const { root, pipeline, store, changeId } = await setupBugFixPath({ withGit: false })
     try {
-      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
+      await pipeline.driveBugFixPathOpenStage(bugInput(changeId), 'slash')
       const status = await store.readStatus(changeId)
       expect(status.nodes.open).toBe('completed')
 
@@ -170,9 +172,9 @@ describe('fast-path happy path', () => {
 
 describe('fast-path gates', () => {
   it('T5 refuses implement entry when the bug record lacks a root cause', async () => {
-    const { root, pipeline, store, changeId } = await setupFastPath()
+    const { root, pipeline, store, changeId } = await setupBugFixPath()
     try {
-      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
+      await pipeline.driveBugFixPathOpenStage(bugInput(changeId), 'slash')
       await writeFile(
         join(root, 'openspec', 'changes', changeId, 'bug-record.md'),
         '# Bug record\n\n## Problem\n\nParser crashes.\n',
@@ -187,8 +189,8 @@ describe('fast-path gates', () => {
     }
   })
 
-  it('refuses the full-go open drive on a fast-path change', async () => {
-    const { root, pipeline, changeId } = await setupFastPath()
+  it('refuses the full-go-path open drive on a fast-path change', async () => {
+    const { root, pipeline, changeId } = await setupBugFixPath()
     try {
       await expect(pipeline.driveOpenStage(changeId, 'Fix parser crash', 'slash'))
         .rejects.toMatchObject({ code: 'invalid_transition' })
@@ -198,9 +200,9 @@ describe('fast-path gates', () => {
   })
 
   it('refuses fix-file writes before the regression test is done (regression-test-first)', async () => {
-    const { root, pipeline, changeId } = await setupFastPath()
+    const { root, pipeline, changeId } = await setupBugFixPath()
     try {
-      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
+      await pipeline.driveBugFixPathOpenStage(bugInput(changeId), 'slash')
       await pipeline.enterImplementStage(changeId, 'slash')
 
       // Fix file is inside the allowlist but the regression task is not done.
@@ -229,8 +231,8 @@ describe('fast-path gates', () => {
 })
 
 describe('T15 escalation', () => {
-  it('auto-escalates to full-go when touched files grow beyond the allowlist', async () => {
-    const { root, pipeline, store, changeId } = await setupFastPath()
+  it('auto-escalates to full-go-path when touched files grow beyond the allowlist', async () => {
+    const { root, pipeline, store, changeId } = await setupBugFixPath()
     try {
       await reachImplementInProgress(pipeline, root, changeId)
 
@@ -245,7 +247,7 @@ describe('T15 escalation', () => {
       expect(drive.result.escalated).toBeDefined()
 
       const status = await store.readStatus(changeId)
-      expect(status.mode).toBe('full-go')
+      expect(status.mode).toBe('full-go-path')
       expect(status.current).toBe('clarify')
       expect(status.openspecSkipped?.skipped).toBe(false)
       expect(status.nodes.implement).toBe('failed')
@@ -256,10 +258,10 @@ describe('T15 escalation', () => {
 
       // Fast-path ledger preserved for audit; OpenSpec change backfilled.
       const preserved = await readFile(
-        join(root, 'openspec', 'changes', changeId, 'fastpath-ledger.json'),
+        join(root, 'openspec', 'changes', changeId, 'bug-fix-path-ledger.json'),
         'utf8',
       )
-      expect(JSON.parse(preserved).fastPath).toBe(true)
+      expect(JSON.parse(preserved).bugFixPath).toBe(true)
       const proposal = await readFile(
         join(root, 'openspec', 'changes', changeId, ARTIFACT_FILES.proposal),
         'utf8',
@@ -271,21 +273,23 @@ describe('T15 escalation', () => {
   })
 
   it('refuses escalation outside fast-path implement', async () => {
-    const { root, pipeline, store, changeId } = await setupFastPath()
+    const { root, pipeline, store, changeId } = await setupBugFixPath()
     try {
-      await pipeline.driveFastPathOpenStage(bugInput(changeId), 'slash')
+      await pipeline.driveBugFixPathOpenStage(bugInput(changeId), 'slash')
       await expect(pipeline.driveEscalateStage({ changeId, cause: 'premature' }))
         .rejects.toMatchObject({ code: 'invalid_transition' })
       const status = await store.readStatus(changeId)
       expect(status.current).toBe('open')
-      expect(status.mode).toBe('bug-fast-path')
+      expect(status.mode).toBe('bug-fix-path')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  it('backfills clarify → design → plan → implement → verify → archive after escalation', async () => {
-    const { root, pipeline, store, changeId } = await setupFastPath()
+  // Backfills all seven full-path stages — strictly heavier than the stages
+  // happy path that tripped the default 5s under parallel load (2026-09-20).
+  it('backfills clarify → design → plan → implement → verify → archive after escalation', { timeout: 60_000 }, async () => {
+    const { root, pipeline, store, changeId } = await setupBugFixPath()
     try {
       await reachImplementInProgress(pipeline, root, changeId)
 
@@ -337,7 +341,7 @@ describe('T15 escalation', () => {
       const verify = await pipeline.driveVerifyStage(changeId)
       if (verify.node !== 'verify') throw new Error('expected a verify drive')
       expect(verify.result.backToImplement).toBe(false)
-      expect(verify.result.report.mode).toBe('full-go')
+      expect(verify.result.report.mode).toBe('full-go-path')
 
       await pipeline.driveArchiveStage(changeId, true, 'slash')
       const status = await store.readStatus(changeId)

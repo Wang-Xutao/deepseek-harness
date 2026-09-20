@@ -16,6 +16,10 @@
     { "path": "../../boot/cmdline" },
     { "path": "../../core/session" },
     { "path": "../../core/agent" },
-    { "path": "../../interaction/commands" }
+    { "path": "../../core/tools" },
+    { "path": "../../code-runtime/code-runtime" },
+    { "path": "../../interaction/commands" },
+    { "path": "../../interaction/user-approval" },
+    { "path": "../../interaction/user-questions" }
   ]
 }

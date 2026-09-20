@@ -34,7 +34,7 @@ export const TEMPLATE_PLACEMENTS: readonly TemplatePlacement[] = [
   { id: 'abandoned', column: 1, row: 8, onPath: true },
 ]
 
-/** Template edges mirrored from baf-core full-go + shared recovery edges. */
+/** Template edges mirrored from baf-core full-go-path + shared recovery edges. */
 export const TEMPLATE_EDGES: readonly TemplateEdge[] = [
   { id: 'T1', from: null, to: 'intake', kind: 'entry', condition: 'any BAF input' },
   { id: 'T2', from: 'intake', to: 'open', kind: 'forward', condition: 'confirmed new requirement or high-risk bug' },

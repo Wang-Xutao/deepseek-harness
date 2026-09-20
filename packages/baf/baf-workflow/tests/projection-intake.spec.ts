@@ -68,13 +68,13 @@ describe('projection store', () => {
 })
 
 describe('intake rules', () => {
-  it('forces full-go for new requirements and public-api bugs', () => {
+  it('forces full-go-path for new requirements and public-api bugs', () => {
     const feature = classifyIntake({
       description: '新增 feature: export public API',
       workspace: { root: '/tmp' },
       affectedScopeHint: 'public-api',
     })
-    expect(feature.mode).toBe('full-go')
+    expect(feature.mode).toBe('full-go-path')
     expect(feature.openspecRequired).toBe(true)
 
     const cross = classifyIntake({
@@ -82,7 +82,7 @@ describe('intake rules', () => {
       workspace: { root: '/tmp' },
       affectedScopeHint: 'cross-module',
     })
-    expect(cross.mode).toBe('full-go')
+    expect(cross.mode).toBe('full-go-path')
   })
 
   it('allows fast path for low-risk bugs when baseline permits', async () => {
@@ -97,7 +97,7 @@ describe('intake rules', () => {
       affectedScopeHint: 'single-file',
       baseline: real,
     })
-    expect(intake.mode).toBe('bug-fast-path')
+    expect(intake.mode).toBe('bug-fix-path')
     expect(intake.openspecRequired).toBe(false)
   })
 })
@@ -152,7 +152,7 @@ describe('tab view', () => {
         mode: status.mode,
         current: status.current,
       }])
-      if (status.mode === 'bug-fast-path') {
+      if (status.mode === 'bug-fix-path') {
         expect(view.nodes.find(n => n.id === 'clarify')?.status).toBe('skipped')
         expect(view.openspecSkipped?.skipped).toBe(true)
       }

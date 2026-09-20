@@ -814,20 +814,20 @@
 .preserved .list { margin-bottom: 0; }
 
 /* §13 R3 — fast-path Tab form: 5-field structured dispatch. */
-.fastPathForm {
+.bugFixPathForm {
   display: grid;
   gap: 0.45rem;
   margin-top: 0.55rem;
 }
 
-.fastPathLabel {
+.bugFixPathLabel {
   display: grid;
   gap: 0.18rem;
   font-size: 0.72rem;
   color: var(--wf-muted);
 }
 
-.fastPathInput {
+.bugFixPathInput {
   width: 100%;
   border: 1px solid var(--wf-line);
   border-radius: 6px;
@@ -839,19 +839,19 @@
   resize: vertical;
 }
 
-.fastPathInput:focus {
+.bugFixPathInput:focus {
   outline: 2px solid color-mix(in srgb, var(--wf-accent) 60%, transparent);
   outline-offset: 1px;
 }
 
-.fastPathTextarea { min-height: 4.2rem; }
+.bugFixPathTextarea { min-height: 4.2rem; }
 
-.fastPathHelp {
+.bugFixPathHelp {
   font-size: 0.66rem;
   color: var(--wf-muted);
 }
 
-.fastPathWarn {
+.bugFixPathWarn {
   font-size: 0.68rem;
   color: var(--wf-danger, #c33);
 }

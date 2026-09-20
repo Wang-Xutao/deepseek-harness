@@ -1,7 +1,7 @@
 /**
  * Stage completion gates (enterprise-workflow §5.3 completion conditions).
  * A gate inspects durable artifacts and returns reason codes; it never
- * trusts caller assertions. Fast path skips full-go-only artifacts.
+ * trusts caller assertions. Fast path skips full-go-path-only artifacts.
  * @module @deepseek-ai/dsh-baf-workflow/stages/gates
  */
 
@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { OpenSpecAdapter } from '@deepseek-ai/dsh-baf-core'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
-import { REGRESSION_TASK_ID } from './fastpath.ts'
+import { REGRESSION_TASK_ID } from './bug-fix-path.ts'
 
 /** Outcome of one completion gate. */
 export interface GateOutcome {
@@ -22,8 +22,8 @@ export interface GateOutcome {
 export interface GateInput {
   readonly workspaceRoot: string
   readonly changeId: string
-  /** Which workflow mode the change runs (fast path skips full-go artifacts). */
-  readonly mode: 'full-go' | 'bug-fast-path'
+  /** Which workflow mode the change runs (fast path skips full-go-path artifacts). */
+  readonly mode: 'full-go-path' | 'bug-fix-path'
 }
 
 const ok: GateOutcome = { ok: true, reasonCodes: [] }
@@ -67,7 +67,7 @@ function templateOnly(body: string): boolean {
  * @returns gate outcome.
  */
 export async function clarifyGate(input: GateInput): Promise<GateOutcome> {
-  if (input.mode === 'bug-fast-path') return ok
+  if (input.mode === 'bug-fix-path') return ok
   const body = await readArtifact(input, ARTIFACT_FILES.clarify)
   if (body === undefined) return fail(['stage_incomplete'], 'clarify.md missing')
   if (templateOnly(body)) return fail(['stage_incomplete'], 'clarify.md is still the unfilled template')
@@ -83,7 +83,7 @@ export async function clarifyGate(input: GateInput): Promise<GateOutcome> {
  * @returns gate outcome.
  */
 export async function designGate(input: GateInput): Promise<GateOutcome> {
-  if (input.mode === 'bug-fast-path') return ok
+  if (input.mode === 'bug-fix-path') return ok
   const body = await readArtifact(input, ARTIFACT_FILES.design)
   if (body === undefined) return fail(['stage_incomplete'], 'design.md missing')
   if (templateOnly(body)) return fail(['stage_incomplete'], 'design.md is still the unfilled template')
@@ -130,7 +130,7 @@ async function readPlan(input: GateInput): Promise<PlanDocument | undefined> {
  * @returns gate outcome.
  */
 export async function planGate(input: GateInput): Promise<GateOutcome> {
-  if (input.mode === 'bug-fast-path') return ok
+  if (input.mode === 'bug-fix-path') return ok
   const plan = await readPlan(input)
   if (plan === undefined) return fail(['stage_incomplete'], 'plan.json missing or malformed')
   if (plan.allowlist.length === 0) return fail(['stage_incomplete'], 'plan.json allowlist is empty')
@@ -162,7 +162,7 @@ export async function implementGate(
   input: GateInput,
   touched: readonly string[],
 ): Promise<GateOutcome> {
-  if (input.mode === 'bug-fast-path') {
+  if (input.mode === 'bug-fix-path') {
     const plan = await readPlan(input)
     if (plan === undefined) return fail(['stage_incomplete'], 'plan.json missing or malformed')
     const allow = new Set(plan.allowlist)

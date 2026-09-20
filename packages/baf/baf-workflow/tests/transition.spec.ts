@@ -33,7 +33,7 @@ const NON_HUMAN_SOURCES: readonly (TransitionSource | undefined | 'model-tool')[
  * intake / verify / archive evidence on hand for each rule's own gate so the
  * only failure surface is the source check.
  */
-function statusForRule(fromNode: WorkflowNode, mode: 'full-go' | 'bug-fast-path'): WorkflowStatus {
+function statusForRule(fromNode: WorkflowNode, mode: 'full-go-path' | 'bug-fix-path'): WorkflowStatus {
   return {
     changeId: 'c-mtx',
     projectionVersion: 1,
@@ -96,8 +96,8 @@ function evidenceFor(ruleId: string): Record<string, unknown> {
 /**
  * Pick a mode the rule accepts; rules with `modes: []` accept every mode.
  */
-function modeFor(ruleId: string): 'full-go' | 'bug-fast-path' {
-  return ruleId === 'T3' || ruleId === 'T5' ? 'bug-fast-path' : 'full-go'
+function modeFor(ruleId: string): 'full-go-path' | 'bug-fix-path' {
+  return ruleId === 'T3' || ruleId === 'T5' ? 'bug-fix-path' : 'full-go-path'
 }
 
 describe('confirm-edge source matrix (§22.15 B / P2-C2)', () => {
@@ -144,7 +144,7 @@ describe('confirm-edge source matrix (§22.15 B / P2-C2)', () => {
   }
 
   it('control: T4 (clarify → design) accepts model-tool and missing source', () => {
-    const status = statusForRule('clarify', 'full-go')
+    const status = statusForRule('clarify', 'full-go-path')
     for (const src of [...HUMAN_SOURCES, 'model-tool' as const, undefined]) {
       const evidence = src === undefined ? {} : { source: src }
       const decision = decideTransition({ status, to: 'design', evidence })

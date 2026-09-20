@@ -17,7 +17,7 @@ import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { ProjectionStore } from '../src/projection.ts'
 import { driveClassify } from '../src/command-drives.ts'
-import { driveGo } from '../src/go-coordinator.ts'
+import { driveGo, type GateAsk } from '../src/go-coordinator.ts'
 import { focusFor, type FocusStore } from '../src/session-focus.ts'
 import { completeTask, recordTouched } from '../src/stages/implement.ts'
 
@@ -27,10 +27,10 @@ const FIXTURE_BASELINE = fileURLToPath(
   new URL('../../baf-core/tests/fixtures/baseline/baseline.yml', import.meta.url),
 )
 
-/** A description the heuristic classifier lands on full-go + public-api. */
+/** A description the heuristic classifier lands on full-go-path + public-api. */
 const DESCRIPTION = 'feat: add export public API for reports'
 
-/** Workspace fixture: baseline + a real Git repo (drift anchor + full-go open). */
+/** Workspace fixture: baseline + a real Git repo (drift anchor + full-go-path open). */
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'baf-go-'))
   await mkdir(join(root, '.baf'), { recursive: true })
@@ -122,7 +122,7 @@ async function reachGateA(root: string, focus: FocusStore): Promise<string> {
     '',
   ].join('\n'))
   const gate = await driveGo({ cwd: root, focus })
-  expect(gate.text).toContain('awaiting_customer_confirm')
+  expect(gate.text).toContain('等待你的确认')
   return changeId
 }
 
@@ -169,7 +169,7 @@ async function reachGateB(root: string, focus: FocusStore): Promise<string> {
   await recordTouched(root, { changeId, file: 'src/export.ts' })
   await completeTask(root, changeId, 't1')
   const card = await driveGo({ cwd: root, focus })
-  expect(card.text).toContain('awaiting_customer_confirm')
+  expect(card.text).toContain('等待你的确认')
   return changeId
 }
 
@@ -179,7 +179,7 @@ describe('session binding (§18.3.1 / §18.6)', () => {
     try {
       const card = await driveGo({ cwd: root, focus })
       expect(card.kind).toBe('success')
-      expect(card.text).toContain('无未完成工作流')
+      expect(card.text).toContain('没有进行中的工作流')
       expect(card.text).toContain('不需要写 /baf-go + 需求')
       expect(focus.get()).toBeUndefined()
     } finally {
@@ -195,7 +195,7 @@ describe('session binding (§18.3.1 / §18.6)', () => {
       // §18.2 keeps 确认/补充/退出 on the card, not behind `baf-go`.
       expect(card.kind).toBe('success')
       expect(card.text).toContain('分类卡')
-      expect(card.text).toContain('mode: full-go')
+      expect(card.text).toContain('mode: full-go-path')
       // The change it minted is bound to this session: it was created by this
       // conversation, so the next `baf-go` needs no `continue` word.
       const changeId = await activeId(root)
@@ -404,7 +404,7 @@ describe('routing table (§18.4.2)', () => {
       const changeId = await reachGateB(root, focus)
       const card = await driveGo({ cwd: root, focus })
       expect(card.kind).toBe('success')
-      expect(card.text).toContain('门 B 已确认 · 已归档')
+      expect(card.text).toContain('检查已确认 · 已归档')
       expect((await statusOf(root, changeId)).terminal).toBe('completed')
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -445,7 +445,7 @@ describe('confirmation gates (§18.5)', () => {
       const changeId = await reachGateA(root, focus)
       const card = await driveGo({ cwd: root, focus })
       expect(card.kind).toBe('success')
-      expect(card.text).toContain('门 A 已确认 · plan 已进入')
+      expect(card.text).toContain('设计已确认 · 已进入计划阶段')
       const status = await statusOf(root, changeId)
       expect(status.current).toBe('plan')
       expect(status.nodes.plan).toBe('in-progress')
@@ -467,29 +467,230 @@ describe('confirmation gates (§18.5)', () => {
       // The unlock is one call: it moves to plan and does *not* re-write the
       // park event, so a customer holding down /baf-go cannot inflate the log.
       const unlocked = await driveGo({ cwd: root, focus })
-      expect(unlocked.text).toContain('门 A 已确认 · plan 已进入')
+      expect(unlocked.text).toContain('设计已确认 · 已进入计划阶段')
       expect(await parks()).toHaveLength(1)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  it('names both gate cards with the awaiting_customer_confirm marker', async () => {
+  it('names both gate cards with the waiting-for-confirmation headline', async () => {
     const { root, focus } = await setup()
     try {
       const changeId = await reachDesign(root, focus)
       await author(root, changeId, 'design.md', '# Design\n\n## Approach\n\nAdd src/export.ts.\n')
       const gateA = await driveGo({ cwd: root, focus })
       // §22.14-D: gate A now renders the registered §22 card verbatim. The
-      // headline is `需客户确认 · <title> · 点本行展开/折叠指令全文` and the
-      // body lists the registered options. The customer-facing card no
-      // longer needs the `awaiting_customer_confirm` marker as a separate
+      // headline is `等待你的确认 · <title> · 点本行展开/折叠详情` and the
+      // body lists the registered options in plain language. The customer-facing card no
+      // longer carries an internal status token as a separate
       // token — it is the registered `设计确认门` card itself.
       expect(gateA.kind).toBe('success')
-      expect(gateA.text).toContain('需客户确认')
-      expect(gateA.text).toContain('N3 design 已实现')
+      expect(gateA.text).toContain('等待你的确认')
+      expect(gateA.text).toContain('设计文档已经写好')
       expect(gateA.text).toContain('【选项】')
       expect(gateA.text).toContain('/baf-go')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('interactive gate dialog (§22.17)', () => {
+  /** The pop calls the coordinator made, for asserting which gate popped. */
+  interface PopRecord { gateId: string; changeId?: string }
+
+  /** An ask channel that answers one registry option and records every pop. */
+  function askAnswer(optionId: string, label: string, pops: PopRecord[]): GateAsk {
+    return async (gate) => {
+      pops.push({ gateId: gate.gateId, ...(gate.changeId === undefined ? {} : { changeId: gate.changeId }) })
+      return { kind: 'answered', optionId, label }
+    }
+  }
+
+  /** An ask channel where the customer pauses (closed / skipped the dialog). */
+  const askPause: GateAsk = async () => ({ kind: 'paused', reason: 'dismissed' })
+
+  it('pops gate A on park and a confirmed dialog advances to plan', async () => {
+    const { root, focus } = await setup()
+    try {
+      const changeId = await reachDesign(root, focus)
+      await author(root, changeId, 'design.md', '# Design\n\n## Approach\n\nAdd src/export.ts.\n')
+      const pops: PopRecord[] = []
+      const card = await driveGo({ cwd: root, focus, ask: askAnswer('confirm', '确认设计，进入计划', pops) })
+      expect(pops).toEqual([{ gateId: 'design-confirm', changeId }])
+      expect(card.text).toContain('设计已确认 · 已进入计划阶段')
+      expect((await statusOf(root, changeId)).current).toBe('plan')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('a paused dialog keeps the workflow parked and hints how to continue', async () => {
+    const { root, focus } = await setup()
+    try {
+      const changeId = await reachDesign(root, focus)
+      await author(root, changeId, 'design.md', '# Design\n\n## Approach\n\nAdd src/export.ts.\n')
+      const card = await driveGo({ cwd: root, focus, ask: askPause })
+      expect(card.text).toContain('等待你的确认')
+      expect(card.text).toContain('/baf-go 重新弹出确认框')
+      expect(card.text).toContain('/baf-go-confirm 不弹框直接继续')
+      const status = await statusOf(root, changeId)
+      expect(status.current).toBe('design')
+      expect(status.nodes.plan).toBeUndefined()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('a parked gate re-pops on the next /baf-go instead of silently unlocking', async () => {
+    const { root, focus } = await setup()
+    try {
+      const changeId = await reachDesign(root, focus)
+      await author(root, changeId, 'design.md', '# Design\n\n## Approach\n\nAdd src/export.ts.\n')
+      // First pop: paused. The workflow stays parked at gate A.
+      await driveGo({ cwd: root, focus, ask: askPause })
+      // Second /baf-go must POP AGAIN (the customer revives the dialog), and
+      // this time the confirm click continues the workflow.
+      const pops: PopRecord[] = []
+      const card = await driveGo({ cwd: root, focus, ask: askAnswer('confirm', '确认设计，进入计划', pops) })
+      expect(pops).toEqual([{ gateId: 'design-confirm', changeId }])
+      expect(card.text).toContain('设计已确认 · 已进入计划阶段')
+      expect((await statusOf(root, changeId)).current).toBe('plan')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('pops gate B and archives on the confirm click', async () => {
+    const { root, focus } = await setup()
+    try {
+      const changeId = await reachGateB(root, focus)
+      const pops: PopRecord[] = []
+      const card = await driveGo({ cwd: root, focus, ask: askAnswer('confirm', '确认归档', pops) })
+      expect(pops).toEqual([{ gateId: 'verify-archive', changeId }])
+      expect(card.text).toContain('检查已确认 · 已归档')
+      expect((await statusOf(root, changeId)).terminal).toBe('completed')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('pops the intake gate and confirms the classification on click', async () => {
+    const { root, focus } = await setup()
+    try {
+      await driveGo({ cwd: root, rawInput: DESCRIPTION, focus })
+      const changeId = await activeId(root)
+      const pops: PopRecord[] = []
+      const card = await driveGo({ cwd: root, focus, ask: askAnswer('confirm-full', '确认 · 完整流程', pops) })
+      expect(pops).toEqual([{ gateId: 'intake-classify', changeId }])
+      const status = await statusOf(root, changeId)
+      expect(status.intake?.confirmation).toBe('confirmed')
+      expect(card.text).not.toContain('重新弹出确认框')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('§22.17 I: the intake pop carries the classifier judgment', async () => {
+    const { root, focus } = await setup()
+    try {
+      await driveGo({ cwd: root, rawInput: DESCRIPTION, focus })
+      const changeId = await activeId(root)
+      const seen: { gateId: string; judgment?: { mode: string } }[] = []
+      await driveGo({
+        cwd: root,
+        focus,
+        ask: async (gate) => {
+          seen.push({
+            gateId: gate.gateId,
+            ...(gate.judgment === undefined ? {} : { judgment: gate.judgment }),
+          })
+          return { kind: 'paused', reason: 'dismissed' }
+        },
+      })
+      expect(seen).toHaveLength(1)
+      expect(seen[0]?.gateId).toBe('intake-classify')
+      expect(seen[0]?.judgment?.mode).toBe('full-go-path')
+      // The paused branch replays the classification card, change untouched.
+      expect((await statusOf(root, changeId)).intake?.confirmation).toBe('pending')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('/baf-go-confirm passes gate A on the first call without any dialog', async () => {
+    const { root, focus } = await setup()
+    try {
+      const changeId = await reachDesign(root, focus)
+      await author(root, changeId, 'design.md', '# Design\n\n## Approach\n\nAdd src/export.ts.\n')
+      const pops: PopRecord[] = []
+      const card = await driveGo({
+        cwd: root,
+        focus,
+        confirm: true,
+        ask: askAnswer('confirm', '确认设计，进入计划', pops), // must never be consulted
+      })
+      expect(pops).toEqual([])
+      expect(card.text).toContain('设计已确认 · 已进入计划阶段')
+      expect((await statusOf(root, changeId)).current).toBe('plan')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('/baf-go-confirm continues a parked gate B by archiving', async () => {
+    const { root, focus } = await setup()
+    try {
+      const changeId = await reachGateB(root, focus)
+      const card = await driveGo({ cwd: root, focus, confirm: true })
+      expect(card.text).toContain('检查已确认 · 已归档')
+      expect((await statusOf(root, changeId)).terminal).toBe('completed')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('an uninitialized workspace surfaces the scaffold gate instead of "nothing to do"', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-go-scaffold-'))
+    const focus = focusFor(root)
+    try {
+      const card = await driveGo({ cwd: root, focus })
+      expect(card.text).toContain('工作区需要初始化')
+      expect(card.text).toContain('初始化工作区')
+      expect(card.text).toContain('暂不初始化')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('an uninitialized workspace pops scaffold; confirm mode dispatches the init', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-go-scaffold-'))
+    const focus = focusFor(root)
+    try {
+      // Dialog path: the init click routes to driveScaffold — no scaffold
+      // adapter in this test composition, so the drive's own "service not
+      // mounted" card proves the dispatch happened.
+      const pops: PopRecord[] = []
+      const viaDialog = await driveGo({ cwd: root, focus, ask: askAnswer('init', '初始化工作区', pops) })
+      expect(pops).toEqual([{ gateId: 'scaffold' }])
+      expect(viaDialog.text).toContain('初始化服务没有加载')
+      // Confirm mode takes the same positive path without any dialog.
+      const viaConfirm = await driveGo({ cwd: root, focus, confirm: true })
+      expect(viaConfirm.text).toContain('初始化服务没有加载')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('a paused scaffold dialog hints the two continue paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-go-scaffold-'))
+    const focus = focusFor(root)
+    try {
+      const card = await driveGo({ cwd: root, focus, ask: askPause })
+      expect(card.text).toContain('工作区需要初始化')
+      expect(card.text).toContain('/baf-go 重新弹出确认框')
+      expect(card.text).toContain('/baf-go-confirm 不弹框直接继续')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -510,7 +711,7 @@ describe('drift handoff (§19.4)', () => {
       await (await pipeline(root)).driveDriftStage(changeId)
 
       const card = await driveGo({ cwd: root, focus })
-      expect(card.text).toContain('请选择复位目标')
+      expect(card.text).toContain('请选择要退回的阶段')
       expect(card.text).toContain('/baf-workflow-resume design')
       expect(card.text).toContain('git-revision-changed')
       // Never auto-picks: the projection stays parked in drift.
@@ -533,7 +734,7 @@ describe('drift handoff (§19.4)', () => {
 
       const card = await driveGo({ cwd: root, focus, rawInput: 'clarify' })
       expect(card.kind).toBe('success')
-      expect(card.text).toContain('已复位到 clarify')
+      expect(card.text).toContain('已退回到 clarify')
       expect((await statusOf(root, changeId)).current).toBe('clarify')
     } finally {
       await rm(root, { recursive: true, force: true })

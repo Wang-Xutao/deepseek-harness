@@ -7,6 +7,8 @@ import {
   buildEmptyTabView,
   confirmGateOf,
   statusToTabView,
+  type AwaitingConfirmSnapshot,
+  type ProjectionEvent,
   type WorkflowTabGate,
   type WorkflowTabLanes,
   type WorkflowTabPendingGate,
@@ -37,29 +39,45 @@ const WORKSPACE_BASELINE_PATH = '.baf/baseline.yml'
  * `gateToTabView()` shape if the registry lacks the §22 fields (e.g. the
  * caller omits `gateId` in its gate payload, which only happens for
  * pre-P1 fixtures).
+ *
+ * §13 R5 — when the caller passes a `snapshot` captured onto the matching
+ * `awaiting-confirm` event, that snapshot wins over the live registry.
+ * This keeps replay honest: a §22 edit after the park cannot silently
+ * change what an already-parked customer sees.
  * @param confirmId - the change-level confirm gate id from `confirmGateOf`.
+ * @param snapshot - optional frozen copy from the awaiting-confirm event.
  * @returns Tab gate payload, or undefined if registry has no mapping.
  */
-function enrichTabGate(confirmId: WorkflowTabGate['id']): WorkflowTabGate | undefined {
+function enrichTabGate(
+  confirmId: WorkflowTabGate['id'],
+  snapshot?: AwaitingConfirmSnapshot,
+): WorkflowTabGate | undefined {
   const gateId = confirmId === 'design-to-plan' ? 'design-confirm'
     : confirmId === 'verify-to-archive' ? 'verify-archive'
       : undefined
   if (gateId === undefined) return undefined
-  const spec = GATE_REGISTRY[gateId]
-  if (spec === undefined) return undefined
+  const spec = snapshot === undefined ? GATE_REGISTRY[gateId] : undefined
+  if (spec === undefined && snapshot === undefined) return undefined
   const node = confirmId === 'design-to-plan' ? 'design' as const
     : 'verify' as const
   const actionKey = confirmId === 'design-to-plan' ? 'gate.confirmIntoPlan'
     : 'gate.confirmArchive'
+  const question = snapshot?.question ?? spec?.question
+  if (question === undefined) return undefined
+  const options = snapshot !== undefined
+    ? snapshot.options
+      .filter(opt => opt.command !== '__noop__')
+      .map(opt => ({ id: opt.id, label: opt.label }))
+    : (spec?.options ?? [])
+      .filter(opt => opt.command !== '__noop__')
+      .map(opt => ({ id: opt.id, label: opt.label }))
   return {
     id: confirmId,
     node,
     actionKey,
     gateId,
-    question: spec.question,
-    options: spec.options
-      .filter(opt => opt.command !== '__noop__')
-      .map(opt => ({ id: opt.id, label: opt.label })),
+    question,
+    options,
   }
 }
 
@@ -141,13 +159,17 @@ export async function buildWorkflowTabView(
     const resume = status.current === 'drift' && options.resume !== undefined
       ? await options.resume(selected)
       : undefined
+    // §13 R5 — pick the most recent awaiting-confirm snapshot for this
+    // change (eventually-consistent with the §18.5 confirmation guard).
+    const gateSnapshot = lastAwaitingConfirmSnapshot(events)
     const extras: { lanes?: WorkflowTabLanes; resume?: WorkflowTabResume } = {
       ...(lanes === undefined ? {} : { lanes }),
       ...(resume === undefined ? {} : { resume }),
     }
     const derived = includeMetrics ? deriveWorkflowMetrics(events) : undefined
     const view = statusToTabView(status, changes, derived, extras)
-    return attachWorkspaceGates(view, store.workspaceRoot())
+    const enriched = gateSnapshot !== undefined ? enrichTabGateWithSnapshot(view, gateSnapshot) : view
+    return attachWorkspaceGates(enriched, store.workspaceRoot())
   } catch (error) {
     return attachWorkspaceGates({
       ...buildEmptyTabView(changes),
@@ -177,4 +199,38 @@ function attachWorkspaceGates(view: WorkflowTabView, cwd: string): WorkflowTabVi
     ...(enrichedGate === undefined ? {} : { gate: enrichedGate }),
     ...(pendingGate === undefined ? {} : { pendingGate }),
   }
+}
+
+/**
+ * §13 R5 — walk the event log from the tail and return the snapshot
+ * carried on the most recent `awaiting-confirm` event. Old events without
+ * `snapshot` simply pass through (return undefined → caller falls back to
+ * the live registry).
+ * @param events - full event log for a single change (ascending seq).
+ * @returns last snapshot or undefined.
+ */
+function lastAwaitingConfirmSnapshot(events: readonly ProjectionEvent[]): AwaitingConfirmSnapshot | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (event !== undefined && event.type === 'awaiting-confirm' && event.snapshot !== undefined) {
+      return event.snapshot
+    }
+  }
+  return undefined
+}
+
+/**
+ * §13 R5 — apply a snapshot to the view's `gate` field. Replaces the
+ * live-registry-derived gate with the snapshot-backed one. Returns the
+ * view unchanged when no parked gate exists (the snapshot is only useful
+ * for parked gates).
+ * @param view - tab view to mutate.
+ * @param snapshot - frozen copy from the awaiting-confirm event.
+ * @returns view with the snapshot-backed gate.
+ */
+function enrichTabGateWithSnapshot(view: WorkflowTabView, snapshot: AwaitingConfirmSnapshot): WorkflowTabView {
+  if (view.gate === undefined) return view
+  const enriched = enrichTabGate(view.gate.id, snapshot)
+  if (enriched === undefined) return view
+  return { ...view, gate: enriched }
 }

@@ -18,7 +18,7 @@ import {
   type ProjectionEvent,
   type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
-import { BUG_RECORD_FILE } from '../src/stages/fastpath.ts'
+import { BUG_RECORD_FILE } from '../src/stages/bug-fix-path.ts'
 import { confirmIntake, createWorkflowService } from '../src/workflow-service.ts'
 import { ProjectionStore } from '../src/projection.ts'
 import { StagePipeline } from '../src/stages/pipeline.ts'
@@ -62,22 +62,22 @@ describe('deriveLanes', () => {
       { type: 'stage-completed', node: 'open', artifacts: ['bug-record.md'] },
       { type: 'stage-entered', node: 'implement' },
       { type: 'stage-failed', node: 'implement', reason: 'escalated: scope grew' },
-      { type: 'mode-upgraded', from: 'bug-fast-path', to: 'full-go', cause: 'scope grew' },
+      { type: 'mode-upgraded', from: 'bug-fix-path', to: 'full-go-path', cause: 'scope grew' },
       { type: 'stage-entered', node: 'clarify' },
       { type: 'stage-completed', node: 'clarify', artifacts: ['clarify.md'] },
     ))
 
     expect(lanes).toBeDefined()
-    const [fastPath, fullGo] = lanes?.lanes ?? []
-    expect(fastPath?.id).toBe('bug-fast-path')
-    expect(fullGo?.id).toBe('full-go')
+    const [bugFixPath, fullGoPath] = lanes?.lanes ?? []
+    expect(bugFixPath?.id).toBe('bug-fix-path')
+    expect(fullGoPath?.id).toBe('full-go-path')
 
     // The pre-upgrade lane stops where the escalation interrupted it...
-    expect(fastPath?.status.implement).toBe('failed')
-    expect(fastPath?.status.clarify).toBeUndefined()
-    // ...and the full-go lane has no trace of the abandoned implement.
-    expect(fullGo?.status.clarify).toBe('completed')
-    expect(fullGo?.status.implement).toBeUndefined()
+    expect(bugFixPath?.status.implement).toBe('failed')
+    expect(bugFixPath?.status.clarify).toBeUndefined()
+    // ...and the full-go-path lane has no trace of the abandoned implement.
+    expect(fullGoPath?.status.clarify).toBe('completed')
+    expect(fullGoPath?.status.implement).toBeUndefined()
 
     expect(lanes?.upgrade).toMatchObject({
       from: 'implement',
@@ -92,7 +92,7 @@ describe('deriveLanes', () => {
 
   it('keeps the upgrade edge on screen for a degenerate log', () => {
     const lanes = deriveLanes(log(
-      { type: 'mode-upgraded', from: 'bug-fast-path', to: 'full-go', cause: 'no stages yet' },
+      { type: 'mode-upgraded', from: 'bug-fix-path', to: 'full-go-path', cause: 'no stages yet' },
     ))
     // Nothing was entered on either side; the edge still has to point somewhere
     // legible rather than collapsing the whole lane view.
@@ -102,7 +102,7 @@ describe('deriveLanes', () => {
 
   it('leaves the first lane empty when nothing was entered before the split', () => {
     const lanes = deriveLanes(log(
-      { type: 'mode-upgraded', from: 'bug-fast-path', to: 'full-go', cause: 'early' },
+      { type: 'mode-upgraded', from: 'bug-fix-path', to: 'full-go-path', cause: 'early' },
       { type: 'stage-entered', node: 'clarify' },
     ))
     expect(lanes?.lanes[0]?.status).toEqual({})
@@ -125,7 +125,7 @@ describe('Tab payload for an escalated change', () => {
         baseline,
       })
       await confirmIntake(store, intake.changeId, 'user')
-      await pipeline.driveFastPathOpenStage({
+      await pipeline.driveBugFixPathOpenStage({
         changeId: intake.changeId,
         title: 'Fix parser crash on empty input',
         problem: 'Parser dereferences a null token when the input file is empty.',
@@ -166,7 +166,7 @@ describe('gate exposure', () => {
     current: WorkflowStatus['current'],
     nodes: WorkflowStatus['nodes'],
   ): WorkflowStatus {
-    return { changeId: 'c1', mode: 'full-go', current, nodes } as unknown as WorkflowStatus
+    return { changeId: 'c1', mode: 'full-go-path', current, nodes } as unknown as WorkflowStatus
   }
 
   it('opens gate A only once design completed, and stays silent otherwise', () => {
@@ -220,7 +220,7 @@ describe('resume exposure', () => {
       expect(before.resume).toBeUndefined()
       expect(calls).toBe(0)
 
-      await pipeline.driveFastPathOpenStage({
+      await pipeline.driveBugFixPathOpenStage({
         changeId: intake.changeId,
         title: 'Fix parser crash on empty input',
         problem: 'Parser dereferences a null token when the input file is empty.',

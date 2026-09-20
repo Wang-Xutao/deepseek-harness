@@ -41,7 +41,7 @@ function state(partial: Partial<GuardWorkflowState>): GuardWorkflowState {
     active: true,
     changeId: 'change-1',
     stage: 'implement',
-    mode: 'full-go',
+    mode: 'full-go-path',
     intakeConfirmed: true,
     allowlist: ['src/feature.c'],
     changeDirRel: 'openspec/changes/change-1',
@@ -253,6 +253,63 @@ describe('tool classification and guard', () => {
   })
 })
 
+describe('§22.17 J hard line: generic question tool vs pending gate', () => {
+  it('denies ask_user_question while a gate is pending, pointing at baf_gate_ask', () => {
+    const guard = createBafToolGuard({
+      workspaceRoot: ROOT,
+      sources: {
+        readConfig: () => CONFIG,
+        readState: () => state({ stage: 'intake', intakeConfirmed: false, gatePending: true }),
+      },
+    })
+    const denial = guard(exec('ask_user_question', { questions: [] }))
+    expect(denial).toContain('gate_pending_ask_blocked')
+    expect(denial).toContain('baf_gate_ask')
+  })
+
+  it('allows ask_user_question when no gate is pending (clarification stays legal)', () => {
+    const guard = createBafToolGuard({
+      workspaceRoot: ROOT,
+      sources: {
+        readConfig: () => CONFIG,
+        readState: () => state({ stage: 'implement', gatePending: false }),
+      },
+    })
+    expect(guard(exec('ask_user_question', { questions: [] }))).toBeUndefined()
+  })
+
+  it('allows ask_user_question in an inactive workspace (auto-pop owns that zone)', () => {
+    const guard = createBafToolGuard({
+      workspaceRoot: ROOT,
+      sources: {
+        readConfig: () => CONFIG,
+        readState: () => ({ active: false, intakeConfirmed: false, allowlist: [] }),
+      },
+    })
+    expect(guard(exec('ask_user_question', { questions: [] }))).toBeUndefined()
+  })
+
+  it('disk state: unconfirmed intake ⇒ gatePending; confirm ⇒ cleared', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-guard-gate-'))
+    try {
+      await mkdir(join(root, '.baf'), { recursive: true })
+      const baseline = await loadBaselineFile(FIXTURE_BASELINE)
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const { intake } = await createWorkflowService({ store }).intake({
+        description: 'feat: add export public API for reports',
+        workspace: { root },
+        affectedScopeHint: 'public-api',
+        baseline,
+      })
+      expect(readGuardWorkflowState(root).gatePending).toBe(true)
+      await confirmIntake(store, intake.changeId, 'user')
+      expect(readGuardWorkflowState(root).gatePending).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+    }
+  })
+})
+
 describe('sync disk state', () => {
   async function workspace() {
     const root = await mkdtemp(join(tmpdir(), 'baf-guard-'))
@@ -303,7 +360,10 @@ describe('sync disk state', () => {
     }
   })
 
-  it('adjudicates against a real on-disk projection driven to implement', async () => {
+  // Drives a real workspace to implement (git+fs heavy); under full-suite
+  // parallel load the default 5s budget intermittently expires (hunt
+  // 2026-09-20: 5048ms).
+  it('adjudicates against a real on-disk projection driven to implement', { timeout: 60_000 }, async () => {
     const { root, clean } = await workspace()
     try {
       const changeId = await driveToImplement(root)

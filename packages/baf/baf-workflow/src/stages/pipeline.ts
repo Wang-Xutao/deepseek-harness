@@ -59,10 +59,10 @@ import {
   type AbandonStageResult,
 } from './abandon.ts'
 import {
-  driveFastPathOpen,
+  driveBugFixPathOpen,
   rootCauseRecorded,
-  type FastPathBugInput,
-} from './fastpath.ts'
+  type BugFixPathBugInput,
+} from './bug-fix-path.ts'
 import {
   driveEscalate,
   scopeGrowthFiles,
@@ -75,9 +75,9 @@ export interface StagePipelineOptions {
   readonly store: ProjectionStore
   /** Workspace root for artifacts and projection. */
   readonly workspaceRoot: string
-  /** Git facts; full-go open blocks without a revision. */
+  /** Git facts; full-go-path open blocks without a revision. */
   readonly gitRevision?: string
-  /** Baseline governing the chain; full-go open requires it. */
+  /** Baseline governing the chain; full-go-path open requires it. */
   readonly baseline?: BaselineManifest
   /** Phase 7 quality adapter (wired rows gate verify). */
   readonly stack?: StackAdapter
@@ -168,18 +168,18 @@ export class StagePipeline {
     // write so a blocked open leaves the change at intake with only a
     // transition-rejected audit event.
     const pre = await this.store.readStatus(changeId)
-    if (pre.mode === 'bug-fast-path') {
+    if (pre.mode === 'bug-fix-path') {
       // Fast-path changes carry a bug record, not an OpenSpec skeleton.
       await this.recordRejectionQuiet(changeId, pre, 'open', 'invalid_transition')
       throw new BafError(
         'invalid_transition',
-        'bug-fast-path change must use driveFastPathOpenStage',
+        'bug-fix-path change must use driveBugFixPathOpenStage',
         { changeId },
       )
     }
-    if (pre.mode === 'full-go') {
+    if (pre.mode === 'full-go-path') {
       if (this.ctx.baseline === undefined) {
-        throw new BafError('baseline_unavailable', 'full-go open requires a parsed baseline', {
+        throw new BafError('baseline_unavailable', 'full-go-path open requires a parsed baseline', {
           changeId,
         })
       }
@@ -187,7 +187,7 @@ export class StagePipeline {
         await this.recordRejectionQuiet(changeId, pre, 'open', 'invalid_transition')
         throw new BafError(
           'invalid_transition',
-          'full-go open blocks when local Git is unavailable',
+          'full-go-path open blocks when local Git is unavailable',
           { changeId },
         )
       }
@@ -225,19 +225,19 @@ export class StagePipeline {
    * @param input - bug fields (problem/root cause/regression test/scope).
    * @returns drive result.
    */
-  async driveFastPathOpenStage(input: FastPathBugInput, source?: TransitionSource): Promise<DriveResult> {
+  async driveBugFixPathOpenStage(input: BugFixPathBugInput, source?: TransitionSource): Promise<DriveResult> {
     const pre = await this.store.readStatus(input.changeId)
-    if (pre.mode !== 'bug-fast-path') {
+    if (pre.mode !== 'bug-fix-path') {
       await this.recordRejectionQuiet(input.changeId, pre, 'open', 'invalid_transition')
       throw new BafError(
         'invalid_transition',
-        'full-go change must use driveOpenStage',
+        'full-go-path change must use driveOpenStage',
         { changeId: input.changeId },
       )
     }
     const status = await this.enterStage(input.changeId, 'open', undefined, undefined, source)
-    const result = await driveFastPathOpen(this.ctx, input)
-    // Same anchor discipline as full-go open: lock the baseline + revision
+    const result = await driveBugFixPathOpen(this.ctx, input)
+    // Same anchor discipline as full-go-path open: lock the baseline + revision
     // when both are observable; a missing revision only warns (recorded in
     // the bug record by the handler).
     const baseline = this.ctx.baseline
@@ -305,7 +305,7 @@ export class StagePipeline {
   }
 
   /**
-   * Enter implement (T8 full-go / T5 fast-path) without running the
+   * Enter implement (T8 full-go-path / T5 fast-path) without running the
    * completion gate. The fast-path edge carries machine evidence read back
    * from the bug record — never a caller assertion.
    * Callers run per-task work (recordTouched/completeTask) and then finish
@@ -315,7 +315,7 @@ export class StagePipeline {
    */
   async enterImplementStage(changeId: string, source?: TransitionSource): Promise<WorkflowStatus> {
     const pre = await this.readCurrent(changeId)
-    if (pre.mode === 'bug-fast-path') {
+    if (pre.mode === 'bug-fix-path') {
       return this.enterStage(changeId, 'implement', {
         rootCauseRecorded: await rootCauseRecorded(this.ctx.workspace.root, changeId),
       }, undefined, source)
@@ -339,7 +339,7 @@ export class StagePipeline {
         from: status.current,
       })
     }
-    if (status.mode === 'bug-fast-path') {
+    if (status.mode === 'bug-fix-path') {
       const ledger = await readLedger(this.ctx.workspace.root, changeId)
       const growth = scopeGrowthFiles(ledger)
       if (growth.length > 0) {
@@ -400,7 +400,7 @@ export class StagePipeline {
         { changeId, node, reasonCodes: ['stage_incomplete'] },
       )
     }
-    const mode = status.mode === 'bug-fast-path' ? 'bug-fast-path' as const : 'full-go' as const
+    const mode = status.mode === 'bug-fix-path' ? 'bug-fix-path' as const : 'full-go-path' as const
     const gateInput = { workspaceRoot: this.ctx.workspace.root, changeId, mode }
     const gate = node === 'clarify'
       ? await clarifyGate(gateInput)

@@ -62,7 +62,7 @@ export const baselineManifestSchema = z.object({
   workflow: z.object({
     default: z.literal('go'),
     requireOpenSpec: z.boolean(),
-    bugFastPath: z.object({
+    bugFixPath: z.object({
       allowed: z.boolean(),
       maxScope: maxScopeSchema,
       requireRegressionTest: z.boolean(),

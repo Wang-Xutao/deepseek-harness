@@ -92,8 +92,24 @@
   font-weight: 500;
 }
 
+/* Subtitle seat under the title: the body carries no inset of its own (the
+   header's 24px left padding and the option list's 12px belong to those
+   sections), so the detail takes the header's inset here — the old 2px left
+   margin rendered the description flush against the card edge, outdented
+   from the title above it and reading as a broken line. The `.card .detail p`
+   prefix out-specifies MarkdownText's own `.markdown p` sheet regardless of
+   bundle order, collapsing the chat-message paragraph margins (16px 0, sized
+   for message bubbles) into caption spacing inside the card. */
 .detail {
-  margin: 0 2px 8px;
+  margin: 0 16px 8px 24px;
+}
+
+.card .detail p {
+  margin: 0;
+}
+
+.card .detail p + p {
+  margin-top: 8px;
 }
 
 .footerActions {
@@ -430,6 +446,11 @@
 
   .options {
     padding: 4px 8px;
+  }
+
+  /* The header's left inset narrows to 18px here; the detail tracks it. */
+  .detail {
+    margin-left: 18px;
   }
 
   .title {

@@ -46,7 +46,7 @@
 
 - [ ] 「新建变更」或对话描述后出现分类卡
 - [ ] 分类卡显示 kind / mode / scope / confidence / summary
-- [ ] 确认 → 模式变为 full-go / fast-path / clarify；拒绝 → 退出
+- [ ] 确认 → 模式变为 full-go-path / fast-path / clarify；拒绝 → 退出
 - [ ] 确认前工作区无意外源码写入
 
 ## G. Projection / Transition
@@ -62,8 +62,8 @@
 
 ## I. 模式与续跑（概念核对）
 
-- [ ] 理解：full-go / bug-fast-path 由 **intake 分类确认**决定，不是另开 slash「选模式」
-- [ ] 理解：一条变更一种模式；同工作区可多变更；快路径可升级 full-go（同变更，不必新开会话）
+- [ ] 理解：full-go-path / bug-fix-path 由 **intake 分类确认**决定，不是另开 slash「选模式」
+- [ ] 理解：一条变更一种模式；同工作区可多变更；快路径可升级 full-go-path（同变更，不必新开会话）
 - [ ] 理解：状态在工作区 projection；同 cwd 新会话可续；换机需同步 `.baf/projection/`
 
 ## J. 明确尚未实现

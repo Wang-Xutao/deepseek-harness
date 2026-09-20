@@ -117,8 +117,8 @@ function artifactName(path: string): string {
 function modeLabel(mode: string, t: (key: WorkflowTabKey) => string): string {
   switch (mode) {
     case 'template': return t('mode.template')
-    case 'full-go': return t('mode.fullGo')
-    case 'bug-fast-path': return t('mode.fastPath')
+    case 'full-go-path': return t('mode.fullGoPath')
+    case 'bug-fix-path': return t('mode.bugFixPath')
     case 'clarify-required': return t('mode.clarify')
     default: return mode
   }
@@ -146,7 +146,7 @@ function stageActionsDone(status: WorkflowTabNodeView['status'] | undefined): bo
  * helper line, mirroring `command-drives.ts:missing` so the customer sees
  * the same diagnostic they'd get from the slash card.
  */
-function FastPathForm(props: {
+function BugFixPathForm(props: {
   busy: boolean
   changeId: string | null
   value: {
@@ -156,7 +156,7 @@ function FastPathForm(props: {
     test: string
     testCmd: string
   }
-  onChange: (next: FastPathFormProps['value']) => void
+  onChange: (next: BugFixPathFormProps['value']) => void
   onSubmit: () => void
   t: (key: WorkflowTabKey) => string
 }): React.ReactElement {
@@ -167,63 +167,63 @@ function FastPathForm(props: {
   const testTrimmed = value.test.trim()
   const testCmdTrimmed = value.testCmd.trim()
   const missing: string[] = []
-  if (problemTrimmed.length === 0) missing.push(t('intake.fastPath.problem'))
-  if (rootCauseTrimmed.length === 0) missing.push(t('intake.fastPath.rootCause'))
-  if (fileLines.length === 0) missing.push(t('intake.fastPath.file'))
-  if (testTrimmed.length === 0) missing.push(t('intake.fastPath.test'))
-  if (testCmdTrimmed.length === 0) missing.push(t('intake.fastPath.testCmd'))
+  if (problemTrimmed.length === 0) missing.push(t('intake.bugFixPath.problem'))
+  if (rootCauseTrimmed.length === 0) missing.push(t('intake.bugFixPath.rootCause'))
+  if (fileLines.length === 0) missing.push(t('intake.bugFixPath.file'))
+  if (testTrimmed.length === 0) missing.push(t('intake.bugFixPath.test'))
+  if (testCmdTrimmed.length === 0) missing.push(t('intake.bugFixPath.testCmd'))
   const ready = missing.length === 0 && changeId !== null
   return (
-    <div className={css.fastPathForm} aria-label={t('intake.fastPath.title')}>
-      <p className={css.hint}>{t('intake.fastPath.help')}</p>
-      <label className={css.fastPathLabel}>
-        {t('intake.fastPath.problem')}
+    <div className={css.bugFixPathForm} aria-label={t('intake.bugFixPath.title')}>
+      <p className={css.hint}>{t('intake.bugFixPath.help')}</p>
+      <label className={css.bugFixPathLabel}>
+        {t('intake.bugFixPath.problem')}
         <textarea
-          className={clsx(css.fastPathInput, css.fastPathTextarea)}
+          className={clsx(css.bugFixPathInput, css.bugFixPathTextarea)}
           value={value.problem}
           onChange={event => onChange({ ...value, problem: event.target.value })}
           rows={2}
           disabled={busy}
         />
       </label>
-      <label className={css.fastPathLabel}>
-        {t('intake.fastPath.rootCause')}
+      <label className={css.bugFixPathLabel}>
+        {t('intake.bugFixPath.rootCause')}
         <textarea
-          className={clsx(css.fastPathInput, css.fastPathTextarea)}
+          className={clsx(css.bugFixPathInput, css.bugFixPathTextarea)}
           value={value.rootCause}
           onChange={event => onChange({ ...value, rootCause: event.target.value })}
           rows={2}
           disabled={busy}
         />
       </label>
-      <label className={css.fastPathLabel}>
-        {t('intake.fastPath.file')}
+      <label className={css.bugFixPathLabel}>
+        {t('intake.bugFixPath.file')}
         <textarea
-          className={clsx(css.fastPathInput, css.fastPathTextarea)}
+          className={clsx(css.bugFixPathInput, css.bugFixPathTextarea)}
           value={value.file}
           onChange={event => onChange({ ...value, file: event.target.value })}
           rows={3}
           placeholder={'src/foo.ts\nsrc/bar.ts'}
           disabled={busy}
         />
-        <span className={css.fastPathHelp}>{t('intake.fastPath.fileHelp')}</span>
+        <span className={css.bugFixPathHelp}>{t('intake.bugFixPath.fileHelp')}</span>
       </label>
-      <label className={css.fastPathLabel}>
-        {t('intake.fastPath.test')}
+      <label className={css.bugFixPathLabel}>
+        {t('intake.bugFixPath.test')}
         <input
           type="text"
-          className={css.fastPathInput}
+          className={css.bugFixPathInput}
           value={value.test}
           onChange={event => onChange({ ...value, test: event.target.value })}
           placeholder="tests/foo.spec.ts"
           disabled={busy}
         />
       </label>
-      <label className={css.fastPathLabel}>
-        {t('intake.fastPath.testCmd')}
+      <label className={css.bugFixPathLabel}>
+        {t('intake.bugFixPath.testCmd')}
         <input
           type="text"
-          className={css.fastPathInput}
+          className={css.bugFixPathInput}
           value={value.testCmd}
           onChange={event => onChange({ ...value, testCmd: event.target.value })}
           placeholder="pnpm test foo"
@@ -231,7 +231,7 @@ function FastPathForm(props: {
         />
       </label>
       {missing.length > 0 && (
-        <p className={css.fastPathWarn} role="status">{t('intake.fastPath.required')}</p>
+        <p className={css.bugFixPathWarn} role="status">{t('intake.bugFixPath.required')}</p>
       )}
       <div className={css.actions}>
         <button
@@ -240,7 +240,7 @@ function FastPathForm(props: {
           disabled={busy || !ready}
           onClick={onSubmit}
         >
-          {t('intake.fastPath.submit')}
+          {t('intake.bugFixPath.submit')}
         </button>
       </div>
     </div>
@@ -248,7 +248,7 @@ function FastPathForm(props: {
 }
 
 /** Type alias extracted so the `WorkflowView` parent and the form agree. */
-type FastPathFormProps = {
+type BugFixPathFormProps = {
   readonly value: {
     readonly problem: string
     readonly rootCause: string
@@ -343,7 +343,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // §13 R3 — fast-path Tab form state. Five required fields, kept as
   // plain strings so the textarea and inputs share a `useState<string>` shape.
   // `file` is multi-line; each line becomes one `file=` argument on submit.
-  const [fastPath, setFastPath] = useState({
+  const [bugFixPath, setBugFixPath] = useState({
     problem: '',
     rootCause: '',
     file: '',
@@ -827,28 +827,28 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                     Action buttons stay gated on `pending` because they only
                     make sense before intake is decided. */}
                 {view.intake.confirmation === 'pending' && (
-                  view.intake.mode === 'bug-fast-path'
+                  view.intake.mode === 'bug-fix-path'
                     ? (
-                      <FastPathForm
+                      <BugFixPathForm
                         busy={busy}
                         changeId={view.changeId}
-                        value={fastPath}
-                        onChange={setFastPath}
+                        value={bugFixPath}
+                        onChange={setBugFixPath}
                         onSubmit={() => {
                           const changeId = view.changeId
                           if (changeId === null) return
-                          const files = fastPath.file
+                          const files = bugFixPath.file
                             .split(/\r?\n/)
                             .map(line => line.trim())
                             .filter(line => line.length > 0)
                           void run(() => transition(changeId, 'open', {
-                            problem: fastPath.problem.trim(),
-                            'root-cause': fastPath.rootCause.trim(),
+                            problem: bugFixPath.problem.trim(),
+                            'root-cause': bugFixPath.rootCause.trim(),
                             file: files,
-                            test: fastPath.test.trim(),
-                            'test-cmd': fastPath.testCmd.trim(),
+                            test: bugFixPath.test.trim(),
+                            'test-cmd': bugFixPath.testCmd.trim(),
                           }))
-                          setFastPath({ problem: '', rootCause: '', file: '', test: '', testCmd: '' })
+                          setBugFixPath({ problem: '', rootCause: '', file: '', test: '', testCmd: '' })
                         }}
                         t={t}
                       />
@@ -1231,10 +1231,10 @@ function LanePanel(props: {
         {lanes.lanes.map(lane => (
           <div
             key={lane.id}
-            className={clsx(css.lane, lane.id === 'bug-fast-path' && css.lanePreserved)}
+            className={clsx(css.lane, lane.id === 'bug-fix-path' && css.lanePreserved)}
           >
             <span className={css.laneLabel}>
-              {t(lane.id === 'bug-fast-path' ? 'lane.fastpath' : 'lane.fullgo')}
+              {t(lane.id === 'bug-fix-path' ? 'lane.bugFixPath' : 'lane.fullGoPath')}
             </span>
             <ol className={css.laneTrack}>
               {lane.nodes.map((node) => {

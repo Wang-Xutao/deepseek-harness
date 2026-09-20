@@ -155,6 +155,15 @@ const processBoundTests = [
   'packages/workflow/workflow-worker-thread/tests/session.spec.ts',
 ]
 
+// BAF integration suites: every spec drives real temp workspaces through
+// multi-stage pipelines (projection writes + git spawns per stage). Under
+// full-suite parallel load on Windows (transform workers + Defender scans)
+// the default 5s budget intermittently expires mid-pipeline — observed
+// 2026-09-20 across stages/bug-fix-path/lanes/resume/gate-dialog/tool-guard
+// in independent runs, always at ~5.0s on tests whose unloaded runtime is
+// well under 1s. These suites get a 60s ceiling; nothing else changes.
+const bafIntegrationTests = ['packages/baf/*/tests/**/*.spec.ts']
+
 export default defineConfig({
   plugins: [pathsPlugin(), standardDecoratorPlugin()],
   test: {
@@ -179,8 +188,24 @@ export default defineConfig({
           exclude: [
             ...platformUnsupportedTests,
             ...processBoundTests,
+            ...bafIntegrationTests,
             ...coverageExemptExcludes,
           ],
+        },
+      },
+      {
+        plugins: [pathsPlugin(), standardDecoratorPlugin()],
+        test: {
+          name: 'baf-integration',
+          execArgv: vitestExecArgv,
+          pool: 'forks',
+          setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
+          include: bafIntegrationTests,
+          exclude: [
+            ...platformUnsupportedTests,
+            ...coverageExemptExcludes,
+          ],
+          testTimeout: 60_000,
         },
       },
       {

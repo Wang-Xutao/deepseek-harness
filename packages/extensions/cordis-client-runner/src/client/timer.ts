@@ -201,7 +201,7 @@ export class ClientTimerService extends Service {
   debounce<F extends (...args: any[]) => void>(callback: F, delay: number): WithDispose<F> {
     return this.schedule('ctx.debounce()', (args, disposed) => {
       if (disposed) return
-      return globalThis.setTimeout(callback, delay, ...args)
+      return globalThis.setTimeout(callback, delay, ...args) as unknown as number
     })
   }
 }

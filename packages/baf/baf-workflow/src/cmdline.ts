@@ -2,9 +2,9 @@
  * `baf-cli` Commander tree — the standalone mirror of `/baf-*` slash commands.
  *
  * One process per `dsh --profile baf-cli -- <subcommand>…` invocation. The
- * subcommand name matches the slash name 1:1 (`help`, `welcome`, `version`,
- * `status`, `list`, `go`, `doctor`, `workflow-open`, `workflow-classify`,
- * `workflow-clarify`, `workflow-design`, `workflow-plan`,
+ * subcommand name matches the slash name 1:1 (`help`, `welcome`, `gate`,
+ * `version`, `status`, `list`, `go`, `doctor`, `workflow-open`,
+ * `workflow-classify`, `workflow-clarify`, `workflow-design`, `workflow-plan`,
  * `workflow-implement`, `workflow-verify`, `workflow-archive`,
  * `workflow-abandon`, `check-quality`, `check-guard`)
  * and the output goes through the same `formatCommandReport` formatter the
@@ -46,9 +46,10 @@ import {
   driveVerify,
 } from './command-drives.ts'
 import { driveGo } from './go-coordinator.ts'
+import { renderGate } from './gate-cards.ts'
 import { focusFor } from './session-focus.ts'
-import { probeMountFlags, probeToolchain, renderProbeLines, renderWelcomeCard, resolveStartupBinding } from './session-gate.ts'
-import { ProjectionStore } from './projection.ts'
+import { probeMountFlags, probeToolchain, renderProbeLines, renderWelcomeCard, resolveScaffoldService, resolveStartupBinding } from './session-gate.ts'
+import { ProjectionStore, resolveActiveChange } from './projection.ts'
 import { resolveBafProductVersions } from './product-versions.ts'
 
 export const name = 'baf-cli'
@@ -68,25 +69,27 @@ interface CliResult {
 /** Slash → description map (mirrors the descriptors in `commands.ts`). */
 const SLASH_DESC: Record<string, string> = {
   '/baf-help': '列出全部指令与用法 · ★★',
-  '/baf-welcome': '会话启动卡：绑定 + 工具链体检 · ★★',
+  '/baf-welcome': '启动检查：工作区状态 + 环境体检 · ★★',
+  '/baf-gate': '重新弹出确认卡（如初始化确认） · ★★',
   '/baf-version': '查看桌面/插件版本（对齐设置页） · ★',
-  '/baf-status': '查看当前变更：模式/阶段/intake · ★★★',
-  '/baf-doctor': '工作流自检：cwd/工具链/注册 · ★',
+  '/baf-status': '查看当前变更：模式/阶段/分类 · ★★★',
+  '/baf-doctor': '工作流自检：工作区/环境/注册 · ★',
   '/baf-list': '列出工作区全部变更（含已归档/已放弃） · ★★',
   '/baf-go': '自动驱动到下一个客户确认点 · ★★★',
-  '/baf-workflow-open': '启动变更：intake 分类 · ★★★',
-  '/baf-workflow-classify': '分类确认 / 拒绝 · ★★',
-  '/baf-workflow-clarify': '澄清阶段（N2） · ★★',
-  '/baf-workflow-design': '设计阶段（N3） · ★★',
-  '/baf-workflow-plan': '计划阶段（N4） · ★★',
-  '/baf-workflow-implement': '实现阶段（N5 进入/完成） · ★★★',
-  '/baf-workflow-verify': '验证阶段（N6） · ★★★',
-  '/baf-workflow-archive': '归档变更（N7/T14，需 confirm） · ★★★',
-  '/baf-workflow-abandon': '放弃变更（T16，需 confirm） · ★',
-  '/baf-workflow-resume': 'drift 复位（T13，需选目标节点） · ★★★',
+  '/baf-go-confirm': '不弹确认框，直接继续工作流 · ★★',
+  '/baf-workflow-open': '启动变更：先分类 · ★★★',
+  '/baf-workflow-classify': '分类确认 / 重新描述 · ★★',
+  '/baf-workflow-clarify': '澄清阶段：把需求问清楚 · ★★',
+  '/baf-workflow-design': '设计阶段：写设计文档 · ★★',
+  '/baf-workflow-plan': '计划阶段：拆任务 · ★★',
+  '/baf-workflow-implement': '实现阶段：进入/完成 · ★★★',
+  '/baf-workflow-verify': '验证阶段：跑检查 · ★★★',
+  '/baf-workflow-archive': '归档变更（需确认） · ★★★',
+  '/baf-workflow-abandon': '放弃变更（需确认） · ★',
+  '/baf-workflow-resume': '流程有偏差时，退回到指定阶段 · ★★★',
   '/baf-check-quality': '基线 C 栈质量检查 · ★★',
-  '/baf-check-guard': '安全门禁（verify + secret-scan） · ★★',
-  '/baf-scaffold': '初始化工作区（与 §22 scaffold 门同源） · ★★',
+  '/baf-check-guard': '安全检查（verify + 密钥扫描） · ★★',
+  '/baf-scaffold': '初始化工作区（缺配置时用它） · ★★',
 }
 
 /**
@@ -101,37 +104,39 @@ function slashDesc(slash: string): string {
 function cardTitle(slash: string, runtime?: string): string {
   const desc = slashDesc(slash)
   return runtime === undefined
-    ? `${desc} · 点本行展开/折叠指令全文`
-    : `${desc} · ${runtime} · 点本行展开/折叠指令全文`
+    ? `${desc} · 点本行展开/折叠详情`
+    : `${desc} · ${runtime} · 点本行展开/折叠详情`
 }
 
 const HELP_CORE = [
   'baf help       列出全部指令与用法 · ★★',
-  'baf welcome    会话启动卡：绑定 + 工具链体检 · ★★',
-  'baf scaffold   初始化工作区（与 §22 scaffold 门同源） · ★★',
-  'baf status     查看当前变更：模式/阶段/intake · ★★★',
+  'baf welcome    启动检查：工作区状态 + 环境体检 · ★★',
+  'baf gate       重新弹出确认卡（如初始化确认） · ★★',
+  'baf scaffold   初始化工作区（缺配置时用它） · ★★',
+  'baf status     查看当前变更：模式/阶段/分类 · ★★★',
   'baf version    查看桌面/插件版本（对齐设置页） · ★',
-  'baf doctor     工作流自检：cwd/工具链/注册 · ★',
+  'baf doctor     工作流自检：工作区/环境/注册 · ★',
   'baf list       列出工作区全部变更（含已归档/已放弃） · ★★',
 ] as const
 
 const HELP_FLOW = [
   'baf go                   自动驱动到下一个客户确认点 · ★★★',
-  'baf workflow-open        启动变更：intake 分类 · ★★★',
-  'baf workflow-classify    分类确认 / 拒绝 · ★★',
-  'baf workflow-clarify     澄清阶段（N2） · ★★',
-  'baf workflow-design      设计阶段（N3） · ★★',
-  'baf workflow-plan        计划阶段（N4） · ★★',
-  'baf workflow-implement   实现阶段（N5 进入/完成） · ★★★',
-  'baf workflow-verify      验证阶段（N6） · ★★★',
-  'baf workflow-archive     归档变更（N7/T14，需 confirm） · ★★★',
-  'baf workflow-abandon     放弃变更（T16，需 confirm） · ★',
-  'baf workflow-resume      drift 复位（T13，需选目标节点） · ★★★',
+  'baf go-confirm           不弹确认框，直接继续工作流 · ★★',
+  'baf workflow-open        启动变更：先分类 · ★★★',
+  'baf workflow-classify    分类确认 / 重新描述 · ★★',
+  'baf workflow-clarify     澄清阶段：把需求问清楚 · ★★',
+  'baf workflow-design      设计阶段：写设计文档 · ★★',
+  'baf workflow-plan        计划阶段：拆任务 · ★★',
+  'baf workflow-implement   实现阶段：进入/完成 · ★★★',
+  'baf workflow-verify      验证阶段：跑检查 · ★★★',
+  'baf workflow-archive     归档变更（需确认） · ★★★',
+  'baf workflow-abandon     放弃变更（需确认） · ★',
+  'baf workflow-resume      流程有偏差时，退回到指定阶段 · ★★★',
 ] as const
 
 const HELP_CHECK = [
   'baf check-quality    基线 C 栈质量检查 · ★★',
-  'baf check-guard      安全门禁（verify + secret-scan） · ★★',
+  'baf check-guard      安全检查（verify + 密钥扫描） · ★★',
 ] as const
 
 const USAGE = [
@@ -141,11 +146,11 @@ const USAGE = [
 ] as const
 
 const MODE_LINES = [
-  '模式由 intake 分类确认决定（不是另开一套 CLI）：',
-  '  · full-go = 完整流程（新需求 / 高风险）',
-  '  · bug-fast-path = 缺陷快路径（低风险 Bug）',
+  '模式由需求分类确认决定（不是另开一套 CLI）：',
+  '  · full-go-path = 完整流程（新需求 / 高风险）',
+  '  · bug-fix-path = 缺陷修复路径（低风险 Bug，更快）',
   '  · clarify-required = 信息不足，先澄清',
-  '快路径若风险扩大，在同一变更内升级为 full-go（无需新开 CLI 调用）。',
+  '缺陷修复路径中若风险扩大，会在同一变更内升级为完整流程。',
 ] as const
 
 /**
@@ -162,7 +167,7 @@ function readCwd(opts: { cwd?: string }): string | undefined {
 function missingCwd(command: string): CliResult {
   return {
     ok: false,
-    text: formatCommandReport(false, `${command} · 缺少工作区 · 点本行展开/折叠指令全文`, [
+    text: formatCommandReport(false, `${command} · 缺少工作区 · 点本行展开/折叠详情`, [
       { title: '原因', lines: ['CLI 没有 --cwd，当前工作目录也为空'] },
       { title: '处理', lines: ['指定 --cwd <path> 或 cd 到工作区目录'] },
     ]),
@@ -279,6 +284,25 @@ export function buildBafProgram(): Command {
       fromDrive(toCli(renderWelcomeCard({ cwd, probe, binding })))
     })
 
+  program.command('gate')
+    .description(`${slashDesc('/baf-gate')}（与 /baf-gate 同源渲染）`)
+    .argument('[gateId]', '确认项编号（可选值）: scaffold | intake-classify | design-confirm | verify-archive | abandon | resume')
+    .action((gateId: string | undefined) => {
+      const id = gateId === undefined ? '' : gateId.trim()
+      if (id === '') {
+        emit(false, formatCommandReport(false, cardTitle('/baf-gate', '缺少 gateId'), [
+          {
+            title: '用法',
+            lines: ['baf gate scaffold | intake-classify | design-confirm | verify-archive | abandon | resume'],
+          },
+        ]) + '\n', 1)
+        return
+      }
+      // Read-only registry render, identical to the slash card (§22.9).
+      const r = toCli(renderGate(id))
+      emit(r.ok, r.text, r.ok ? 0 : 1)
+    })
+
   program.command('scaffold')
     .description(`${slashDesc('/baf-scaffold')}（与 /baf-scaffold 同源 drive）`)
     .allowUnknownOption(true)
@@ -288,10 +312,16 @@ export function buildBafProgram(): Command {
       const cwd = readCwd(opts)
       if (cwd === undefined) fromDrive(missingCwd('baf scaffold'))
       const ctx = getCtx()
-      const scaffoldService = ctx?.get('bafScaffold')
+      // The scaffold service sits in the baf-domain isolate, so a bare host
+      // lookup cannot see it. A CLI process usually has no live agent; when
+      // one exists (launcher compositions that keep an agent around), prefer
+      // its realm — otherwise this falls back to the host ctx and surfaces
+      // the standard refusal card.
+      const scaffoldService = ctx === undefined ? undefined : resolveScaffoldService(ctx, cliAgentRealm(ctx))
       if (scaffoldService === undefined) {
-        emit(false, formatCommandReport(false, cardTitle('/baf-scaffold', 'scaffold 服务未挂载'), [
-          { title: '原因', lines: ['当前 composition 未安装 baf-scaffold（ScaffoldAdapter 不可用）'] },
+        emit(false, formatCommandReport(false, cardTitle('/baf-scaffold', '初始化服务没有加载'), [
+          { title: '原因', lines: ['工作区初始化需要的组件没有加载到当前会话'] },
+          { title: '处理', lines: ['请在设置里启用 BAF 工作流预设（含全部 BAF 组件）后，重新打开本会话再试'] },
         ]) + '\n', 1)
         return
       }
@@ -319,7 +349,7 @@ export function buildBafProgram(): Command {
             lines: [
               `cwd: ${ok ? cwd : '（missing）'}`,
               'profile: baf-cli（当前 dsh 会话）',
-              'commands: help/welcome/version/doctor/status/list 可见',
+              'commands: help/welcome/gate/version/doctor/status/list 可见',
               'drives: go + workflow-open/classify/clarify/design/plan/implement/verify/archive/abandon/resume + check-quality/guard',
               'workflow tab: 请打开桌面「工作流」页签核对流程图',
             ],
@@ -338,28 +368,44 @@ export function buildBafProgram(): Command {
 
   program.command('status')
     .description(slashDesc('/baf-status'))
-    .action(async () => {
+    .option('--focus <changeId>', '§13 R2 · explicit focus when multiple actives exist')
+    .action(async (cmdOpts: { focus?: string }) => {
       const opts = program.opts<{ cwd?: string }>()
       const cwd = readCwd(opts)
       if (cwd === undefined) fromDrive(missingCwd('baf status'))
       const store = new ProjectionStore({ workspaceRoot: cwd })
       const index = await store.readIndex()
-      const ids = index.changes.map(c => c.changeId)
-      if (ids.length === 0) {
-        emit(true, formatCommandReport(true, cardTitle('/baf-status', '模板（空闲）· 无活动变更'), [
-          { title: '工作区', lines: [`cwd: ${cwd}`] },
-          { title: '变更', lines: ['（无）— 流程图为参考模板'] },
-          { title: '模式说明', lines: MODE_LINES },
-        ]) + '\n', 0)
-      }
-      const changeId = ids.at(-1)
+      // §13 R2 — explicit `--focus <id>` wins over the auto-pick. We still
+      // validate the id against the index so a typo surfaces as a clear
+      // error instead of silently re-routing to another change.
+      let changeId: string | undefined = cmdOpts.focus
       if (changeId === undefined) {
-        emit(true, formatCommandReport(true, cardTitle('/baf-status', '模板（空闲）· 无活动变更'), [
-          { title: '工作区', lines: [`cwd: ${cwd}`] },
-          { title: '变更', lines: ['（无）'] },
-        ]) + '\n', 0)
+        const picked = await resolveActiveChange(store)
+        if (picked.kind === 'none') {
+          emit(true, formatCommandReport(true, cardTitle('/baf-status', '模板（空闲）· 无活动变更'), [
+            { title: '工作区', lines: [`cwd: ${cwd}`] },
+            { title: '变更', lines: ['（无）— 流程图为参考模板'] },
+            { title: '模式说明', lines: MODE_LINES },
+          ]) + '\n', 0)
+        }
+        if (picked.kind === 'ambiguous') {
+          const list = picked.candidates.map(c => `${c.changeId} · ${modeZh(c.mode)} · ${String(c.current)}`)
+          emit(true, formatCommandReport(true, cardTitle('/baf-status', `多活动变更 · 焦点为 ${list[0]?.split(' · ')[0] ?? '?'}`), [
+            { title: '活动变更', lines: list },
+            { title: '处理', lines: ['`baf status --focus <changeId>` 显式选择，或 /baf-go 让协调器推进焦点'] },
+            { title: '工作区', lines: [`cwd: ${cwd}`] },
+          ]) + '\n', 0)
+        }
+        changeId = picked.changeId
+      } else if (!index.changes.some(c => c.changeId === changeId)) {
+        emit(true, formatCommandReport(false, cardTitle('/baf-status', '--focus 指向不存在的变更'), [
+          { title: '本工作区变更', lines: index.changes.length === 0 ? ['（无）'] : index.changes.map(c => c.changeId) },
+          { title: '处理', lines: ['去掉 --focus 让协调器选焦点，或换成本工作区存在的 changeId'] },
+        ]) + '\n', 1)
       }
-      const status = await store.readStatus(changeId)
+      // changeId is guaranteed defined here: the four `emit` paths above all
+      // return `never` via process.exit; the next access is safe.
+      const status = await store.readStatus(changeId as string)
       const others = index.changes
         .filter(c => c.changeId !== changeId)
         .map(c => `${c.changeId} · ${modeZh(c.mode)} · ${String(c.current)}`)
@@ -433,7 +479,7 @@ export function buildBafProgram(): Command {
   program.command('go')
     .description(`${slashDesc('/baf-go')}（与 /baf-go 同源 drive；自动推进到下一个确认点）`)
     .allowUnknownOption(true)
-    .argument('[args...]', 'key=value pairs (change=…, continue, 或漂移复位目标节点)')
+    .argument('[args...]', 'key=value pairs (change=…, continue, 或要退回的阶段)')
     .action(async (args: string[]) => {
       const opts = program.opts<{ cwd?: string }>()
       const cwd = readCwd(opts)
@@ -447,6 +493,36 @@ export function buildBafProgram(): Command {
         cwd,
         rawInput: args.join(' '),
         focus: focusFor(cwd),
+        adapters: {
+          ...(stack === undefined ? {} : { stack }),
+          ...(guard === undefined ? {} : { guard }),
+        },
+        source: 'cli',
+      }))
+      emit(r.ok, r.text, r.ok ? 0 : 1)
+    })
+
+  // §22.17 CLI mirror of /baf-go-confirm: same coordinator drive in confirm
+  // mode — take the positive path at the resting gate without any popup
+  // (the CLI has no dialog surface; `baf go` keeps the legacy unlock rule).
+  program.command('go-confirm')
+    .description(`${slashDesc('/baf-go-confirm')}（与 /baf-go-confirm 同源 drive）`)
+    .allowUnknownOption(true)
+    .argument('[args...]', 'key=value pairs (change=…, continue, 或要退回的阶段)')
+    .action(async (args: string[]) => {
+      const opts = program.opts<{ cwd?: string }>()
+      const cwd = readCwd(opts)
+      if (cwd === undefined) {
+        emit(false, missingCwd('baf go-confirm').text, 1)
+        return
+      }
+      const ctx = getCtx()
+      const { stack, guard } = ctx === undefined ? {} : resolveAdapters(ctx, cwd)
+      const r = toCli(await driveGo({
+        cwd,
+        rawInput: args.join(' '),
+        focus: focusFor(cwd),
+        confirm: true,
         adapters: {
           ...(stack === undefined ? {} : { stack }),
           ...(guard === undefined ? {} : { guard }),
@@ -538,6 +614,21 @@ export function setBafCliContext(ctx: Context | undefined): void {
 
 function getCtx(): Context | undefined {
   return hostCtx
+}
+
+/**
+ * Best-effort realm for the CLI: the live agent's ctx when the launcher kept
+ * one around, else undefined (the caller then resolves host-only).
+ * @param ctx - the CLI row's host context.
+ * @returns an agent-shaped scope for {@link resolveScaffoldService}, or undefined.
+ */
+function cliAgentRealm(ctx: Context): { ctx?: Context } | undefined {
+  try {
+    const agent = ctx.agents.list()[0]
+    return agent === undefined ? undefined : { ctx: agent.ctx }
+  } catch {
+    return undefined
+  }
 }
 
 /**

@@ -62,10 +62,10 @@ export interface GateContext {
 }
 
 /** Stable headline for the collapsed card row. */
-const HEADLINE = '需客户确认 · 请点击工作流页签按钮，或输入对应命令'
+const HEADLINE = '等待你的确认 · 点工作流页签的按钮，或输入对应命令'
 
 /** Single-line footer hint shown on every gate card. */
-const FOOTER = '请点击工作流页签按钮，或输入对应命令'
+const FOOTER = '点工作流页签的按钮，或输入对应命令'
 
 /**
  * The canonical registry. Every gate the workflow ever offers must be
@@ -75,44 +75,49 @@ const FOOTER = '请点击工作流页签按钮，或输入对应命令'
 export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
   'scaffold': {
     id: 'scaffold',
-    title: '工作区未初始化 · awaiting_customer_confirm',
-    question: '当前工作区缺少 `.baf/baseline.yml` 与 `openspec/changes/` 目录。需要先做 init 骨架才能走工作流。',
+    title: '工作区需要初始化',
+    question: '这个目录还没有初始化，缺少工作流需要的配置文件和目录。先初始化，才能开始处理变更。',
     options: [
-      { id: 'init', label: '初始化工作区（执行 scaffold）', command: '/baf-scaffold' },
+      { id: 'init', label: '初始化工作区', command: '/baf-scaffold' },
       { id: 'cancel', label: '暂不初始化', command: '__noop__' },
     ],
   },
   'intake-classify': {
     id: 'intake-classify',
-    title: 'intake 分类待确认 · awaiting_customer_confirm',
-    question: 'intake 分类器已生成结果，请确认或拒绝后继续。',
+    title: '需求分类待确认',
+    question: '系统已经初步判断了这个需求的类型和处理方式。请确认判断结果，或拒绝后重新描述。',
+    // §22.17 J — the two paths are separate clickable options: the customer
+    // settles full-go-path vs bug-fix-path here (an `intake-mode-set` event
+    // when it differs from the classifier's pick), instead of re-describing
+    // the whole requirement just to change lanes.
     options: [
-      { id: 'confirm', label: '确认分类', command: '/baf-workflow-classify', args: ['confirm'] },
-      { id: 'reject', label: '拒绝并重新描述', command: '/baf-workflow-classify', args: ['reject'] },
+      { id: 'confirm-full', label: '确认 · 完整流程', command: '/baf-workflow-classify', args: ['confirm', 'mode=full-go-path'] },
+      { id: 'confirm-bugfix', label: '确认 · 缺陷修复路径', command: '/baf-workflow-classify', args: ['confirm', 'mode=bug-fix-path'] },
+      { id: 'reject', label: '重新描述需求', command: '/baf-workflow-classify', args: ['reject'] },
     ],
   },
   'design-confirm': {
     id: 'design-confirm',
-    title: '自动驱动 · 设计文档已完成 · awaiting_customer_confirm',
-    question: 'N3 design 已实现。按 §18.5 门 A，必须由客户再敲一次 /baf-go 才能进入 plan。',
+    title: '设计已完成，请确认',
+    question: '设计文档已经写好。确认后将进入计划阶段。任选一种方式确认：确认弹窗点「确认设计」、工作流页签点确认按钮、聊天里输入 /baf-go-confirm、或终端跑 baf go-confirm；输入 /baf-go 会重新弹出确认框。',
     options: [
       { id: 'confirm', label: '确认设计，进入计划', command: '/baf-go' },
-      { id: 'back', label: '退回澄清', command: '/baf-workflow-clarify' },
+      { id: 'back', label: '退回，继续澄清需求', command: '/baf-workflow-clarify' },
     ],
   },
   'verify-archive': {
     id: 'verify-archive',
-    title: '自动驱动 · verify 已通过 · awaiting_customer_confirm',
-    question: 'N6 verify 全部必需检查通过。按 §18.5 门 B，必须由客户再敲一次 /baf-go 才能归档。',
+    title: '检查已通过，请确认归档',
+    question: '所有检查都已通过。确认后将归档本次变更。任选一种方式确认：确认弹窗点「确认归档」、工作流页签点确认按钮、聊天里输入 /baf-go-confirm、或终端跑 baf go-confirm；输入 /baf-go 会重新弹出确认框。',
     options: [
       { id: 'confirm', label: '确认归档', command: '/baf-go' },
-      { id: 'back', label: '退回实现', command: '/baf-workflow-implement' },
+      { id: 'back', label: '退回，继续修改实现', command: '/baf-workflow-implement' },
     ],
   },
   'abandon': {
     id: 'abandon',
-    title: '放弃变更 · awaiting_customer_confirm',
-    question: '将放弃当前 active change 并保留审计。需要客户二次确认。',
+    title: '请确认：放弃当前变更',
+    question: '即将放弃当前正在进行的变更。放弃后变更结束，只保留操作记录，已完成的阶段不会继续。',
     options: [
       { id: 'confirm', label: '确认放弃', command: '/baf-workflow-abandon', args: ['confirm'] },
       { id: 'cancel', label: '取消', command: '__noop__' },
@@ -120,8 +125,8 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
   },
   'resume': {
     id: 'resume',
-    title: 'drift detected · 请选择复位目标节点 · awaiting_customer_confirm',
-    question: '工作流检测到漂移。请从候选集中选一个目标节点（斜杠命令携带节点名）。',
+    title: '流程出现偏差，请选择回退位置',
+    question: '工作流检测到实际改动和流程记录对不上。请选择要退回的阶段，从那里重新开始（它之后的阶段会重跑）。',
     options: [], // populated dynamically from `ctx.resumeCandidates`
     dynamicOptions: 'resume-targets',
   },
@@ -135,17 +140,14 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
 function renderOptionLine(spec: GateOptionSpec, index: number, changeId: string | undefined): string {
   const num = `[${index + 1}]`
   if (spec.command === '__noop__') {
-    return `${num} ${spec.label}    → （不动作，按 /baf-go 重弹卡）`
+    return `${num} ${spec.label}    → 本次不操作`
   }
   const invocation = spec.args === undefined || spec.args.length === 0
     ? spec.command
     : `${spec.command} ${spec.args.join(' ')}`
-  const tail = spec.id === 'confirm' || spec.id === 'init' || spec.id === 'back'
-    ? '（resolve 一次性，按钮即用）'
-    : ''
   return changeId === undefined || spec.id === 'init'
-    ? `${num} ${spec.label}    → ${invocation} ${tail}`.trimEnd()
-    : `${num} ${spec.label}    → ${invocation} change=${changeId} ${tail}`.trimEnd()
+    ? `${num} ${spec.label}    → ${invocation}`
+    : `${num} ${spec.label}    → ${invocation} change=${changeId}`
 }
 
 /** Render the resume card's dynamic options. */
@@ -216,16 +218,16 @@ export function renderGateCard(spec: GateSpec, ctx?: GateContext): CommandResult
   if (sections === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, `${spec.title} · 缺少上下文`, [
-        { title: '原因', lines: ['此门需要动态上下文（resume 候选 / change id），但 ctx 为空'] },
-        { title: '处理', lines: ['从工作流 Tab 检查；或重跑 /baf-go 让 coordinator 重新计算'] },
+      text: formatCommandReport(false, `${spec.title} · 信息不全，暂时无法展示 · 点本行展开/折叠详情`, [
+        { title: '原因', lines: ['这张卡需要额外的上下文（可选的回退阶段 / 变更编号），当前没有拿到'] },
+        { title: '处理', lines: ['到工作流页签看一下当前状态；或重新输入 /baf-go 让系统重新计算'] },
       ]),
     }
   }
 
   return {
     kind: 'success',
-    text: formatCommandReport(true, `${HEADLINE} · ${spec.title}`, sections),
+    text: formatCommandReport(true, `${HEADLINE} · ${spec.title} · 点本行展开/折叠详情`, sections),
   }
 }
 
@@ -246,9 +248,9 @@ export function renderGate(gateId: string, ctx?: GateContext): CommandResult {
   if (spec === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, `未知确认门 ${JSON.stringify(gateId)} · unknown_gate`, [
-        { title: '原因', lines: [`gateId 不在 §22 GATE_REGISTRY（合法值：${Object.keys(GATE_REGISTRY).join(' | ')}）`] },
-        { title: '处理', lines: ['重跑 /baf-go 让协调器重算当前门；或查 /baf-help 的命令表'] },
+      text: formatCommandReport(false, `无法识别的确认项 ${JSON.stringify(gateId)} · 点本行展开/折叠详情`, [
+        { title: '原因', lines: [`系统里没有这个确认项（现有：${Object.keys(GATE_REGISTRY).join(' | ')}）`] },
+        { title: '处理', lines: ['重新输入 /baf-go 让系统重新计算当前需要确认的事项；或输入 /baf-help 查看命令表'] },
       ]),
     }
   }

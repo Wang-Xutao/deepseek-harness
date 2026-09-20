@@ -23,6 +23,7 @@ export type GuardReasonCode =
   | 'scope_exceeded'
   | 'dangerous_command'
   | 'shell_indirect_write'
+  | 'gate_pending_ask_blocked'
 
 /** Snapshot of the workflow state a guard call adjudicates against. */
 export interface GuardWorkflowState {
@@ -33,10 +34,16 @@ export interface GuardWorkflowState {
   readonly mode?: string
   /** Intake confirmation observed in the projection (fail-closed default false). */
   readonly intakeConfirmed: boolean
-  /** Allowlist from plan.json / fastpath-ledger.json of the active change. */
+  /** Allowlist from plan.json / bug-fix-path-ledger.json of the active change. */
   readonly allowlist: readonly string[]
   /** Workspace-relative change dir (docs home), e.g. `openspec/changes/<id>`. */
   readonly changeDirRel?: string
+  /**
+   * §22.17 J — a customer-confirmation gate is pending (unconfirmed intake
+   * classification, or a parked awaiting-confirm gate A/B). When true, the
+   * generic question tool must not substitute for the registry gate card.
+   */
+  readonly gatePending?: boolean
 }
 
 /** Baseline-derived guard configuration. */

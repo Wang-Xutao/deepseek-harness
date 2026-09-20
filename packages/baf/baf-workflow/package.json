@@ -36,6 +36,10 @@
       "types": "./lib/types/gate-ask.d.ts",
       "default": "./lib/gate-ask.js"
     },
+    "./auto-pop": {
+      "types": "./lib/types/auto-pop.d.ts",
+      "default": "./lib/auto-pop.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -45,6 +49,7 @@
     "lib/cmdline.js",
     "lib/session-gate.js",
     "lib/gate-ask.js",
+    "lib/auto-pop.js",
     "lib/types/**/*.d.ts"
   ],
   "scripts": {
@@ -63,7 +68,8 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^"
+    "@deepseek-ai/dsh-commands": "workspace:^",
+    "@deepseek-ai/dsh-user-questions": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -72,6 +78,7 @@
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
     "@deepseek-ai/dsh-agent": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^"
+    "@deepseek-ai/dsh-commands": "workspace:^",
+    "@deepseek-ai/dsh-user-questions": "workspace:^"
   }
 }

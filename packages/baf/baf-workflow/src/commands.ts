@@ -3,15 +3,16 @@
  *
  * Naming follows a two-tier scheme:
  *   - **Core** (no middle segment): `/baf-help`, `/baf-welcome`,
- *     `/baf-version`, `/baf-status`, `/baf-doctor`, `/baf-list` — entry /
- *     discovery / view surfaces used across every session. `/baf-welcome` is
+ *     `/baf-gate`, `/baf-version`, `/baf-status`, `/baf-doctor`, `/baf-list` —
+ *     entry / discovery / view surfaces used across every session. `/baf-welcome` is
  *     the §18.3 startup card (binding + toolchain probe); the preset's
  *     `baf-session-gate` row fires it once at session open, and the customer
  *     can reprint it any time.
- *   - **Go** (no middle segment): `/baf-go` — the single auto-drive entry
- *     (§18). Pushes the session to its next customer-action point; the two
- *     mandatory confirmation gates are its stop points, and there is
- *     deliberately no `/baf-go confirm`.
+ *   - **Go** (no middle segment): `/baf-go` and `/baf-go-confirm` — the
+ *     auto-drive entries (§18 / §22.17). Both push the session to its next
+ *     customer-action point; the two mandatory confirmation gates are the
+ *     stop points. `/baf-go` pops the §22 interactive dialog where a popup
+ *     channel exists; `/baf-go-confirm` takes the positive path directly.
  *   - **Workflow** (`baf-workflow-*`): the go-workflow stage commands
  *     (open / classify / clarify / design / plan / implement / verify /
  *     archive / abandon).
@@ -20,8 +21,8 @@
  *
  * Descriptions drop the leading "BAF" prefix and end with a usage-frequency
  * mark (★★★ 常用 / ★★ 偶尔 / ★ 极少). Card titles mirror the description
- * and append the standardize expand/collapse hint
- * `点本行展开/折叠指令全文`, so the slash card and the picker line read as
+ * and append the standardized expand/collapse hint
+ * `点本行展开/折叠详情`, so the slash card and the picker line read as
  * one.
  *
  * Mounted as a non-isolated preset row (like `@deepseek-ai/dsh-command-goal`)
@@ -51,14 +52,19 @@ import {
   driveResume,
   driveScaffold,
   driveVerify,
+  type DriveAdapters,
 } from './command-drives.ts'
 import { driveGo } from './go-coordinator.ts'
+import { makeGateAsk, type GateDialogAgent } from './gate-dialog.ts'
+import { renderGate } from './gate-cards.ts'
 import { focusFor } from './session-focus.ts'
 import {
   probeMountFlags,
   probeToolchain,
   renderProbeLines,
   renderWelcomeCard,
+  resolveIsolateService,
+  resolveScaffoldService,
   resolveStartupBinding,
 } from './session-gate.ts'
 
@@ -68,59 +74,62 @@ export const inject = ['commands']
 /** Append the standard expand/collapse hint to a card title. */
 function withHint(description: string, runtime?: string): string {
   return runtime === undefined
-    ? `${description} · 点本行展开/折叠指令全文`
-    : `${description} · ${runtime} · 点本行展开/折叠指令全文`
+    ? `${description} · 点本行展开/折叠详情`
+    : `${description} · ${runtime} · 点本行展开/折叠详情`
 }
 
-/** Shape of the args Cordis passes to a slash handler. */
+/** Shape of the args Cordis passes to a slash handler. The runtime agent also
+ * carries its realm `ctx`; declared optional because only the probes read it. */
 type SlashHandlerArgs = {
-  agent: { session: { header: { cwd?: string } } }
+  agent: { session: { header: { cwd?: string } }; ctx?: Context }
   rawInput: string
 }
 
 const HELP_CORE = [
-  '/baf-help           列出全部指令与用法 · ★★',
-  '/baf-welcome        会话启动卡：绑定 + 工具链体检 · ★★',
-  '/baf-scaffold       初始化工作区（与 §22 scaffold 门同源） · ★★',
-  '/baf-status         查看当前变更：模式/阶段/intake · ★★★',
+  '/baf-help           列出全部命令与用法 · ★★',
+  '/baf-welcome        启动检查：工作区状态 + 环境体检 · ★★',
+  '/baf-gate           重新弹出确认卡（如初始化确认） · ★★',
+  '/baf-scaffold       初始化工作区（缺配置时用它） · ★★',
+  '/baf-status         查看当前变更：模式/阶段/分类 · ★★★',
   '/baf-version        查看桌面/插件版本（对齐设置页） · ★',
-  '/baf-doctor         工作流自检：cwd/工具链/注册 · ★',
+  '/baf-doctor         工作流自检：工作区/环境/注册 · ★',
   '/baf-list           列出工作区全部变更（含已归档/已放弃） · ★★',
 ] as const
 
 const HELP_FLOW = [
-  '/baf-go                     自动驱动到下一个客户确认点 · ★★★',
-  '/baf-workflow-open         启动变更：intake 分类 · ★★★',
-  '/baf-workflow-classify     分类确认 / 拒绝 · ★★',
-  '/baf-workflow-clarify      澄清阶段（N2） · ★★',
-  '/baf-workflow-design       设计阶段（N3） · ★★',
-  '/baf-workflow-plan         计划阶段（N4） · ★★',
-  '/baf-workflow-implement    实现阶段（N5 进入/完成） · ★★★',
-  '/baf-workflow-verify       验证阶段（N6） · ★★★',
-  '/baf-workflow-archive      归档变更（N7/T14，需 confirm） · ★★★',
-  '/baf-workflow-abandon      放弃变更（T16，需 confirm） · ★',
-  '/baf-workflow-resume       drift 复位（T13，需选目标节点） · ★★★',
+  '/baf-go                     自动推进到下一个需要你确认的点 · ★★★',
+  '/baf-go-confirm             不弹确认框，直接继续工作流 · ★★',
+  '/baf-workflow-open         启动变更：先分类 · ★★★',
+  '/baf-workflow-classify     分类确认 / 重新描述 · ★★',
+  '/baf-workflow-clarify      澄清阶段：把需求问清楚 · ★★',
+  '/baf-workflow-design       设计阶段：写设计文档 · ★★',
+  '/baf-workflow-plan         计划阶段：拆任务 · ★★',
+  '/baf-workflow-implement    实现阶段：进入/完成 · ★★★',
+  '/baf-workflow-verify       验证阶段：跑检查 · ★★★',
+  '/baf-workflow-archive      归档变更（需 confirm） · ★★★',
+  '/baf-workflow-abandon      放弃变更（需 confirm） · ★',
+  '/baf-workflow-resume       流程偏差后退回指定阶段重做 · ★★★',
 ] as const
 
 const HELP_CHECK = [
   '/baf-check-quality    基线 C 栈质量检查 · ★★',
-  '/baf-check-guard      安全门禁（verify + secret-scan） · ★★',
+  '/baf-check-guard      安全检查（verify + 密钥扫描） · ★★',
 ] as const
 
 const USAGE = [
   '1. 新建会话，选「BAF 模式」',
   '2. 打开「工作流」页签 →「新建变更」，或直接描述需求',
-  '3. 分类确认后再改代码；阶段由 domain service 推进，勿口头宣称完成',
+  '3. 分类确认后再改代码；阶段由系统推进，勿口头宣称完成',
 ] as const
 
 const MODE_LINES = [
-  '模式由 intake 分类确认决定（不是另开一套 slash）：',
-  '  · 模板 = 尚无活动变更时的参考图',
-  '  · full-go = 完整流程（新需求 / 高风险）',
-  '  · bug-fast-path = 缺陷快路径（低风险 Bug）',
+  '模式由分类确认决定（不是另开一套命令）：',
+  '  · 模板 = 还没有进行中的变更时的参考图',
+  '  · full-go-path = 完整流程（新需求 / 高风险）',
+  '  · bug-fix-path = 缺陷修复路径（低风险 Bug，更快）',
   '  · clarify-required = 信息不足，先澄清',
   '同一工作区可有多条变更，但一条变更只有一种模式；',
-  '快路径若风险扩大，在同一变更内升级为 full-go（无需新开会话）。',
+  '缺陷修复路径若风险扩大，在同一变更内升级为完整流程（无需新开会话）。',
 ] as const
 
 /**
@@ -145,7 +154,7 @@ export function apply(ctx: Context): void {
     }),
     ctx.commands.register({
       name: 'baf-welcome',
-      description: '会话启动卡：绑定 + 工具链体检 · ★★',
+      description: '启动检查：工作区状态 + 环境体检 · ★★',
       handler: async ({ agent }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-welcome')
@@ -153,10 +162,32 @@ export function apply(ctx: Context): void {
         // binds one (§18.6 guard 4 — adoption is the customer's call, and the
         // gate is exactly where they make it).
         const [probe, binding] = await Promise.all([
-          probeToolchain(cwd, probeMountFlags(ctx)),
+          probeToolchain(cwd, probeMountFlags(ctx, agent)),
           resolveStartupBinding(cwd),
         ])
         return renderWelcomeCard({ cwd, probe, binding })
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-gate',
+      description: '重新弹出确认卡（如初始化确认） · ★★',
+      handler: ({ rawInput }: SlashHandlerArgs): CommandResult => {
+        const gateId = rawInput.trim()
+        if (gateId === '') {
+          return {
+            kind: 'error',
+            text: formatCommandReport(false, withHint('重新弹出确认卡（如初始化确认） · ★★', '缺少确认项名称'), [
+              {
+                title: '用法',
+                lines: ['/baf-gate scaffold | intake-classify | design-confirm | verify-archive | abandon | resume'],
+              },
+            ]),
+          }
+        }
+        // Read-only by construction: `renderGate` only reads the §22 registry
+        // (unknown ids come back as its structured refusal card). Resolution
+        // stays with the mapped drive commands / Tab buttons (§22.9).
+        return renderGate(gateId)
       },
     }),
     ctx.commands.register({
@@ -165,15 +196,37 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-go')
-        const { stack, guard } = resolveAdapters(ctx, cwd)
+        // §22.17: with a `userQuestions` answerer mounted (desktop GUI),
+        // /baf-go pops the §22 interactive dialog at each park point. The
+        // runtime agent object is the live registry Agent (commands pass it
+        // whole); the local structural type cannot express the branded id,
+        // hence the single cast.
+        const ask = makeGateAsk(ctx, agent as unknown as GateDialogAgent | undefined)
         return driveGo({
           cwd,
           rawInput,
           focus: focusFor(cwd),
-          adapters: {
-            ...(stack === undefined ? {} : { stack }),
-            ...(guard === undefined ? {} : { guard }),
-          },
+          ...(ask === undefined ? {} : { ask }),
+          adapters: resolveDriveAdapters(ctx, agent, cwd),
+        })
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-go-confirm',
+      description: '不弹确认框，直接继续工作流 · ★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-go-confirm')
+        // §22.17 confirm mode: take the positive path at the resting gate
+        // (scaffold init / intake confirm / gates A+B unlock) without any
+        // popup. Drift still asks — auto-picking a rollback node is §19's
+        // one forbidden shortcut.
+        return driveGo({
+          cwd,
+          rawInput,
+          focus: focusFor(cwd),
+          confirm: true,
+          adapters: resolveDriveAdapters(ctx, agent, cwd),
         })
       },
     }),
@@ -195,12 +248,17 @@ export function apply(ctx: Context): void {
               ],
             },
             {
-              title: 'BAF 插件包（各自独立 semver）',
+              title: 'BAF 核心包（工作流本体，各自独立 semver）',
               lines: [
                 `@deepseek-ai/dsh-baf-core: ${v.bafCore}`,
                 ...(v.bafCoreNotes ? [`  · ${v.bafCoreNotes}`] : []),
                 `@deepseek-ai/dsh-baf-workflow: ${v.bafWorkflow}`,
                 ...(v.bafWorkflowNotes ? [`  · ${v.bafWorkflowNotes}`] : []),
+              ],
+            },
+            {
+              title: 'BAF 子包',
+              lines: [
                 `@deepseek-ai/dsh-baf-openspec: ${v.bafOpenspec}`,
                 ...(v.bafOpenspecNotes ? [`  · ${v.bafOpenspecNotes}`] : []),
               ],
@@ -326,7 +384,7 @@ export function apply(ctx: Context): void {
         // Same probe and same renderer as the welcome card (§18.3.2), so
         // "doctor disagrees with the startup card" cannot happen. The probe
         // cache makes the second call free within one session open.
-        const probe = cwdOk ? await probeToolchain(cwd, probeMountFlags(ctx)) : undefined
+        const probe = cwdOk ? await probeToolchain(cwd, probeMountFlags(ctx, agent)) : undefined
         return {
           kind: cwdOk ? 'success' : 'error',
           text: formatCommandReport(
@@ -356,7 +414,7 @@ export function apply(ctx: Context): void {
     }),
     ...(['workflow-open'] as const).map(stage => ctx.commands.register({
       name: `baf-${stage}`,
-      description: '启动变更：intake 分类 · ★★★',
+      description: '启动变更：先分类 · ★★★',
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd(`/baf-${stage}`)
@@ -414,7 +472,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-verify')
-        const { stack, guard } = resolveAdapters(ctx, cwd)
+        const { stack, guard } = resolveAdapters(ctx, agent, cwd)
         return driveVerify(cwd, rawInput, { ...(stack === undefined ? {} : { stack }), ...(guard === undefined ? {} : { guard }) })
       },
     }),
@@ -451,7 +509,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent }): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-check-quality')
-        const { stack } = resolveAdapters(ctx, cwd)
+        const { stack } = resolveAdapters(ctx, agent, cwd)
         return driveQuality(cwd, { ...(stack === undefined ? {} : { stack }) })
       },
     }),
@@ -461,26 +519,29 @@ export function apply(ctx: Context): void {
       handler: async ({ agent }): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-check-guard')
-        const { guard } = resolveAdapters(ctx, cwd)
+        const { guard } = resolveAdapters(ctx, agent, cwd)
         return driveGuard(cwd, { ...(guard === undefined ? {} : { guard }) })
       },
     }),
     ctx.commands.register({
       name: 'baf-scaffold',
-      description: '初始化工作区（与 §22 scaffold 门同源） · ★★',
+      description: '初始化工作区（缺配置时用它） · ★★',
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-scaffold')
         // Per §22.4: this slash is the human-confirmation trigger; the drive
-        // is unconditional at humanConfirmed:true. The scaffold adapter is
-        // resolved from the host ctx the same way bafQuality / bafGuard are.
-        const scaffold = ctx.get('bafScaffold')
+        // is unconditional at humanConfirmed:true. The scaffold service sits
+        // in the baf-domain isolate — invisible to both this row ctx and the
+        // agent realm — so it resolves through resolveScaffoldService
+        // (agentPresets.serviceFor first; plain get as the fallback for
+        // host-only compositions like tests and CLI).
+        const scaffold = resolveScaffoldService(ctx, agent)
         if (scaffold === undefined) {
           return {
             kind: 'error',
-            text: formatCommandReport(false, withHint('初始化工作区（与 §22 scaffold 门同源） · ★★', 'scaffold 服务未挂载'), [
-              { title: '原因', lines: ['当前 composition 未安装 baf-scaffold（ScaffoldAdapter 不可用）'] },
-              { title: '处理', lines: ['确认 preset/agent.cordis.yml 加载了 baf-scaffold 行后重试'] },
+            text: formatCommandReport(false, withHint('初始化工作区（缺配置时用它） · ★★', '初始化服务没有加载'), [
+              { title: '原因', lines: ['工作区初始化需要的组件没有加载到当前会话'] },
+              { title: '处理', lines: ['请在设置里启用 BAF 工作流预设（含全部 BAF 组件）后，重新打开本会话再试'] },
             ]),
           }
         }
@@ -499,7 +560,7 @@ export function apply(ctx: Context): void {
 function missingCwd(command: string): CommandResult {
   return {
     kind: 'error',
-    text: formatCommandReport(false, `${command} · 缺少工作区 · 点本行展开/折叠指令全文`, [
+    text: formatCommandReport(false, `${command} · 缺少工作区 · 点本行展开/折叠详情`, [
       { title: '原因', lines: ['当前会话没有 cwd，无法读取 .baf/projection'] },
       { title: '处理', lines: ['为会话绑定工作区目录后重试'] },
     ]),
@@ -509,16 +570,36 @@ function missingCwd(command: string): CommandResult {
 /**
  * Resolve the optional StackAdapter / GuardPolicy services for verify/quality/guard.
  *
- * These come from sibling `baf-quality` and `baf-guard` packages when mounted.
- * Returns undefined entries for the absent ones — drives tolerate that and
- * surface a clear "服务未挂挂" card to the caller.
+ * These come from sibling `baf-quality` and `baf-guard` rows, which sit in
+ * the baf-domain **isolate** — invisible to both the row ctx and the agent
+ * realm ctx — so they resolve through {@link resolveIsolateService}
+ * (`agentPresets.serviceFor`), with plain `ctx.get` as the fallback for
+ * non-isolate compositions (tests, CLI). Absent services return undefined —
+ * drives tolerate that and surface a clear 「服务未挂载」 card to the caller.
  */
-function resolveAdapters(ctx: Context, cwd: string): { stack?: StackAdapter; guard?: GuardPolicy } {
-  const stack = ctx.get('bafQuality')?.adapter()
-  const guard = ctx.get('bafGuard')?.policy(cwd)
+function resolveAdapters(ctx: Context, agent: { ctx?: Context } | undefined, cwd: string): { stack?: StackAdapter; guard?: GuardPolicy } {
+  const quality = resolveIsolateService<{ adapter(): StackAdapter }>(ctx, agent, 'bafQuality')
+  const guard = resolveIsolateService<{ policy(root: string): GuardPolicy }>(ctx, agent, 'bafGuard')
+  return {
+    ...(quality === undefined ? {} : { stack: quality.adapter() }),
+    ...(guard === undefined ? {} : { guard: guard.policy(cwd) }),
+  }
+}
+
+/**
+ * Full adapter set for the §18 coordinator: stack/guard (verify wiring) plus
+ * the scaffold adapter the §22.17 dialog needs when the customer clicks
+ * 「初始化工作区」. All three services sit in the baf-domain isolate and
+ * resolve through {@link resolveIsolateService}; the scaffold service's own
+ * `scaffold(opts)` method already satisfies the `ScaffoldAdapter` shape.
+ */
+function resolveDriveAdapters(ctx: Context, agent: { ctx?: Context }, cwd: string): DriveAdapters {
+  const { stack, guard } = resolveAdapters(ctx, agent, cwd)
+  const scaffold = resolveScaffoldService(ctx, agent)
   return {
     ...(stack === undefined ? {} : { stack }),
     ...(guard === undefined ? {} : { guard }),
+    ...(scaffold === undefined ? {} : { scaffold }),
   }
 }
 

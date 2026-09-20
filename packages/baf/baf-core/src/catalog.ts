@@ -28,10 +28,10 @@ export interface NodeCatalogEntry {
   readonly entries: readonly string[]
   /** Route profile phase key (same as node for N0–N7; drift uses prior). */
   readonly routePhase: WorkflowNode
-  /** Whether full-go includes this node on the happy path. */
-  readonly onFullGo: boolean
-  /** Whether bug-fast-path includes this node on the happy path. */
-  readonly onFastPath: boolean
+  /** Whether full-go-path includes this node on the happy path. */
+  readonly onFullGoPath: boolean
+  /** Whether bug-fix-path includes this node on the happy path. */
+  readonly onBugFixPath: boolean
 }
 
 /**
@@ -50,7 +50,7 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
       'Parse user intent into a candidate classification (model suggests only)',
       'Rule-engine review: scope, public API, data format, concurrency, security, performance, spec impact, rollback',
       'Compute affectedScope and confidence',
-      'Decide mode: full-go, bug-fast-path, or clarify-required',
+      'Decide mode: full-go-path, bug-fix-path, or clarify-required',
       'Show classification card when requiresUserConfirmation',
       'On confirm, append ChangeIntake to the projection log',
     ],
@@ -68,8 +68,8 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     ],
     entries: ['session message', '/baf-workflow-open', 'baf workflow-open', 'Tab new change'],
     routePhase: 'intake',
-    onFullGo: true,
-    onFastPath: true,
+    onFullGoPath: true,
+    onBugFixPath: true,
   },
   open: {
     id: 'open',
@@ -78,14 +78,14 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     prerequisites: [
       'Intake confirmed',
       'Workspace readable',
-      'Git available (full-go blocks if missing; fast path warns)',
+      'Git available (full-go-path blocks if missing; fast path warns)',
       'Baseline resolvable',
     ],
     actions: [
       'Probe workspace / Git / baseline / OpenSpec availability',
       'Require explicit select-or-create when multiple active changes exist',
       'Generate unique change id',
-      'Create change skeleton (OpenSpec dirs for full-go; minimal bug record for fast path)',
+      'Create change skeleton (OpenSpec dirs for full-go-path; minimal bug record for fast path)',
       'Lock baseline and record source revision',
     ],
     artifacts: [
@@ -105,13 +105,13 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     ],
     entries: ['auto after intake', '/baf-workflow-open', 'baf workflow-open', 'Tab start'],
     routePhase: 'open',
-    onFullGo: true,
-    onFastPath: true,
+    onFullGoPath: true,
+    onBugFixPath: true,
   },
   clarify: {
     id: 'clarify',
     titleKey: 'node.clarify',
-    purpose: 'Close blocking questions and write testable acceptance criteria (full-go).',
+    purpose: 'Close blocking questions and write testable acceptance criteria (full-go-path).',
     prerequisites: ['open completed'],
     actions: [
       'Enumerate blocking questions',
@@ -131,13 +131,13 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     ],
     entries: ['auto after open', '/baf-workflow-clarify', 'Tab'],
     routePhase: 'clarify',
-    onFullGo: true,
-    onFastPath: false,
+    onFullGoPath: true,
+    onBugFixPath: false,
   },
   design: {
     id: 'design',
     titleKey: 'node.design',
-    purpose: 'Produce a verifiable technical design grounded in the real repository (full-go).',
+    purpose: 'Produce a verifiable technical design grounded in the real repository (full-go-path).',
     prerequisites: ['clarify completed'],
     actions: [
       'Read actual repository code; do not invent APIs',
@@ -157,13 +157,13 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     ],
     entries: ['auto after clarify', '/baf-workflow-design', 'Tab'],
     routePhase: 'design',
-    onFullGo: true,
-    onFastPath: false,
+    onFullGoPath: true,
+    onBugFixPath: false,
   },
   plan: {
     id: 'plan',
     titleKey: 'node.plan',
-    purpose: 'Break design into verifiable tasks with allowlist, verify commands, and rollback points (full-go).',
+    purpose: 'Break design into verifiable tasks with allowlist, verify commands, and rollback points (full-go-path).',
     prerequisites: ['design completed'],
     actions: [
       'Split design into tasks (input/output/files/verify/rollback)',
@@ -181,22 +181,22 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     ],
     entries: ['auto after design', '/baf-workflow-plan', 'Tab'],
     routePhase: 'plan',
-    onFullGo: true,
-    onFastPath: false,
+    onFullGoPath: true,
+    onBugFixPath: false,
   },
   implement: {
     id: 'implement',
     titleKey: 'node.implement',
     purpose: 'Implement and test within the allowlist under guard checks.',
     prerequisites: [
-      'full-go: plan completed',
+      'full-go-path: plan completed',
       'fast path: open completed with root-cause record',
     ],
     actions: [
       'Before each task, check stage and guard',
       'Edit only allowlisted files (new scope needs reconfirm or escalation)',
       'Prefer minimal implementation + tests before expanding',
-      'Sync specs on full-go',
+      'Sync specs on full-go-path',
       'Record structured external-command results',
       'Record per-task start/complete/blocked',
     ],
@@ -209,12 +209,12 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     failure: [
       'Guard deny → blocked + stable reason code',
       'Cancel must not fabricate completed',
-      'Fast-path scope growth → escalate to full-go (T15)',
+      'Fast-path scope growth → escalate to full-go-path (T15)',
     ],
     entries: ['auto transition', '/baf-workflow-implement', 'baf workflow-implement', 'Tab'],
     routePhase: 'implement',
-    onFullGo: true,
-    onFastPath: true,
+    onFullGoPath: true,
+    onBugFixPath: true,
   },
   verify: {
     id: 'verify',
@@ -244,8 +244,8 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     ],
     entries: ['auto transition', '/baf-workflow-verify', 'baf workflow-verify', 'Tab'],
     routePhase: 'verify',
-    onFullGo: true,
-    onFastPath: true,
+    onFullGoPath: true,
+    onBugFixPath: true,
   },
   archive: {
     id: 'archive',
@@ -258,7 +258,7 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     actions: [
       'Show change summary, verify results, and audit refs',
       'Request human confirmation',
-      'Atomically archive via OpenSpec adapter (full-go) or write final bug record (fast path)',
+      'Atomically archive via OpenSpec adapter (full-go-path) or write final bug record (fast path)',
       'Write final projection state',
     ],
     artifacts: ['archived change / final record', 'summary', 'final projection'],
@@ -271,8 +271,8 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     ],
     entries: ['/baf-workflow-archive', 'Tab confirm archive'],
     routePhase: 'archive',
-    onFullGo: true,
-    onFastPath: true,
+    onFullGoPath: true,
+    onBugFixPath: true,
   },
   drift: {
     id: 'drift',
@@ -298,7 +298,7 @@ export const NODE_CATALOG: Readonly<Record<WorkflowNode, NodeCatalogEntry>> = {
     ],
     entries: ['automatic on evidence change', 'Tab'],
     routePhase: 'drift',
-    onFullGo: true,
-    onFastPath: true,
+    onFullGoPath: true,
+    onBugFixPath: true,
   },
 }

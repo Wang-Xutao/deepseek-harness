@@ -1,5 +1,5 @@
 /**
- * Shared runtime context for full-go stage handlers (§12 Phase 5).
+ * Shared runtime context for full-go-path stage handlers (§12 Phase 5).
  * One context binds the projection store, the OpenSpec adapter, and the
  * workspace identity for a whole stage chain; handlers stay pure functions
  * over it.

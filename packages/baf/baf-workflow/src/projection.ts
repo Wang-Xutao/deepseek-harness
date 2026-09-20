@@ -58,6 +58,101 @@ export function isActiveChange(entry: { readonly current: WorkflowNode | Termina
   return entry.current !== 'completed' && entry.current !== 'abandoned'
 }
 
+/**
+ * Stale writer-lock threshold (§18.4 leak guard): if the lock file's `at`
+ * timestamp is older than this, the previous owner is presumed dead (process
+ * crash / kill / restart without releasing) and the lock may be reclaimed.
+ *
+ * 60s is well above the longest legitimate append path (an OpenSpec validate
+ * + C-stack coverage + analysis run can take a few seconds; the verify drive
+ * is the slowest). Below that, racing a live writer would corrupt the JSONL.
+ *
+ * Override via the `BAF_STALE_LOCK_MS` environment variable when running a
+ * long-running verify (e.g. on a CI agent that suspends the process between
+ * commands and crosses the 60s boundary on resume). Bad inputs fall back to
+ * the default and log once — silent fallback would let a regression that
+ * merely set the env var to `0` reintroduce the lock-corruption race.
+ */
+export const STALE_LOCK_MS = (() => {
+  const fallback = 60_000
+  const raw = process.env.BAF_STALE_LOCK_MS
+  if (raw === undefined || raw === '') return fallback
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed < 1_000) {
+    // eslint-disable-next-line no-console
+    console.warn(`[baf] BAF_STALE_LOCK_MS=${JSON.stringify(raw)} is not a positive integer ≥ 1000; using ${fallback}ms`)
+    return fallback
+  }
+  return parsed
+})()
+
+/** Read the `at` field of a writer-lock file, or undefined when absent / malformed. */
+async function readLockAt(path: string): Promise<string | undefined> {
+  try {
+    const text = await readFile(path, 'utf8')
+    const parsed = JSON.parse(text) as { at?: unknown }
+    return typeof parsed.at === 'string' ? parsed.at : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Pick the "active" change every entry surface agrees on (§13 issue #2).
+ *
+ * One workspace can carry multiple non-terminal changes at once (a slow
+ * design still parked next to a fresh bug-fix-path). The drives, the Tab,
+ * `/baf-status`, and the session-gate all ask "which one is the focus?"
+ * — and §22 says the focus is the change the customer was last driving,
+ * not the lexically-first row in the index. We rank by projection `seq`
+ * descending (the most recent event wins), tie-break by changeId lexical
+ * order (deterministic, locale-independent). The result is the same
+ * regardless of which surface asked, so a Tab click and a `/baf-go` typed
+ * at the terminal always converge on the same change id.
+ *
+ * Sync variant of {@link resolveActiveChange} — the drives already hold
+ * the index in hand (they did `store.readIndex()`), so going async just
+ * to re-read would be pointless. The async helper is the public surface
+ * for callers that do not have the index loaded.
+ * @param changes - workspace projection index rows.
+ * @returns discriminated union.
+ */
+export function pickActiveChange(changes: readonly ProjectionIndexEntry[]):
+  | { readonly kind: 'none' }
+  | { readonly kind: 'one'; readonly changeId: string }
+  | { readonly kind: 'ambiguous'; readonly candidates: readonly ProjectionIndexEntry[] }
+{
+  const actives = changes.filter(isActiveChange)
+  if (actives.length === 0) return { kind: 'none' }
+  if (actives.length === 1) {
+    const only = actives[0]
+    if (only === undefined) return { kind: 'none' }
+    return { kind: 'one', changeId: only.changeId }
+  }
+  const sorted = [...actives].sort((a, b) =>
+    a.seq !== b.seq ? b.seq - a.seq : a.changeId.localeCompare(b.changeId),
+  )
+  return { kind: 'ambiguous', candidates: sorted }
+}
+
+export async function resolveActiveChange(store: ProjectionStore): Promise<
+  | { readonly kind: 'none' }
+  | { readonly kind: 'one'; readonly changeId: string }
+  | { readonly kind: 'ambiguous'; readonly candidates: readonly ProjectionIndexEntry[] }
+> {
+  const index = await store.readIndex()
+  return pickActiveChange(index.changes)
+}
+
+/**
+ * List every active (non-terminal) change in the workspace, oldest first.
+ * Used by the session gate's welcome card and the dashboard panel.
+ */
+export async function listActiveChanges(store: ProjectionStore): Promise<readonly ProjectionIndexEntry[]> {
+  const index = await store.readIndex()
+  return index.changes.filter(isActiveChange)
+}
+
 /** Mutable fold state while replaying events. */
 interface FoldState {
   changeId: string
@@ -128,7 +223,7 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
       state.mode = event.intake.mode
       state.current = 'intake'
       state.nodes.intake = 'in-progress'
-      if (event.intake.mode === 'bug-fast-path') {
+      if (event.intake.mode === 'bug-fix-path') {
         state.openspecSkipped = {
           skipped: true,
           reasonCodes: event.intake.reasonCodes,
@@ -147,6 +242,36 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
       }
       state.nodes.intake = 'completed'
       break
+    case 'intake-mode-set': {
+      // §22.17 J — customer path override at the classify gate. Legal only
+      // while the intake is pending; anything else stays audit-only so a
+      // replayed log never resurrects a confirmed change's mode.
+      if (state.intake === undefined || state.intake.confirmation === 'confirmed') break
+      if (event.to === state.intake.mode) break
+      state.intake = { ...state.intake, mode: event.to }
+      state.mode = event.to
+      if (event.to === 'bug-fix-path') {
+        // Same shape the classified-bug fold applies (§ intake-classified):
+        // fast-path cuts the openspec doc stages and annotates why.
+        state.openspecSkipped = { skipped: true, reasonCodes: ['customer-override'] }
+        for (const skipped of ['clarify', 'design', 'plan'] as const) {
+          state.nodes[skipped] = 'skipped'
+          state.annotations[skipped] = { reasonCodes: ['fast-path-cut', 'customer-override'] }
+        }
+      } else {
+        // Mirror of `mode-upgraded`: reopen the doc stages the fast path cut.
+        state.openspecSkipped = { skipped: false, reasonCodes: ['customer-override'] }
+        for (const node of ['clarify', 'design', 'plan'] as const) {
+          if (state.nodes[node] === 'skipped') {
+            state.nodes[node] = 'available'
+            const nextAnnotations = { ...state.annotations }
+            Reflect.deleteProperty(nextAnnotations, node)
+            state.annotations = nextAnnotations
+          }
+        }
+      }
+      break
+    }
     case 'stage-entered':
       state.current = event.node
       state.nodes[event.node] = 'in-progress'
@@ -179,8 +304,12 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
       state.annotations.drift = { detail: event.cause }
       break
     case 'mode-upgraded':
-      state.mode = 'full-go'
-      state.openspecSkipped = { skipped: false, reasonCodes: [event.cause] }
+      state.mode = 'full-go-path'
+      // §13 R6 — `event.cause` is now structured `{ code, message } | string`;
+      // the fold keeps the human-readable summary (or the legacy string) in
+      // `reasonCodes` so the rest of the projection fold stays string-only.
+      const upgradeReason = typeof event.cause === 'string' ? event.cause : event.cause.message
+      state.openspecSkipped = { skipped: false, reasonCodes: [upgradeReason] }
       for (const node of ['clarify', 'design', 'plan'] as const) {
         if (state.nodes[node] === 'skipped') {
           state.nodes[node] = 'available'
@@ -267,6 +396,21 @@ export class ProjectionStore {
   private readonly eventId: () => string
   private readonly queues = new Map<string, Promise<unknown>>()
   private lockHeld = false
+  /**
+   * §13 R8 — in-process subscribers that want a poke whenever any change
+   * in this workspace gets a new event appended. The Tab UI subscribes
+   * once per workspace render and unsubscribes on unmount, so a `clear`
+   * prediction at a stale `current: 'design'` card never reaches the
+   * user (the customer types `/baf-go` in chat, the new event lands,
+   * the Tab refetches, the gate card swaps for the next stage).
+   *
+   * The bus is intentionally **not** persisted and **not** cross-process:
+   * a second dsh instance writing the same workspace won't poke this
+   * instance — the Tab's `getTabView` poll / refresh path is still the
+   * safety net for that case. The point is to remove the latency on the
+   * same-process hot path, where the bus pays for itself.
+   */
+  private readonly listeners = new Set<(changeId: string) => void>()
 
   constructor(options: ProjectionStoreOptions) {
     this.root = options.workspaceRoot
@@ -309,6 +453,12 @@ export class ProjectionStore {
 
   /**
    * Acquire the workspace writer lock (best-effort exclusive create).
+   *
+   * On `EEXIST` the lock is inspected: if its `at` is older than
+   * {@link STALE_LOCK_MS}, the previous owner is presumed dead (crash /
+   * kill / unlink-on-restart) and the stale lock is reclaimed. Otherwise
+   * a {@link BafError} with code `writer_conflict` is thrown so the caller
+   * surfaces it instead of corrupting the JSONL.
    * @returns disposer that releases the lock.
    */
   async acquireWriter(): Promise<() => Promise<void>> {
@@ -322,9 +472,28 @@ export class ProjectionStore {
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
       if (code === 'EEXIST') {
+        // Stale-lock guard: a writer that died holding the lock leaves a
+        // file behind. Reclaim after the freshness window so a fresh boot
+        // can recover without operator intervention.
+        const priorAt = await readLockAt(path)
+        const ageMs = priorAt === undefined
+          ? Number.POSITIVE_INFINITY
+          : Date.now() - Date.parse(priorAt)
+        if (priorAt !== undefined && Number.isFinite(ageMs) && ageMs > STALE_LOCK_MS) {
+          try {
+            await unlink(path)
+          } catch {
+            // Another process reclaimed it between read and unlink; fall
+            // through to writer_conflict so the caller still sees the
+            // conflict instead of silently racing.
+          }
+          return this.acquireWriter()
+        }
         throw new BafError('writer_conflict', 'another projection writer holds the lock', {
           path,
           pid: process.pid,
+          priorAt: priorAt ?? null,
+          ageMs: Number.isFinite(ageMs) ? ageMs : null,
         })
       }
       throw error
@@ -430,9 +599,43 @@ export class ProjectionStore {
     const current = previous.catch(() => undefined).then(run)
     this.queues.set(changeId, current)
     try {
-      return await current
+      const result = await current
+      // §13 R8 — fire-and-forget; throwing listeners must not poison the
+      // writer queue. The catch wrapper is cheap: subscribers are the Tab
+      // view rebuilder which catches its own errors and shows a blocked
+      // reason instead of crashing the dashboard.
+      this.emit(changeId)
+      return result
     } finally {
       if (this.queues.get(changeId) === current) this.queues.delete(changeId)
+    }
+  }
+
+  /**
+   * §13 R8 — register a subscriber. Returns an unsubscribe function so
+   * the Tab can `useEffect` pair subscribe/unsubscribe without leaking
+   * the listener when the workspace unmounts. Subscribers are called
+   * once per successfully appended event on the change they were
+   * notified about — passing the `changeId` so a single listener that
+   * watches every change can still index cheaply.
+   * @param listener - callback fired with the affected changeId.
+   * @returns unsubscribe function.
+   */
+  subscribe(listener: (changeId: string) => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+
+  private emit(changeId: string): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(changeId)
+      } catch (error) {
+        // Last-resort guard: a listener that throws synchronously must
+        // not break the loop or bubble out of `append`. Surface via
+        // process warning channel; production telemetry can hook here.
+        console.warn(`[baf] projection listener threw: ${error instanceof Error ? error.message : String(error)}`)
+      }
     }
   }
 
@@ -528,6 +731,13 @@ export class ProjectionStore {
 
   /**
    * Write via temp file + fsync + rename.
+   *
+   * The final rename retries briefly on Windows sharing violations: renaming
+   * onto a target a concurrent reader holds open (Tab refresh polling the
+   * index, a test's poll loop) fails transiently with EPERM/EBUSY — the
+   * reader releases within milliseconds, and without the retry a customer's
+   * gate-card click could die as an error card just because a refresh was
+   * mid-read (observed as the 2026-09-20 auto-pop flake).
    * @param path - destination.
    * @param body - file body.
    */
@@ -542,7 +752,19 @@ export class ProjectionStore {
     } finally {
       await handle.close()
     }
-    await rename(tmp, path)
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await rename(tmp, path)
+        return
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if ((code === 'EPERM' || code === 'EBUSY' || code === 'EACCES') && attempt < 5) {
+          await new Promise(resolve => setTimeout(resolve, 25 * (attempt + 1)))
+          continue
+        }
+        throw error
+      }
+    }
   }
 }
 

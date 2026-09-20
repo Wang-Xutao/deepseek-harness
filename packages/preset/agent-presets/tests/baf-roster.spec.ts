@@ -90,16 +90,21 @@ describe('shipped BAF roster', () => {
     expect(source).toContain('bafWorkflow: true')
     expect(source).toContain('Phase 5 起启用')
     expect(source).toMatch(/^\s*- id: baf-openspec\s*$/m)
-    // Phase 7: standard/quality/guard/scaffold live in the baf-domain isolate
+    // Phase 7: standard/quality/guard live in the baf-domain isolate
     // alongside the existing core/workflow/openspec rows.
     expect(source).toContain('bafStandard: true')
     expect(source).toContain('bafQuality: true')
     expect(source).toContain('bafGuard: true')
-    expect(source).toContain('bafScaffold: true')
     expect(source).toMatch(/^\s*- id: baf-standard\s*$/m)
     expect(source).toMatch(/^\s*- id: baf-quality\s*$/m)
     expect(source).toMatch(/^\s*- id: baf-guard\s*$/m)
-    expect(source).toMatch(/^\s*- id: baf-scaffold\s*$/m)
+    // baf-scaffold sits INSIDE the baf-domain isolate: a preset row outside
+    // an isolate realm publishes its service process-global and fails the
+    // agent-presets mount invariant (which kills every baf session). Host-
+    // plane consumers resolve it through the receiving agent's realm
+    // (`resolveScaffoldService`), like the other isolate services.
+    expect(source).toContain('bafScaffold: true')
+    expect(source).toMatch(/^\s+- id: baf-scaffold\s*$/m)
     // Per-agent tool guard install row sits outside the isolate (reaches host
     // `agents` service), parallel to baf-commands.
     expect(source).toContain("name: '@deepseek-ai/dsh-baf-guard/install'")

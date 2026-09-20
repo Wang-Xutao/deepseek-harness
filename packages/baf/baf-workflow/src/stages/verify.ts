@@ -13,7 +13,7 @@ import type { StageContext } from './context.ts'
 import { CheckRunner, type CheckReportRow, type VerifyReport } from './check-runner.ts'
 import { verifyGate } from './gates.ts'
 import { readLedger } from './implement.ts'
-import { regressionSatisfied } from './fastpath.ts'
+import { regressionSatisfied } from './bug-fix-path.ts'
 
 /** Result of a verify drive. */
 export interface VerifyStageResult {
@@ -46,11 +46,11 @@ export interface VerifyRunnerOptions {
 export function buildVerifyRunner(
   ctx: StageContext,
   changeId: string,
-  mode: 'full-go' | 'bug-fast-path' = 'full-go',
+  mode: 'full-go-path' | 'bug-fix-path' = 'full-go-path',
   options: VerifyRunnerOptions = {},
 ): CheckRunner {
   const runner = new CheckRunner()
-  if (mode === 'bug-fast-path') {
+  if (mode === 'bug-fix-path') {
     runner.register({
       name: 'regression-test',
       required: true,
@@ -71,7 +71,7 @@ export function buildVerifyRunner(
         const reasons = status.intake?.reasonCodes ?? []
         return {
           ok: true,
-          diagnostics: [`skipped: bug-fast-path (未走 OpenSpec; intake reason codes: ${reasons.join(', ')})`],
+          diagnostics: [`skipped: bug-fix-path (未走 OpenSpec; intake reason codes: ${reasons.join(', ')})`],
         }
       },
     })
@@ -180,7 +180,7 @@ export async function driveVerify(
 ): Promise<VerifyStageResult> {
   // The projection's mode — not the caller's claim — selects the check set.
   const status = await ctx.store.readStatus(changeId)
-  const mode = status.mode === 'bug-fast-path' ? 'bug-fast-path' : 'full-go'
+  const mode = status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path'
   const toolVersions: Record<string, string> = { openspec: 'local-file-1' }
   const runner = buildVerifyRunner(ctx, changeId, mode, { toolVersions })
   const rows = await runner.runAll(signal)

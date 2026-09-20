@@ -21,10 +21,39 @@ export interface ProjectionEventBase {
 /** Which mandatory customer-confirmation gate is being awaited (§18.5). */
 export type ConfirmGate = 'design-to-plan' | 'verify-to-archive'
 
+/**
+ * §13 R5 — frozen copy of the §22 gate card text captured at park time.
+ * Only the fields the Tab renders; the `command` field is preserved verbatim
+ * so the dispatch on resolve stays correct even after registry edits.
+ */
+export interface AwaitingConfirmSnapshot {
+  readonly title: string
+  readonly question: string
+  readonly options: readonly {
+    readonly id: string
+    readonly label: string
+    readonly command: string
+    readonly args?: readonly string[]
+  }[]
+}
+
 /** One projection log event. */
 export type ProjectionEvent =
   | (ProjectionEventBase & { type: 'intake-classified'; intake: ChangeIntake })
   | (ProjectionEventBase & { type: 'intake-confirmed'; by: 'user' | 'rule' })
+  | (ProjectionEventBase & {
+    /**
+     * §22.17 J — the customer overrode the classifier's path choice at the
+     * classify gate (the dialog's two path buttons). Legal only while the
+     * intake is still pending confirmation (between `intake-classified`
+     * and `intake-confirmed`); the fold ignores a stray later event so a
+     * replayed log never resurrects a confirmed change's mode.
+     */
+    type: 'intake-mode-set'
+    from: 'clarify-required' | 'full-go-path' | 'bug-fix-path'
+    to: 'full-go-path' | 'bug-fix-path'
+    by: 'user'
+  })
   | (ProjectionEventBase & { type: 'baseline-locked'; lock: BaselineLock })
   | (ProjectionEventBase & { type: 'stage-entered'; node: WorkflowNode; cause?: string; source?: TransitionSource })
   | (ProjectionEventBase & { type: 'stage-completed'; node: WorkflowNode; artifacts: string[] })
@@ -32,14 +61,29 @@ export type ProjectionEvent =
   | (ProjectionEventBase & { type: 'drift-detected'; node: WorkflowNode; cause: string })
   | (ProjectionEventBase & {
     type: 'mode-upgraded'
-    from: 'bug-fast-path'
-    to: 'full-go'
-    cause: string
+    from: 'bug-fix-path'
+    to: 'full-go-path'
+    /**
+     * Structured cause: `code` is a stable machine-readable id (e.g.
+     * `'file-count-exceeded'`, `'cross-module'`, `'manual-escalation'`),
+     * `message` is the human-readable summary written into the proposal.
+     * The string legacy form is preserved by accepting a plain string
+     * for replay of pre-R6 events.
+     */
+    cause: { code: string; message: string } | string
   })
   | (ProjectionEventBase & {
     /** Coordinator parked on gate A/B awaiting an explicit customer drive (§18.5). */
     type: 'awaiting-confirm'
     gate: ConfirmGate
+    /**
+     * §13 R5 — snapshot of the §22 gate card text at the moment of the
+     * park. Replay of an old log yields the same `question` / `options`
+     * the customer saw, even if `GATE_REGISTRY` has since been edited.
+     * Older events pre-R5 omit this field; readers must fall back to the
+     * live registry in that case.
+     */
+    snapshot?: AwaitingConfirmSnapshot
   })
   | (ProjectionEventBase & { type: 'change-archived'; source?: TransitionSource })
   | (ProjectionEventBase & { type: 'change-abandoned'; source?: TransitionSource })

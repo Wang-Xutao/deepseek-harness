@@ -11,8 +11,8 @@ export type WorkflowTabKey =
   | 'strip.blocked'
   | 'strip.idle'
   | 'mode.template'
-  | 'mode.fullGo'
-  | 'mode.fastPath'
+  | 'mode.fullGoPath'
+  | 'mode.bugFixPath'
   | 'mode.clarify'
   | 'mode.help'
   | 'card.duration'
@@ -37,16 +37,16 @@ export type WorkflowTabKey =
   | 'intake.supplement'
   | 'intake.required'
   | 'intake.notRequired'
-  | 'intake.fastPath.title'
-  | 'intake.fastPath.help'
-  | 'intake.fastPath.problem'
-  | 'intake.fastPath.rootCause'
-  | 'intake.fastPath.file'
-  | 'intake.fastPath.fileHelp'
-  | 'intake.fastPath.test'
-  | 'intake.fastPath.testCmd'
-  | 'intake.fastPath.submit'
-  | 'intake.fastPath.required'
+  | 'intake.bugFixPath.title'
+  | 'intake.bugFixPath.help'
+  | 'intake.bugFixPath.problem'
+  | 'intake.bugFixPath.rootCause'
+  | 'intake.bugFixPath.file'
+  | 'intake.bugFixPath.fileHelp'
+  | 'intake.bugFixPath.test'
+  | 'intake.bugFixPath.testCmd'
+  | 'intake.bugFixPath.submit'
+  | 'intake.bugFixPath.required'
   | 'detail.title'
   | 'detail.empty'
   | 'detail.checklist'
@@ -95,8 +95,8 @@ export type WorkflowTabKey =
   // §22.16 P3 freeze contract removed 2026-09; if a future phase needs
   // i18n for gate cards, read GATE_REGISTRY and project per-locale at
   // render time, do not re-introduce dead dictionaries.
-  | 'lane.fastpath'
-  | 'lane.fullgo'
+  | 'lane.bugFixPath'
+  | 'lane.fullGoPath'
   | 'lane.help'
   | 'edge.upgraded'
   | 'edge.cause'
@@ -149,10 +149,10 @@ export const en: Record<WorkflowTabKey, string> = {
   'strip.blocked': 'Blocked',
   'strip.idle': 'Idle',
   'mode.template': 'Template (idle)',
-  'mode.fullGo': 'Full-go',
-  'mode.fastPath': 'Bug fast-path',
+  'mode.fullGoPath': 'Full-go',
+  'mode.bugFixPath': 'Bug fix path',
   'mode.clarify': 'Needs clarify',
-  'mode.help': 'Template = reference graph before a change starts. After intake: full-go / bug-fast-path / clarify-required.',
+  'mode.help': 'Template = reference graph before a change starts. After intake: full-go-path / bug-fix-path / clarify-required.',
   'card.duration': 'Time',
   'card.tokens': 'Tokens',
   'card.next': 'Next',
@@ -175,16 +175,16 @@ export const en: Record<WorkflowTabKey, string> = {
   'intake.supplement': 'Add details in chat',
   'intake.required': 'Required',
   'intake.notRequired': 'Not required',
-  'intake.fastPath.title': 'Fast-path Bug fields',
-  'intake.fastPath.help': 'Five required fields gate the fast-path ledger. They map 1:1 to the slash form.',
-  'intake.fastPath.problem': 'Problem',
-  'intake.fastPath.rootCause': 'Root cause',
-  'intake.fastPath.file': 'Affected files (one per line)',
-  'intake.fastPath.fileHelp': 'Repeat or list — each line becomes one `file=` argument.',
-  'intake.fastPath.test': 'Regression test file',
-  'intake.fastPath.testCmd': 'Regression test command',
-  'intake.fastPath.submit': 'Submit fast-path',
-  'intake.fastPath.required': 'All five fields are required before fast-path can dispatch.',
+  'intake.bugFixPath.title': 'Fast-path Bug fields',
+  'intake.bugFixPath.help': 'Five required fields gate the fast-path ledger. They map 1:1 to the slash form.',
+  'intake.bugFixPath.problem': 'Problem',
+  'intake.bugFixPath.rootCause': 'Root cause',
+  'intake.bugFixPath.file': 'Affected files (one per line)',
+  'intake.bugFixPath.fileHelp': 'Repeat or list — each line becomes one `file=` argument.',
+  'intake.bugFixPath.test': 'Regression test file',
+  'intake.bugFixPath.testCmd': 'Regression test command',
+  'intake.bugFixPath.submit': 'Submit fast-path',
+  'intake.bugFixPath.required': 'All five fields are required before fast-path can dispatch.',
   'detail.title': 'Stage detail',
   'detail.empty': 'Select a stage on the graph',
   'detail.checklist': 'Stage checklist',
@@ -226,8 +226,8 @@ export const en: Record<WorkflowTabKey, string> = {
   'gate.confirmIntoPlan': 'Confirm and continue',
   'gate.confirmArchive': 'Confirm archive',
   'gate.replyToContinue': 'Run /baf-go again to continue',
-  'lane.fastpath': 'Bug fast-path (before the upgrade)',
-  'lane.fullgo': 'Full-go (after the upgrade)',
+  'lane.bugFixPath': 'Bug fix path (before the upgrade)',
+  'lane.fullGoPath': 'Full-go (after the upgrade)',
   'lane.help': 'A fast-path change that escalated keeps both paths: the earlier lane is greyed but never deleted.',
   'edge.upgraded': 'T15 upgrade: {from} → {to}',
   'edge.cause': 'Cause',
@@ -278,10 +278,10 @@ export const zh: Record<WorkflowTabKey, string> = {
   'strip.blocked': '阻断',
   'strip.idle': '空闲',
   'mode.template': '模板（空闲）',
-  'mode.fullGo': '完整流程',
-  'mode.fastPath': '缺陷快路径',
+  'mode.fullGoPath': '完整流程',
+  'mode.bugFixPath': '缺陷修复路径',
   'mode.clarify': '需先澄清',
-  'mode.help': '模板 = 还没开始变更时的参考图。分类确认后才会变成完整流程 / 快路径 / 需澄清。',
+  'mode.help': '模板 = 还没开始变更时的参考图。分类确认后才会变成完整流程 / 缺陷修复路径 / 需澄清。',
   'card.duration': '耗时',
   'card.tokens': 'Tokens',
   'card.next': '下一跳',
@@ -304,16 +304,16 @@ export const zh: Record<WorkflowTabKey, string> = {
   'intake.supplement': '在对话中补充',
   'intake.required': '需要',
   'intake.notRequired': '不需要',
-  'intake.fastPath.title': 'fast-path Bug 字段',
-  'intake.fastPath.help': '5 字段是 fast-path 账本的硬性前置；与 slash 的 key=value 一一对应。',
-  'intake.fastPath.problem': '现象',
-  'intake.fastPath.rootCause': '根因',
-  'intake.fastPath.file': '受影响文件（每行一个）',
-  'intake.fastPath.fileHelp': '可重复也可换行 — 每行就是一个 file= 参数。',
-  'intake.fastPath.test': '回归测试文件',
-  'intake.fastPath.testCmd': '回归测试命令',
-  'intake.fastPath.submit': '提交 fast-path',
-  'intake.fastPath.required': 'fast-path 必须填齐 5 字段后才能提交。',
+  'intake.bugFixPath.title': 'fast-path Bug 字段',
+  'intake.bugFixPath.help': '5 字段是 fast-path 账本的硬性前置；与 slash 的 key=value 一一对应。',
+  'intake.bugFixPath.problem': '现象',
+  'intake.bugFixPath.rootCause': '根因',
+  'intake.bugFixPath.file': '受影响文件（每行一个）',
+  'intake.bugFixPath.fileHelp': '可重复也可换行 — 每行就是一个 file= 参数。',
+  'intake.bugFixPath.test': '回归测试文件',
+  'intake.bugFixPath.testCmd': '回归测试命令',
+  'intake.bugFixPath.submit': '提交 fast-path',
+  'intake.bugFixPath.required': 'fast-path 必须填齐 5 字段后才能提交。',
   'detail.title': '阶段详情',
   'detail.empty': '在流程图中选择一个阶段',
   'detail.checklist': '本阶段清单',
@@ -356,9 +356,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gate.confirmArchive': '确认归档',
   'gate.replyToContinue': '再敲一次 /baf-go 继续',
   // §22.16 P3 freeze contract removed 2026-09 — see WorkflowTabKey.
-  'lane.fastpath': '缺陷快路径（升级前）',
-  'lane.fullgo': '完整流程（升级后）',
-  'lane.help': '快路径中途升级后，两条 path 都保留：升级前那条置灰，但不删除。',
+  'lane.bugFixPath': '缺陷修复路径（升级前）',
+  'lane.fullGoPath': '完整流程（升级后）',
+  'lane.help': '缺陷修复路径中途升级后，两条路径都保留：升级前那条置灰，但不删除。',
   'edge.upgraded': 'T15 升级：{from} → {to}',
   'edge.cause': '原因',
   'edge.at': '时间',
@@ -391,7 +391,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'dashboard.focus': '当前焦点',
   'dashboard.note': '完整筛选/归档导出在 Phase 8；此处为工作流页入口（可先查看列表）。',
   'empty.hint': '描述变更，然后启动 intake。',
-  'openspec.skipped': '已跳过 OpenSpec（fast path）',
+  'openspec.skipped': '已跳过 OpenSpec（缺陷修复路径）',
   'graph.aria': 'BAF go 工作流图',
   'graph.ops': '细分操作',
   'none': '—',

@@ -39,14 +39,14 @@ properties:
   workflow:
     type: object
     additionalProperties: false
-    required: [default, requireOpenSpec, bugFastPath]
+    required: [default, requireOpenSpec, bugFixPath]
     properties:
       default:
         type: string
         const: go
       requireOpenSpec:
         type: boolean
-      bugFastPath:
+      bugFixPath:
         type: object
         additionalProperties: false
         required: [allowed, maxScope, requireRegressionTest]

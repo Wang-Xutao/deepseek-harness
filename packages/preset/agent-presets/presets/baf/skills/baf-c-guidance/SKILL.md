@@ -10,7 +10,7 @@ Do not invent compiler flags, coverage numbers, or analyzer names. Load them fro
 ## What this skill covers
 
 - Prefer existing project build/test layouts discovered in the workspace.
-- Keep changes inside the plan allowlist; scope growth requires reconfirmation or full-go upgrade.
+- Keep changes inside the plan allowlist; scope growth requires reconfirmation or full-go-path upgrade.
 - Treat missing tools as `tool_unavailable` — never report a missing check as passed.
 - Protected paths and secret scan rules come from baseline `guard`; refuse writes that violate them.
 

@@ -77,7 +77,7 @@ read-only tools and future tools pass through.
 
 `projection-state.ts` reads `.baf/projection/index.json` and the change
 log plus the allowlist (from `openspec/changes/<id>/plan.json` or
-`fastpath-ledger.json`) **on every call**. Failure modes:
+`bug-fix-path-ledger.json`) **on every call**. Failure modes:
 
 - Unreadable index → `{active:false, intakeConfirmed:false, allowlist:[]}`
 - Active change + unreadable log → `{active:true, intakeConfirmed:false}`

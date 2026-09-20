@@ -62,7 +62,7 @@ export * from './stages/clarify.ts'
 export * from './stages/design.ts'
 export * from './stages/plan.ts'
 export * from './stages/implement.ts'
-export * from './stages/fastpath.ts'
+export * from './stages/bug-fix-path.ts'
 export * from './stages/escalate.ts'
 export * from './stages/verify.ts'
 export * from './stages/archive.ts'
@@ -80,9 +80,41 @@ export * from './gate-cards.ts'
 export {
   driveGateResolve,
   driveScaffold,
+} from './command-drives.ts'
+/**
+ * Cross-realm service resolution for host-plane consumers. `bafScaffold` (and
+ * the baf-domain services generally) sit inside the entry-local isolate, so a
+ * host ctx cannot see them directly — this helper looks through the receiving
+ * agent's realm first (see `agent.cordis.yml`).
+ */
+export { resolveIsolateService, resolveScaffoldService } from './session-gate.ts'
+/**
+ * CLI-shaped drives — explicit re-export to win against the wildcard
+ * `export * from './stages/*.ts'` above, which puts the internal
+ * `StageContext`-based versions of the same names in the module namespace.
+ * The host Tab, the CLI, and the slash layer must all bind to the
+ * CLI-shaped ones (cwd + rawInput + source); the stage-shaped versions are
+ * package-private to the pipeline factory.
+ */
+export {
+  driveAbandon,
+  driveArchive,
+  driveClassify,
+  driveClarify,
+  driveDesign,
+  driveImplement,
+  drivePlan,
+  driveResume,
+  driveVerify,
   type DriveAdapters,
 } from './command-drives.ts'
-export { isActiveChange } from './projection.ts'
+export {
+  isActiveChange,
+  listActiveChanges,
+  pickActiveChange,
+  resolveActiveChange,
+  STALE_LOCK_MS,
+} from './projection.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -126,7 +158,7 @@ export class BafWorkflow extends Service {
   }
 
   /**
-   * Stage pipeline bound to the current workspace (Phase 5 full-go chain).
+   * Stage pipeline bound to the current workspace (Phase 5 full-go-path chain).
    * @param options - optional git revision, baseline, and Phase 7 adapters
    * (stack/guard) for the chain.
    * @returns pipeline, or throws when no workspace is bound.

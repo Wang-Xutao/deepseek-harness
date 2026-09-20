@@ -186,6 +186,44 @@ export async function confirmIntake(
 }
 
 /**
+ * §22.17 J — record the customer's path override at the classify gate
+ * (`/baf-workflow-classify confirm mode=…`). Only legal while the intake is
+ * still pending confirmation; a no-op when the requested mode already holds.
+ * @param store - projection store.
+ * @param changeId - change id.
+ * @param to - the customer's chosen path.
+ * @returns updated status (unchanged when the mode already matches).
+ */
+export async function setIntakeMode(
+  store: ProjectionStore,
+  changeId: string,
+  to: 'full-go-path' | 'bug-fix-path',
+): Promise<WorkflowStatus> {
+  const status = await store.readStatus(changeId)
+  if (status.intake === undefined) {
+    throw new BafError('invalid_transition', 'no intake to override', { changeId })
+  }
+  // Same-mode re-confirm is a no-op, not an error: the dialog's path options
+  // always carry `mode=`, so retrying a bug-path confirm after a
+  // missing-fields park must sail through (§22.17 J).
+  if (status.intake.mode === to) return status
+  if (status.intake.confirmation !== 'pending') {
+    throw new BafError('invalid_transition', 'intake already confirmed; mode can no longer change', { changeId })
+  }
+  // `from` is audit-only (the fold keys off `to`); narrow WorkflowMode for
+  // the event type — anything unexpected records as clarify-required.
+  const from = status.mode === 'full-go-path' || status.mode === 'bug-fix-path' ? status.mode : 'clarify-required'
+  const { status: next } = await store.append(changeId, status.projectionVersion, meta => ({
+    type: 'intake-mode-set',
+    from,
+    to,
+    by: 'user' as const,
+    ...meta,
+  }))
+  return next
+}
+
+/**
  * Reject a pending intake (marks abandoned without archive).
  * @param store - projection store.
  * @param changeId - change id.

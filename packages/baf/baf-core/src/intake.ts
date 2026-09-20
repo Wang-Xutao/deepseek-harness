@@ -11,7 +11,7 @@ export type ChangeKind =
   | 'unknown'
 
 /** Workflow execution mode selected by intake. */
-export type WorkflowMode = 'full-go' | 'bug-fast-path' | 'clarify-required'
+export type WorkflowMode = 'full-go-path' | 'bug-fix-path' | 'clarify-required'
 
 /** Estimated blast radius used by fast-path policy. */
 export type AffectedScope =

@@ -73,7 +73,7 @@ ctx.bafGuard.toolGuard({ workspaceRoot }): ToolGuard
 
 `projection-state.ts` **每次调用**都读 `.baf/projection/index.json` +
 change log + allowlist（来自 `openspec/changes/<id>/plan.json` 或
-`fastpath-ledger.json`）。失败形态：
+`bug-fix-path-ledger.json`）。失败形态：
 
 - index 不可读 → `{active:false, intakeConfirmed:false, allowlist:[]}`
 - active change 但 log 不可读 → `{active:true, intakeConfirmed:false}`

@@ -10,7 +10,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
  * Mirrors `WorkflowMode` from baf-core (declared locally to avoid pulling
  * the full intake module across the Remote boundary).
  */
-export type BafWorkflowMode = 'full-go' | 'bug-fast-path' | 'clarify-required'
+export type BafWorkflowMode = 'full-go-path' | 'bug-fix-path' | 'clarify-required'
 
 /** Request carrying the session whose cwd owns the projection. */
 export interface BafWorkflowSessionRequest {
@@ -35,8 +35,13 @@ export interface BafWorkflowTransitionRequest {
   readonly sessionId: SessionId
   readonly changeId: string
   readonly to: WorkflowNode | TerminalState
-  /** JSON-safe evidence payload attached to the transition. */
-  readonly evidence?: Readonly<Record<string, string | number | boolean | null>>
+  /**
+   * JSON-safe evidence payload attached to the transition. The host flattens
+   * arrays into repeated `key=value` pairs (the `driveClassify` parser
+   * already understands multi-valued `file=` for fast-path), and skips
+   * `undefined` / `null`. Scalars are stringified as-is.
+   */
+  readonly evidence?: Readonly<Record<string, string | number | boolean | null | readonly (string | number | boolean | null)[]>>
 }
 
 /**

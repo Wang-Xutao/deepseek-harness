@@ -53,7 +53,7 @@ function baseline(stack: Partial<BaselineManifest['stack']>): BaselineManifest {
     workflow: {
       default: 'go',
       requireOpenSpec: true,
-      bugFastPath: { allowed: true, maxScope: 'small-local', requireRegressionTest: true },
+      bugFixPath: { allowed: true, maxScope: 'small-local', requireRegressionTest: true },
     },
     routeProfile: {
       default: { provider: 'p', model: 'm' },

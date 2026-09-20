@@ -73,7 +73,7 @@ export interface WorkflowTabGate {
 
 /** One path lane in the §18.4.3 dual-lane view. */
 export interface WorkflowTabLane {
-  readonly id: 'bug-fast-path' | 'full-go'
+  readonly id: 'bug-fix-path' | 'full-go-path'
   /** Node ids this lane draws, in stage order. */
   readonly nodes: readonly WorkflowNode[]
   /** Node status as recorded *within this lane's* slice of the event log. */
@@ -85,10 +85,16 @@ export interface WorkflowTabLane {
 export interface WorkflowTabUpgradeEdge {
   /** Where the pre-upgrade path stopped. */
   readonly from: WorkflowNode
-  /** Where the full-go path picked up. */
+  /** Where the full-go-path path picked up. */
   readonly to: WorkflowNode
   readonly at: string
-  readonly cause: string
+  /**
+   * §13 R6 — carry the structured `{ code, message }` form through to the
+   * Tab so the renderer can display `message` verbatim while keeping the
+   * machine-readable `code` for any audit / dashboard grouping. Legacy
+   * plain-string causes (pre-R6 logs) are accepted for replay honesty.
+   */
+  readonly cause: { code: string; message: string } | string
   readonly labelKey: string
 }
 
@@ -236,7 +242,7 @@ export function buildEmptyTabView(
       id: catalog.id,
       status: 'template' as const,
       catalog,
-      onPath: catalog.onFullGo,
+      onPath: catalog.onFullGoPath,
       transitionsIn: transitionsInto(catalog.id),
       transitionsOut: transitionsFrom(catalog.id),
     })),

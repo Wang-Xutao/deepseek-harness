@@ -96,7 +96,7 @@ export async function driveClarify(
   const gateInput = {
     workspaceRoot: ctx.workspace.root,
     changeId: input.changeId,
-    mode: 'full-go' as const,
+    mode: 'full-go-path' as const,
   }
   const gate = await clarifyGate(gateInput)
   if (!gate.ok) {

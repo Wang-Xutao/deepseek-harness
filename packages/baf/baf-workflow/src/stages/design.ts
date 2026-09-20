@@ -105,7 +105,7 @@ export async function driveDesign(
   const gate = await designGate({
     workspaceRoot: ctx.workspace.root,
     changeId: input.changeId,
-    mode: 'full-go',
+    mode: 'full-go-path',
   })
   if (!gate.ok) {
     throw new BafError(

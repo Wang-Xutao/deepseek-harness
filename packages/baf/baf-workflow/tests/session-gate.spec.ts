@@ -19,9 +19,10 @@ import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ProjectionStore } from '../src/projection.ts'
 import {
+  STARTUP_GATE_COMMAND,
   WELCOME_COMMAND,
   apply,
   probeMountFlags,
@@ -29,10 +30,13 @@ import {
   renderProbeLines,
   renderWelcomeCard,
   resetSessionGateCache,
+  resolveIsolateService,
+  resolveScaffoldService,
   resolveStartupBinding,
   runSessionGate,
   sessionGateLogLine,
   sessionGateSection,
+  startupGateCardFor,
   type ToolchainProbe,
 } from '../src/session-gate.ts'
 
@@ -57,7 +61,7 @@ async function seedChange(root: string, changeId: string, archive = false): Prom
   const intake = {
     changeId,
     kind: 'new-requirement' as const,
-    mode: 'full-go' as const,
+    mode: 'full-go-path' as const,
     affectedScope: 'cross-module' as const,
     confidence: 0.9,
     reasonCodes: ['new-requirement'],
@@ -115,7 +119,7 @@ describe('BAF session gate · toolchain probe (§18.3.2)', () => {
       const openspec = itemOf(probe, 'openspec')
       expect(['missing', 'unknown']).toContain(openspec.state)
       expect(openspec.detail).toContain('openspec/changes 缺失')
-      expect(openspec.hint).toContain('baf scaffold')
+      expect(openspec.hint).toContain('初始化工作区')
       expect(itemOf(probe, 'guard').state).toBe('ok')
     } finally {
       await cleanup(root)
@@ -180,12 +184,12 @@ describe('BAF session gate · toolchain probe (§18.3.2)', () => {
     try {
       const probe = await probeToolchain(root)
       const lines = renderProbeLines(probe)
-      expect(lines[0]).toMatch(/^✓ workspace/)
-      expect(lines.some(l => l.startsWith('✗ baseline'))).toBe(true)
+      expect(lines[0]).toMatch(/^✓ 工作区/)
+      expect(lines.some(l => l.startsWith('✗ 工作流配置'))).toBe(true)
       expect(lines.some(l => l.startsWith('? C 工具链'))).toBe(true)
       expect(lines.some(l => l.startsWith('版本'))).toBe(true)
-      // A hint rides on its own indented line so the column stays scannable.
-      expect(lines.some(l => l.includes('\n  ↳ '))).toBe(true)
+      // A remedy rides on its own indented line so the status column stays scannable.
+      expect(lines.some(l => l.startsWith('   → 怎么处理：'))).toBe(true)
     } finally {
       await cleanup(root)
     }
@@ -214,7 +218,7 @@ describe('BAF session gate · toolchain probe (§18.3.2)', () => {
       expect(openspec.detail).toContain('超时')
       // The detected half still carries its remedy — that is the customer's
       // actual next step.
-      expect(openspec.hint).toContain('scaffold')
+      expect(openspec.hint).toContain('初始化工作区')
     } finally {
       process.env.PATH = original
       await cleanup(root)
@@ -231,7 +235,7 @@ describe('BAF session gate · startup binding (§18.3.1)', () => {
       expect(binding.actives).toEqual([])
       const card = renderWelcomeCard({ cwd: root, probe: await probeToolchain(root), binding })
       expect(card.kind).toBe('success')
-      expect(card.text).toContain('无未完成工作流')
+      expect(card.text).toContain('没有进行中的工作流')
       expect(card.text).toContain('直接描述你的需求')
       // Reading the index may create the empty index document, but it must
       // never mint a change: the gate is read-only (§18.6 guard 4).
@@ -249,10 +253,10 @@ describe('BAF session gate · startup binding (§18.3.1)', () => {
       const binding = await resolveStartupBinding(root)
       expect(binding.actives.map(c => c.changeId)).toEqual(['CHG-ONE'])
       const card = renderWelcomeCard({ cwd: root, probe: await probeToolchain(root), binding })
-      expect(card.text).toContain('检测到未完成工作流 CHG-ONE')
-      expect(card.text).toContain('继续还是新开？')
-      expect(card.text).toContain('/baf-go continue 继续 CHG-ONE')
-      expect(card.text).toContain('本会话尚未绑定')
+      expect(card.text).toContain('工作区里有没做完的工作流')
+      expect(card.text).toContain('CHG-ONE · 完整流程 · 进行到 intake')
+      expect(card.text).toContain('回复 /baf-go continue 接着做 CHG-ONE')
+      expect(card.text).toContain('本会话还没接手')
     } finally {
       await cleanup(root)
     }
@@ -266,8 +270,10 @@ describe('BAF session gate · startup binding (§18.3.1)', () => {
       const binding = await resolveStartupBinding(root)
       expect(binding.actives).toHaveLength(2)
       const card = renderWelcomeCard({ cwd: root, probe: await probeToolchain(root), binding })
-      expect(card.text).toContain('检测到 2 条未完成工作流')
-      expect(card.text).toContain('/baf-go change=<id>')
+      expect(card.text).toContain('有 2 条没做完的工作流 · 需要选一条继续')
+      expect(card.text).toContain('CHG-A')
+      expect(card.text).toContain('CHG-B')
+      expect(card.text).toContain('/baf-go change=<编号>')
     } finally {
       await cleanup(root)
     }
@@ -289,33 +295,42 @@ describe('BAF session gate · startup binding (§18.3.1)', () => {
     resetSessionGateCache()
     const root = join(tmpdir(), 'baf-gate-missing-71c2')
     const probe = await probeToolchain(root)
-    const binding: Awaited<ReturnType<typeof resolveStartupBinding>> = { actives: [] }
+    const binding: Awaited<ReturnType<typeof resolveStartupBinding>> = { actives: [], drifted: new Set<string>() }
     const card = renderWelcomeCard({ cwd: root, probe, binding })
     expect(card.kind).toBe('success')
-    expect(card.text).toContain('BAF 模式已就绪')
+    expect(card.text).toContain('BAF 已就绪')
     // The card always ends with something the customer can actually do.
     expect(card.text).toContain('【下一步】')
-    // §22.14-D: when baseline is missing the welcome card splices the
-    // registered §22 scaffold card verbatim — the same options the Tab
-    // pendingGate and the `baf_gate_ask` tool render.
-    expect(card.text).toContain('【问题】')
-    expect(card.text).toContain('【选项】')
-    expect(card.text).toMatch(/初始化工作区（执行 scaffold）/)
-    expect(card.text).toContain('暂不初始化')
+    // §22.14-D: the welcome card stays lean — the §22 scaffold card is NEVER
+    // spliced in (that produced a second 【下一步】); it pops as its own card
+    // via `/baf-gate scaffold` (asserted below through startupGateCardFor).
+    expect(card.text).not.toContain('【问题】')
+    expect(card.text).not.toContain('【选项】')
+    expect(card.text!.match(/【下一步】/g)).toHaveLength(1)
+    // Section order: 当前状态 → 下一步 → 环境体检 → 常用命令.
+    const order = ['当前状态', '下一步', '环境体检', '常用命令']
+      .map(t => card.text!.indexOf(`【${t}】`))
+    expect(order.every(i => i >= 0)).toBe(true)
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+    // The env problem gets its own standard gate card (修复/忽略).
+    expect(startupGateCardFor(probe)).toBe('/baf-gate scaffold')
   })
 
-  it('omits the §22 scaffold fragment when the workspace has a baseline', async () => {
+  it('omits the env gate card when the workspace has a baseline', async () => {
     const root = await emptyWorkspace()
     try {
       await mkdir(join(root, '.baf'), { recursive: true })
       await writeFile(join(root, '.baf', 'baseline.yml'), await readFile(FIXTURE_BASELINE, 'utf8'), 'utf8')
       resetSessionGateCache()
       const probe = await probeToolchain(root)
-      const binding: Awaited<ReturnType<typeof resolveStartupBinding>> = { actives: [] }
+      const binding: Awaited<ReturnType<typeof resolveStartupBinding>> = { actives: [], drifted: new Set<string>() }
       const card = renderWelcomeCard({ cwd: root, probe, binding })
-      // With a real baseline, the §22 fragment must NOT splice in.
+      // With a real baseline, no §22 gate pops and no fragment appears.
       expect(card.text).not.toContain('【问题】')
-      expect(card.text).not.toContain('初始化工作区（执行 scaffold）')
+      // The openspec probe hint legitimately mentions the button; only the
+      // gate card itself would carry the「工作区需要初始化」title.
+      expect(card.text).not.toContain('工作区需要初始化')
+      expect(startupGateCardFor(probe)).toBeUndefined()
     } finally {
       await cleanup(root)
     }
@@ -366,12 +381,16 @@ describe('BAF session gate · two channels (§18.3.3)', () => {
       // 等等).
       expect(settled).toContain('baf_gate_ask')
       expect(settled).toContain('不得自创')
+      // Workflow-impact rule — questions that reroute the workflow (full-go-path ↔
+      // bug-fix-path etc.) must state the impact in the question and options.
+      expect(settled).toContain('工作流走向')
+      expect(settled).toContain('full-go-path')
     } finally {
       await cleanup(root)
     }
   })
 
-  it('delivers the card by executing /baf-welcome, and only logs when it is absent', async () => {
+  it('delivers the welcome card then the env gate card, and only logs when absent', async () => {
     const root = await emptyWorkspace()
     try {
       const calls: string[] = []
@@ -384,13 +403,13 @@ describe('BAF session gate · two channels (§18.3.3)', () => {
         }),
         fakeAgent(root),
       )
-      expect(calls).toEqual([WELCOME_COMMAND])
+      expect(calls).toEqual([WELCOME_COMMAND, `${STARTUP_GATE_COMMAND} scaffold`])
       expect(logs).toHaveLength(1)
       expect(logs[0]).toContain('session baf:session-gate')
       expect(warnings).toEqual([])
 
       // Unregistered command → warn, never throw: a broken composition must
-      // still leave an openable session (§17.7 R19).
+      // still leave an openable session (§17.7 R19). Both executions miss.
       resetSessionGateCache()
       const second: string[] = []
       await runSessionGate(
@@ -401,6 +420,7 @@ describe('BAF session gate · two channels (§18.3.3)', () => {
         fakeAgent(root),
       )
       expect(second.join('\n')).toContain('/baf-welcome is not registered')
+      expect(second.join('\n')).toContain('/baf-gate scaffold is not registered')
     } finally {
       await cleanup(root)
     }
@@ -465,6 +485,92 @@ describe('BAF session gate · row install (§18.3)', () => {
     expect(probeMountFlags(present)).toEqual({ guardMounted: true, qualityMounted: true })
     const absent = fakeCtx({ get: () => undefined })
     expect(probeMountFlags(absent)).toEqual({ guardMounted: false, qualityMounted: false })
+  })
+
+  /** A realm ctx double whose `get` answers nothing — an isolate-invisible realm. */
+  function blindRealm(): Context {
+    return { get: () => undefined } as unknown as Context
+  }
+
+  it('reads mount flags through agentPresets.serviceFor when the isolate hides them from get', () => {
+    // The real-desktop composition: bafGuard/bafQuality sit in the baf-domain
+    // isolate, invisible to both the row ctx and the agent realm — the only
+    // reader that can see them is agentPresets.serviceFor(agent, name).
+    const guard = { policy: () => ({}) }
+    const quality = { adapter: () => ({ id: () => 'stack' }) }
+    const agent = { ctx: blindRealm() }
+    const presets = {
+      serviceFor: (who: unknown, name: string) =>
+        who === agent && name === 'bafGuard' ? guard : name === 'bafQuality' ? quality : undefined,
+    }
+    const ctx = fakeCtx({ get: (name: string) => name === 'agentPresets' ? presets : undefined })
+    expect(probeMountFlags(ctx, agent)).toEqual({ guardMounted: true, qualityMounted: true })
+  })
+
+  it('resolves the scaffold service through serviceFor when both scopes miss (production incident)', () => {
+    // tmp/session/2.jsonl: the customer clicked 「初始化工作区」 in the §22.17
+    // dialog, the dispatch routed correctly, and STILL surfaced
+    // 「初始化服务没有加载」 — because agent.ctx.get('bafScaffold') cannot see
+    // an isolate realm. serviceFor is the sanctioned cross-isolate read.
+    const scaffold = { scaffold: () => ({ kind: 'done' }) }
+    const agent = { ctx: blindRealm() }
+    const presets = { serviceFor: (who: unknown, name: string) => who === agent && name === 'bafScaffold' ? scaffold : undefined }
+    const ctx = fakeCtx({ get: (name: string) => name === 'agentPresets' ? presets : undefined })
+    expect(resolveScaffoldService(ctx, agent)).toBe(scaffold)
+    expect(resolveIsolateService(ctx, agent, 'bafScaffold')).toBe(scaffold)
+  })
+
+  it('falls back to plain realm get when serviceFor cannot answer', () => {
+    const scaffold = { scaffold: () => ({ kind: 'done' }) }
+    const agentPresets = { serviceFor: () => undefined }
+    // Agent realm misses, row ctx sees it (test/CLI compositions).
+    const agent = { ctx: blindRealm() }
+    const ctx = fakeCtx({ get: (name: string) => name === 'agentPresets' ? agentPresets : name === 'bafScaffold' ? scaffold : undefined })
+    expect(resolveScaffoldService(ctx, agent)).toBe(scaffold)
+    // No agent at all — only the row ctx is consulted.
+    expect(resolveScaffoldService(ctx, undefined)).toBe(scaffold)
+    // Neither channel knows the name — undefined, never a throw. (A ctx whose
+    // get returns an object for every name counts as mounted; this one has
+    // no definition for the service at all.)
+    const empty = fakeCtx({ get: () => undefined })
+    expect(resolveIsolateService(empty, { ctx: blindRealm() }, 'bafScaffold')).toBeUndefined()
+  })
+
+  it('fires the welcome card once even when the row is applied twice (double-trigger guard)', async () => {
+    const root = await emptyWorkspace()
+    try {
+      const calls: string[] = []
+      const handlers = new Map<string, (payload: { agent: Agent }) => void>()
+      const agent = fakeAgent(root)
+      const ctx = fakeCtx({
+        agents: { list: () => [agent] },
+        commands: { execute: async (_agent: unknown, line: string) => { calls.push(line); return {} } },
+        logger: quietLogger(),
+        on: ((event: string, handler: (payload: { agent: Agent }) => void) => {
+          handlers.set(event, handler)
+        }),
+        effect: () => undefined,
+      })
+      apply(ctx)
+      // A preset reload / second mount of the same composition runs apply()
+      // again with a fresh fibers map — the module-level WeakSet is what
+      // keeps the second run from firing a duplicate welcome + gate card.
+      apply(ctx)
+      // The welcome fires from a fire-and-forget runSessionGate that probes
+      // the real toolchain (baseline/git/openspec FS reads); under a loaded
+      // parallel suite that can outrun waitFor's 1s default, so budget 10s —
+      // the assertions below still pin the once-only contract.
+      await vi.waitFor(() => { expect(calls).toContain(WELCOME_COMMAND) }, { timeout: 10_000 })
+      expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
+
+      // A late agent/created for an agent the list loop already installed
+      // must not fire a second welcome either.
+      handlers.get('agent/created')?.({ agent })
+      await new Promise(resolve => setTimeout(resolve, 25))
+      expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
+    } finally {
+      await cleanup(root)
+    }
   })
 })
 

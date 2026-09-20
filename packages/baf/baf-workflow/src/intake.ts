@@ -75,10 +75,10 @@ export function suggestIntake(input: IntakeInput): IntakeCandidate {
   }
 
   const mode: WorkflowMode = kind === 'bug' && (affectedScope === 'single-file' || affectedScope === 'small-local')
-    ? 'bug-fast-path'
+    ? 'bug-fix-path'
     : kind === 'unknown'
       ? 'clarify-required'
-      : 'full-go'
+      : 'full-go-path'
 
   return {
     kind,
@@ -87,7 +87,7 @@ export function suggestIntake(input: IntakeInput): IntakeCandidate {
     confidence,
     reasonCodes,
     summary: text.trim().slice(0, 500),
-    openspecRequired: mode === 'full-go',
+    openspecRequired: mode === 'full-go-path',
   }
 }
 
@@ -106,34 +106,34 @@ export function reviewIntake(
   const affectedScope = candidate.affectedScope
   let { mode, confidence, openspecRequired } = candidate
 
-  const forceFullGoScopes: AffectedScope[] = ['cross-module', 'public-api']
-  if (forceFullGoScopes.includes(affectedScope)) {
-    mode = 'full-go'
+  const forceFullGoPathScopes: AffectedScope[] = ['cross-module', 'public-api']
+  if (forceFullGoPathScopes.includes(affectedScope)) {
+    mode = 'full-go-path'
     openspecRequired = true
-    reasonCodes.push(`scope-forces-full-go:${affectedScope}`)
+    reasonCodes.push(`scope-forces-full-go-path:${affectedScope}`)
   }
 
   if (kind === 'new-requirement') {
-    mode = 'full-go'
+    mode = 'full-go-path'
     openspecRequired = true
-    reasonCodes.push('new-requirement-full-go')
+    reasonCodes.push('new-requirement-full-go-path')
   }
 
-  if (mode === 'bug-fast-path') {
+  if (mode === 'bug-fix-path') {
     if (baseline === undefined) {
-      mode = 'full-go'
+      mode = 'full-go-path'
       openspecRequired = true
       reasonCodes.push('baseline_unavailable')
       confidence = Math.min(confidence, 0.5)
-    } else if (!baseline.workflow.bugFastPath.allowed) {
-      mode = 'full-go'
+    } else if (!baseline.workflow.bugFixPath.allowed) {
+      mode = 'full-go-path'
       openspecRequired = true
       reasonCodes.push('fast-path-disallowed')
     } else {
-      const max = baseline.workflow.bugFastPath.maxScope
+      const max = baseline.workflow.bugFixPath.maxScope
       const order = ['single-file', 'small-local', 'cross-module', 'public-api', 'unknown'] as const
       if (order.indexOf(affectedScope) > order.indexOf(max) || affectedScope === 'unknown') {
-        mode = 'full-go'
+        mode = 'full-go-path'
         openspecRequired = true
         reasonCodes.push('scope-exceeds-fast-path')
       } else {
@@ -148,7 +148,7 @@ export function reviewIntake(
     reasonCodes.push('clarify-required')
   }
 
-  if (baseline?.workflow.requireOpenSpec === true && mode === 'full-go') {
+  if (baseline?.workflow.requireOpenSpec === true && mode === 'full-go-path') {
     openspecRequired = true
   }
 

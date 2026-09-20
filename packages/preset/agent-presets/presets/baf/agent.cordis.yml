@@ -263,6 +263,17 @@
     fetch: true
     searchTimeoutMs: 60000
 
+# baf-scaffold service row. MUST sit INSIDE the baf-domain isolate: a preset
+# row outside an `isolate` realm publishes its service process-global, which
+# agent-presets' mount invariant rejects outright ("row(s) published
+# process-global service(s) [bafScaffold]") — and a rejected mount kills every
+# baf session (new-session / workspace selection fail with agent-preset/invalid).
+# Host-plane consumers (`/baf-scaffold` handler, the workflow Tab Remote) must
+# therefore resolve the service through the receiving agent's `agent.ctx`
+# (entry-local isolate realm), the same pattern `probeMountFlags` already uses
+# for bafGuard / bafQuality. The service itself is stateless (writes workspace
+# files by cwd), so one isolate instance per agent is exactly right.
+
 # Slash commands must sit outside the baf-domain isolate (same pattern as
 # command-goal): they register into the host `commands` service for this
 # standing mount. Handlers read the file-backed projection store by cwd.
@@ -304,15 +315,28 @@
 - id: baf-guard-install
   name: '@deepseek-ai/dsh-baf-guard/install'
 
-# Phase 8.12 (§22.9 / §22.14 E): model-facing `baf_gate_ask` tool. Sits
-# outside the baf-domain isolate like baf-commands / baf-session-gate because
-# the `tools` registry is a host-plane service (same pattern as `tool-bash` /
-# `tool-fs` above). The tool is the model's *only* authorized way to render
-# a §22 gate card; it does not touch any drive, only `renderGate()` (P0
-# registry + unknown_gate refusal), so a missing tool is a soft degradation,
-# not a session-opener failure (§17.7 R19).
+# Phase 8.12 + §22.17: model-facing `baf_gate_ask` tool. Sits outside the
+# baf-domain isolate like baf-commands / baf-session-gate because the
+# `tools` registry is a host-plane service (same pattern as `tool-bash` /
+# `tool-fs` above). The tool renders the §22 card from the registry and,
+# when a `userQuestions` answerer is mounted (the `tool-ask-user` row above
+# publishes it), pops the §22.17 interactive dialog — the customer's click
+# resolves through `driveGateResolve` (P0 registry + unknown_gate refusal),
+# exactly like a Tab button. Without an answerer it degrades to card text
+# only, so a missing tool or service is a soft degradation, not a
+# session-opener failure (§17.7 R19).
 - id: baf-gate-ask
   name: '@deepseek-ai/dsh-baf-workflow/gate-ask'
+
+# §22.17 J: state-driven auto-pop. Host-plane listener on `session/event` —
+# when a genuine user message lands in an initialized, idle workspace, it
+# pops the 「作为新需求开始？」 pre-question; only the customer's click mints
+# a change and pops the classification dialog. This moves the popup trigger
+# off the model's good behavior (rules are soft) and onto the platform. Sits
+# outside the baf-domain isolate because `agents` / `userQuestions` are
+# host-plane services; every failure degrades to a log line (§17.7 R19).
+- id: baf-auto-pop
+  name: '@deepseek-ai/dsh-baf-workflow/auto-pop'
 
 # ── BAF domain（entry-local realm；桌面/CLI 经 session projection 读取状态）──
 - id: baf-domain

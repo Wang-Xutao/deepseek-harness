@@ -3,7 +3,8 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "lib/types",
-    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo",
+    "types": ["node", "client-build-environment"]
   },
   "files": [
     "src/types.ts",
@@ -20,6 +21,8 @@
   ],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../baf/baf-core" },
+    { "path": "../../baf/baf-workflow" },
     { "path": "../locale" },
     { "path": "../ui-conversation" },
     { "path": "../ui-primitives" },
@@ -28,7 +31,6 @@
     { "path": "../../util/brand" },
     { "path": "../../core/session" },
     { "path": "../../preset/agent-presets" },
-    { "path": "../../typert/protocol" },
-    { "path": "../../baf/baf-core" }
+    { "path": "../../typert/protocol" }
   ]
 }

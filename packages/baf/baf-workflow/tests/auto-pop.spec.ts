@@ -1,0 +1,247 @@
+/**
+ * §22.17 J auto-pop unit tests: the platform-guaranteed trigger behind
+ * 「直接描述需求，分类卡自动弹出」.
+ *
+ * The row subscribes `session/event` on the host plane. These tests drive
+ * the captured listener with synthetic `user/message` events against real
+ * temp workspaces and a fake `userQuestions` service — no Cordis runtime.
+ * Everything else (the classify dialog itself, the path options, the
+ * bug-field draft) is pinned in `gate-dialog.spec.ts`.
+ */
+
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
+import { describe, expect, it } from 'vitest'
+import type { Context } from '@deepseek-ai/cordis'
+import type {
+  AskUserQuestionAnswer,
+  AskUserQuestionRequest,
+} from '@deepseek-ai/dsh-user-questions'
+import { apply } from '../src/auto-pop.ts'
+import { ProjectionStore } from '../src/projection.ts'
+
+const execFileAsync = promisify(execFile)
+
+const FIXTURE_BASELINE = fileURLToPath(
+  new URL('../../baf-core/tests/fixtures/baseline/baseline.yml', import.meta.url),
+)
+
+/** A `userQuestions` service double that records asks and replays canned answers. */
+function serviceWith(replies: AskUserQuestionAnswer[]): {
+  calls: AskUserQuestionRequest[]
+  ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>
+} {
+  const calls: AskUserQuestionRequest[] = []
+  let n = 0
+  return {
+    calls,
+    async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer> {
+      calls.push(request)
+      const reply = replies[n]
+      n += 1
+      if (reply === undefined) throw Object.assign(new Error('no reply'), { code: 'NO_PROVIDER' })
+      return reply
+    },
+  }
+}
+
+function selected(label: string): AskUserQuestionAnswer {
+  return { answers: [{ id: 'x', selected: [label] }] }
+}
+
+/** Install the row against a fake host ctx and return the captured listener. */
+function install(service: unknown): {
+  emit: (session: unknown, event: unknown) => void
+  ctx: Context
+  logs: string[]
+} {
+  const listeners = new Map<string, (session: unknown, event: unknown) => void>()
+  // Collect row log lines so a stuck fire-and-forget chain says WHERE it
+  // stopped instead of surfacing as a bare poll timeout.
+  const logs: string[] = []
+  const agent = {
+    session: { header: { cwd: 'replaced-per-test' } },
+    ctx: { get: (name: string) => (name === 'userQuestions' ? service : undefined) },
+  }
+  const ctx = {
+    on: (name: string, fn: (session: unknown, event: unknown) => void) => {
+      listeners.set(name, fn)
+    },
+    agents: { get: () => agent },
+    logger: {
+      info: (line: string) => { logs.push(`info: ${line}`) },
+      warn: (line: string) => { logs.push(`warn: ${line}`) },
+    },
+    get: () => undefined,
+  } as unknown as Context
+  apply(ctx)
+  const emit = (session: unknown, event: unknown): void => {
+    listeners.get('session/event')?.(session, event)
+  }
+  return { emit, ctx, logs }
+}
+
+/** Workspace fixture: baseline + git repo (the go.spec recipe). */
+async function setup(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'baf-auto-pop-'))
+  await mkdir(join(root, '.baf'), { recursive: true })
+  await writeFile(
+    join(root, '.baf', 'baseline.yml'),
+    await readFile(FIXTURE_BASELINE, 'utf8'),
+    'utf8',
+  )
+  await execFileAsync('git', ['init', '-q'], { cwd: root })
+  await execFileAsync('git', [
+    '-c', 'user.email=baf@test', '-c', 'user.name=baf', '-c', 'commit.gpgsign=false',
+    'commit', '-q', '--allow-empty', '-m', 'init',
+  ], { cwd: root })
+  return root
+}
+
+/** One synthetic user/message event. */
+function userMessage(text: string, sourceKind = 'user'): unknown {
+  return {
+    type: 'user/message',
+    data: { source: { kind: sourceKind }, content: [{ type: 'text', text }] },
+  }
+}
+
+/** Let fire-and-forget async chains settle. */
+const settle = async (): Promise<void> => new Promise(resolve => setTimeout(resolve, 150))
+
+/**
+ * Poll until the confirm chain (fire-and-forget under load) reaches the
+ * confirmed intake — a fixed settle is flaky on a loaded parallel run.
+ */
+async function waitForConfirmed(root: string, logs: string[], timeoutMs = 60_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const index = await new ProjectionStore({ workspaceRoot: root }).readIndex()
+    const active = index.changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+    if (active[0] !== undefined
+      && (await new ProjectionStore({ workspaceRoot: root }).readStatus(active[0].changeId))
+        .intake?.confirmation === 'confirmed') {
+      return
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`auto-pop confirm chain did not settle in time; row logs:\n${logs.join('\n')}`)
+    }
+    await settle()
+  }
+}
+
+async function activeCount(root: string): Promise<number> {
+  const index = await new ProjectionStore({ workspaceRoot: root }).readIndex()
+  return index.changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned').length
+}
+
+describe('§22.17 J state-driven auto-pop', () => {
+  // The happy-path test polls a fire-and-forget chain; on a loaded parallel
+  // run the default 5s test timeout can fire long before the chain settles.
+  // Budget generously — the fast path returns in well under a second.
+  it('a genuine requirement in an idle workspace pops pre-question → classify → confirm', { timeout: 120_000 }, async () => {
+    const root = await setup()
+    try {
+      // Pre-question 开始, then the classify dialog's 完整流程 confirm.
+      const service = serviceWith([selected('作为新需求开始'), selected('确认 · 完整流程')])
+      const { emit, logs } = install(service)
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('给报表模块加一个导出公网 API'))
+      // Pre-question must be asked immediately; the confirm chain follows.
+      const deadline = Date.now() + 60_000
+      while (service.calls.length < 2 && Date.now() < deadline) await settle()
+      expect(service.calls).toHaveLength(2)
+      expect(service.calls[0]?.questions[0]?.id).toBe('baf-auto-pop')
+      expect(service.calls[1]?.questions[0]?.question).toBe('需求分类待确认')
+      expect(service.calls[1]?.questions[0]?.detail).toContain('系统初步判断')
+      expect(await activeCount(root)).toBe(1)
+      await waitForConfirmed(root, logs)
+    } finally {
+      // Fire-and-forget chain may still hold a handle on a loaded parallel
+      // run (Windows ENOTEMPTY); cleanup noise must not fail the assertions.
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+
+  it('「只是聊天」 mints nothing', async () => {
+    const root = await setup()
+    try {
+      const service = serviceWith([selected('只是聊天，不开始')])
+      const { emit } = install(service)
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('今天天气怎么样，聊两句'))
+      await settle()
+      expect(service.calls).toHaveLength(1)
+      expect(await activeCount(root)).toBe(0)
+    } finally {
+      // Fire-and-forget chain may still hold a handle on a loaded parallel
+      // run (Windows ENOTEMPTY); cleanup noise must not fail the assertions.
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+
+  it('slash input, short greetings, and non-user sources never pop', async () => {
+    const root = await setup()
+    try {
+      const service = serviceWith([])
+      const { emit } = install(service)
+      emit({ header: { id: 's1', cwd: root } }, userMessage('/baf-help 查看命令'))
+      emit({ header: { id: 's2', cwd: root } }, userMessage('你好'))
+      emit({ header: { id: 's3', cwd: root } }, userMessage('插件注入的一条很长很长很长的消息', 'plugin'))
+      await settle()
+      expect(service.calls).toHaveLength(0)
+      expect(await activeCount(root)).toBe(0)
+    } finally {
+      // Fire-and-forget chain may still hold a handle on a loaded parallel
+      // run (Windows ENOTEMPTY); cleanup noise must not fail the assertions.
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+
+  it('uninitialized workspaces and busy workspaces never pop', async () => {
+    const bare = await mkdtemp(join(tmpdir(), 'baf-auto-pop-'))
+    const busy = await setup()
+    try {
+      const service = serviceWith([])
+      const { emit } = install(service)
+      emit({ header: { id: 's1', cwd: bare } }, userMessage('给报表模块加一个导出公网 API'))
+      await settle()
+      expect(service.calls).toHaveLength(0)
+      // Busy: an unconfirmed intake is an active change.
+      const store = new ProjectionStore({ workspaceRoot: busy })
+      const { createWorkflowService } = await import('../src/workflow-service.ts')
+      const { intake } = await createWorkflowService({ store }).intake({
+        description: 'feat: add export public API for reports',
+        workspace: { root: busy },
+        affectedScopeHint: 'public-api',
+      })
+      expect(intake.changeId).toBeTruthy()
+      emit({ header: { id: 's2', cwd: busy } }, userMessage('再做一个全新的需求吧'))
+      await settle()
+      expect(service.calls).toHaveLength(0)
+    } finally {
+      await rm(bare, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+      await rm(busy, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+
+  it('offers at most once per session', async () => {
+    const root = await setup()
+    try {
+      const service = serviceWith([selected('只是聊天，不开始')])
+      const { emit } = install(service)
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('随便聊聊今天的工作安排'))
+      await settle()
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('现在我要正式提一个新需求了'))
+      await settle()
+      expect(service.calls).toHaveLength(1)
+      expect(await activeCount(root)).toBe(0)
+    } finally {
+      // Fire-and-forget chain may still hold a handle on a loaded parallel
+      // run (Windows ENOTEMPTY); cleanup noise must not fail the assertions.
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+})

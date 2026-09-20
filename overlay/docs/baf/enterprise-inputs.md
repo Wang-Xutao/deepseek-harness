@@ -35,11 +35,11 @@
 
 | 字段 | 消费者 | 当前值 | 决定人 | 冻结版本 |
 | --- | --- | --- | --- | --- |
-| bug-fast-path 是否允许 | baf-workflow / baseline `workflow.bugFastPath.allowed` | unavailable | | |
-| bug-fast-path 影响范围上限 `maxScope` | baf-workflow | unavailable | | |
-| bug-fast-path 是否强制回归测试 | baf-workflow | unavailable | | |
+| bug-fix-path 是否允许 | baf-workflow / baseline `workflow.bugFixPath.allowed` | unavailable | | |
+| bug-fix-path 影响范围上限 `maxScope` | baf-workflow | unavailable | | |
+| bug-fix-path 是否强制回归测试 | baf-workflow | unavailable | | |
 | 默认工作流 | baseline `workflow.default` | go（fixture） | | |
-| full-go 是否强制 OpenSpec | baseline `workflow.requireOpenSpec` | true（fixture） | | |
+| full-go-path 是否强制 OpenSpec | baseline `workflow.requireOpenSpec` | true（fixture） | | |
 
 ## 4. 模型路由（EnterpriseRoutePolicy）
 

@@ -106,6 +106,9 @@ export interface BafToolGuardOptions {
   readonly sources?: ToolGuardSources
 }
 
+/** The generic question tool the BAF composition exposes (tool-ask-user row). */
+const ASK_USER_TOOL = 'ask_user_question'
+
 /**
  * Create the synchronous ToolGuard for one agent workspace. Every call
  * re-reads config + state: the guard never caches across tool executions.
@@ -115,6 +118,22 @@ export interface BafToolGuardOptions {
 export function createBafToolGuard(options: BafToolGuardOptions) {
   const sources = options.sources ?? diskSources
   return (execution: Readonly<ToolExecution>): string | undefined => {
+    // §22.17 J hard line: while a customer-confirmation gate is pending
+    // (unconfirmed classification, parked gate A/B), the generic question
+    // tool must not substitute for the registry gate card — the model has to
+    // call `baf_gate_ask` so the decision surfaces as a clickable dialog.
+    // Outside a pending gate the generic tool stays legal (clarifications
+    // that decide nothing are its job); the idle-workspace guarantee comes
+    // from the host-plane auto-pop row instead.
+    if (execution.name === ASK_USER_TOOL) {
+      const state = sources.readState(options.workspaceRoot)
+      // `gatePending === true` keeps the undefined (unknown) case open — the
+      // hard line only fires on a positively-read pending gate.
+      if (state.active && state.gatePending === true) {
+        return `${BAF_GUARD_PREFIX} gate_pending_ask_blocked: 当前有未决的工作流确认（分类 / 设计确认 / 归档确认）。请改用 baf_gate_ask 弹出注册表确认卡让客户点选，不得用通用提问工具代答或代问工作流决策。`
+      }
+      return undefined
+    }
     const call = classifyToolCall(execution.name, execution.arguments)
     if (call.kind === 'unrecognized') return undefined
     const config = sources.readConfig(options.workspaceRoot)

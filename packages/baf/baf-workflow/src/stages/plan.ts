@@ -94,7 +94,7 @@ export async function drivePlan(ctx: StageContext, input: PlanInput): Promise<Pl
   const gate = await planGate({
     workspaceRoot: ctx.workspace.root,
     changeId: input.changeId,
-    mode: 'full-go',
+    mode: 'full-go-path',
   })
   if (!gate.ok) {
     throw new BafError(

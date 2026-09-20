@@ -212,7 +212,7 @@ describe('driveResume card (§19.3 / §19.6)', () => {
 
       const card = await driveResume(root, '')
       expect(card.kind).toBe('error')
-      expect(card.text).toContain('请选择复位目标')
+      expect(card.text).toContain('请选择要退回的阶段')
       expect(card.text).toContain('/baf-workflow-resume design')
       expect(card.text).toContain('/baf-workflow-resume clarify')
       // The drive's probe cannot see the temp workspace's git/baseline facts
@@ -234,7 +234,7 @@ describe('driveResume card (§19.3 / §19.6)', () => {
       await pipeline.driveDriftStage(changeId, { gitRevision: 'rev-2' })
       const card = await driveResume(root, 'implement')
       expect(card.kind).toBe('error')
-      expect(card.text).toContain('不在候选集内')
+      expect(card.text).toContain('不在可退回列表内')
       const status = await pipeline.context().store.readStatus(changeId)
       expect(status.current).toBe('drift')
     } finally {
@@ -249,7 +249,7 @@ describe('driveResume card (§19.3 / §19.6)', () => {
       await pipeline.driveDriftStage(changeId, { gitRevision: 'rev-2' })
       const card = await driveResume(root, 'clarify')
       expect(card.kind).toBe('success')
-      expect(card.text).toContain('已复位到 clarify')
+      expect(card.text).toContain('已退回到 clarify')
       expect(card.text).toContain('design → clarify')
       expect(card.text).toContain('clarify → design → plan → implement → verify')
 
@@ -285,7 +285,7 @@ describe('awaiting-confirm replay (R24)', () => {
         intake: {
           changeId,
           kind: 'feature',
-          mode: 'full-go',
+          mode: 'full-go-path',
           scope: [],
           confidence: 'high',
           openspec: true,

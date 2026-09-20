@@ -75,11 +75,11 @@ describe('baseline loader', () => {
     expect(() => parseBaselineManifest(raw, BAF_VERSION)).toThrow(/fallback group/)
   })
 
-  it('rejects an illegal bug-fast-path maxScope', async () => {
+  it('rejects an illegal bug-fix-path maxScope', async () => {
     const raw = clone(await fixtureRaw()) as Record<string, unknown>
     const workflow = raw.workflow as Record<string, unknown>
-    const bugFastPath = workflow.bugFastPath as Record<string, unknown>
-    bugFastPath.maxScope = 'unknown'
+    const bugFixPath = workflow.bugFixPath as Record<string, unknown>
+    bugFixPath.maxScope = 'unknown'
     expect(() => parseBaselineManifest(raw, BAF_VERSION)).toThrow(BafError)
     try {
       parseBaselineManifest(raw, BAF_VERSION)

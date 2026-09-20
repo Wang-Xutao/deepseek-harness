@@ -20,10 +20,10 @@ import {
   type WorkflowNode,
   type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
-import { isActiveChange, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
+import { pickActiveChange, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
 import { rerunChain } from './stages/drift.ts'
 import { GATE_REGISTRY, type GateOptionSpec, type GateSpec } from './gate-cards.ts'
-import { confirmIntake, createWorkflowService, rejectIntake } from './workflow-service.ts'
+import { confirmIntake, createWorkflowService, rejectIntake, setIntakeMode } from './workflow-service.ts'
 import { driveGo } from './go-coordinator.ts'
 import { readLedger } from './stages/implement.ts'
 import { formatCommandReport, modeZh } from './command-format.ts'
@@ -75,8 +75,8 @@ const SLASH_DESC: Record<string, string> = {
 export function cardTitle(slash: string, runtime?: string): string {
   const desc = SLASH_DESC[slash] ?? slash
   return runtime === undefined
-    ? `${desc} · 点本行展开/折叠指令全文`
-    : `${desc} · ${runtime} · 点本行展开/折叠指令全文`
+    ? `${desc} · 点本行展开/折叠详情`
+    : `${desc} · ${runtime} · 点本行展开/折叠详情`
 }
 
 /** Outcome of resolving the change a command addresses. */
@@ -97,12 +97,15 @@ function resolveChange(index: IndexShape, explicit?: string): ChangeResolution {
       ? { kind: 'ok', changeId: explicit }
       : { kind: 'none' }
   }
-  const actives = index.changes.filter(isActiveChange)
-  if (actives.length === 0) return { kind: 'none' }
-  if (actives.length > 1) return { kind: 'ambiguous', candidates: actives.map(c => `${c.changeId} · ${String(c.current)}`) }
-  const first = actives[0]
-  if (first === undefined) return { kind: 'none' }
-  return { kind: 'ok', changeId: first.changeId }
+  // Same tie-breaker as the Tab / `/baf-status` / session-gate surfaces
+  // (highest seq, then lexical changeId) so a slash command and a Tab click
+  // agree on the focus even when several changes are still in-flight
+  // (§13 issue #2: three surfaces used to diverge here).
+  const fullIndex = { changes: index.changes as readonly ProjectionIndexEntry[] }
+  const picked = pickActiveChange(fullIndex.changes)
+  if (picked.kind === 'none') return { kind: 'none' }
+  if (picked.kind === 'one') return { kind: 'ok', changeId: picked.changeId }
+  return { kind: 'ambiguous', candidates: picked.candidates.map(c => `${c.changeId} · ${c.current}`) }
 }
 
 /**
@@ -115,7 +118,7 @@ export function renderDomainError(command: string, error: unknown): CommandResul
   if (isBafError(error)) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, `${command} · ${error.code}`, [
+      text: formatCommandReport(false, `${command} · ${error.code} · 点本行展开/折叠详情`, [
         {
           title: '原因',
           lines: [
@@ -131,7 +134,7 @@ export function renderDomainError(command: string, error: unknown): CommandResul
   }
   return {
     kind: 'error',
-    text: formatCommandReport(false, `${command} · 失败`, [
+    text: formatCommandReport(false, `${command} · 失败 · 点本行展开/折叠详情`, [
       { title: '原因', lines: [error instanceof Error ? error.message : String(error)] },
     ]),
   }
@@ -196,7 +199,7 @@ export async function driveOpen(cwd: string, rawInput: string, _source: Transiti
         {
           title: '下一步',
           lines: [
-            `确认：/baf-workflow-classify confirm${intake.mode === 'bug-fast-path' ? ' problem=… root-cause=… file=… test=… test-cmd=…' : ' title=…'}`,
+            `确认：/baf-workflow-classify confirm mode=${intake.mode === 'bug-fix-path' ? 'bug-fix-path problem=… root-cause=… file=… test=… test-cmd=…' : 'full-go-path title=…'}`,
             '拒绝：/baf-workflow-classify reject',
           ],
         },
@@ -263,8 +266,36 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
               `reasonCodes: ${intake.reasonCodes.join(', ') || '（无）'}`,
             ],
         },
-        { title: '用法', lines: ['/baf-workflow-classify confirm [字段…]', '/baf-workflow-classify reject'] },
+        { title: '用法', lines: ['/baf-workflow-classify confirm [mode=full-go-path|bug-fix-path] [字段…]', '/baf-workflow-classify reject'] },
       ]),
+    }
+  }
+
+  // §22.17 J — `mode=` carries the customer's path choice from the classify
+  // dialog's two path buttons (or a hand-typed slash). Record the override
+  // while the intake is still pending; the confirm below then proceeds down
+  // the overridden path.
+  const requestedMode = valueOf(args, 'mode')
+  if (requestedMode !== undefined) {
+    if (requestedMode !== 'full-go-path' && requestedMode !== 'bug-fix-path') {
+      return {
+        kind: 'error',
+        text: formatCommandReport(false, cardTitle('/baf-workflow-classify', 'mode 取值不合法'), [
+          { title: '收到', lines: [`mode=${requestedMode}`] },
+          { title: '合法值', lines: ['mode=full-go-path', 'mode=bug-fix-path'] },
+        ]),
+      }
+    }
+    try {
+      await setIntakeMode(store, changeId, requestedMode)
+    } catch (error) {
+      return {
+        kind: 'error',
+        text: formatCommandReport(false, cardTitle('/baf-workflow-classify', '改道失败'), [
+          { title: '原因', lines: [error instanceof Error ? error.message : String(error)] },
+          { title: '说明', lines: ['分类确认后不能再改道；如需换路径，请重新描述需求新开一条'] },
+        ]),
+      }
     }
   }
 
@@ -279,7 +310,7 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
   }
 
   const pipeline = await pipelineFor(cwd)
-  if (status.mode === 'bug-fast-path') {
+  if (status.mode === 'bug-fix-path') {
     const problem = valueOf(args, 'problem')
     const rootCause = valueOf(args, 'root-cause')
     const files = valuesOf(args, 'file')
@@ -307,7 +338,7 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
         ]),
       }
     }
-    await pipeline.driveFastPathOpenStage({
+    await pipeline.driveBugFixPathOpenStage({
       changeId,
       title: valueOf(args, 'title') ?? status.intake?.summary ?? changeId,
       problem: problem as string,
@@ -321,7 +352,7 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
         kind: 'error',
         text: formatCommandReport(false, cardTitle('/baf-workflow-classify', 'baseline_unavailable'), [
           { title: '原因', lines: [`工作区缺少可解析的 ${WORKSPACE_BASELINE_PATH}`] },
-          { title: '处理', lines: ['先初始化工作区基线（baf-scaffold / 企业基线包）再确认 full-go'] },
+          { title: '处理', lines: ['先初始化工作区基线（baf-scaffold / 企业基线包）再确认 full-go-path'] },
         ]),
       }
     }
@@ -332,7 +363,7 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
     kind: 'success',
     text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `已确认并进入 open · ${modeZh(after.mode)}`), [
       { title: '状态', lines: statusLines(after) },
-      ...(after.mode === 'bug-fast-path'
+      ...(after.mode === 'bug-fix-path'
         ? [{ title: 'fast-path', lines: ['bug-record.md 与回归测试台账已建立', '下一步：/baf-workflow-implement（先写回归测试）'] } as const]
         : [{ title: '下一步', lines: ['clarify：/baf-workflow-clarify（或页签）', '分类卡与产物在 openspec/changes/ 下'] } as const]),
     ]),
@@ -487,7 +518,7 @@ export async function driveImplement(cwd: string, rawInput: string, source: Tran
       const status = await store.readStatus(resolution.changeId)
       return {
         kind: 'success',
-        text: formatCommandReport(true, cardTitle('/baf-workflow-implement', 'T15 已升级 full-go · 当前 clarify'), [
+        text: formatCommandReport(true, cardTitle('/baf-workflow-implement', 'T15 已升级 full-go-path · 当前 clarify'), [
           { title: '原因', lines: [result.result.escalated.cause] },
           { title: '状态', lines: statusLines(status) },
           { title: '下一步', lines: ['/baf-workflow-clarify → /baf-workflow-design → /baf-workflow-plan 补走'] },
@@ -511,7 +542,7 @@ export async function driveImplement(cwd: string, rawInput: string, source: Tran
       {
         title: '纪律',
         lines: [
-          'bug-fast-path：必须先写回归测试（recordTouched 顺序强制）',
+          'bug-fix-path：必须先写回归测试（recordTouched 顺序强制）',
           '只允许修改 plan.json allowlist 内文件（baf-guard 硬门禁）',
           '完成后：/baf-workflow-implement done',
         ],
@@ -696,13 +727,13 @@ export async function driveResume(cwd: string, rawInput: string, source: Transit
   if (target === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, cardTitle('/baf-workflow-resume', `drift detected · ${changeId} · 请选择复位目标`), [
-        { title: '漂移证据', lines: evidenceLines(options.signals, status) },
+      text: formatCommandReport(false, cardTitle('/baf-workflow-resume', `流程有偏差 · ${changeId} · 请选择要退回的阶段`), [
+        { title: '偏差证据', lines: evidenceLines(options.signals, status) },
         {
-          title: '候选复位目标',
+          title: '可以退回到',
           lines: options.candidates.map(node => candidateLine(node, options.anchor, options.candidates.length)),
         },
-        { title: '不做任何事的后果', lines: ['流程停在 drift，所有 mutating 工具被 guard 拒绝'] },
+        { title: '不处理的后果', lines: ['流程会一直停在这里，改代码的请求都会被拦下'] },
       ]),
     }
   }
@@ -710,9 +741,9 @@ export async function driveResume(cwd: string, rawInput: string, source: Transit
   if (!options.candidates.includes(target as WorkflowNode)) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, cardTitle('/baf-workflow-resume', `invalid_transition · ${changeId}`), [
-        { title: '原因', lines: [`目标节点 ${target} 不在候选集内（锚点 ${options.anchor}）`] },
-        { title: '候选复位目标', lines: options.candidates.map(node => `  /baf-workflow-resume ${node}`) },
+      text: formatCommandReport(false, cardTitle('/baf-workflow-resume', `不能退到这个阶段 · ${changeId}`), [
+        { title: '原因', lines: [`目标阶段 ${target} 不在可退回列表内（当前锚点 ${options.anchor}）`] },
+        { title: '可以退回到', lines: options.candidates.map(node => `  /baf-workflow-resume ${node}`) },
       ]),
     }
   }
@@ -722,12 +753,12 @@ export async function driveResume(cwd: string, rawInput: string, source: Transit
   const after = await store.readStatus(changeId)
   return {
     kind: 'success',
-    text: formatCommandReport(true, cardTitle('/baf-workflow-resume', `已复位到 ${target} · ${changeId}`), [
-      { title: '锚点', lines: [`${resumed.result.anchor} → ${resumed.result.target}`] },
-      { title: '漂移证据', lines: evidenceLines(resumed.result.signals, status) },
+    text: formatCommandReport(true, cardTitle('/baf-workflow-resume', `已退回到 ${target} · ${changeId}`), [
+      { title: '退回路径', lines: [`${resumed.result.anchor} → ${resumed.result.target}`] },
+      { title: '偏差证据', lines: evidenceLines(resumed.result.signals, status) },
       { title: '状态', lines: statusLines(after) },
-      { title: '需要重跑', lines: [rerunChain(target as WorkflowNode).join(' → ')] },
-      { title: '下一步', lines: ['敲 /baf-go 从该节点继续自动推进'] },
+      { title: '需要重做', lines: [rerunChain(target as WorkflowNode).join(' → ')] },
+      { title: '下一步', lines: ['输入 /baf-go 从该阶段继续自动推进'] },
     ]),
   }
 }
@@ -776,8 +807,8 @@ export async function driveQuality(cwd: string, adapters: DriveAdapters): Promis
   if (adapters.stack === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, cardTitle('/baf-check-quality', 'quality 服务未挂载'), [
-        { title: '原因', lines: ['当前 composition 未安装 baf-quality（StackAdapter 不可用）'] },
+      text: formatCommandReport(false, cardTitle('/baf-check-quality', '质量检查组件没有加载'), [
+        { title: '原因', lines: ['质量检查需要的组件（baf-quality）没有加载到当前配置'] },
       ]),
     }
   }
@@ -821,8 +852,8 @@ export async function driveGuard(cwd: string, adapters: DriveAdapters): Promise<
   if (adapters.guard === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, cardTitle('/baf-check-guard', 'guard 服务未挂载'), [
-        { title: '原因', lines: ['当前 composition 未安装 baf-guard（GuardPolicy 不可用）'] },
+      text: formatCommandReport(false, cardTitle('/baf-check-guard', '安全检查组件没有加载'), [
+        { title: '原因', lines: ['安全检查需要的组件（baf-guard）没有加载到当前配置'] },
       ]),
     }
   }
@@ -874,7 +905,8 @@ export async function driveGuard(cwd: string, adapters: DriveAdapters): Promise<
  *
  * @param cwd - workspace root.
  * @param adapters - must carry a scaffold adapter (resolved by the entry
- *   surface via `ctx.get('bafScaffold')`).
+ *   surface via `resolveScaffoldService` — `agentPresets.serviceFor` first,
+ *   plain `get` second, because the service sits in the baf-domain isolate).
  * @param baselineId - optional enterprise baseline id; defaults to
  *   `baf-baseline-init` (matches `baf-scaffold`'s `planScaffold` default).
  * @returns result card.
@@ -887,9 +919,9 @@ export async function driveScaffold(
   if (adapters.scaffold === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, cardTitle('/baf-scaffold', 'scaffold 服务未挂载'), [
-        { title: '原因', lines: ['当前 composition 未安装 baf-scaffold（ScaffoldAdapter 不可用）'] },
-        { title: '处理', lines: ['确认 preset/agent.cordis.yml 加载了 baf-scaffold 行后重试'] },
+      text: formatCommandReport(false, cardTitle('/baf-scaffold', '初始化服务没有加载'), [
+        { title: '原因', lines: ['工作区初始化需要的组件没有加载到当前会话'] },
+        { title: '处理', lines: ['请在设置里启用 BAF 工作流预设（含全部 BAF 组件）后，重新打开本会话再试'] },
       ]),
     }
   }
@@ -901,25 +933,25 @@ export async function driveScaffold(
   if (outcome.kind === 'refused') {
     return {
       kind: 'error',
-      text: formatCommandReport(false, cardTitle('/baf-scaffold', '需人工确认'), [
-        { title: '原因', lines: ['scaffold 在 `requireHumanConfirmation` 名单内，未提供确认'] },
-        { title: '处理', lines: ['在 Tab 上点「初始化工作区」按钮，或直接敲 /baf-scaffold'] },
+      text: formatCommandReport(false, cardTitle('/baf-scaffold', '需要你确认'), [
+        { title: '原因', lines: ['初始化会写入/改写工作区文件，需要明确确认后才会执行'] },
+        { title: '处理', lines: ['在工作流页签点「初始化工作区」按钮，或输入 /baf-scaffold'] },
       ]),
     }
   }
   const { created, skipped, backedUp } = outcome.changes
   const allEmpty = created.length === 0 && skipped.length === 0 && backedUp.length === 0
   const titleSuffix = allEmpty
-    ? '无变化'
-    : `+${created.length} 创建 · ${skipped.length} 一致 · ${backedUp.length} 备份重写`
+    ? '无需改动，工作区已就绪'
+    : `新增 ${created.length} 项 · 已存在 ${skipped.length} 项 · 改写 ${backedUp.length} 项`
   return {
     kind: 'success',
     text: formatCommandReport(true, cardTitle('/baf-scaffold', titleSuffix), [
       { title: '工作区', lines: [`cwd: ${cwd}`, `baselineId: ${baselineId}`] },
-      ...(created.length === 0 ? [] : [{ title: '已创建', lines: created } as const]),
-      ...(skipped.length === 0 ? [] : [{ title: '已跳过（内容一致）', lines: skipped } as const]),
-      ...(backedUp.length === 0 ? [] : [{ title: '已备份并重写', lines: backedUp } as const]),
-      { title: '下一步', lines: ['/baf-workflow-open <需求> 启动第一条变更', '或重新敲 /baf-status 查看绑定'] },
+      ...(created.length === 0 ? [] : [{ title: '新增', lines: created } as const]),
+      ...(skipped.length === 0 ? [] : [{ title: '已存在（内容一致，未改动）', lines: skipped } as const]),
+      ...(backedUp.length === 0 ? [] : [{ title: '已备份并改写', lines: backedUp } as const]),
+      { title: '下一步', lines: ['/baf-workflow-open <需求> 启动第一条变更', '或输入 /baf-status 查看当前状态'] },
     ]),
   }
 }
@@ -957,15 +989,23 @@ export async function driveGateResolve(
     changeId?: string
     /** Audit-line emitter; omitted callers get silent runs (e.g. CLI smoke). */
     audit?: (line: string) => void
+    /**
+     * §22.17 J — extra key=value tokens spliced into the dispatched classify
+     * confirm invocation. The registry's option args are static; the bug-fix
+     * fields (problem/root-cause/file/test/test-cmd) are per-call payload the
+     * dialog gathered from `baf_gate_ask`, so they ride along here. Only the
+     * confirm subcommand consumes them; reject ignores stray kv pairs.
+     */
+    extraArgs?: readonly string[]
   },
 ): Promise<CommandResult> {
   const spec: GateSpec | undefined = (GATE_REGISTRY as Record<string, GateSpec | undefined>)[gateId]
   if (spec === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, cardTitle('gateResolve', `未知确认门 ${JSON.stringify(gateId)} · unknown_gate`), [
-        { title: '原因', lines: [`gateId 不在 §22 GATE_REGISTRY（合法值：${Object.keys(GATE_REGISTRY).join(' | ')}）`] },
-        { title: '处理', lines: ['让 coordinator 重算当前门（重跑 /baf-go）或查 /baf-help 命令表'] },
+      text: formatCommandReport(false, cardTitle('gateResolve', `无法识别的确认项 ${JSON.stringify(gateId)}`), [
+        { title: '原因', lines: [`系统里没有这个确认项（现有：${Object.keys(GATE_REGISTRY).join(' | ')}）`] },
+        { title: '处理', lines: ['重新输入 /baf-go 让系统重新计算，或输入 /baf-help 查看命令表'] },
       ]),
     }
   }
@@ -1037,7 +1077,12 @@ export async function driveGateResolve(
     return driveScaffold(cwd, adapters, opt.args?.[0] ?? 'baf-baseline-init')
   }
   if (opt.command === '/baf-workflow-classify') {
-    return driveClassify(cwd, invocations.replace('/baf-workflow-classify', '').trim(), innerSource)
+    const base = invocations.replace('/baf-workflow-classify', '').trim()
+    // §22.17 J — splice the per-call payload only into a confirm dispatch.
+    const withExtra = base.split(/\s+/).includes('confirm') && opts?.extraArgs !== undefined && opts.extraArgs.length > 0
+      ? `${base} ${opts.extraArgs.join(' ')}`.trim()
+      : base
+    return driveClassify(cwd, withExtra, innerSource)
   }
   if (opt.command === '/baf-workflow-clarify') {
     return driveClarify(cwd, invocations.replace('/baf-workflow-clarify', '').trim(), innerSource)
@@ -1053,8 +1098,18 @@ export async function driveGateResolve(
   }
   if (opt.command === '/baf-go') {
     // §18 coordinator — gates A/B re-fire through the same surface the
-    // slash handler uses; no separate drive needed.
-    return driveGo({ cwd, adapters, rawInput: invocations.replace('/baf-go', '').trim(), source: innerSource })
+    // slash handler uses; no separate drive needed. The re-dispatch carries
+    // the gate's change id (§22.17): the coordinator's binding guard
+    // (§18.6.4) refuses an unfocused second `/baf-go`, and the dispatch has
+    // no session focus cache — without `change=` a dialog/Tab confirm click
+    // would die on "请选择本会话的工作流" instead of unlocking the gate.
+    const changeArg = opts?.changeId === undefined ? '' : ` change=${opts.changeId}`
+    return driveGo({
+      cwd,
+      adapters,
+      rawInput: `${invocations.replace('/baf-go', '').trim()}${changeArg}`.trim(),
+      source: innerSource,
+    })
   }
   return {
     kind: 'error',

@@ -153,7 +153,7 @@ function checkEvidence(
       if (status.intake?.confirmation !== 'confirmed') return 'intake_confirmation_required'
       break
     case 'T5':
-      if (status.mode !== 'bug-fast-path') return 'invalid_transition'
+      if (status.mode !== 'bug-fix-path') return 'invalid_transition'
       if (evidence?.rootCauseRecorded !== true) return 'invalid_transition'
       break
     case 'T10':

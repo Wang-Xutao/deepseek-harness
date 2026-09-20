@@ -13,12 +13,12 @@ import { ARTIFACT_FILES, changeDir } from '@deepseek-ai/dsh-baf-openspec'
 import type { StageContext } from './context.ts'
 import { implementGate, type PlanDocument } from './gates.ts'
 import { stageArtifactPaths } from './artifacts.ts'
-import { assertRegressionFirst } from './fastpath.ts'
+import { assertRegressionFirst } from './bug-fix-path.ts'
 
 /** Mutable task ledger persisted as plan.json during implement. */
 export interface ImplementLedger {
   /** True for the bug fast-path ledger written at fast-path open. */
-  readonly fastPath?: boolean
+  readonly bugFixPath?: boolean
   readonly tasks: readonly (PlanTaskInputRow & { done: boolean })[]
   readonly allowlist: readonly string[]
   /** Files actually edited or created so far. */
@@ -39,7 +39,7 @@ export interface ImplementStageResult {
   readonly status: WorkflowStatus
   readonly artifacts: readonly string[]
   readonly ledger: ImplementLedger
-  /** Set when the drive escalated to full-go instead of completing (T15). */
+  /** Set when the drive escalated to full-go-path instead of completing (T15). */
   readonly escalated?: { readonly cause: string }
 }
 
@@ -169,13 +169,13 @@ export async function driveImplementComplete(
 ): Promise<ImplementStageResult> {
   const ledger = await readLedger(ctx.workspace.root, changeId)
   // Mode comes from the projection, not the caller: fast-path changes gate
-  // on the regression-test rule, full-go changes on plan completeness.
+  // on the regression-test rule, full-go-path changes on plan completeness.
   const status = await ctx.store.readStatus(changeId)
   const gate = await implementGate(
     {
       workspaceRoot: ctx.workspace.root,
       changeId,
-      mode: status.mode === 'bug-fast-path' ? 'bug-fast-path' : 'full-go',
+      mode: status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
     },
     ledger.touched,
   )

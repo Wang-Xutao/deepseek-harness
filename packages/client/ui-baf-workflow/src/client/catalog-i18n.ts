@@ -22,7 +22,7 @@ export const CATALOG_ZH: Readonly<Partial<Record<WorkflowNodeId, CatalogLocaleBo
       '解析用户意图为候选分类（模型仅建议）',
       '规则引擎复核：范围、公开 API、数据格式、并发、安全、性能、规格影响、回滚',
       '计算 affectedScope 与置信度',
-      '决定模式：full-go / bug-fast-path / clarify-required',
+      '决定模式：full-go-path / bug-fix-path / clarify-required',
       '需要确认时展示分类卡',
       '确认后将 ChangeIntake 追加到 projection',
     ],
@@ -32,7 +32,7 @@ export const CATALOG_ZH: Readonly<Partial<Record<WorkflowNodeId, CatalogLocaleBo
   },
   open: {
     purpose: '创建变更身份、骨架目录，并锁定基线。',
-    prerequisites: ['Intake 已确认', '工作区可读', 'Git 可用（full-go 缺失则阻断）', '基线可解析'],
+    prerequisites: ['Intake 已确认', '工作区可读', 'Git 可用（full-go-path 缺失则阻断）', '基线可解析'],
     actions: [
       '探测工作区 / Git / 基线 / OpenSpec',
       '多活动变更时要求显式选择或新建',
@@ -45,7 +45,7 @@ export const CATALOG_ZH: Readonly<Partial<Record<WorkflowNodeId, CatalogLocaleBo
     failure: ['需要 OpenSpec 但不可用 → openspec_unavailable', '禁止覆盖已有文件'],
   },
   clarify: {
-    purpose: '关闭阻塞问题，并写出可测试的验收标准（full-go）。',
+    purpose: '关闭阻塞问题，并写出可测试的验收标准（full-go-path）。',
     prerequisites: ['open 已完成'],
     actions: [
       '枚举阻塞问题',
@@ -58,7 +58,7 @@ export const CATALOG_ZH: Readonly<Partial<Record<WorkflowNodeId, CatalogLocaleBo
     failure: ['关键信息不足 → 保持 clarify，禁止进入设计'],
   },
   design: {
-    purpose: '固化方案边界、接口与风险（full-go）。',
+    purpose: '固化方案边界、接口与风险（full-go-path）。',
     prerequisites: ['clarify 完成或可跳过'],
     actions: ['写设计草案', '标明接口与依赖', '记录风险与回滚策略'],
     artifacts: ['设计文档 / 规格增量'],
@@ -66,7 +66,7 @@ export const CATALOG_ZH: Readonly<Partial<Record<WorkflowNodeId, CatalogLocaleBo
     failure: ['范围膨胀 → 回到 clarify'],
   },
   plan: {
-    purpose: '把设计拆成可执行任务与门禁顺序（full-go）。',
+    purpose: '把设计拆成可执行任务与门禁顺序（full-go-path）。',
     prerequisites: ['design 完成'],
     actions: ['拆任务', '标注依赖与并行', '定义门禁顺序'],
     artifacts: ['任务列表', '门禁计划'],
@@ -83,7 +83,7 @@ export const CATALOG_ZH: Readonly<Partial<Record<WorkflowNodeId, CatalogLocaleBo
     ],
     artifacts: ['源码', '测试', '规格增量', '任务结果'],
     completion: ['每任务有结果', '无越权编辑', '跳过测试不得计为通过'],
-    failure: ['Guard 拒绝 → blocked', 'fast-path 范围膨胀 → 升级 full-go'],
+    failure: ['Guard 拒绝 → blocked', 'fast-path 范围膨胀 → 升级 full-go-path'],
   },
   verify: {
     purpose: '运行 OpenSpec/质量/守卫检查并汇总新鲜报告。',

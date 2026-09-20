@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { parseManifest } from '../src/update/manifest.ts'
 import { buildUpdatePlan } from '../src/update/plan.ts'
 import { compareVersions, isNewer } from '../src/update/semver.ts'
-import { parseVersions } from '../src/versions.ts'
+import { loadVersions, parseVersions, versionsPath } from '../src/versions.ts'
 
 describe('semver', () => {
   it('orders rc below release', () => {
@@ -15,6 +18,59 @@ describe('semver', () => {
 describe('parseVersions', () => {
   it('fills defaults', () => {
     expect(parseVersions({})).toMatchObject({ bafDsh: '0.0.9', bafPlugin: '0.0.2' })
+  })
+})
+
+describe('loadVersions vs stale persisted snapshot', () => {
+  it('lets the running build embed outrank a 0.0.11-era file and fill blank sub-packages', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baf-versions-'))
+    try {
+      // Real-world shape from a 0.0.11 install: bafCore/bafWorkflow pinned at
+      // 0.1.3-alpha.1 and the five sub-packages entirely missing.
+      writeFileSync(versionsPath(dir), JSON.stringify({
+        bafDsh: '0.0.11',
+        dsh: '0.1.5-alpha.1',
+        bafPlugin: '0.0.2',
+        bafCore: '0.1.3-alpha.1',
+        bafWorkflow: '0.1.3-alpha.1',
+      }), 'utf8')
+      const merged = loadVersions(dir, {
+        bafDsh: '0.0.15',
+        dsh: '0.1.5-alpha.1',
+        bafPlugin: '0.0.2',
+        bafCore: '0.0.1',
+        bafWorkflow: '0.0.1',
+        bafOpenspec: '0.0.1',
+        bafStandard: '0.0.1',
+        bafQuality: '0.0.1',
+        bafGuard: '0.0.1',
+        bafScaffold: '0.0.1',
+      })
+      expect(merged).toMatchObject({
+        bafDsh: '0.0.15',
+        dsh: '0.1.5-alpha.1',
+        bafCore: '0.0.1',
+        bafWorkflow: '0.0.1',
+        bafOpenspec: '0.0.1',
+        bafStandard: '0.0.1',
+        bafQuality: '0.0.1',
+        bafGuard: '0.0.1',
+        bafScaffold: '0.0.1',
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the persisted bafPlugin identity (independent update channel)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baf-versions-'))
+    try {
+      writeFileSync(versionsPath(dir), JSON.stringify({ bafPlugin: '0.0.9' }), 'utf8')
+      const merged = loadVersions(dir, { bafDsh: '0.0.15', dsh: '0.1.5-alpha.1', bafPlugin: '0.0.2' })
+      expect(merged.bafPlugin).toBe('0.0.9')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

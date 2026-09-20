@@ -516,6 +516,41 @@ function createUpdateService(): UpdateService {
   })
 }
 
+/**
+ * Post-ready supervision for the dsh web child. `waitForReady` detaches its
+ * pipe listeners once the ready URL appears, and nothing else consumed
+ * stdout/stderr — so the child's logging could eventually stall on a full OS
+ * pipe. Drain both continuously, and record a backend death that would
+ * otherwise be invisible: the window keeps rendering the already-loaded app
+ * while every client fetch fails with "Failed to fetch" and nothing lands in
+ * launch-error.log. Intentional shutdowns (`killChildTree` clears `child`
+ * before signalling) are excluded.
+ * @param proc - the child that just reached ready.
+ */
+function watchChildAfterReady(proc: ChildProcess): void {
+  const tail: string[] = []
+  let tailLength = 0
+  const drain = (chunk: Buffer | string): void => {
+    const text = String(chunk)
+    tail.push(text)
+    tailLength += text.length
+    while (tailLength > 4096 && tail.length > 1) {
+      tailLength -= tail[0].length
+      tail.shift()
+    }
+  }
+  proc.stdout?.on('data', drain)
+  proc.stderr?.on('data', drain)
+  proc.once('exit', (code, signal) => {
+    if (child !== proc) return
+    logLaunchFailure(
+      `后端在就绪后退出 code=${String(code)} signal=${String(signal)}\n`
+      + `（窗口仍显示已加载的页面，但所有请求会以 Failed to fetch 失败）\n`
+      + `stdout/stderr 末尾：\n${tail.join('').slice(-2000)}`,
+    )
+  })
+}
+
 async function startDshProcess(): Promise<string> {
   // Bypass the candidate walk when a prior launch cached a Node binary that
   // still satisfies the engines range. The cache is re-probed, not trusted: an
@@ -553,6 +588,7 @@ async function startDshProcess(): Promise<string> {
   })
   const url = await waitForReady(child)
   markLaunch('dsh-ready')
+  watchChildAfterReady(child)
   return url
 }
 

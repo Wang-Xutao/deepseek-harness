@@ -20,7 +20,7 @@ export type ConfirmGateId = 'design-to-plan' | 'verify-to-archive'
 
 /** One path lane in the §18.4.3 dual-lane view. */
 export interface WorkflowTabLaneView {
-  readonly id: 'bug-fast-path' | 'full-go'
+  readonly id: 'bug-fix-path' | 'full-go-path'
   readonly nodes: readonly WorkflowNodeId[]
   /** Status **within this lane's slice** of the event log, not the live one. */
   readonly status: Readonly<Partial<Record<WorkflowNodeId, NodeStatusId>>>

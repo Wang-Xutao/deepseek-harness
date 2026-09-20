@@ -17,7 +17,7 @@ import {
   type BaselineManifest,
 } from '@deepseek-ai/dsh-baf-core'
 import {
-  FASTPATH_LEDGER_FILE,
+  BUG_FIX_PATH_LEDGER_FILE,
   parseProjectionLog,
   replay,
   type ProjectionIndex,
@@ -70,7 +70,7 @@ function readAllowlist(workspaceRoot: string, changeId: string): readonly string
       // fall through to the fast-path ledger
     }
   }
-  const fast = readTextIfPossible(join(changeDir, FASTPATH_LEDGER_FILE))
+  const fast = readTextIfPossible(join(changeDir, BUG_FIX_PATH_LEDGER_FILE))
   if (fast !== undefined) {
     try {
       const parsed = JSON.parse(fast) as { readonly allowlist?: unknown }
@@ -122,9 +122,15 @@ export function readGuardWorkflowState(workspaceRoot: string): GuardWorkflowStat
       intakeConfirmed: status.intake?.confirmation === 'confirmed',
       allowlist: readAllowlist(workspaceRoot, active.changeId),
       changeDirRel: `openspec/changes/${active.changeId}`,
+      // §22.17 J — a gate is pending when the classification is still
+      // unconfirmed, or when the log tail is an unresolved awaiting-confirm
+      // park (any resolving dispatch appends stage events after it, so the
+      // tail stops being awaiting-confirm).
+      gatePending: status.intake?.confirmation !== 'confirmed'
+        || events.at(-1)?.type === 'awaiting-confirm',
     }
   } catch {
     // Corrupted tail: fail closed rather than guessing the stage.
-    return { active: true, changeId: active.changeId, intakeConfirmed: false, allowlist: [] }
+    return { active: true, changeId: active.changeId, intakeConfirmed: false, allowlist: [], gatePending: true }
   }
 }

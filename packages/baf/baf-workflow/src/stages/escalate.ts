@@ -1,8 +1,8 @@
 /**
  * T15 risk escalation (§12 Phase 6): fast-path implement whose scope grew
  * (files outside the allowlist, or a semantic discovery such as public-API
- * impact) upgrades to full-go. The upgrade adjudicates T15 while the mode is
- * still bug-fast-path (the transition table filters T15 by that mode), then
+ * impact) upgrades to full-go-path. The upgrade adjudicates T15 while the mode is
+ * still bug-fix-path (the transition table filters T15 by that mode), then
  * writes `mode-upgraded`, preserves the fast-path ledger for audit, installs
  * the OpenSpec change backfill, and re-enters at clarify.
  * @module @deepseek-ai/dsh-baf-workflow/stages/escalate
@@ -17,11 +17,11 @@ import { ProjectionStore } from '../projection.ts'
 import type { StageContext } from './context.ts'
 import { writeArtifact } from './write.ts'
 import {
-  FASTPATH_LEDGER_FILE,
+  BUG_FIX_PATH_LEDGER_FILE,
   readBugRecord,
   sectionOf,
-  type FastPathLedgerView,
-} from './fastpath.ts'
+  type BugFixPathLedgerView,
+} from './bug-fix-path.ts'
 
 /** Options for {@link driveEscalate}. */
 export interface EscalateOptions {
@@ -34,7 +34,7 @@ export interface EscalateOptions {
 export interface EscalateStageResult {
   readonly status: WorkflowStatus
   readonly cause: string
-  /** Whether the fast-path plan.json was preserved as fastpath-ledger.json. */
+  /** Whether the fast-path plan.json was preserved as bug-fix-path-ledger.json. */
   readonly preservedLedger: boolean
 }
 
@@ -44,14 +44,14 @@ export interface EscalateStageResult {
  * @param ledger - implement ledger.
  * @returns out-of-allowlist files.
  */
-export function scopeGrowthFiles(ledger: FastPathLedgerView): readonly string[] {
+export function scopeGrowthFiles(ledger: BugFixPathLedgerView): readonly string[] {
   const allow = new Set(ledger.allowlist)
   return ledger.touched.filter(file => !allow.has(file))
 }
 
 /**
  * Render the proposal backfill installed at escalation. The bug context
- * becomes the OpenSpec "Why" so the upgraded change is a real full-go
+ * becomes the OpenSpec "Why" so the upgraded change is a real full-go-path
  * change and verify's openspec-validate stays meaningful.
  * @param changeId - change id.
  * @param cause - escalation cause.
@@ -70,7 +70,7 @@ export function renderEscalatedProposal(
     '',
     '## Why',
     '',
-    `Escalated from bug-fast-path to full-go — ${cause}`,
+    `Escalated from bug-fix-path to full-go-path — ${cause}`,
     '',
     '## Problem',
     '',
@@ -85,12 +85,12 @@ export function renderEscalatedProposal(
 }
 
 /**
- * Drive T15: adjudicate implement → clarify (bug-fast-path only), record
+ * Drive T15: adjudicate implement → clarify (bug-fix-path only), record
  * `stage-failed` + `mode-upgraded`, preserve the fast-path ledger, install
  * the OpenSpec backfill, and enter clarify for the N2→N4 补走.
  *
- * Ordering constraint: T15 is mode-filtered to bug-fast-path and the
- * `mode-upgraded` event flips the fold's mode to full-go, so the transition
+ * Ordering constraint: T15 is mode-filtered to bug-fix-path and the
+ * `mode-upgraded` event flips the fold's mode to full-go-path, so the transition
  * must be adjudicated BEFORE the event is appended or the edge disappears.
  * @param ctx - stage context.
  * @param options - change + cause.
@@ -133,14 +133,17 @@ export async function driveEscalate(
     afterFail.projectionVersion,
     meta => ({
       type: 'mode-upgraded' as const,
-      from: 'bug-fast-path' as const,
-      to: 'full-go' as const,
-      cause,
+      from: 'bug-fix-path' as const,
+      to: 'full-go-path' as const,
+      // §13 R6 — structured cause. Caller may pass either the bare string
+      // (legacy shape, accepted on the event type for replay) or the
+      // `{ code, message }` form produced by the fast-path bounds checker.
+      cause: normaliseCause(cause),
       ...meta,
     }),
   )
 
-  const preservedLedger = await preserveFastPathLedger(ctx.workspace.root, changeId)
+  const preservedLedger = await preserveBugFixPathLedger(ctx.workspace.root, changeId)
   await installOpenSpecBackfill(ctx, changeId, cause)
 
   const { status: afterClarify } = await ctx.store.append(
@@ -167,13 +170,13 @@ export async function driveEscalate(
  * @param changeId - change id.
  * @returns whether a ledger was preserved.
  */
-async function preserveFastPathLedger(
+async function preserveBugFixPathLedger(
   workspaceRoot: string,
   changeId: string,
 ): Promise<boolean> {
   const dir = changeDir(workspaceRoot, changeId)
   const source = join(dir, ARTIFACT_FILES.planJson)
-  const destination = join(dir, FASTPATH_LEDGER_FILE)
+  const destination = join(dir, BUG_FIX_PATH_LEDGER_FILE)
   try {
     await stat(destination)
     return false // Already preserved (idempotent re-escalation attempt).
@@ -190,7 +193,7 @@ async function preserveFastPathLedger(
 }
 
 /**
- * Install the OpenSpec change backfill required of a full-go change:
+ * Install the OpenSpec change backfill required of a full-go-path change:
  * proposal.md carrying the bug context plus the tasks.md template the
  * backfilled plan stage fills in. The bug record stays in place
  * (identity/audit preserved).
@@ -238,4 +241,23 @@ async function appendRejection(
     reason: reason ?? 'invalid_transition',
     ...meta,
   })).catch(() => undefined)
+}
+
+/**
+ * §13 R6 — accept either a structured `{ code, message }` cause (preferred)
+ * or a plain string (legacy callers, fast-path bounds checker). When the
+ * input is a string we infer the code as the kebab-case token at the front
+ * if it looks like `'file-count-exceeded: …'`, else fall back to
+ * `'manual-escalation'`. Replay of old events that already stored a string
+ * cause flows through unchanged because the event union accepts both.
+ * @param cause - raw cause value passed to {@link driveEscalate}.
+ * @returns normalised cause ready for the event append.
+ */
+function normaliseCause(cause: string | { code: string; message: string }): { code: string; message: string } | string {
+  if (typeof cause !== 'string') return cause
+  const head = cause.split(':', 1)[0]?.trim()
+  if (head !== undefined && head === head.toLowerCase() && /^[a-z][a-z0-9-]*$/.test(head)) {
+    return { code: head, message: cause }
+  }
+  return cause
 }

@@ -12,9 +12,12 @@
  * 2. **Chaining** (§18.4): keep moving while the next step needs no
  *    model-authored content, so the customer types `baf-go` once per decision
  *    point instead of once per stage.
- * 3. **The two mandatory confirmation gates** (§18.5): stop after design and
- *    again after verify, and treat "customer typed `baf-go` again" as the
- *    confirmation — there is deliberately **no** `baf-go confirm`.
+ * 3. **The two mandatory confirmation gates** (§18.5 / §22.17): stop after
+ *    design and again after verify. With a popup channel (desktop GUI) both
+ *    the park and any re-run of `/baf-go` surface the §22 interactive dialog;
+ *    `/baf-go-confirm` takes the positive path directly, and where no popup
+ *    channel exists (CLI / tests) the legacy rule holds — the customer
+ *    typing `baf go` again *is* the confirmation.
  *
  * Idempotent throughout: re-running on a resting point re-renders its card and
  * writes nothing.
@@ -25,6 +28,7 @@
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import {
   isBafError,
+  type AwaitingConfirmSnapshot,
   type ConfirmGate,
   type TransitionSource,
   type WorkflowNode,
@@ -40,14 +44,19 @@ import { parseArgs, valueOf } from './cli-args.ts'
 import {
   cardTitle,
   driveClassify,
+  driveGateResolve,
   driveOpen,
   driveResume,
+  driveScaffold,
+  loadWorkspaceBaseline,
   pipelineFor,
   renderDomainError,
   statusLines,
   type DriveAdapters,
 } from './command-drives.ts'
-import { renderGate } from './gate-cards.ts'
+import { GATE_REGISTRY, renderGate, type GateId } from './gate-cards.ts'
+import { judgmentOf } from './gate-dialog.ts'
+import type { GateJudgment } from './gate-dialog.ts'
 import type { FocusStore } from './session-focus.ts'
 
 /** Node names `baf-go` accepts as an explicit drift-resume target. */
@@ -74,7 +83,41 @@ export interface GoInput {
   readonly focus?: FocusStore
   /** Origin of the drive (§22.15 B convention). */
   readonly source?: TransitionSource
+  /**
+   * §22.17 popup channel (host-plane `gate-dialog.ts`). Present only on the
+   * GUI slash surface; the coordinator pops it at each park point and
+   * dispatches the answered option through `driveGateResolve`. Undefined in
+   * CLI/tests — everything degrades to the plain §22 card.
+   */
+  readonly ask?: GateAsk
+  /**
+   * `/baf-go-confirm` mode: take the positive path at whichever gate the
+   * workspace/change rests on (scaffold init, intake confirm, gates A/B
+   * unlock) without popping any dialog. Drift keeps asking — §19 forbids
+   * auto-picking a rollback target.
+   */
+  readonly confirm?: boolean
 }
+
+/**
+ * One §22 popup outcome (§22.17). `answered` carries the registry option id
+ * the customer clicked; `paused` means they closed/skipped/dismissed the
+ * dialog (the workflow stays parked); `unavailable` means no dialog could
+ * ever show (no answerer), so the caller degrades to the plain card.
+ */
+export type GateAskOutcome =
+  | { readonly kind: 'answered'; readonly optionId: string; readonly label: string }
+  | { readonly kind: 'paused'; readonly reason: 'dismissed' | 'cancelled' | 'skipped' }
+  | { readonly kind: 'unavailable'; readonly reason: string }
+
+/** The popup channel `go-coordinator` consumes — implemented by `gate-dialog.ts`. */
+export type GateAsk = (gate: {
+  readonly gateId: GateId
+  readonly changeId?: string
+  readonly resumeCandidates?: readonly WorkflowNode[]
+  /** §22.17 I: the intake classifier's verdict, shown on the intake-classify dialog. */
+  readonly judgment?: GateJudgment
+}) => Promise<GateAskOutcome>
 
 /** One row of the projection index, as far as routing cares. */
 interface ActiveRow {
@@ -97,6 +140,19 @@ interface Section {
 export async function driveGo(input: GoInput): Promise<CommandResult> {
   const { cwd } = input
   try {
+    // §22.17: an uninitialized workspace has exactly one legal next step —
+    // the scaffold gate. `/baf-go` pops it (so 暂不初始化 is reversible by
+    // typing /baf-go again), `/baf-go-confirm` initializes directly, and
+    // without a popup channel the §22 card renders instead of the old
+    // misleading "没有进行中的工作流".
+    if (await loadWorkspaceBaseline(cwd) === undefined) {
+      if (input.confirm === true) return driveScaffold(cwd, input.adapters ?? {})
+      const card = renderGate('scaffold', { cwd })
+      if (input.ask === undefined) return card
+      const resolved = await resolveViaDialog(input.ask, cwd, input.adapters ?? {}, { gateId: 'scaffold' })
+      return resolved ?? withContinueHint(card)
+    }
+
     const store = new ProjectionStore({ workspaceRoot: cwd })
     const args = parseArgs(input.rawInput ?? '')
     const resumeTarget = args.positionals.find(p => RESUME_TARGETS.includes(p as WorkflowNode)) as
@@ -145,6 +201,9 @@ export async function driveGo(input: GoInput): Promise<CommandResult> {
       changeId: binding.changeId,
       resumeTarget,
       source: input.source ?? 'slash',
+      adapters: input.adapters ?? {},
+      ...(input.ask === undefined ? {} : { ask: input.ask }),
+      confirm: input.confirm === true,
     })
   } catch (error) {
     return renderDomainError('/baf-go', error)
@@ -235,7 +294,7 @@ function resolveBinding(input: {
     // Unbound with nothing active and no requirement: nothing to drive.
     return {
       kind: 'stop',
-      card: successCard('无未完成工作流', [
+      card: successCard('没有进行中的工作流', [
         {
           title: '下一步',
           lines: ['直接描述你的需求即可，分类卡会自动弹出', '（不需要写 /baf-go + 需求）'],
@@ -268,6 +327,21 @@ function resolveBinding(input: {
   }
 }
 
+/** Everything `route` needs beyond the bound change — one bag so the verify re-route can pass it through. */
+interface RouteContext {
+  readonly cwd: string
+  readonly store: ProjectionStore
+  readonly pipeline: StagePipeline
+  readonly changeId: string
+  readonly resumeTarget: WorkflowNode | undefined
+  readonly source: TransitionSource
+  readonly adapters: DriveAdapters
+  /** §22.17 popup channel; absent on CLI/tests. */
+  readonly ask?: GateAsk
+  /** `/baf-go-confirm` mode: take the positive path without popping. */
+  readonly confirm: boolean
+}
+
 /**
  * Route a bound change to its next action (§18.4.2).
  *
@@ -277,14 +351,7 @@ function resolveBinding(input: {
  * @param context - bound routing context.
  * @returns the card for the resting point.
  */
-async function route(context: {
-  readonly cwd: string
-  readonly store: ProjectionStore
-  readonly pipeline: StagePipeline
-  readonly changeId: string
-  readonly resumeTarget: WorkflowNode | undefined
-  readonly source: TransitionSource
-}): Promise<CommandResult> {
+async function route(context: RouteContext): Promise<CommandResult> {
   const { cwd, store, pipeline, changeId, resumeTarget, source } = context
   const status = await store.readStatus(changeId)
   const at = (n: WorkflowNode): string | undefined => status.nodes[n]
@@ -301,8 +368,22 @@ async function route(context: {
 
   // §19: drift never resolves itself. Hand over to the resume flow — the
   // customer names the rollback node, or reads the candidate set first.
-  // Auto-picking it would silently invalidate completed work.
+  // Auto-picking it would silently invalidate completed work — including in
+  // `/baf-go-confirm` mode, so confirm only upgrades the card with the
+  // continue hint, never picks a node.
   if (node === 'drift') {
+    if (resumeTarget === undefined && context.ask !== undefined) {
+      const options = await pipeline.resumeOptions(changeId)
+      if (options.status.current === 'drift' && options.candidates.length > 0) {
+        const resolved = await resolveViaDialog(context.ask, context.cwd, context.adapters, {
+          gateId: 'resume',
+          changeId,
+          resumeCandidates: options.candidates,
+        })
+        if (resolved !== undefined) return resolved
+        return withContinueHint(await driveResume(cwd, `change=${changeId}`, source))
+      }
+    }
     const forward = resumeTarget === undefined ? '' : ` ${resumeTarget}`
     return driveResume(cwd, `change=${changeId}${forward}`, source)
   }
@@ -310,10 +391,25 @@ async function route(context: {
   switch (node) {
     case 'intake': {
       // Not yet confirmed → (re)surface the classification card (§18.4.1).
-      // The card's own 确认/补充/退出 is where that decision is made; `baf-go`
-      // only replays it, because §18.2 reserves "baf-go means confirm" for the
-      // two gates, not for intake.
+      // The card's own 确认/补充/退出 is where that decision is made; plain
+      // `baf-go` only replays it (§18.2 reserves "baf-go means confirm" for
+      // the two gates), while a popup channel (§22.17) or `/baf-go-confirm`
+      // can settle it right here — the click/confirm is customer input.
       if (status.intake?.confirmation !== 'confirmed') {
+        if (context.confirm) {
+          return driveClassify(cwd, `confirm change=${changeId}`, source)
+        }
+        if (context.ask !== undefined) {
+          // §22.17 I: the dialog carries the classifier's verdict so the
+          // click confirms a visible path, not a blind 「确认分类」.
+          const resolved = await resolveViaDialog(context.ask, context.cwd, context.adapters, {
+            gateId: 'intake-classify',
+            changeId,
+            ...(status.intake === undefined ? {} : { judgment: judgmentOf(status.intake) }),
+          })
+          if (resolved !== undefined) return resolved
+          return withContinueHint(await driveClassify(cwd, `change=${changeId}`, source))
+        }
         return driveClassify(cwd, `change=${changeId}`, source)
       }
       // Confirmed but never opened: no customer decision is pending — every
@@ -323,7 +419,7 @@ async function route(context: {
     }
 
     case 'open': {
-      if (status.mode === 'bug-fast-path') {
+      if (status.mode === 'bug-fix-path') {
         const next = await pipeline.enterImplementStage(changeId, source)
         return successCard('已进入 implement', [
           { title: '状态', lines: statusLines(next) },
@@ -353,20 +449,32 @@ async function route(context: {
     case 'design': {
       const prep = await prepareDoc(pipeline, changeId, 'design', at('design'), source)
       if (prep.kind === 'card') return prep.card
-      // **Gate A** (§18.5). The unlock is the customer typing `baf-go` once
-      // more, observed as the matching `awaiting-confirm` at the log tail.
-      if (!(await gateUnlocked(store, changeId, 'design-to-plan'))) {
-        await parkOnGate(store, changeId, 'design-to-plan')
-        // §22.14-D: render the registered §22 card verbatim so slash, Tab,
-        // and the coordinator agree on options / commands. The card is
-        // `kind: 'error'` so the surface still renders it as a stop.
-        return renderGate('design-confirm', { cwd, changeId })
+      // **Gate A** (§18.5 / §22.17). One park, three unlock shapes: the
+      // dialog's confirm option (dispatched as a gate-card `/baf-go` with no
+      // ask channel, so the legacy tail check below sees the unlock),
+      // `/baf-go-confirm` (positive-path mode), and — with no popup channel
+      // (CLI/tests) — the customer typing `baf-go` again.
+      const parked = await gateUnlocked(store, changeId, 'design-to-plan')
+      if (!parked) await parkOnGate(store, changeId, 'design-to-plan')
+      const proceed = async (): Promise<CommandResult> => {
+        const next = await pipeline.beginDocStage(changeId, 'plan', source)
+        return successCard('设计已确认 · 已进入计划阶段', [
+          { title: '状态', lines: statusLines(next) },
+          { title: '接下来', lines: ['模型填 plan.md / plan.json，填完敲 /baf-go'] },
+        ])
       }
-      const next = await pipeline.beginDocStage(changeId, 'plan', source)
-      return successCard('门 A 已确认 · plan 已进入', [
-        { title: '状态', lines: statusLines(next) },
-        { title: '接下来', lines: ['模型填 plan.md / plan.json，填完敲 /baf-go'] },
-      ])
+      if (context.confirm) return proceed()
+      if (context.ask !== undefined) {
+        // Every /baf-go on a parked gate re-pops the dialog (§22.17) — the
+        // customer who paused via the popup revives it by typing /baf-go.
+        const resolved = await resolveViaDialog(context.ask, context.cwd, context.adapters, { gateId: 'design-confirm', changeId })
+        if (resolved !== undefined) return resolved
+        return withContinueHint(renderGate('design-confirm', { cwd, changeId }))
+      }
+      // §22.14-D: render the registered §22 card verbatim so slash, Tab,
+      // and the coordinator agree on options / commands. The card is
+      // `kind: 'error'` so the surface still renders it as a stop.
+      return parked ? proceed() : renderGate('design-confirm', { cwd, changeId })
     }
 
     case 'plan': {
@@ -383,13 +491,13 @@ async function route(context: {
     }
 
     case 'implement': {
-      if (at('implement') === 'completed') return driveVerifyNow(cwd, store, pipeline, changeId, source)
+      if (at('implement') === 'completed') return driveVerifyNow(context)
       const ledger = await readLedger(cwd, changeId)
       const gate = await implementGate(
         {
           workspaceRoot: cwd,
           changeId,
-          mode: status.mode === 'bug-fast-path' ? 'bug-fast-path' : 'full-go',
+          mode: status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
         },
         ledger.touched,
       )
@@ -410,43 +518,50 @@ async function route(context: {
       }
       const driven = await pipeline.driveImplementStage(changeId)
       if (driven.node !== 'implement') throw new Error(`expected an implement drive, got ${driven.node}`)
-      // §18.4.2: a T15 escalation rewrites the lane to full-go; the session
+      // §18.4.2: a T15 escalation rewrites the lane to full-go-path; the session
       // stays put and the next `baf-go` lands on clarify.
       if (driven.result.escalated !== undefined) {
         const after = await store.readStatus(changeId)
-        return errorCard('T15 已升级 full-go', [
+        return errorCard('已升级为完整流程', [
           { title: '原因', lines: [driven.result.escalated.cause] },
           { title: '状态', lines: statusLines(after) },
           {
             title: '说明',
             lines: [
-              'fast-path 泳道保留可追溯（升级边 T15）',
-              '缺口 clarify/design/plan 将按 full-go 补走',
-              '敲 /baf-go 继续',
+              '缺陷修复路径的记录会保留，可追溯',
+              '缺的 澄清/设计/计划 阶段会按完整流程补走',
+              '输入 /baf-go 继续',
             ],
           },
         ])
       }
-      return driveVerifyNow(cwd, store, pipeline, changeId, source)
+      return driveVerifyNow(context)
     }
 
     case 'verify': {
-      if (at('verify') !== 'completed') return driveVerifyNow(cwd, store, pipeline, changeId, source)
-      // **Gate B** (§18.5) — archiving is the customer's call, not the
-      // coordinator's. Same unlock rule as gate A.
-      if (!(await gateUnlocked(store, changeId, 'verify-to-archive'))) {
-        await parkOnGate(store, changeId, 'verify-to-archive')
-        // §22.14-D: render the registered §22 card verbatim.
-        return renderGate('verify-archive', { cwd, changeId })
+      if (at('verify') !== 'completed') return driveVerifyNow(context)
+      // **Gate B** (§18.5 / §22.17) — archiving is the customer's call, not
+      // the coordinator's. Same three unlock shapes as gate A.
+      const parked = await gateUnlocked(store, changeId, 'verify-to-archive')
+      if (!parked) await parkOnGate(store, changeId, 'verify-to-archive')
+      const proceed = async (): Promise<CommandResult> => {
+        const driven = await pipeline.driveArchiveStage(changeId, true, source)
+        if (driven.node !== 'archive') throw new Error(`expected an archive drive, got ${driven.node}`)
+        const after = await store.readStatus(changeId)
+        return successCard('检查已确认 · 已归档', [
+          { title: '状态', lines: statusLines(after) },
+          { title: '产物', lines: [driven.result.archivePath] },
+          { title: '下一步', lines: ['本条工作流结束；新需求请在新会话中提出'] },
+        ])
       }
-      const driven = await pipeline.driveArchiveStage(changeId, true, source)
-      if (driven.node !== 'archive') throw new Error(`expected an archive drive, got ${driven.node}`)
-      const after = await store.readStatus(changeId)
-      return successCard('门 B 已确认 · 已归档', [
-        { title: '状态', lines: statusLines(after) },
-        { title: '产物', lines: [driven.result.archivePath] },
-        { title: '下一步', lines: ['本条工作流结束；新需求请在新会话中提出'] },
-      ])
+      if (context.confirm) return proceed()
+      if (context.ask !== undefined) {
+        const resolved = await resolveViaDialog(context.ask, context.cwd, context.adapters, { gateId: 'verify-archive', changeId })
+        if (resolved !== undefined) return resolved
+        return withContinueHint(renderGate('verify-archive', { cwd, changeId }))
+      }
+      // §22.14-D: render the registered §22 card verbatim.
+      return parked ? proceed() : renderGate('verify-archive', { cwd, changeId })
     }
 
     case 'archive': {
@@ -462,7 +577,7 @@ async function route(context: {
     }
 
     default: {
-      return errorCard(`未识别的节点 ${node}`, [
+      return errorCard(`未识别的阶段 ${node}`, [
         { title: '活动变更', lines: [`${changeId} · 当前 ${node}`] },
         { title: '处理', lines: ['/baf-status 查看完整状态；必要时 /baf-workflow-resume 复位'] },
       ])
@@ -530,18 +645,11 @@ async function prepareDoc(
 
 /**
  * Run the verify stage and render either the T11 fix-loop card or gate B.
- * @param store - projection store.
- * @param pipeline - stage pipeline.
- * @param changeId - change id.
+ * @param context - bound routing context (the change this verify belongs to).
  * @returns verify outcome card.
  */
-async function driveVerifyNow(
-  cwd: string,
-  store: ProjectionStore,
-  pipeline: StagePipeline,
-  changeId: string,
-  source: TransitionSource,
-): Promise<CommandResult> {
+async function driveVerifyNow(context: RouteContext): Promise<CommandResult> {
+  const { pipeline, changeId, source } = context
   const driven = await pipeline.driveVerifyStage(changeId, new AbortController().signal, source)
   if (driven.node !== 'verify') throw new Error(`expected a verify drive, got ${driven.node}`)
   const rows = driven.result.report.checks.map(
@@ -551,7 +659,7 @@ async function driveVerifyNow(
     const failures = driven.result.report.checks
       .filter(row => !row.ok)
       .map(row => `${row.name}: ${row.diagnostics.join('; ')}`)
-    return errorCard('必需检查失败 · T11 回实现', [
+    return errorCard('必需检查未通过 · 退回实现阶段', [
       { title: '检查', lines: rows.length === 0 ? ['（无检查项）'] : rows },
       { title: '失败详情', lines: failures.length === 0 ? ['（无诊断信息）'] : failures },
       { title: '报告', lines: [driven.result.reportPath] },
@@ -559,7 +667,49 @@ async function driveVerifyNow(
     ])
   }
   // Verify passed → re-route so gate B owns the next move (single source).
-  return route({ cwd, store, pipeline, changeId, resumeTarget: undefined, source })
+  // The re-route drops any explicit resume target: a verify run never
+  // carries one, and gate B must not misread it as a drift instruction.
+  return route({ ...context, resumeTarget: undefined })
+}
+
+/**
+ * Pop the §22.17 dialog for one gate and, when the customer clicks a
+ * resolving option, dispatch it through `driveGateResolve` — the same single
+ * resolve channel the Tab buttons use, with the same `gate-card` §22.15
+ * source. The inner `/baf-go` dispatch carries no ask channel, so a dialog
+ * confirm can never recursively pop another dialog.
+ *
+ * @param context - routing context (cwd + adapters + ask channel).
+ * @param gate - which gate to pop, with change id / resume candidates.
+ * @returns the dispatched drive's card, or undefined when the customer
+ *   paused or no dialog could show (callers fall back to the plain card).
+ */
+async function resolveViaDialog(
+  ask: GateAsk,
+  cwd: string,
+  adapters: DriveAdapters,
+  gate: {
+    readonly gateId: GateId
+    readonly changeId?: string
+    readonly resumeCandidates?: readonly WorkflowNode[]
+  },
+): Promise<CommandResult | undefined> {
+  const outcome = await ask(gate)
+  if (outcome.kind !== 'answered') return undefined
+  const opts = gate.changeId === undefined ? undefined : { changeId: gate.changeId }
+  return driveGateResolve(cwd, gate.gateId, outcome.optionId, adapters, gate.resumeCandidates, 'gate-card', opts)
+}
+
+/**
+ * Append the §22.17 continue hint to a paused gate card: how the customer
+ * revives the popup (`/baf-go`) or settles it without one (`/baf-go-confirm`).
+ * Section shape mirrors `formatCommandReport` (【title】 + indented lines).
+ */
+function withContinueHint(card: CommandResult): CommandResult {
+  return {
+    kind: card.kind,
+    text: `${card.text}\n\n【继续】\n  /baf-go 重新弹出确认框\n  /baf-go-confirm 不弹框直接继续`,
+  }
 }
 
 /**
@@ -599,12 +749,43 @@ async function parkOnGate(
 ): Promise<WorkflowStatus> {
   const status = await store.readStatus(changeId)
   if (await gateUnlocked(store, changeId, gate)) return status
+  // §13 R5 — capture the §22 gate card text at park time so a later
+  // registry edit cannot silently change what the customer sees on replay.
+  const snapshot = captureGateSnapshot(gate)
   const { status: next } = await store.append(changeId, status.projectionVersion, meta => ({
     type: 'awaiting-confirm',
     gate,
+    ...(snapshot === undefined ? {} : { snapshot }),
     ...meta,
   }))
   return next
+}
+
+/**
+ * §13 R5 — map a {@link ConfirmGate} to the matching GATE_REGISTRY spec and
+ * freeze its text + options. Kept sync and pure so it can run inside the
+ * `append` callback; the gate-cards module has no I/O.
+ * @param gate - the parked gate id.
+ * @returns frozen snapshot, or undefined when the gate has no static spec
+ * (only the two §18.5 confirm gates today).
+ */
+function captureGateSnapshot(gate: ConfirmGate): AwaitingConfirmSnapshot | undefined {
+  const spec = GATE_REGISTRY[gateToGateId(gate)]
+  if (spec === undefined) return undefined
+  return {
+    title: spec.title,
+    question: spec.question,
+    options: spec.options.map(opt => ({
+      id: opt.id,
+      label: opt.label,
+      command: opt.command,
+      ...(opt.args === undefined ? {} : { args: opt.args }),
+    })),
+  }
+}
+
+function gateToGateId(gate: ConfirmGate): 'design-confirm' | 'verify-archive' {
+  return gate === 'design-to-plan' ? 'design-confirm' : 'verify-archive'
 }
 
 /**
@@ -643,6 +824,6 @@ function successCard(runtime: string, sections: readonly Section[]): CommandResu
 function errorCard(runtime: string, sections: readonly Section[], marker?: string): CommandResult {
   const title = marker === undefined
     ? cardTitle('/baf-go', runtime)
-    : `${runtime} · ${marker} · 点本行展开/折叠指令全文`
+    : `${runtime} · ${marker} · 点本行展开/折叠详情`
   return { kind: 'error', text: formatCommandReport(false, title, sections) }
 }

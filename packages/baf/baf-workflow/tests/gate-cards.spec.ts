@@ -86,18 +86,22 @@ describe('renderGateCard (§22)', () => {
     const spec: GateSpec = GATE_REGISTRY['scaffold']
     const result = renderGateCard(spec, { cwd: '/tmp/ws' })
     expect(result.kind).toBe('success')
-    expect(result.text).toContain('初始化工作区（执行 scaffold）')
+    expect(result.text).toContain('初始化工作区')
     expect(result.text).toContain('/baf-scaffold')
     expect(result.text).toContain('暂不初始化')
-    expect(result.text).toContain('请点击工作流页签按钮')
+    expect(result.text).toContain('点工作流页签的按钮')
   })
 
-  it('renders the intake-classify gate card with confirm / reject', () => {
+  it('renders the intake-classify gate card with both path options / reject', () => {
     const result = renderGate(GATE_REGISTRY['intake-classify'].id, { cwd: '/tmp/ws', changeId: 'CHG-001' })
     expect(result.kind).toBe('success')
-    expect(result.text).toContain('确认分类')
-    expect(result.text).toContain('拒绝并重新描述')
-    expect(result.text).toContain('/baf-workflow-classify confirm')
+    // §22.17 J — the two paths are separate clickable options, not one blind
+    // 「确认分类」; each carries its mode= override on the confirm dispatch.
+    expect(result.text).toContain('确认 · 完整流程')
+    expect(result.text).toContain('确认 · 缺陷修复路径')
+    expect(result.text).toContain('/baf-workflow-classify confirm mode=full-go-path')
+    expect(result.text).toContain('/baf-workflow-classify confirm mode=bug-fix-path')
+    expect(result.text).toContain('重新描述需求')
     expect(result.text).toContain('/baf-workflow-classify reject')
     expect(result.text).toContain('change=CHG-001')
   })
@@ -118,7 +122,7 @@ describe('renderGateCard (§22)', () => {
   it('returns a refusal when the resume gate is asked without candidates', () => {
     const result = renderGate('resume', { cwd: '/tmp/ws' })
     expect(result.kind).toBe('error')
-    expect(result.text).toContain('缺少上下文')
+    expect(result.text).toContain('额外的上下文')
   })
 
   it('returns a structured refusal for an unknown gate id (never a TypeError)', () => {
@@ -128,8 +132,8 @@ describe('renderGateCard (§22)', () => {
     for (const bogus of ['hand-written-scaffold', 'PLAN_CONFIRM', '']) {
       const result = renderGate(bogus, { cwd: '/tmp/ws' })
       expect(result.kind, `gateId=${JSON.stringify(bogus)}`).toBe('error')
-      expect(result.text).toContain('unknown_gate')
-      expect(result.text).toContain('GATE_REGISTRY')
+      expect(result.text).toContain('无法识别的确认项')
+      expect(result.text).toContain('系统里没有这个确认项')
     }
   })
 
@@ -138,7 +142,7 @@ describe('renderGateCard (§22)', () => {
     expect(result.kind).toBe('success')
     expect(result.text).toContain('/baf-go')
     expect(result.text).toContain('确认设计，进入计划')
-    expect(result.text).toContain('退回澄清')
+    expect(result.text).toContain('退回，继续澄清需求')
   })
 
   it('renders the verify-archive gate pointing at /baf-go (the §18.5 门 B)', () => {
@@ -160,7 +164,7 @@ describe('renderGateCard (§22)', () => {
       const result = id === 'resume'
         ? renderGate(id, { cwd: '/tmp/ws', resumeCandidates: ['plan'] })
         : renderGate(id, { cwd: '/tmp/ws' })
-      expect(result.text).toContain('请点击工作流页签按钮')
+      expect(result.text).toContain('点工作流页签的按钮')
     }
   })
 })

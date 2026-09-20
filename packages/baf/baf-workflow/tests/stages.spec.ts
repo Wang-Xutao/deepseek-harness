@@ -1,5 +1,5 @@
 /**
- * Phase 5 full-go stage pipeline tests: happy path, gate failures, and
+ * Phase 5 full-go-path stage pipeline tests: happy path, gate failures, and
  * illegal entry (§12 Phase 5.8 acceptance).
  */
 
@@ -61,7 +61,10 @@ async function touchReference(root: string, rel: string): Promise<string> {
 }
 
 describe('stage pipeline happy path', () => {
-  it('runs open → clarify → design → plan → implement → verify → archive', async () => {
+  // Seven stages × git+fs work; under full-suite parallel load on Windows the
+  // default 5s budget intermittently expires mid-pipeline (hunt run 2026-09-20:
+  // timed out at 5055ms with the machine thrashing). Fast path is ~1s.
+  it('runs open → clarify → design → plan → implement → verify → archive', { timeout: 60_000 }, async () => {
     const { root, pipeline, changeId } = await setup()
     try {
       await pipeline.driveOpenStage(changeId, 'Add report export API', 'slash')

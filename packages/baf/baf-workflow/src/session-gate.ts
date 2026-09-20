@@ -23,7 +23,10 @@
  *   in dsh that puts a card in the transcript before the first turn. It is
  *   *not* a session event: `system/message` requires an open turn
  *   (`session/invariant.ts`), and a synthetic `user/message` would put words
- *   in the customer's mouth.
+ *   in the customer's mouth. When the probe trips a registered §22 gate (no
+ *   baseline → scaffold), a second `/baf-gate scaffold` execution pops the
+ *   standard gate card as its own card — 修复/忽略 is decided there, never
+ *   inside the welcome card.
  * - the model reads the same facts as a system-prompt section, which is what
  *   makes requirement 1 real on the model side: the session knows whether it
  *   is bound to a change, and knows which tools are missing, without spending
@@ -52,8 +55,8 @@ import { isBafError } from '@deepseek-ai/dsh-baf-core'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
 import { createLocalOpenSpecAdapter } from '@deepseek-ai/dsh-baf-openspec'
 import { formatCommandReport, modeZh } from './command-format.ts'
-import { gateCardSections, GATE_REGISTRY } from './gate-cards.ts'
-import { isActiveChange, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
+import { listActiveChanges, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
+import type { ScaffoldAdapterOptions, ScaffoldAdapterOutcome } from './pipeline-factory.ts'
 import { resolveBafProductVersions, type BafProductVersions } from './product-versions.ts'
 
 /** Preset row id / module name installed by `presets/baf/agent.cordis.yml`. */
@@ -69,6 +72,14 @@ export const inject = ['agents', 'commands']
 
 /** The command the gate fires at session open. Registered by `commands.ts`. */
 export const WELCOME_COMMAND = '/baf-welcome'
+
+/**
+ * The §22 gate-card command the gate may fire **after** the welcome card.
+ * Registered by `commands.ts`; `renderGate` (the §22 registry) is the single
+ * source of its text, so the popped card is byte-identical to the one the Tab
+ * pendingGate and the `baf_gate_ask` tool render.
+ */
+export const STARTUP_GATE_COMMAND = '/baf-gate'
 
 /**
  * Prompt-section position. `PLAN_POLICY` (500) and `TEAM_POLICY` (600) are the
@@ -118,6 +129,14 @@ export interface ToolchainProbe {
 export interface StartupBinding {
   /** Non-terminal changes, oldest first. `length` picks the card branch. */
   readonly actives: readonly ProjectionIndexEntry[]
+  /**
+   * §13 R4 — change ids whose working tree differs from the locked baseline
+   * at session open. Empty when nothing is drifted. The startup card surfaces
+   * these as a one-line hint pointing the customer at `/baf-workflow-resume`,
+   * so a drift detected while the user was away is not silently dropped
+   * until the user manually refreshes the Tab.
+   */
+  readonly drifted: ReadonlySet<string>
 }
 
 /** Options for {@link probeToolchain}. */
@@ -141,6 +160,16 @@ export interface GateSnapshot {
 const probeCache = new Map<string, ToolchainProbe>()
 const snapshotCache = new Map<string, GateSnapshot>()
 const inflight = new Map<Agent, AbortController>()
+/**
+ * Agents whose welcome card has already fired. Module-level on purpose: the
+ * row can be applied more than once for one process (preset reload, a second
+ * mount of the same composition), and each `apply` gets a fresh `fibers`
+ * map — so the `fibers.has` check cannot see a previous run. Without this
+ * set, a re-apply after the agent exists fires a SECOND welcome + gate card
+ * into the same session (the "双触发" bug — its regression test is the
+ * double-trigger guard in `session-gate.spec.ts`).
+ */
+const gateFired = new WeakSet<Agent>()
 
 /**
  * Drop every cached probe/snapshot. Tests call this between workspaces; the
@@ -196,13 +225,56 @@ export async function probeToolchain(cwd: string, options: ProbeOptions = {}): P
 
 /**
  * Which branch the startup card renders (§18.3.1).
+ *
+ * Lists the workspace's non-terminal changes through the shared
+ * {@link listActiveChanges} helper so the welcome card, the Tab dashboard,
+ * and `/baf-status` agree on the same active set (§13 issue #2). Also runs
+ * a cheap drift probe (§13 R4) — `git status --porcelain` against the locked
+ * baseline — so the welcome card can flag a drift the customer did not see
+ * because they were away from the workspace when the index changed.
+ *
+ * Failure containment: a non-zero git exit, a missing `.git/`, or a missing
+ * baseline all degrade to `drifted: ∅`. The probe is read-only and runs with
+ * a 5s ceiling per active change.
  * @param cwd - workspace root.
- * @returns the non-terminal changes of that workspace.
+ * @returns the non-terminal changes of that workspace + the drifted subset.
  */
 export async function resolveStartupBinding(cwd: string): Promise<StartupBinding> {
   const store = new ProjectionStore({ workspaceRoot: cwd })
-  const index = await store.readIndex()
-  return { actives: index.changes.filter(isActiveChange) }
+  const actives = await listActiveChanges(store)
+  const drifted = new Set<string>()
+  for (const entry of actives) {
+    const hasDrift = await probeDriftFor(cwd, store, entry.changeId)
+    if (hasDrift) drifted.add(entry.changeId)
+  }
+  return { actives, drifted }
+}
+
+/**
+ * §13 R4 — return true when the working tree differs from the locked
+ * baseline. Lightweight: a single `git status --porcelain` is enough to
+ * know whether anything changed since the projection was locked. We do not
+ * compare individual file content here — the full drift detection (with
+ * `DriftSignal` shape) lives in `stages/drift.ts` and is only run when the
+ * user types `/baf-workflow-resume` or clicks the Tab drift card.
+ */
+async function probeDriftFor(cwd: string, store: ProjectionStore, changeId: string): Promise<boolean> {
+  try {
+    const status = await store.readStatus(changeId)
+    const baselineRevision = status.baseline?.sourceRevision
+    if (baselineRevision === undefined) return false
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const execFileAsync = promisify(execFile)
+    const { stdout } = await execFileAsync(
+      'git',
+      ['status', '--porcelain'],
+      { cwd, timeout: 5_000, windowsHide: true },
+    ).catch(() => ({ stdout: '' }))
+    return stdout.trim() !== ''
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -217,44 +289,42 @@ export function renderWelcomeCard(input: {
 }): CommandResult {
   const { cwd, probe, binding } = input
   const actives = binding.actives
-  const headline = `BAF 模式已就绪 · ${basename(cwd) || cwd} · ${bindingConclusion(binding)} · 点本行展开/折叠指令全文`
+  const headline = `BAF 已就绪 · ${basename(cwd) || cwd} · ${bindingConclusion(binding)} · 点本行展开/折叠详情`
 
   const sections: { title: string; lines: readonly string[] }[] = [
+    { title: '当前状态', lines: bindingLines(actives) },
+    { title: '下一步', lines: nextStepLines(actives, binding.drifted) },
     { title: '环境体检', lines: renderProbeLines(probe) },
-    { title: '本会话绑定', lines: bindingLines(actives) },
-    { title: '下一步', lines: nextStepLines(actives) },
     {
-      title: '可用指令',
+      title: '常用命令',
       lines: [
-        '/baf-welcome                 重印本卡（绑定 + 体检）',
-        '/baf-go                      推进当前工作流到下一个需要你确认的点',
-        '/baf-workflow-resume [节点]   drift 后复位到合法节点',
+        '/baf-welcome                 重新显示本卡（状态 + 体检）',
+        '/baf-go                      把工作流推进到下一个需要你确认的点',
+        '/baf-gate [名称]             重新弹出确认卡（如 scaffold）',
+        '/baf-workflow-resume [阶段]   流程出现偏差后，退回指定阶段重来',
         '/baf-status                  完整状态 · /baf-doctor 体检明细',
-        '/baf-help                    全部指令与用法',
+        '/baf-help                    全部命令与用法',
       ],
     },
   ]
-  // §22.14-D: when the workspace has no baseline, splice the §22 scaffold
-  // card fragment into the welcome so the customer sees the registered
-  // options verbatim. The card is the same one the Tab pendingGate and the
-  // `baf_gate_ask` tool render — no third option can sneak in here.
-  const baselineItem = probe.items.find(i => i.key === 'baseline')
-  if (baselineItem !== undefined && baselineItem.state === 'missing') {
-    sections.splice(sections.length - 2, 0, ...scaffoldCardFragment())
-  }
   return { kind: 'success', text: formatCommandReport(true, headline, sections) }
 }
 
 /**
- * §22.14-D: render the registered scaffold gate card as raw `formatCommandReport`
- * sections so the welcome card can splice it in alongside its own prose.
- * The headline + framing box of the welcome card stays; only the question /
- * options / footer (verbatim from the §22 registry) is appended.
- * @returns report sections to splice.
+ * §22.14-D: the standard gate card to pop as its own card **after** the
+ * welcome, when the probe trips a registered §22 gate. Registry-driven by
+ * construction: only probes a registered gate can resolve trip a pop (baseline
+ * missing → `scaffold`); other missing rows keep their `↳` hint line in
+ * 【环境体检】 instead. The welcome card itself never splices gate sections in
+ * — that produced a second 【下一步】 and buried the options.
+ * @param probe - the same probe the welcome card rendered.
+ * @returns the slash command to execute, or undefined when nothing to pop.
  */
-function scaffoldCardFragment(): readonly { title: string; lines: readonly string[] }[] {
-  const spec = GATE_REGISTRY['scaffold']
-  return gateCardSections(spec) ?? []
+export function startupGateCardFor(probe: ToolchainProbe): string | undefined {
+  const baseline = probe.items.find(i => i.key === 'baseline')
+  return baseline !== undefined && baseline.state === 'missing'
+    ? `${STARTUP_GATE_COMMAND} scaffold`
+    : undefined
 }
 
 /**
@@ -287,13 +357,32 @@ export function sessionGateSection(cwd: string): string {
   const rules = [
     '分类确认前不得修改源码；实现阶段只改 allowlist 内文件。',
     '阶段推进只经 /baf-go 或工作流页签，自然语言不是转换证据。',
-    '两个确认门（design 完成 → plan、verify 通过 → archive）只认客户再敲一次 /baf-go。',
+    '两个确认门（design 完成 → plan、verify 通过 → archive）只认客户在确认框点「确认」、工作流页签按钮，或 /baf-go-confirm。',
     // §22 rule #4: when blocked by a gate, the only action is to call
-    // `baf_gate_ask(gateId)` (§22.9) and read the registered gate card
+    // `baf_gate_ask(gateId)` (§22.9 / §22.17) and read the registered gate card
     // verbatim — never invent a third option, never propose "模型手写 scaffold"
     // or any other path outside the registry. Customer's typed agreement is
     // not evidence; point them at the Tab button or the mapped slash command.
-    '被确认门挡住时，唯一动作是调用 baf_gate_ask(gateId) 弹标准选项卡；选项由注册表决定，不得自创、改写或在卡外建议其他路径；客户口头同意不是证据。',
+    '被确认门挡住时，唯一动作是调用 baf_gate_ask(gateId)：它会向客户弹出确认框并等待选择，返回的就是选择后的真实结果；选项由注册表决定，不得自创、改写或在卡外建议其他路径；客户没选就如实说明，口头同意不是证据。',
+    // §22.17 as-built hardening: a model that cannot reach a gate (service
+    // missing) must NOT fill the vacuum with a self-made question — generic
+    // ask tools (ask_user_question) pop real dialogs, so invented options
+    // look exactly like registry gates to the customer. Workflow decisions
+    // (classification, gates, initialization) go through baf_gate_ask only.
+    '不得用通用提问工具（如 ask_user_question）替代确认门、预演分类或为工作流决策自创选项：初始化、分类、确认门、放弃、复位等工作流决策只能经 baf_gate_ask 弹出的注册表选项或对应斜杠指令；通用提问工具只用于与工作流走向无关的澄清。',
+    // §22.17 I: every workflow-advancing decision pops a registry dialog the
+    // customer clicks — including "the customer just stated a requirement".
+    // The tool's requirement bootstrap is the sanctioned one-call path; prose
+    // step lists and "请输入 /baf-xxx 命令" hand-offs leave the decision
+    // un-popped (2026-09-20 incident).
+    '客户陈述新需求（工作区已初始化、无进行中变更）时，唯一动作是调用 baf_gate_ask（gateId=intake-classify，requirement=客户原话）：工具会建立变更并弹出分类确认卡，客户点选后返回真实结果；工作区未初始化时该调用会自动弹初始化确认卡。不得用文字罗列手动步骤、不得让客户自己拼命令。',
+    // Customer-facing questions whose answers reroute the workflow: the
+    // workflow impact must be IN the question and every option, not implied.
+    // A scope answer that silently flips the full path ↔ the bug-fix path (or
+    // skips a stage / rebuilds behavior) is a workflow decision made in
+    // disguise. Use plain customer words (完整流程 / 缺陷修复路径), never
+    // internal ids or section numbers.
+    '向客户提出会影响工作流走向的问题（范围/模式/取舍类澄清）时，必须把工作流影响写进问题和每个选项，且用客户能懂的话，如「（走完整流程，七个阶段）」「（走缺陷修复路径，更快）」「（按 PDF 重做状态机，可能改变现有迁移行为）」；不得出现内部编号或术语（如 §22、gate、full-go-path、bug-fix-path），不得只列技术差异，让客户在不知情时选择工作流。',
   ]
   if (snapshot === undefined) {
     return [
@@ -305,7 +394,7 @@ export function sessionGateSection(cwd: string): string {
   }
   const actives = snapshot.binding.actives
   const binding = actives.length === 0
-    ? '无未完成工作流 —— 客户描述需求后走 intake 分类，不要自行假设已有变更'
+    ? '没有进行中的工作流 —— 客户描述需求后走分类确认，不要自行假设已有变更'
     : actives.map(row => `${row.changeId}（${modeZh(row.mode)} · 当前 ${row.current}）`).join('、')
       + ' —— 客户未确认前，本会话不得把它们当作已绑定的工作流'
   const probe = snapshot.probe.items
@@ -334,7 +423,7 @@ export async function runSessionGate(ctx: Context, agent: Agent): Promise<void> 
   const controller = new AbortController()
   inflight.set(agent, controller)
   try {
-    const probe = await probeToolchain(cwd, { ...probeMountFlags(ctx) })
+    const probe = await probeToolchain(cwd, { ...probeMountFlags(ctx, agent) })
     const binding = await resolveStartupBinding(cwd)
     const snapshot: GateSnapshot = { cwd, probe, binding, at: Date.now() }
     snapshotCache.set(cwd, snapshot)
@@ -342,6 +431,17 @@ export async function runSessionGate(ctx: Context, agent: Agent): Promise<void> 
     const execution = await ctx.commands.execute(agent, WELCOME_COMMAND, [], controller.signal)
     if (execution === undefined) {
       ctx.logger.warn(`baf-session-gate: ${WELCOME_COMMAND} is not registered; welcome card skipped`)
+    }
+    // §22.14-D: when the probe trips a registered gate (no baseline →
+    // scaffold), pop the standard gate card as its own card right after the
+    // welcome — the customer picks 修复/忽略 there, the welcome stays lean.
+    // Same containment as the welcome fire: an absent command is a log line.
+    const gateCard = startupGateCardFor(probe)
+    if (gateCard !== undefined) {
+      const gateExecution = await ctx.commands.execute(agent, gateCard, [], controller.signal)
+      if (gateExecution === undefined) {
+        ctx.logger.warn(`baf-session-gate: ${gateCard} is not registered; env gate card skipped`)
+      }
     }
   } catch (error: unknown) {
     ctx.logger.warn(
@@ -371,10 +471,13 @@ export function apply(ctx: Context): void {
     })
     fibers.set(agent, fiber)
     // Fire-and-forget: the first screen must not wait on the probe (§17.7 R20).
+    if (gateFired.has(agent)) return
+    gateFired.add(agent)
     void runSessionGate(ctx, agent)
   }
 
   const dispose = (agent: Agent): void => {
+    gateFired.delete(agent)
     inflight.get(agent)?.abort()
     inflight.delete(agent)
     const fiber = fibers.get(agent)
@@ -394,39 +497,129 @@ export function apply(ctx: Context): void {
     for (const controller of inflight.values()) controller.abort()
     inflight.clear()
     const pending = [...fibers.values()]
+    for (const agent of fibers.keys()) gateFired.delete(agent)
     fibers.clear()
     await Promise.all(pending.map(fiber => fiber.dispose()))
   }, 'baf-session-gate: agent gates')
 }
 
-/** Mount flags read from the composition, for the guard/quality row. */
-export function probeMountFlags(ctx: Context): ProbeOptions {
+/**
+ * Mount flags read from the composition, for the guard/quality row.
+ *
+ * The services live inside the `baf-domain` isolate. **Neither the host-plane
+ * row ctx NOR the agent's realm ctx can see them** — `isolate` realms are
+ * entry-local and invisible outside the group that declares them, including
+ * to `agent.ctx.get` (verified against the packaged desktop 2026-09-20: the
+ * welcome card reported 检查组件缺失 while the services were mounted). The
+ * only sanctioned read channel is the `agentPresets` service's
+ * `serviceFor(agent, name)` (agent-presets/index.ts), which scans the agent's
+ * standing-mount fiber. Non-isolate compositions (CLI, tests) still resolve
+ * via plain `ctx.get` — the two-scope fallback below.
+ */
+export function probeMountFlags(ctx: Context, agent?: { ctx?: Context }): ProbeOptions {
   return {
-    guardMounted: ctx.get('bafGuard') !== undefined,
-    qualityMounted: ctx.get('bafQuality') !== undefined,
+    guardMounted: resolveIsolateService(ctx, agent, 'bafGuard') !== undefined,
+    qualityMounted: resolveIsolateService(ctx, agent, 'bafQuality') !== undefined,
   }
 }
 
-/** 【环境体检】 rows, aligned on the label column. Also used by `/baf-doctor`. */
+/** Structural view of the `agentPresets` service — no runtime dependency. */
+interface AgentPresetsLike {
+  serviceFor?: (agent: { ctx?: Context }, name: string) => unknown
+}
+
+/**
+ * Resolve a service that a preset mounted behind an `isolate` realm.
+ *
+ * Channel 1 — `agentPresets.serviceFor(agent, name)`: the only read path that
+ * crosses an isolate boundary (same API session-controller / skill-catalog
+ * use). Channel 2 — plain `ctx.get` on the agent realm then the row ctx, for
+ * compositions that mount the rows without an isolate (CLI profile, tests,
+ * dev compositions) and for callers without an agent.
+ *
+ * @param ctx - the calling (host-plane) ctx.
+ * @param agent - the receiving agent, when the caller has one.
+ * @param name - service name as the preset's rows resolve it.
+ * @returns the service instance, or undefined when no reachable realm defines it.
+ */
+export function resolveIsolateService<T = unknown>(
+  ctx: Context,
+  agent: { ctx?: Context } | undefined,
+  name: string,
+): T | undefined {
+  if (agent?.ctx !== undefined) {
+    try {
+      const presets = ctx.get('agentPresets') as AgentPresetsLike | undefined
+      const svc = presets?.serviceFor?.(agent, name)
+      if (svc !== undefined) return svc as T
+    } catch {
+      // Composition without the agentPresets service — fall through to get().
+    }
+  }
+  const scopes = agent?.ctx === undefined ? [ctx] : [agent.ctx, ctx]
+  for (const scope of scopes) {
+    try {
+      const svc = scope.get(name)
+      if (svc !== undefined) return svc as T
+    } catch {
+      // Realm without the definition — try the next scope.
+    }
+  }
+  return undefined
+}
+
+/**
+ * Resolve the `bafScaffold` service across realm boundaries. The service sits
+ * inside the baf-domain isolate — a preset row outside an `isolate` realm
+ * would publish process-global and fail the agent-presets mount invariant —
+ * so host-plane callers (the `/baf-scaffold` slash handler, the §22.17 gate
+ * dialog, the Tab Remote) read it through {@link resolveIsolateService}.
+ * @param ctx - the calling (host-plane) ctx.
+ * @param agent - the receiving agent, when the caller has one.
+ * @returns the scaffold service, or undefined when no reachable realm defines it.
+ */
+export function resolveScaffoldService(
+  ctx: Context,
+  agent?: { ctx?: Context },
+): { scaffold: (opts: ScaffoldAdapterOptions) => ScaffoldAdapterOutcome } | undefined {
+  return resolveIsolateService(ctx, agent, 'bafScaffold')
+}
+
+/** 【环境体检】 rows: `符号 检查项 状态 · 详情`, remedy on its own indented
+ * line. Also used by `/baf-doctor`. Plain-language by design: the label says
+ * what was checked (Chinese), the status word says how it went, the hint says
+ * what to do about it. */
 export function renderProbeLines(probe: ToolchainProbe): readonly string[] {
-  return probe.items.map((item) => {
-    if (item.state === 'info') return `${item.label.padEnd(12)} ${item.detail}`
-    const line = `${markOf(item.state)} ${item.label.padEnd(12)} ${item.detail}`
-    return item.hint === undefined ? line : `${line}\n  ↳ ${item.hint}`
+  return probe.items.flatMap((item) => {
+    const status = statusWordOf(item.state)
+    const head = item.state === 'info'
+      ? `${item.label.padEnd(10)} ${item.detail}`
+      : `${markOf(item.state)} ${item.label.padEnd(10)} ${status === '' ? item.detail : `${status} · ${item.detail}`}`
+    return item.hint === undefined ? [head] : [head, `   → 怎么处理：${item.hint}`]
   })
+}
+
+/** Plain status word per probe state (§20.5 symbols stay, words added). */
+function statusWordOf(state: ProbeState): string {
+  switch (state) {
+    case 'ok': return '正常'
+    case 'missing': return '缺失'
+    case 'unknown': return '未确认'
+    case 'info': return ''
+  }
 }
 
 /** Card conclusion for the headline (§20.3). */
 function bindingConclusion(binding: StartupBinding): string {
   const actives = binding.actives
-  if (actives.length === 0) return '无未完成工作流'
+  if (actives.length === 0) return '没有进行中的工作流'
   if (actives.length === 1) {
     const only = actives[0]
     return only === undefined
-      ? '无未完成工作流'
-      : `检测到未完成工作流 ${only.changeId}（当前 ${only.current}）· 继续还是新开？`
+      ? '没有进行中的工作流'
+      : `有一条没做完的工作流 ${only.changeId}（进行到 ${only.current}）`
   }
-  return `检测到 ${actives.length} 条未完成工作流 · 请选择一条继续`
+  return `有 ${actives.length} 条没做完的工作流 · 需要选一条继续`
 }
 
 /** §20.5 symbols. `info` rows carry no symbol at all. */
@@ -439,28 +632,35 @@ function markOf(state: ProbeState): string {
   }
 }
 
-/** 【本会话绑定】 rows. */
+/** 【当前状态】 rows. */
 function bindingLines(actives: readonly ProjectionIndexEntry[]): readonly string[] {
   if (actives.length === 0) {
-    return ['无 —— 直接描述你的需求即可开始（intake 分类卡会自动弹出）']
+    return ['没有进行中的工作流 —— 直接描述你的需求即可开始，确认卡会自动弹出']
   }
   const rows = actives.map(
-    row => `${row.changeId} · ${modeZh(row.mode)} · 当前 ${row.current} · 最后活动 ${row.updatedAt || '（未知）'}`,
+    row => `${row.changeId} · ${modeZh(row.mode)} · 进行到 ${row.current} · 最后活动 ${row.updatedAt || '（未知）'}`,
   )
-  return ['工作区里还有未完成的工作流（本会话尚未绑定）：', ...rows]
+  return ['工作区里有没做完的工作流（本会话还没接手哪一条）：', ...rows]
 }
 
 /** 【下一步】 rows — always a command the customer can actually type (§20.2). */
-function nextStepLines(actives: readonly ProjectionIndexEntry[]): readonly string[] {
+function nextStepLines(
+  actives: readonly ProjectionIndexEntry[],
+  drifted: ReadonlySet<string> = new Set(),
+): readonly string[] {
   if (actives.length === 0) {
-    return ['直接描述你的需求（自动进入 intake 分类）；也可回复 /baf-go 重新查看本卡。']
+    return ['直接描述你的需求（自动进入分类确认）；也可回复 /baf-go 重新查看本卡。']
   }
   const only = actives.length === 1 ? actives[0]?.changeId : undefined
+  const driftHint = drifted.size > 0
+    ? [`检测到 ${drifted.size} 条工作流的实际改动和记录对不上：[${[...drifted].join(', ')}] — 回复 /baf-workflow-resume 退回重做`]
+    : []
   return [
+    ...driftHint,
     only === undefined
-      ? '回复 /baf-go change=<id> 指定一条继续（不会替你猜）'
-      : `回复 /baf-go continue 继续 ${only}`,
-    '要改做别的需求：先 /baf-workflow-abandon change=<id> confirm 放弃它，或新开一个会话',
+      ? '回复 /baf-go change=<编号> 指定接手哪一条（不会替你猜）'
+      : `回复 /baf-go continue 接着做 ${only}`,
+    '想改做别的需求：先 /baf-workflow-abandon change=<编号> confirm 放弃当前这条，或新开一个会话',
   ]
 }
 
@@ -487,11 +687,11 @@ async function probeWorkspace(cwd: string): Promise<ToolchainItem> {
   try {
     const s = await stat(cwd)
     return s.isDirectory()
-      ? { key: 'workspace', state: 'ok', label: 'workspace', detail: cwd }
+      ? { key: 'workspace', state: 'ok', label: '工作区', detail: cwd }
       : {
         key: 'workspace',
         state: 'missing',
-        label: 'workspace',
+        label: '工作区',
         detail: `${cwd} 不是目录`,
         hint: '换一个工作区目录打开会话',
       }
@@ -499,7 +699,7 @@ async function probeWorkspace(cwd: string): Promise<ToolchainItem> {
     return {
       key: 'workspace',
       state: 'missing',
-      label: 'workspace',
+      label: '工作区',
       detail: `${cwd} 不存在`,
       hint: '换一个工作区目录打开会话',
     }
@@ -513,9 +713,9 @@ async function probeBaseline(cwd: string): Promise<{ item: ToolchainItem; requir
     item: {
       key: 'baseline',
       state: 'missing',
-      label: 'baseline',
+      label: '工作流配置',
       detail,
-      hint: '运行 baf scaffold 生成，或导入企业 baseline',
+      hint: '点工作流页签的「初始化工作区」按钮，或输入 /baf-scaffold',
     },
     requireOpenSpec: true,
   })
@@ -525,16 +725,16 @@ async function probeBaseline(cwd: string): Promise<{ item: ToolchainItem; requir
       item: {
         key: 'baseline',
         state: 'ok',
-        label: 'baseline',
+        label: '工作流配置',
         detail: `${manifest.baselineId} · baf ${manifest.bafCompatibility.min}–${manifest.bafCompatibility.max}`,
       },
       requireOpenSpec: manifest.workflow.requireOpenSpec,
     }
   } catch (error: unknown) {
     if (isBafError(error) && error.code === 'baseline_incompatible') {
-      return missing('.baf/baseline.yml 与当前 BAF 版本不兼容')
+      return missing('配置文件与当前版本不匹配（.baf/baseline.yml）')
     }
-    return missing('.baf/baseline.yml 缺失或无法解析')
+    return missing('还没有初始化（缺少 .baf/baseline.yml）')
   }
 }
 
@@ -548,14 +748,14 @@ async function probeGit(cwd: string, timeoutMs: number): Promise<ToolchainItem> 
     })
     const revision = stdout.trim()
     return revision === ''
-      ? { key: 'git', state: 'missing', label: 'Git', detail: '仓库无提交', hint: '提交一次以建立 drift 锚点' }
-      : { key: 'git', state: 'ok', label: 'Git', detail: `${revision}（drift 锚点）` }
+      ? { key: 'git', state: 'missing', label: 'Git 仓库', detail: '仓库还没有任何提交', hint: '先提交一次代码（git commit）' }
+      : { key: 'git', state: 'ok', label: 'Git 仓库', detail: revision }
   } catch (error: unknown) {
     return {
       key: 'git',
       state: timedOut(error) ? 'unknown' : 'missing',
-      label: 'Git',
-      detail: '不可用（无法读取 HEAD）',
+      label: 'Git 仓库',
+      detail: timedOut(error) ? '超时，未能确认' : '不可用',
       hint: '初始化仓库并提交一次：git init && git commit',
     }
   }
@@ -570,9 +770,9 @@ async function probeOpenSpec(
   const cli = await probeOpenSpecCli(timeoutMs)
   const detection = await createLocalOpenSpecAdapter({ workspaceRoot: cwd }).detect({ workspace: { root: cwd } })
   const layout = detection.available
-  const hint = '安装 OpenSpec CLI，或运行 baf scaffold 生成 openspec/changes'
+  const hint = '点「初始化工作区」生成 openspec/changes，或安装 OpenSpec 命令行工具'
   if (layout && cli.value !== undefined) {
-    return { key: 'openspec', state: 'ok', label: 'OpenSpec', detail: `${cli.value} · openspec/changes 存在` }
+    return { key: 'openspec', state: 'ok', label: 'OpenSpec 目录', detail: `${cli.value} · openspec/changes 存在` }
   }
   // A tool we could not interrogate is `?`, not `✗` (§20.5): reporting missing
   // here would send the customer to install a CLI that is already installed,
@@ -582,27 +782,27 @@ async function probeOpenSpec(
     return {
       key: 'openspec',
       state: 'unknown',
-      label: 'OpenSpec',
-      detail: `${layout ? 'openspec/changes 存在' : 'openspec/changes 缺失'} · CLI 未探测（超时）`,
-      ...(layout ? {} : { hint: '运行 baf scaffold 生成 openspec/changes' }),
+      label: 'OpenSpec 目录',
+      detail: `${layout ? 'openspec/changes 存在' : 'openspec/changes 缺失'} · 命令行工具超时，未能确认`,
+      ...(layout ? {} : { hint: '点「初始化工作区」生成 openspec/changes' }),
     }
   }
   // A baseline that does not require OpenSpec makes the missing piece
-  // informational: full-go will run without it, so a ✗ here would be a false
+  // informational: full-go-path will run without it, so a ✗ here would be a false
   // alarm. Only the baseline can say this — hence the flag threading.
   if (!requireOpenSpec && layout) {
     return {
       key: 'openspec',
       state: 'unknown',
-      label: 'OpenSpec',
-      detail: 'CLI 未探测到 · baseline 未强制（requireOpenSpec=false）',
+      label: 'OpenSpec 目录',
+      detail: '命令行工具未探测到 · 当前配置不强制要求',
     }
   }
   const parts = [
-    cli.value === undefined ? 'CLI 不可执行' : `${cli.value} · CLI 可用`,
+    cli.value === undefined ? '命令行工具不可用' : `${cli.value} · 命令行工具可用`,
     layout ? 'openspec/changes 存在' : 'openspec/changes 缺失',
   ]
-  return { key: 'openspec', state: 'missing', label: 'OpenSpec', detail: parts.join(' · '), hint }
+  return { key: 'openspec', state: 'missing', label: 'OpenSpec 目录', detail: parts.join(' · '), hint }
 }
 
 /** Best-effort `openspec --version`; `value` is undefined when not runnable. */
@@ -634,7 +834,7 @@ function cToolchainItem(): ToolchainItem {
     key: 'c-toolchain',
     state: 'unknown',
     label: 'C 工具链',
-    detail: '未探测 · 首次进入 verify 时检查',
+    detail: '未探测 · 进入验证阶段时才会检查',
   }
 }
 
@@ -643,16 +843,16 @@ function mountsItem(options: ProbeOptions): ToolchainItem {
   const guard = options.guardMounted === true
   const quality = options.qualityMounted === true
   if (guard && quality) {
-    return { key: 'guard', state: 'ok', label: 'guard/quality', detail: '已挂载' }
+    return { key: 'guard', state: 'ok', label: '检查组件', detail: '已加载' }
   }
   const absent = [guard ? undefined : 'baf-guard', quality ? undefined : 'baf-quality']
     .filter((v): v is string => v !== undefined)
   return {
     key: 'guard',
     state: 'missing',
-    label: 'guard/quality',
-    detail: `${absent.join(' / ')} 未挂载`,
-    hint: '检查 preset composition（baf-domain 组内应有该 row）',
+    label: '检查组件',
+    detail: `${absent.join(' / ')} 未加载`,
+    hint: '工作流预设里缺少上述组件，请检查预设配置',
   }
 }
 

@@ -56,7 +56,7 @@ bafCompatibility:
 workflow:
   default: go
   requireOpenSpec: true
-  bugFastPath:
+  bugFixPath:
     allowed: true
     maxScope: small-local
     requireRegressionTest: true

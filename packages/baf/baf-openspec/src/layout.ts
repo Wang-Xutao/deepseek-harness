@@ -52,7 +52,7 @@ export function archivedChangeDir(workspaceRoot: string, changeId: string): stri
   return join(archiveDir(workspaceRoot), changeId)
 }
 
-/** Stage artifact files written by full-go handlers. */
+/** Stage artifact files written by full-go-path handlers. */
 export const ARTIFACT_FILES = {
   proposal: 'proposal.md',
   clarify: 'clarify.md',

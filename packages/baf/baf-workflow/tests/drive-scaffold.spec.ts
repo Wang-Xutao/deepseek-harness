@@ -36,7 +36,7 @@ describe('driveScaffold (§22.4)', () => {
     try {
       const result = await driveScaffold(cwd, {})
       expect(result.kind).toBe('error')
-      expect(result.text).toContain('scaffold 服务未挂载')
+      expect(result.text).toContain('初始化服务没有加载')
     } finally {
       rmSync(cwd, { recursive: true, force: true })
     }
@@ -85,7 +85,7 @@ describe('driveScaffold (§22.4)', () => {
         scaffold: makeStubAdapter({ calls: [], outcome: 'refused' }),
       })
       expect(result.kind).toBe('error')
-      expect(result.text).toContain('需人工确认')
+      expect(result.text).toContain('需要你确认')
     } finally {
       rmSync(cwd, { recursive: true, force: true })
     }
@@ -98,9 +98,9 @@ describe('driveScaffold (§22.4)', () => {
         scaffold: makeStubAdapter({ calls: [], outcome: 'done' }),
       })
       expect(result.kind).toBe('success')
-      expect(result.text).toContain('已创建')
+      expect(result.text).toContain('新增')
       expect(result.text).toContain('.baf/baseline.yml')
-      expect(result.text).toContain('已跳过（内容一致）')
+      expect(result.text).toContain('已存在（内容一致，未改动）')
       expect(result.text).toContain('下一步')
       expect(result.text).toContain('/baf-workflow-open')
     } finally {

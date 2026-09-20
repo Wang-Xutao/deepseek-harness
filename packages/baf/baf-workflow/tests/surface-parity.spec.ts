@@ -54,7 +54,9 @@ const REMOTE_METHODS = [
 const SLASH_NAMES = [
   'baf-help',
   'baf-welcome',
+  'baf-gate',
   'baf-go',
+  'baf-go-confirm',
   'baf-version',
   'baf-status',
   'baf-list',
@@ -134,18 +136,20 @@ describe('BAF surface parity (Phase 8.5)', () => {
   })
 
   it('CLI subcommands map back to drive exports (no orphan subcommands)', () => {
-    // `list`, `help`, `version`, `doctor`, `status`, `welcome` are CLI-/slash-
-    // only surfaces that read the projection store directly; drives handle the
-    // mutating operations. Both sets are listed here so a future addition
-    // to either side must update this snapshot.
+    // `list`, `help`, `version`, `doctor`, `status`, `welcome`, `gate`, `go`,
+    // `go-confirm` are CLI-/slash-only surfaces that read the projection
+    // store directly; drives handle the mutating operations. Both sets are
+    // listed here so a future addition to either side must update this
+    // snapshot.
     //
-    // `go` is the third kind and the reason this test lists it explicitly:
-    // the §18 coordinator lives in `go-coordinator.ts` (not `command-drives.ts`)
-    // *on purpose*, so DRIVE_TO_SLASH stays strictly "one drive = one stage
-    // transition" and the coordinator's chaining never looks like a transition
-    // of its own. It composes drives; it owns none.
+    // `go` and `go-confirm` are the third kind and the reason this test lists
+    // them explicitly: the §18 / §22.17 coordinators live in
+    // `go-coordinator.ts` (not `command-drives.ts`) *on purpose*, so
+    // DRIVE_TO_SLASH stays strictly "one drive = one stage transition" and
+    // the coordinator's chaining never looks like a transition of its own.
+    // It composes drives; it owns none.
     const cliSubcommandSet = new Set(CLI_NAMES)
-    const direct = new Set(['list', 'help', 'version', 'doctor', 'status', 'welcome', 'go'])
+    const direct = new Set(['list', 'help', 'version', 'doctor', 'status', 'welcome', 'gate', 'go', 'go-confirm'])
     for (const sub of CLI_NAMES) {
       const slash = `baf-${sub}`
       const isDirect = direct.has(sub)

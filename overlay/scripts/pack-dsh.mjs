@@ -149,6 +149,11 @@ function copyPackageFlat(packageDir, targetDir) {
 
     for (const entry of entries) {
       if (entry.name === 'node_modules') continue
+      // Build outputs that never belong in the deploy tree. `.desktop-build`
+      // is apps/desktop's electron-builder target: copying it once shipped a
+      // 1.3 GB nested win-unpacked inside resources/dsh/node_modules,
+      // tripling the installed size and the first-launch AV scan time.
+      if (entry.name === '.desktop-build') continue
       const src = join(from, entry.name)
       const destPath = join(to, entry.name)
 

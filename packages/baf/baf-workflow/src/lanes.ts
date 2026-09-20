@@ -11,8 +11,8 @@
  */
 
 import {
-  FAST_PATH_ROWS,
-  FULL_GO_ROWS,
+  BUG_FIX_PATH_ROWS,
+  FULL_GO_PATH_ROWS,
   type NodeStatus,
   type ProjectionEvent,
   type WorkflowNode,
@@ -22,8 +22,8 @@ import {
 
 /** i18n keys the Tab uses for lane headers and the T15 edge (§20.7). */
 const LANE_LABEL_KEY: Record<WorkflowTabLane['id'], string> = {
-  'bug-fast-path': 'lane.fastPath',
-  'full-go': 'lane.fullGo',
+  'bug-fix-path': 'lane.bugFixPath',
+  'full-go-path': 'lane.fullGoPath',
 }
 
 const UPGRADE_LABEL_KEY = 'edge.upgraded'
@@ -114,10 +114,10 @@ export function deriveLanes(
   const before = events.slice(0, upgradeIndex)
   const after = events.slice(upgradeIndex + 1)
 
-  const fastPathStatus = foldNodeStatus(before)
-  const fullGoStatus = foldNodeStatus(after)
+  const bugFixPathStatus = foldNodeStatus(before)
+  const fullGoPathStatus = foldNodeStatus(after)
 
-  // `from` is where the pre-upgrade path stopped, `to` is where full-go picked
+  // `from` is where the pre-upgrade path stopped, `to` is where full-go-path picked
   // up. Both are read off the log rather than assumed, because §18.4.3 requires
   // the picture to show *where it jumped from and to* — a hard-coded
   // `implement → clarify` would lie about an escalation that started elsewhere.
@@ -131,16 +131,16 @@ export function deriveLanes(
   return {
     lanes: [
       {
-        id: 'bug-fast-path',
-        nodes: FAST_PATH_ROWS,
-        status: fastPathStatus,
-        labelKey: LANE_LABEL_KEY['bug-fast-path'],
+        id: 'bug-fix-path',
+        nodes: BUG_FIX_PATH_ROWS,
+        status: bugFixPathStatus,
+        labelKey: LANE_LABEL_KEY['bug-fix-path'],
       },
       {
-        id: 'full-go',
-        nodes: FULL_GO_ROWS,
-        status: fullGoStatus,
-        labelKey: LANE_LABEL_KEY['full-go'],
+        id: 'full-go-path',
+        nodes: FULL_GO_PATH_ROWS,
+        status: fullGoPathStatus,
+        labelKey: LANE_LABEL_KEY['full-go-path'],
       },
     ],
     upgrade: {

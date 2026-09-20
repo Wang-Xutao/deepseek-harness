@@ -26,7 +26,7 @@ export function formatCommandReport(
   const parts: string[] = [
     `${mark} ${headline}`,
     '────────────────────────────────',
-    '类型：系统斜杠指令（不是大模型回复）',
+    '类型：系统斜杠指令，无需大模型',
   ]
   for (const section of sections) {
     parts.push('')
@@ -46,9 +46,9 @@ export function formatCommandReport(
 export function modeZh(mode: string): string {
   switch (mode) {
     case 'template': return '模板（空闲参考图）'
-    case 'full-go': return '完整流程 full-go'
-    case 'bug-fast-path': return '缺陷快路径 bug-fast-path'
-    case 'clarify-required': return '需先澄清 clarify-required'
+    case 'full-go-path': return '完整流程'
+    case 'bug-fix-path': return '缺陷修复路径'
+    case 'clarify-required': return '需先澄清'
     default: return mode
   }
 }
