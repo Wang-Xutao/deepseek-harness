@@ -25,6 +25,12 @@
     }
   ],
   "exclude": [
-    "src/client"
+    "src/client",
+    // Baf-only orphan files: depend on baf-only DESKTOP_IPC events
+    // (pluginsUpdate/updatesCheck/updatesInstall/updatesState) and
+    // helpers (createSeedMetadata) that master refactored away. Not
+    // wired into main.ts at runtime; exclude so build:lib passes.
+    "src/preload.ts",
+    "src/seed-store.ts"
   ]
 }

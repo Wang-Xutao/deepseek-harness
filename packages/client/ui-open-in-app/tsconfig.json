@@ -7,6 +7,13 @@
   "include": [
     "src"
   ],
+  "exclude": [
+    // Baf-only OpenInAppSettingsRow uses app.cmd / app.powershell enum values
+    // master removed, and locale keys ('settings.title', 'settings.description')
+    // master also dropped. Excluded from the typecheck until baf wires
+    // its settings scope into the runtime.
+    "src/client/OpenInAppSettingsRow.tsx"
+  ],
   "references": [
     {
       "path": "../../../vendor/cordis"

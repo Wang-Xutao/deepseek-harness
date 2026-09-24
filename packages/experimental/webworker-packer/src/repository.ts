@@ -12,7 +12,6 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { DSH_HOME_ENV } from '@deepseek-ai/dsh-home-paths'
-import type { DshConfigTreeDeclaration } from '@deepseek-ai/dsh-package-manifest'
 import type { ConfigTree, ImageTree, PackResult } from './pack.ts'
 
 export { packPreviewFixture } from './preview.ts'
@@ -131,7 +130,7 @@ export function configTrees(repoRoot: string): ConfigTree[] {
   }
   const mounts = new Set<string>()
   return declared.map((entry, index) => {
-    const tree = entry as Partial<DshConfigTreeDeclaration> | null
+    const tree = entry as Partial<ConfigTreeDeclaration> | null
     const at = `${CLI_PACKAGE} dsh.configTrees[${String(index)}]`
     if (tree === null || typeof tree !== 'object'
       || typeof tree.mount !== 'string' || tree.mount === ''

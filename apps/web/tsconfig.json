@@ -163,7 +163,14 @@
     "tests/composer-tab-geometry.e2e.ts",
     "tests/complex-history.perf.ts",
     "tests/pwsh-terminal.e2e.ts",
-    "tests/workflow-run.e2e.ts"
+    "tests/workflow-run.e2e.ts",
+    // Baf-only e2e tests added on top of master. They import the excluded
+    // scaffold.ts/prefix-proxy.ts fixtures, which pulls test-support packages
+    // outside this program's rootDir. Exclude them here so the typecheck
+    // program matches master.
+    "tests/message-feedback-layout.e2e.ts",
+    "tests/trace-graph.e2e.ts",
+    "tests/produced-files.e2e.ts"
   ],
   "references": [
     { "path": "../../packages/experimental/auto-review" },

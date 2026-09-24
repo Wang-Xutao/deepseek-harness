@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineMedium as IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './DesktopClosePrefs.module.css'
 
 /** Close preference persisted by the Electron shell. */

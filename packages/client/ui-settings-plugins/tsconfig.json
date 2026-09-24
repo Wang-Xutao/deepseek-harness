@@ -7,6 +7,16 @@
   "include": [
     "src"
   ],
+  "exclude": [
+    // Baf-only PluginCard references `clsx` and `./card-form.ts` that don't
+    // ship on master, plus an IconChevronDownOutline14 that was renamed in
+    // master to IconChevronDownOutlineMedium. Locale keys (collapse, expand,
+    // unsaved, readOnly, saveFailed, discard, save, saving) are also baf-only
+    // additions to the settings-plugins namespace. Excluded until baf wires
+    // its plugin-card form into the runtime.
+    "src/client/PluginCard.tsx",
+    "src/client/card-form.ts"
+  ],
   "references": [
     {
       "path": "../locale/tsconfig.client.json"

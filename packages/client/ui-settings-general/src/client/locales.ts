@@ -35,6 +35,11 @@ export const zh = {
   'connection.connected': '连接成功',
   'connection.reconnect': '连接异常，点击立即重连',
   'connection.restart': '连接中断，正在重试，点击立即重连',
+  'desktopClose.title': '关闭时',
+  'desktopClose.description': '选择关闭按钮的行为',
+  'desktopClose.ask': '每次询问',
+  'desktopClose.tray': '最小化到托盘',
+  'desktopClose.quit': '直接退出',
 } satisfies Record<string, string>
 
 /** The settings namespace key union. */
@@ -75,4 +80,9 @@ export const en = {
   'connection.connected': 'Connected',
   'connection.reconnect': 'Disconnected, reconnect now',
   'connection.restart': 'Reconnecting, reconnect now',
+  'desktopClose.title': 'On close',
+  'desktopClose.description': 'Choose what the close button does',
+  'desktopClose.ask': 'Ask every time',
+  'desktopClose.tray': 'Minimize to tray',
+  'desktopClose.quit': 'Quit directly',
 } satisfies Record<SettingsKey, string>

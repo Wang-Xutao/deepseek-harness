@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconRefreshOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TextInjected } from './face.ts'
 import { failureLine } from './failure-line.ts'
 import { IconWrapOutline16 } from './icons.tsx'
@@ -224,7 +224,7 @@ export function TextPreview({
           data-textpreview-tool="reload"
           onClick={reload}
         >
-          <IconRefreshOutline16 />
+          <IconRefreshOutlineMedium />
         </button>
       </div>
       <div

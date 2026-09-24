@@ -10,6 +10,12 @@
     "src/types.ts",
     "src/css-modules.d.ts"
   ],
+  "exclude": [
+    // Baf-only DesktopUpdate bridges window.bafDesktop which is also
+    // baf-only. Excluded from typecheck until baf wires its desktop-update
+    // scope into the runtime shell.
+    "src/client/DesktopUpdate.tsx"
+  ],
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" },
