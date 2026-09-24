@@ -44,6 +44,12 @@ python/**/__pycache__/
 python/**/.pytest_cache/
 packages/**/__pycache__/
 apps/web/dist/
+# Hidden local probe scripts used for live web-walk verification
+# (named .auto-*, .diag*, .demo* with a dot prefix and never committed).
+apps/web/.auto-*.mjs
+apps/web/.diag*.mjs
+apps/web/.demo*-*.mjs
+apps/web/.demo*-check.mjs
 .artifacts/
 .dsh-build/
 .playwright-mcp/
