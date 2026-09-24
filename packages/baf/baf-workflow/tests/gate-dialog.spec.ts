@@ -11,6 +11,7 @@
  */
 
 import { execFile } from 'node:child_process'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -52,6 +53,45 @@ function answered(label: string): AskUserQuestionAnswer {
   return { answers: [{ id: 'design-confirm', selected: [label] }] }
 }
 
+/** A `userQuestions` double with scripted per-ask replies (multi-leg dialogs). */
+function scriptedService(replies: AskUserQuestionAnswer[]) {
+  const calls: AskUserQuestionRequest[] = []
+  let next = 0
+  return {
+    calls,
+    async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer> {
+      calls.push(request)
+      const reply = replies[next]
+      next += 1
+      if (reply === undefined) throw new Error(`no scripted reply for ask #${next}`)
+      return reply
+    },
+  }
+}
+
+/** A `bafScaffold` double that writes the fixture baseline like the real service. */
+function fakeScaffoldService() {
+  // Synchronous like the real adapter — `driveScaffold` calls it without await.
+  return {
+    scaffold(opts: { readonly workspaceRoot: string }) {
+      mkdirSync(join(opts.workspaceRoot, '.baf'), { recursive: true })
+      writeFileSync(
+        join(opts.workspaceRoot, '.baf', 'baseline.yml'),
+        readFileSync(FIXTURE_BASELINE, 'utf8'),
+      )
+      mkdirSync(join(opts.workspaceRoot, 'openspec', 'changes'), { recursive: true })
+      return {
+        kind: 'done',
+        changes: {
+          created: ['.baf/baseline.yml', 'openspec/changes/.gitkeep'],
+          skipped: [] as string[],
+          backedUp: [] as string[],
+        },
+      }
+    },
+  }
+}
+
 /** An error carrying a UserQuestionError-style `code`. */
 function coded(code: string): Error {
   return Object.assign(new Error('user-questions failure'), { code })
@@ -85,8 +125,9 @@ async function runTool(
   service: unknown,
   root: string,
   args: Record<string, unknown>,
+  realm: Record<string, unknown> = {},
 ): Promise<string> {
-  const agent = { session: { header: { cwd: root } }, ctx: ctxWith({ userQuestions: service }) }
+  const agent = { session: { header: { cwd: root } }, ctx: ctxWith({ userQuestions: service, ...realm }) }
   const result = await tool.execute(args, { agent }) as { type: string; text: string }[]
   return result.map(block => block.text).join('\n')
 }
@@ -181,6 +222,22 @@ describe('§22.17 gate-dialog answer mapping', () => {
     expect(offered).toEqual(['复位到 clarify', '复位到 design'])
   })
 
+  it('§22.19 R4: derives bind options from the caller-supplied change ids', async () => {
+    const service = fakeService(answered('接手 chg-200'))
+    const outcome = await askGateDialog(service, undefined, {
+      gateId: 'bind-workflow',
+      bindCandidates: ['chg-100', 'chg-200'],
+    })
+    // The clicked label maps back to the `bind-<id>` option id that
+    // `driveGateResolve` derives from the same candidate list.
+    expect(outcome).toEqual({ kind: 'answered', optionId: 'bind-chg-200', label: '接手 chg-200' })
+    const offered = service.calls[0]?.questions[0]?.options?.map(o => o.label) ?? []
+    expect(offered).toEqual(['接手 chg-100', '接手 chg-200'])
+    const descriptions = service.calls[0]?.questions[0]?.options?.map(o => o.description) ?? []
+    expect(descriptions).toContain('将执行 /baf-go change=chg-100')
+    expect(descriptions).toContain('将执行 /baf-go change=chg-200')
+  })
+
   it('builds the question from the registry spec (title as question, body as detail)', async () => {
     const service = fakeService(answered('初始化工作区'))
     await askGateDialog(service, undefined, { gateId: 'scaffold' })
@@ -209,6 +266,19 @@ describe('§22.17 gate-dialog answer mapping', () => {
     await askGateDialog(service, undefined, { gateId: 'intake-classify' })
     expect(service.calls[0]?.questions[0]?.detail).not.toContain('系统初步判断')
   })
+
+  it('2026-09-21: note paragraphs render between the question and any judgment', async () => {
+    const service = fakeService(answered('暂不处理'))
+    await askGateDialog(service, undefined, {
+      gateId: 'active-conflict',
+      changeId: 'CHG-9',
+      note: ['现有变更当前进行到：design', '客户提出的新需求：「重构ecum模块」'],
+    })
+    const detail = service.calls[0]?.questions[0]?.detail ?? ''
+    expect(detail).toContain('（变更 CHG-9）')
+    expect(detail).toContain('现有变更当前进行到：design')
+    expect(detail).toContain('客户提出的新需求：「重构ecum模块」')
+  })
 })
 
 describe('§22.17 makeGateAsk service resolution', () => {
@@ -228,13 +298,15 @@ describe('§22.17 makeGateAsk service resolution', () => {
     expect(ask).toBeTypeOf('function')
   })
 
-  it('prefers the receiving agent realm over the row ctx', () => {
+  it('prefers the receiving agent realm over the row ctx', async () => {
     const viaAgent = fakeService(answered('初始化工作区'))
     const viaRow = fakeService(answered('初始化工作区'))
     const agent = { ctx: ctxWith({ userQuestions: viaAgent }) }
     const ask = makeGateAsk(ctxWith({ userQuestions: viaRow }), agent)
     expect(ask).toBeDefined()
-    void ask?.({ gateId: 'scaffold' })
+    // §22.19: the channel rides the ask queue, so the service call lands a
+    // microtask later — await the call instead of firing and forgetting.
+    await ask?.({ gateId: 'scaffold' })
     expect(viaAgent.calls).toHaveLength(1)
     expect(viaRow.calls).toHaveLength(0)
   })
@@ -289,17 +361,21 @@ describe('§22.17 I baf_gate_ask intake bootstrap (requirement param)', () => {
   /** A description the heuristic classifier lands on full-go-path (go.spec's). */
   const DESCRIPTION = 'feat: add export public API for reports'
 
-  it('mints the change from the requirement and pops an informed classify dialog', async () => {
+  it('pops the new-workflow confirmation first, then the informed classify dialog (spec §1)', async () => {
     const root = await setupToolWorkspace()
     try {
-      const service = fakeService(answered('确认 · 完整流程'))
+      // 2026-09-22 user decision: the FIRST dialog of a new requirement is the
+      // explicit 新建工作流 confirmation — the requirement itself is intent,
+      // but the create/bind decision settles on a card.
+      const service = scriptedService([answered('新建工作流'), answered('确认 · 完整流程')])
       const text = await runTool(registerTool(), service, root, {
         gateId: 'intake-classify',
         requirement: DESCRIPTION,
       })
-      // One pop: the classification dialog, with the classifier verdict visible.
-      expect(service.calls).toHaveLength(1)
-      const question = service.calls[0]?.questions[0]
+      expect(service.calls).toHaveLength(2)
+      expect(service.calls[0]?.questions[0]?.question).toBe('未发现进行中的工作流')
+      expect(service.calls[0]?.questions[0]?.detail).toContain(DESCRIPTION)
+      const question = service.calls[1]?.questions[0]
       expect(question?.question).toBe('需求分类待确认')
       expect(question?.detail).toContain('系统初步判断：完整流程')
       // The click confirmed: full-go-path opened (the fixture baseline admits it).
@@ -307,6 +383,26 @@ describe('§22.17 I baf_gate_ask intake bootstrap (requirement param)', () => {
       const minted = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
         .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
       expect(minted).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('暂不处理 on the new-workflow card mints nothing and says so plainly', async () => {
+    const root = await setupToolWorkspace()
+    try {
+      const service = fakeService(answered('暂不处理'))
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        requirement: DESCRIPTION,
+      })
+      expect(service.calls).toHaveLength(1)
+      expect(service.calls[0]?.questions[0]?.question).toBe('未发现进行中的工作流')
+      expect(text).toContain('暂不新建工作流')
+      expect(text).toContain('没有创建任何变更')
+      const minted = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
+        .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+      expect(minted).toHaveLength(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -358,11 +454,292 @@ describe('§22.17 I baf_gate_ask intake bootstrap (requirement param)', () => {
   })
 })
 
+describe('scaffold diversion continues the bootstrap (2026-09-22, session 1.jsonl)', () => {
+  /**
+   * Session 1 turn 1: uninitialized workspace, the customer stated 重构ecum模块,
+   * `baf_gate_ask` diverted to the scaffold gate, the customer clicked
+   * 「初始化工作区」 — and the tool returned the scaffold slash-card alone. The
+   * model read 「类型：系统斜杠指令，无需大模型」 as "nobody clicked", re-asked the
+   * choice as a prose A/B question, and the requirement died in model context.
+   * These tests pin the fix: the click chains into the classification dialog
+   * inside the same tool call, and the returned text opens with the choice.
+   */
+  const NEW_REQUIREMENT = '重构ecum模块'
+
+  it('初始化工作区 click walks 新建确认 → 分类确认 as legs of the same call', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-gate-ask-'))
+    try {
+      // Spec §1 ordering on a fresh workspace: scaffold (environment) →
+      // 新建确认 → 分类确认 — three pops, no prose round-trip.
+      const service = scriptedService([
+        answered('初始化工作区'),
+        answered('新建工作流'),
+        answered('确认 · 完整流程'),
+      ])
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        requirement: NEW_REQUIREMENT,
+      }, { bafScaffold: fakeScaffoldService() })
+      expect(service.calls).toHaveLength(3)
+      expect(service.calls[0]?.questions[0]?.question).toBe('工作区需要初始化')
+      expect(service.calls[1]?.questions[0]?.question).toBe('未发现进行中的工作流')
+      expect(service.calls[2]?.questions[0]?.question).toBe('需求分类待确认')
+      // The model-facing text opens with what the customer clicked and never
+      // claims "this card needed no model" / "not yet clicked".
+      expect(text).toContain('【客户选择】')
+      expect(text).toContain('「初始化工作区」')
+      expect(text).not.toContain('系统斜杠指令，无需大模型')
+      // The classify click confirmed: exactly one active change exists.
+      const actives = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
+        .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+      expect(actives).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('pausing the classification leg still leaves the requirement minted (durable)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-gate-ask-'))
+    try {
+      const service = scriptedService([
+        answered('初始化工作区'),
+        answered('新建工作流'),
+        { answers: [{ id: 'intake-classify', selected: [] }] },
+      ])
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        requirement: NEW_REQUIREMENT,
+      }, { bafScaffold: fakeScaffoldService() })
+      expect(service.calls).toHaveLength(3)
+      // The scaffold leg's choice + result precede the pause note, so the
+      // model cannot misread the pause as "the scaffold click never landed".
+      expect(text).toContain('【客户选择】')
+      expect(text).toContain('「初始化工作区」')
+      expect(text).toContain('客户暂未选择')
+      // Durable: the change sits at intake awaiting classification, so the
+      // §22.19 turn-end auto-pop has something to re-pop.
+      const actives = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
+        .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+      expect(actives).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('active-conflict: the collision pops as a dialog (2026-09-21, session 6.jsonl)', () => {
+  /**
+   * Session 6 turn 1: the customer stated 重构ecum模块 beside a running
+   * change, `baf_gate_ask` answered with a text-only refusal, and the model
+   * bridged the gap with a prose 「A. 继续推进 / B. 新开会话」 question the
+   * customer had to answer by typing "A". These tests pin the fix: the
+   * collision itself pops the registered active-conflict dialog and the click
+   * dispatches through the standard resolve channel.
+   */
+  const EXISTING = 'feat: add export public API for reports'
+  const NEW_REQUIREMENT = '重构ecum模块'
+
+  /** Mint a change and drive it past intake to `open` (no pending gate). */
+  async function mintOpenedChange(root: string, description: string): Promise<string> {
+    await driveOpen(root, description)
+    const store = new ProjectionStore({ workspaceRoot: root })
+    const changeId = (await store.readIndex()).changes
+      .filter(c => c.current !== 'completed' && c.current !== 'abandoned')[0]?.changeId
+    if (changeId === undefined) throw new Error('mint failed')
+    const { driveClassify } = await import('../src/command-drives.ts')
+    await driveClassify(root, `confirm mode=full-go-path change=${changeId}`)
+    // 【变更】2026-09-22 (user report #1): open gates on proposal.md now —
+    // author it so the 继续推进 click below actually advances (the conflict
+    // dialog's own behavior is this suite's subject, not the open gate).
+    const proposalDir = join(root, 'openspec', 'changes', changeId)
+    await mkdir(proposalDir, { recursive: true })
+    await writeFile(join(proposalDir, 'proposal.md'), [
+      '# Proposal',
+      '',
+      '## Why',
+      '',
+      'The existing requirement needs a public report export API.',
+      '',
+      '## Scope',
+      '',
+      '- In: exportReportsCsv API',
+      '',
+      '## Impact',
+      '',
+      'Adds src/export.ts; rollback is deleting the file.',
+      '',
+    ].join('\n'), 'utf8')
+    return changeId
+  }
+
+  it('pops the conflict dialog naming the running change and the new requirement', async () => {
+    const root = await setupToolWorkspace()
+    try {
+      const changeId = await mintOpenedChange(root, EXISTING)
+      const service = fakeService(answered('暂不处理'))
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        requirement: NEW_REQUIREMENT,
+      })
+      expect(service.calls).toHaveLength(1)
+      const question = service.calls[0]?.questions[0]
+      expect(question?.question).toBe('已有进行中的变更')
+      expect(question?.detail).toContain(`（变更 ${changeId}）`)
+      expect(question?.detail).toContain('现有变更当前进行到：open')
+      expect(question?.detail).toContain(`客户提出的新需求：「${NEW_REQUIREMENT}」`)
+      const labels = question?.options?.map(o => o.label) ?? []
+      expect(labels).toEqual(['继续推进现有变更', '放弃现有变更，稍后再提新需求', '暂不处理'])
+      // 暂不处理 = __noop__: paused shape, no second change minted.
+      expect(text).toContain('客户暂未选择')
+      const actives = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
+        .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+      expect(actives).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('clicking 继续推进现有变更 dispatches /baf-go on that change — no prose hand-off', async () => {
+    const root = await setupToolWorkspace()
+    try {
+      const changeId = await mintOpenedChange(root, EXISTING)
+      const service = fakeService(answered('继续推进现有变更'))
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        requirement: NEW_REQUIREMENT,
+      })
+      // The click drove the existing change forward (open → clarify entered);
+      // the returned card is the resulting state, not a menu.
+      expect(text).toContain('clarify')
+      const actives = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
+        .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+      expect(actives.map(c => c.changeId)).toEqual([changeId])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('clicking 放弃现有变更 abandons exactly that change and frees the workspace', async () => {
+    const root = await setupToolWorkspace()
+    try {
+      const changeId = await mintOpenedChange(root, EXISTING)
+      const service = fakeService(answered('放弃现有变更，稍后再提新需求'))
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        requirement: NEW_REQUIREMENT,
+      })
+      expect(text).toContain('已放弃')
+      expect(text).toContain(changeId)
+      // The tool tells the model the exact next call so the new requirement
+      // continues from the classification pop instead of dying in prose.
+      expect(text).toContain('重新调用 baf_gate_ask')
+      expect(text).toContain(NEW_REQUIREMENT)
+      const actives = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
+        .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+      expect(actives).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('confirmed-but-never-opened intake: explain, do not re-pop (2026-09-20 incident)', () => {
+  /**
+   * Incident 3.jsonl: the classify dialog's 确认·完整流程 click landed, the
+   * open drive was blocked by missing Git, and every later surface behaved as
+   * if the classification were still pending — the tool told the model to
+   * re-call with changeId, the re-popped confirm dialog got cancelled, and the
+   * customer read the unchanged confirmed state as "cancel was ignored". The
+   * settled state must instead come back as an explanation pointing at /baf-go.
+   */
+  const DESCRIPTION = 'feat: add export public API for reports'
+
+  it('a confirmed intake via requirement bootstrap: no pop, the parked-state note', async () => {
+    const root = await setupToolWorkspace()
+    try {
+      const changeId = await mintConfirmed(root, DESCRIPTION, 'full-go-path')
+      const service = fakeService(answered('确认 · 完整流程'))
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        requirement: DESCRIPTION,
+      })
+      expect(service.calls).toHaveLength(0)
+      expect(text).toContain('分类已确认（完整流程）')
+      expect(text).toContain('/baf-go')
+      expect(text).toContain(changeId)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('a confirmed intake addressed by changeId: no pop either (retry is not a decision)', async () => {
+    const root = await setupToolWorkspace()
+    try {
+      const changeId = await mintConfirmed(root, DESCRIPTION, 'full-go-path')
+      const service = fakeService(answered('确认 · 完整流程'))
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        changeId,
+      })
+      expect(service.calls).toHaveLength(0)
+      expect(text).toContain('分类已确认（完整流程）')
+      expect(text).toContain('进入建立变更')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('a confirmed clarify-required verdict still pops — the path choice is genuinely open', async () => {
+    const root = await setupToolWorkspace()
+    try {
+      // The incident's own description classifies as clarify-required.
+      const changeId = await mintConfirmed(root, '重构ecum模块', 'clarify-required')
+      const service = fakeService(answered('确认 · 完整流程'))
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        changeId,
+      })
+      expect(service.calls).toHaveLength(1)
+      expect(text).toContain('已确认')
+      expect((await new ProjectionStore({ workspaceRoot: root }).readStatus(changeId)).current).toBe('open')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  /** Mint + service-level confirm (no open drive) — the parked incident shape. */
+  async function mintConfirmed(
+    root: string,
+    description: string,
+    expectMode: 'full-go-path' | 'clarify-required',
+  ): Promise<string> {
+    const { driveOpen } = await import('../src/command-drives.ts')
+    const { confirmIntake } = await import('../src/workflow-service.ts')
+    await driveOpen(root, description)
+    const store = new ProjectionStore({ workspaceRoot: root })
+    const changeId = (await store.readIndex())
+      .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')[0]?.changeId
+    if (changeId === undefined) throw new Error('mint failed')
+    const status = await store.readStatus(changeId)
+    if (status.intake?.mode !== expectMode) {
+      throw new Error(`classifier landed ${status.intake?.mode}, expected ${expectMode}`)
+    }
+    await confirmIntake(store, changeId, 'user')
+    return changeId
+  }
+})
+
 describe('§22.17 J path-choice options + bug-field draft (classify dialog v2)', () => {
   it('the bug-field draft renders into the dialog detail as one paragraph', async () => {
     const root = await setupToolWorkspace()
     try {
-      const service = fakeService({ answers: [{ id: 'intake-classify', selected: [] }] })
+      // Spec §1 (2026-09-22): the 新建工作流 card pops first — answer it, then
+      // the classify dialog carries the draft paragraph; skip on the classify
+      // leg so the detail is inspectable.
+      const service = scriptedService([
+        answered('新建工作流'),
+        { answers: [{ id: 'intake-classify', selected: [] }] },
+      ])
       await runTool(registerTool(), service, root, {
         gateId: 'intake-classify',
         requirement: '登录页在空输入时崩溃',
@@ -372,7 +749,7 @@ describe('§22.17 J path-choice options + bug-field draft (classify dialog v2)',
         test: 'tests/test_parser_empty.c',
         testCmd: 'ctest -R parser_empty',
       })
-      const detail = service.calls[0]?.questions[0]?.detail ?? ''
+      const detail = service.calls[1]?.questions[0]?.detail ?? ''
       expect(detail).toContain('缺陷修复草案')
       expect(detail).toContain('现象：空输入时解析器解引用空指针')
       expect(detail).toContain('根因：parse() 缺少长度守卫')
@@ -387,7 +764,7 @@ describe('§22.17 J path-choice options + bug-field draft (classify dialog v2)',
   it('clicking 确认·缺陷修复路径 on a full-classified change re-routes it end to end', async () => {
     const root = await setupToolWorkspace()
     try {
-      const service = fakeService(answered('确认 · 缺陷修复路径'))
+      const service = scriptedService([answered('新建工作流'), answered('确认 · 缺陷修复路径')])
       const text = await runTool(registerTool(), service, root, {
         gateId: 'intake-classify',
         requirement: 'feat: add export public API for reports',
@@ -418,7 +795,7 @@ describe('§22.17 J path-choice options + bug-field draft (classify dialog v2)',
   it('a bug-path click without draft fields parks with the override still recorded', async () => {
     const root = await setupToolWorkspace()
     try {
-      const service = fakeService(answered('确认 · 缺陷修复路径'))
+      const service = scriptedService([answered('新建工作流'), answered('确认 · 缺陷修复路径')])
       const text = await runTool(registerTool(), service, root, {
         gateId: 'intake-classify',
         requirement: 'feat: add export public API for reports',

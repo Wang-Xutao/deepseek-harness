@@ -22,6 +22,7 @@ import type {
   AskUserQuestionRequest,
 } from '@deepseek-ai/dsh-user-questions'
 import { apply } from '../src/auto-pop.ts'
+import { peekParkedRequirement, resetParkedRequirements } from '../src/requirement-park.ts'
 import { ProjectionStore } from '../src/projection.ts'
 
 const execFileAsync = promisify(execFile)
@@ -88,6 +89,12 @@ function install(service: unknown): {
 /** Workspace fixture: baseline + git repo (the go.spec recipe). */
 async function setup(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'baf-auto-pop-'))
+  await initWorkspace(root)
+  return root
+}
+
+/** Write the baseline + git anchor into an existing (possibly bare) dir. */
+async function initWorkspace(root: string): Promise<void> {
   await mkdir(join(root, '.baf'), { recursive: true })
   await writeFile(
     join(root, '.baf', 'baseline.yml'),
@@ -99,7 +106,6 @@ async function setup(): Promise<string> {
     '-c', 'user.email=baf@test', '-c', 'user.name=baf', '-c', 'commit.gpgsign=false',
     'commit', '-q', '--allow-empty', '-m', 'init',
   ], { cwd: root })
-  return root
 }
 
 /** One synthetic user/message event. */
@@ -201,6 +207,7 @@ describe('§22.17 J state-driven auto-pop', () => {
   })
 
   it('uninitialized workspaces and busy workspaces never pop', async () => {
+    resetParkedRequirements()
     const bare = await mkdtemp(join(tmpdir(), 'baf-auto-pop-'))
     const busy = await setup()
     try {
@@ -209,6 +216,9 @@ describe('§22.17 J state-driven auto-pop', () => {
       emit({ header: { id: 's1', cwd: bare } }, userMessage('给报表模块加一个导出公网 API'))
       await settle()
       expect(service.calls).toHaveLength(0)
+      // 【变更】2026-09-23 (demo2 issue #1): the pre-scaffold statement is
+      // parked — the continuation surfaces it after the workspace initializes.
+      expect(peekParkedRequirement('s1')).toBe('给报表模块加一个导出公网 API')
       // Busy: an unconfirmed intake is an active change.
       const store = new ProjectionStore({ workspaceRoot: busy })
       const { createWorkflowService } = await import('../src/workflow-service.ts')
@@ -224,6 +234,36 @@ describe('§22.17 J state-driven auto-pop', () => {
     } finally {
       await rm(bare, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
       await rm(busy, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+
+  it('a requirement stated before initialization does not burn the offer (pristine first-run)', async () => {
+    // 2026-09-22 web walk 04:39: on a pristine workspace the FIRST message
+    // landed before the scaffold, consumed the session's single offer in a
+    // state where it could never pop, and the promised 分类卡 never appeared.
+    // The offer must survive until the workspace is initialized.
+    resetParkedRequirements()
+    const root = await mkdtemp(join(tmpdir(), 'baf-auto-pop-'))
+    try {
+      const service = serviceWith([selected('只是聊天，不开始')])
+      const { emit } = install(service)
+      // Message #1 arrives pre-scaffold — nothing to offer yet, but the
+      // statement is parked for the post-scaffold continuation.
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('给报表模块加一个导出公网 API'))
+      await settle()
+      expect(service.calls).toHaveLength(0)
+      expect(peekParkedRequirement('sess-1')).toBe('给报表模块加一个导出公网 API')
+      // The scaffold lands; the customer restates — now the pre-question pops
+      // and the restated (initialized-workspace) message supersedes the park.
+      await initWorkspace(root)
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('给报表模块加一个导出公网 API'))
+      const deadline = Date.now() + 60_000
+      while (service.calls.length < 1 && Date.now() < deadline) await settle()
+      expect(service.calls).toHaveLength(1)
+      expect(service.calls[0]?.questions[0]?.id).toBe('baf-auto-pop')
+      expect(peekParkedRequirement('sess-1')).toBeUndefined()
+    } finally {
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
     }
   })
 

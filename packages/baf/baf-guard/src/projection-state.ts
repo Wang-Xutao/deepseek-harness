@@ -8,7 +8,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join, relative, sep } from 'node:path'
 import { load as loadYaml } from 'js-yaml'
 import {
   BAF_VERSION,
@@ -18,9 +18,11 @@ import {
 } from '@deepseek-ai/dsh-baf-core'
 import {
   BUG_FIX_PATH_LEDGER_FILE,
+  focusFor,
   parseProjectionLog,
   replay,
   type ProjectionIndex,
+  type ProjectionIndexEntry,
 } from '@deepseek-ai/dsh-baf-workflow'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { DEFAULT_GUARD_CONFIG, type GuardPolicyConfig, type GuardWorkflowState } from './policy.ts'
@@ -83,14 +85,65 @@ function readAllowlist(workspaceRoot: string, changeId: string): readonly string
 }
 
 /**
+ * Is `targetPath` inside one change's artifact directory
+ * (`openspec/changes/<changeId>/`)? Absolute or workspace-relative input both
+ * resolve; separators normalize for Windows.
+ */
+function pathTargetsChange(workspaceRoot: string, targetPath: string, changeId: string): boolean {
+  const changeDir = join(workspaceRoot, 'openspec', 'changes', changeId)
+  const absolute = isAbsolute(targetPath) ? targetPath : join(workspaceRoot, targetPath)
+  const rel = relative(changeDir, absolute)
+  return rel === ''
+    || (!isAbsolute(rel) && !rel.split(sep).includes('..'))
+}
+
+/**
+ * §22.19 — one ranking for every surface. Session 7.jsonl R3: the guard
+ * picked by freshest `updatedAt` while the model wrote a different change's
+ * artifacts, so confirmed work was refused as 「先确认那条更新的」。 The
+ * unified order:
+ *
+ * 1. **Write path** — the guarded write lands inside some active change's
+ *    `openspec/changes/<id>/` directory; that change is what the write is
+ *    FOR, regardless of which row is fresher.
+ * 2. **Session focus** — the harness focus cache (`focusFor`) names the
+ *    change this conversation is driving (best-effort: process-local).
+ * 3. **pickActiveChange** — highest `seq`, tie lexical changeId; identical
+ *    to the Tab / drives / coordinator ranking, replacing the old
+ *    updatedAt-freshest sort.
+ */
+function pickGuardActive(
+  workspaceRoot: string,
+  changes: readonly ProjectionIndexEntry[],
+  targetPath: string | undefined,
+): ProjectionIndexEntry | undefined {
+  const actives = changes.filter(entry => !TERMINAL.has(entry.current))
+  if (targetPath !== undefined) {
+    const byPath = actives.find(entry => pathTargetsChange(workspaceRoot, targetPath, entry.changeId))
+    if (byPath !== undefined) return byPath
+  }
+  const focused = focusFor(workspaceRoot).get()
+  if (focused !== undefined) {
+    const byFocus = actives.find(entry => entry.changeId === focused)
+    if (byFocus !== undefined) return byFocus
+  }
+  return [...actives].sort((a, b) =>
+    a.seq !== b.seq ? b.seq - a.seq : a.changeId.localeCompare(b.changeId),
+  )[0]
+}
+
+/**
  * Read the active change's workflow state synchronously. "Active" = a
- * non-terminal entry in the projection index with the freshest updatedAt;
- * no index / no active entry / unreadable log ⇒ `{ active: false }` — the
- * guard then denies source writes until a change is confirmed.
+ * non-terminal entry in the projection index selected by the §22.19 ranking
+ * (write path → session focus → highest seq); no index / no active entry /
+ * unreadable log ⇒ `{ active: false }` — the guard then denies source writes
+ * until a change is confirmed.
  * @param workspaceRoot - absolute workspace root.
+ * @param targetPath - the guarded write's path, when the call is an fs-write
+ *   (drives ranking rule 1; omitted for shell/ask adjudications).
  * @returns workflow snapshot for adjudication.
  */
-export function readGuardWorkflowState(workspaceRoot: string): GuardWorkflowState {
+export function readGuardWorkflowState(workspaceRoot: string, targetPath?: string): GuardWorkflowState {
   const indexText = readTextIfPossible(join(workspaceRoot, PROJECTION_INDEX_PATH))
   if (indexText === undefined) {
     return { active: false, intakeConfirmed: false, allowlist: [] }
@@ -101,9 +154,7 @@ export function readGuardWorkflowState(workspaceRoot: string): GuardWorkflowStat
   } catch {
     return { active: false, intakeConfirmed: false, allowlist: [] }
   }
-  const active = (index.changes ?? [])
-    .filter(entry => !TERMINAL.has(entry.current))
-    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : b.seq - a.seq))[0]
+  const active = pickGuardActive(workspaceRoot, index.changes ?? [], targetPath)
   if (active === undefined) {
     return { active: false, intakeConfirmed: false, allowlist: [] }
   }

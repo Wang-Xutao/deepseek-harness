@@ -21,7 +21,16 @@ import {
 
 const EXPECTED_GATE_IDS: readonly GateId[] = [
   'scaffold',
+  'new-workflow',
   'intake-classify',
+  'active-conflict',
+  'bind-workflow',
+  'open-advance',
+  'clarify-advance',
+  'design-advance',
+  'plan-advance',
+  // 【变更】2026-09-23 (demo1 十问题 8): the verify-entry gate.
+  'verify-advance',
   'design-confirm',
   'verify-archive',
   'abandon',
@@ -57,6 +66,7 @@ describe('GATE_REGISTRY shape (§22)', () => {
     // registry honest: it must never invent a command that does not exist.
     const known = new Set([
       '__noop__',
+      '__continued__',
       '/baf-scaffold',
       '/baf-workflow-classify',
       '/baf-workflow-clarify',
@@ -64,6 +74,11 @@ describe('GATE_REGISTRY shape (§22)', () => {
       '/baf-workflow-abandon',
       '/baf-workflow-resume',
       '/baf-go',
+      // §22 user-request 2026-09-20 — the user-facing advance family
+      // (open-advance / clarify-advance / design-advance / plan-advance)
+      // routes through `/baf-go-confirm` so the click takes the positive
+      // path without popping another dialog.
+      '/baf-go-confirm',
     ])
     for (const [id, spec] of Object.entries(GATE_REGISTRY)) {
       if (spec.dynamicOptions !== undefined) continue
@@ -78,6 +93,29 @@ describe('GATE_REGISTRY shape (§22)', () => {
     expect(scaffold.options.map(o => o.id)).toEqual(['init', 'cancel'])
     expect(scaffold.options[0]?.command).toBe('/baf-scaffold')
     expect(scaffold.options[1]?.command).toBe('__noop__')
+  })
+
+  it('new-workflow gate offers create + hold with hints, no slash advertised (spec §1 first dialog)', () => {
+    // 2026-09-22 user decision: the first dialog of a new requirement is an
+    // explicit 新建工作流 confirmation. The click is continued by the
+    // `baf_gate_ask` bootstrap (which holds the requirement), so neither
+    // option maps to a dispatchable slash — the custom `hint` replaces the
+    // derived 「将执行 /xxx」 line, which would advertise a command nobody runs.
+    const gate = GATE_REGISTRY['new-workflow']
+    expect(gate.options.map(o => o.id)).toEqual(['create', 'hold'])
+    const result = renderGate('new-workflow', { cwd: '/tmp/ws' })
+    expect(result.kind).toBe('success')
+    expect(result.text).toContain('未发现进行中的工作流')
+    expect(result.text).toContain('新建工作流')
+    expect(result.text).toContain('确认新建，随即进入分类确认')
+    expect(result.text).toContain('暂不处理')
+    expect(result.text).toContain('本次不新建工作流')
+    expect(result.text).not.toContain('将执行')
+    // 【变更】2026-09-23 (demo3 unified cancel rule): the hold hint now names
+    // the /baf-go revive path, so a bare '/baf-' scan no longer holds — what
+    // must stay absent is an ADVERTISED dispatch command on an option (the
+    // `→ /xxx` shape / 将执行 line), because neither option maps to a slash.
+    expect(result.text).not.toContain('→ /baf-')
   })
 })
 
@@ -159,11 +197,44 @@ describe('renderGateCard (§22)', () => {
     expect(result.text).toContain('取消')
   })
 
+  it('renders the active-conflict gate (session 6.jsonl: collision is a click, not a prose A/B)', () => {
+    const result = renderGate('active-conflict', { cwd: '/tmp/ws', changeId: 'CHG-006' })
+    expect(result.kind).toBe('success')
+    expect(result.text).toContain('已有进行中的变更')
+    expect(result.text).toContain('继续推进现有变更')
+    expect(result.text).toContain('/baf-go change=CHG-006')
+    expect(result.text).toContain('放弃现有变更')
+    expect(result.text).toContain('/baf-workflow-abandon confirm change=CHG-006')
+    expect(result.text).toContain('暂不处理')
+  })
+
+  it('renders the bind-workflow gate dynamically from the active change ids (§22.19 R4)', () => {
+    const result = renderGate('bind-workflow', {
+      cwd: '/tmp/ws',
+      bindCandidates: ['CHG-100', 'CHG-200'],
+    })
+    expect(result.kind).toBe('success')
+    // Each option dispatches the `/baf-go change=<id>` the old text card
+    // advertised — a click and a typed command run the identical drive.
+    expect(result.text).toContain('接手 CHG-100')
+    expect(result.text).toContain('/baf-go change=CHG-100')
+    expect(result.text).toContain('接手 CHG-200')
+    expect(result.text).toContain('/baf-go change=CHG-200')
+  })
+
+  it('returns a refusal when the bind gate is asked without candidates', () => {
+    const result = renderGate('bind-workflow', { cwd: '/tmp/ws' })
+    expect(result.kind).toBe('error')
+    expect(result.text).toContain('额外的上下文')
+  })
+
   it('always prints the standard footer hint', () => {
     for (const id of EXPECTED_GATE_IDS) {
       const result = id === 'resume'
         ? renderGate(id, { cwd: '/tmp/ws', resumeCandidates: ['plan'] })
-        : renderGate(id, { cwd: '/tmp/ws' })
+        : id === 'bind-workflow'
+          ? renderGate(id, { cwd: '/tmp/ws', bindCandidates: ['CHG-100'] })
+          : renderGate(id, { cwd: '/tmp/ws' })
       expect(result.text).toContain('点工作流页签的按钮')
     }
   })

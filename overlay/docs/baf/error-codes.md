@@ -9,6 +9,7 @@
 | `openspec_unavailable` | OpenSpec CLI/模板不可用 | `cli`、`versionRequested`、可选 `detectDetail` | `OpenSpecAdapter.detect()` 失败或版本不满足 baseline |
 | `baseline_unavailable` | baseline 缺失、无法读取或解析失败 | `baselineId?`、`path?`、`cause` | loader 找不到文件、YAML/JSON 非法、schema 校验失败 |
 | `baseline_incompatible` | baseline 与当前 BAF/plugin 版本不兼容 | `baselineId`、`bafVersion`、`min`、`max` | `bafCompatibility` 比对失败 |
+| `git_unavailable` | 本地 Git 不可用（无仓库或无提交锚点），完整流程建立变更被环境阻断 | `changeId` | full-go-path open 前置检查：workspace Git revision 为空 |
 | `policy_missing` | 企业策略或 baseline 字段为 unavailable 且该阶段硬依赖 | `field`、`consumer` | 企业输入未冻结且阶段不允许 fixture 替代 |
 | `invalid_transition` | 转换不在 5.2 表内，或不满足允许条件 | `from`、`to`、`mode?`、`reason` | `WorkflowService.transition()` 拒绝 |
 | `intake_confirmation_required` | 分类未确认前禁止写源码或进入 implement | `changeId`、`intakeStatus` | ToolGuard / transition 在确认前拦截 mutating 写 |

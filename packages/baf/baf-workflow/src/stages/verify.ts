@@ -1,7 +1,8 @@
 /**
  * N6 verify stage handler (§12 Phase 5.6, Phase 7 wiring): run the
  * CheckRunner over openspec-validate plus the wired quality/guard/secret-scan
- * adapters and write `verify-report.json` bound to revision/baseline.
+ * adapters and write `verify-report.json` (machine) + `verify.md`
+ * (customer-facing render, demo5 issue #3) bound to revision/baseline.
  * @module @deepseek-ai/dsh-baf-workflow/stages/verify
  */
 
@@ -37,6 +38,9 @@ export interface VerifyRunnerOptions {
  * explicit skipped annotation (required: false). Phase 7 quality/guard/
  * secret-scan gate only when their adapters are wired into the stage
  * context; otherwise they annotate `tool_unavailable` without gating.
+ * Quality-gate placeholders (`policy_missing` from `<enterprise-tbd>`
+ * baseline entries) annotate as skipped the same way — a check that was
+ * never configured cannot fail, and only checks that actually ran gate.
  * @param ctx - stage context.
  * @param changeId - change id.
  * @param mode - workflow mode of the change.
@@ -88,6 +92,17 @@ export function buildVerifyRunner(
   // Phase 7: quality/guard/secret-scan go live when the corresponding adapter
   // is wired into the stage context; wired rows gate T10 (any gate failure
   // blocks archive, §14.4), unwired rows annotate tool_unavailable only.
+  // 2026-09-22 (web walk deadlock): a scaffolded baseline ships build/test/
+  // analyzers as <enterprise-tbd> placeholders and baf-quality records each as
+  // a `policy_missing` check (fail-closed against guessing — §15). Gating T10
+  // on those made every fresh-workspace verify fail with no in-band fix: the
+  // model cannot edit .baf/baseline.yml (outside the plan allowlist, by
+  // design) and the customer was never asked. An unconfigured check is an
+  // absent check, not a failing one — same semantics the row already gives
+  // unwired adapters (tool_unavailable annotation) and secretScan: off. So
+  // placeholder-only failures annotate `skipped: policy_missing ...` and pass;
+  // any failure with a different reason code (a command that actually ran and
+  // failed, a missed numeric coverage threshold, cancellation) still gates.
   const qualityWired = ctx.stack !== undefined && ctx.baseline !== undefined
   runner.register({
     name: 'quality',
@@ -102,14 +117,20 @@ export function buildVerifyRunner(
       )
       if (options.toolVersions !== undefined) Object.assign(options.toolVersions, report.toolVersions)
       const failed = report.checks.filter(check => !(check as { readonly passed?: boolean }).passed)
+      const entry = (check: unknown) => check as { readonly id?: string; readonly reasonCode?: string }
+      const real = failed.filter(check => entry(check).reasonCode !== 'policy_missing')
+      const placeholders = failed.filter(check => entry(check).reasonCode === 'policy_missing')
+      const ok = !signal.aborted && (report.passed || real.length === 0)
       return {
-        ok: report.passed,
-        diagnostics: failed.length === 0
-          ? ['all quality checks passed']
-          : failed.map((check) => {
-            const entry = check as { readonly id?: string; readonly reasonCode?: string }
-            return `${entry.id ?? 'check'}:${entry.reasonCode ?? 'failed'}`
-          }),
+        ok,
+        diagnostics: ok && real.length === 0
+          ? (placeholders.length === 0
+            ? ['all quality checks passed']
+            : [
+              `skipped: quality gates not configured (${String(placeholders.length)} policy_missing placeholders; fill .baf/baseline.yml stack.build/test/analyzers to enable them)`,
+              ...placeholders.map(check => `${entry(check).id ?? 'check'}:policy_missing`),
+            ])
+          : real.map(check => `${entry(check).id ?? 'check'}:${entry(check).reasonCode ?? 'failed'}`),
       }
     },
   })
@@ -191,6 +212,12 @@ export async function driveVerify(
     toolVersions,
   })
   const reportPath = await persistVerifyReport(ctx.workspace.root, changeId, report)
+  // 【变更】2026-09-23 (demo5 issue #3): the customer-facing verify artifact is
+  // verify.md — the human-readable acceptance document the rail shows (the
+  // JSON stays on disk for drift freshness + quality consumers). Render
+  // failures are tolerated the same way plan.md renders are: the gate judged
+  // the run, and a doc render must not unwind it.
+  await renderVerifyMd(ctx.workspace.root, changeId, report).catch(() => undefined)
 
   const gate = verifyGate(rows)
   if (!gate.ok) {
@@ -228,6 +255,53 @@ export async function persistVerifyReport(
   await writeFile(tmp, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
   await rename(tmp, path)
   return path
+}
+
+/**
+ * 【变更】2026-09-23 (demo5 issue #3): render verify.md — the verify stage's
+ * customer-facing artifact (阶段产物). The rail, gate cards and Tab show
+ * verify.md, NOT verify-report.json; the machine JSON stays alongside for
+ * drift freshness and quality-tool consumers that read it by name.
+ * @param workspaceRoot - absolute workspace root.
+ * @param changeId - change id.
+ * @param report - the aggregated report just persisted.
+ */
+export async function renderVerifyMd(
+  workspaceRoot: string,
+  changeId: string,
+  report: VerifyReport,
+): Promise<void> {
+  const lines: string[] = [
+    `# Verify — ${changeId}`,
+    '',
+    `> 结论：${report.passed ? '✅ 通过（必需检查全部通过）' : '❌ 未通过（存在未通过的必需检查）'}`,
+    '',
+    `- 模式：${report.mode ?? '—'}`,
+    ...(report.sourceRevision === undefined ? [] : [`- 源版本：\`${report.sourceRevision}\``]),
+    ...(report.baselineId === undefined ? [] : [`- 基线：\`${report.baselineId}\``]),
+    `- 完成时间：${report.finishedAt}`,
+    ...(Object.keys(report.toolVersions).length === 0
+      ? []
+      : [`- 工具版本：${Object.entries(report.toolVersions).map(([tool, v]) => `${tool}@${v}`).join('、')}`]),
+    '',
+    '## 检查明细',
+    '',
+    '| 检查 | 必需 | 结果 | 耗时 |',
+    '| --- | --- | --- | --- |',
+  ]
+  for (const check of report.checks) {
+    const verdict = check.ok ? '✅ 通过' : (check.required ? '❌ 失败' : '⚠️ 跳过/失败（非必需）')
+    lines.push(`| ${check.name} | ${check.required ? '是' : '否'} | ${verdict} | ${check.durationMs}ms |`)
+  }
+  lines.push('', '## 诊断', '')
+  for (const check of report.checks) {
+    if (check.diagnostics.length === 0) continue
+    lines.push(`### ${check.name}`, '')
+    for (const line of check.diagnostics) lines.push(`- ${line}`)
+    lines.push('')
+  }
+  lines.push('> 本文档由 verify-report.json 自动渲染；机器消费请读 JSON。', '')
+  await writeFile(join(changeDir(workspaceRoot, changeId), 'verify.md'), lines.join('\n'), 'utf8')
 }
 
 /**

@@ -459,6 +459,10 @@
   flex: 1;
   overflow: auto;
   padding: 1rem;
+  /* 【变更】2026-09-23 (demo1 十问题 10): bottom clearance for the composer /
+     dialog overlay — the last card must scroll clear of it instead of hiding
+     behind (9rem ≈ the collapsed composer + margin). */
+  padding-bottom: 9rem;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
@@ -492,9 +496,28 @@
   margin-bottom: 0.35rem;
 }
 
+/* 【变更】2026-09-23 (demo1 十问题 5): the stats card pairs label+value
+   cells two-per-row (4 grid tracks) — the card is wide enough to carry the
+   session figures in half the vertical space. */
+.metaRowWide {
+  display: grid;
+  grid-template-columns: minmax(3.2rem, auto) 1fr minmax(3.2rem, auto) 1fr;
+  gap: 0.22rem 0.6rem;
+  align-items: baseline;
+  font-size: 0.74rem;
+  margin-bottom: 0.3rem;
+}
+
 .metaKey {
   color: var(--wf-muted);
   font-weight: 600;
+}
+
+/* 【变更】2026-09-23 (demo1 五问题 5): the one value the customer must act on
+   (a pending classification) reads as the card's exception — warn color. */
+.metaValueWarn {
+  color: var(--wf-warn, #b8860b);
+  font-weight: 700;
 }
 
 .biSection { margin-bottom: 0.7rem; }
@@ -528,6 +551,86 @@
 }
 
 .list li + li { margin-top: 0.3rem; }
+
+/* 2026-09-21 (session 5.jsonl) — artifact rail rows: one open button per
+   stage document, with its live state badge beside the file name. */
+.artifactRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.artifactRow + .artifactRow { margin-top: 0.35rem; }
+
+.artifactName {
+  font-weight: 650;
+  word-break: break-all;
+}
+
+/* 【变更】2026-09-23 (demo1 五问题 5): the file name IS the open control —
+   styled as a quiet inline link, and the gap line replaces the itemized
+   missing list (hover carries the full items). */
+.artifactNameBtn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--wf-fg);
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  word-break: break-all;
+  cursor: pointer;
+  text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 3px;
+}
+
+.artifactNameBtn:disabled { cursor: default; text-decoration: none; opacity: 0.6; }
+.artifactNameBtn:not(:disabled):hover { color: var(--wf-accent); }
+
+.artifactGap {
+  margin: 0.1rem 0 0.3rem;
+  padding-left: 0.6rem;
+  font-size: 0.68rem;
+  color: var(--wf-warn, #b8860b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+}
+
+.artifactState {
+  flex: none;
+  margin-left: auto;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.artifactStateFilled {
+  background: color-mix(in srgb, var(--wf-accent) 14%, transparent);
+  color: var(--wf-accent);
+}
+
+.artifactStateTemplate {
+  background: color-mix(in srgb, #d97706 14%, transparent);
+  color: #b45309;
+}
+
+/* 【变更】2026-09-23 (demo5 issue #4): tasks.md 已计划 — blue-tinted middle
+   state between the amber template and the green filled. */
+.artifactStatePlanned {
+  background: color-mix(in srgb, #3b82f6 16%, transparent);
+  color: #2563eb;
+}
+
+.artifactStateMissing {
+  background: color-mix(in srgb, var(--wf-muted) 14%, transparent);
+  color: var(--wf-muted);
+}
 
 .actions {
   display: flex;
@@ -575,11 +678,121 @@
   flex: none;
 }
 
+/* §22.19 R5 — banner row that carries an action (回到进行中的变更). */
+.bannerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .hint {
   margin: 0 0 0.45rem;
   font-size: 0.72rem;
   color: var(--wf-muted);
   line-height: 1.45;
+}
+
+/* 【变更】2026-09-24 (demo6 问题 1): the stats card's compact grid — labeled
+   figures two-per-line with tabular numbers, one grid per section. */
+.statsGrid {
+  display: grid;
+  grid-template-columns: minmax(3rem, auto) 1fr minmax(3rem, auto) 1fr;
+  gap: 0.18rem 0.55rem;
+  align-items: baseline;
+  font-size: 0.74rem;
+  margin-bottom: 0.4rem;
+}
+
+.statsKey {
+  color: var(--wf-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.statsNum {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.statsHero { color: var(--wf-accent); }
+
+/* 【变更】2026-09-24 (demo6 问题 2/3): the intake card's scope cell carries the
+   allowlist count; the summary rides a labeled row like every other field. */
+.scopeValue { font-weight: 600; }
+
+.scopeFiles {
+  color: var(--wf-muted);
+  font-weight: 600;
+  font-size: 0.68rem;
+}
+
+.summaryText {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* 【变更】2026-09-24 (demo6 问题 4): the history modal's records column under
+   the canvas — the graph keeps its size, the records scroll. */
+.historyCanvas {
+  flex: 1 1 60%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.historyRecords {
+  flex: 0 0 auto;
+  max-height: 40%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.6rem 0.9rem 0.75rem;
+  border-top: 1px solid var(--wf-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+/* 【变更】2026-09-24 (demo6 问题 13): the detail panel's failure reference —
+   code chip + meaning + fix on one row (wraps on narrow rails). */
+.failTable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.failRow {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) 1fr;
+  gap: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  align-items: baseline;
+}
+
+.failCode {
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: var(--wf-danger);
+  background: color-mix(in srgb, var(--wf-danger) 10%, transparent);
+  border-radius: 3px;
+  padding: 0.05rem 0.28rem;
+  justify-self: start;
+}
+
+.failMeaning { color: var(--wf-ink); }
+
+.failFix {
+  grid-column: 2;
+  color: var(--wf-muted);
+}
+
+.failFix::before {
+  content: '→ ';
+  color: var(--wf-ok);
+  font-weight: 700;
 }
 
 .toolbar {
@@ -620,8 +833,8 @@
 }
 
 .dashboardPanel {
-  width: min(520px, 100%);
-  max-height: min(70vh, 560px);
+  width: min(680px, 100%);
+  max-height: min(80vh, 680px);
   overflow: auto;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--wf-accent) 35%, var(--wf-line));
@@ -644,6 +857,127 @@
   font-weight: 780;
 }
 
+/* 【变更】2026-09-23 (user issue #6) — comet-style dashboard chrome: header
+   actions, summary tiles with a completion bar, section titles, phase pills,
+   and the per-row task progress + metrics strip. */
+.dashboardHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dashboardMuted {
+  color: var(--wf-muted, var(--dsw-alias-label-caption, inherit));
+  font-size: 0.8rem;
+}
+
+.dashboardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dashboardTiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin: 0.35rem 0 0.55rem;
+}
+
+.dashboardTile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--dsw-alias-bg-canvas, var(--wf-card)) 80%, transparent);
+}
+
+.dashboardTileValue {
+  font-size: 1.25rem;
+  font-weight: 780;
+  line-height: 1.1;
+}
+
+.dashboardTileLabel {
+  font-size: 0.72rem;
+  color: var(--wf-muted, var(--dsw-alias-label-caption, inherit));
+}
+
+.dashboardTileBar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--wf-line);
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.dashboardTileBarFill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--wf-accent);
+  transition: width 240ms ease;
+}
+
+.dashboardSection {
+  margin: 0.55rem 0 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+}
+
+.dashboardPhase {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  background: color-mix(in srgb, var(--wf-accent) 18%, transparent);
+  color: var(--wf-ink);
+}
+
+.dashboardPhaseTerminal {
+  background: color-mix(in srgb, var(--wf-accent) 8%, transparent);
+  opacity: 0.85;
+}
+
+.dashboardRowMetrics {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.72rem;
+  color: var(--wf-muted, var(--dsw-alias-label-caption, inherit));
+}
+
+.dashboardProgress {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 96px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--wf-line);
+  overflow: hidden;
+}
+
+.dashboardProgressFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 7px;
+  background: var(--wf-accent);
+  transition: width 240ms ease;
+}
+
+.dashboardProgressText {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  text-align: center;
+  font-size: 0.66rem;
+  mix-blend-mode: plain;
+}
+
 .dashboardList {
   list-style: none;
   margin: 0.55rem 0;
@@ -662,6 +996,21 @@
   border-radius: 10px;
   border: 1px solid var(--wf-line);
   background: color-mix(in srgb, var(--dsw-alias-bg-canvas, var(--wf-card)) 80%, transparent);
+}
+
+/* §22.19 R5 — the whole row is the pick button (button chrome reset; the
+   .dashboardItem paint above stays the visual). */
+.dashboardPick {
+  width: 100%;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboardPick:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--wf-accent) 45%, var(--wf-line));
 }
 
 .dashboardItemFocus {

@@ -27,6 +27,8 @@ import type {} from '@deepseek-ai/dsh-user-questions' // Context.userQuestions a
 import type { ChangeIntake, GuardPolicy, StackAdapter, WorkflowNode } from '@deepseek-ai/dsh-baf-core'
 import { GATE_REGISTRY, type GateId, type GateOptionSpec, type GateSpec } from './gate-cards.ts'
 import { modeZh } from './command-format.ts'
+import { enqueueAsk } from './ask-queue.ts'
+import { noteScaffoldDialogOffered } from './scaffold-offer.ts'
 import type { DriveAdapters } from './command-drives.ts'
 import { resolveIsolateService, resolveScaffoldService } from './session-gate.ts'
 import type { GateAsk, GateAskOutcome } from './go-coordinator.ts'
@@ -123,10 +125,20 @@ export interface GateDialogInput {
   readonly gateId: GateId
   readonly changeId?: string
   readonly resumeCandidates?: readonly WorkflowNode[]
+  /** Bind gate — the active change ids this session could take over (§22.19 R4). */
+  readonly bindCandidates?: readonly string[]
   /** §22.17 I: the intake classifier's verdict, shown under the question on the intake-classify dialog. */
   readonly judgment?: GateJudgment
   /** §22.17 J: the bug-fix field draft shown on the intake-classify dialog (see {@link GateBugPlan}). */
   readonly bugPlan?: GateBugPlan
+  /**
+   * 2026-09-21 (session 6.jsonl): extra plain-Chinese context paragraphs
+   * rendered between the question and any judgment — e.g. the active-conflict
+   * pop names the running change and the freshly stated requirement, so the
+   * customer clicks knowing exactly what each option applies to. One entry per
+   * paragraph (single newlines fold in the composer's markdown detail).
+   */
+  readonly note?: readonly string[]
 }
 
 /**
@@ -199,7 +211,82 @@ export function makeGateAsk(ctx: Context, agent?: unknown): GateAsk | undefined 
   )
   if (service === undefined) return undefined
   const dialogAgent = agent as GateDialogAgent | undefined
-  return async gate => askGateDialog(service, dialogAgent, gate)
+  // §22.19: coordinator pops ride the single-flight queue — the dialog can
+  // no longer cover an in-flight auto-pop / gate-ask dialog on the same
+  // session, and a re-pop of the same gate+change while one is up collapses
+  // to a duplicate drop.
+  return async gate => askGateDialogQueued(service, dialogAgent, gate)
+}
+
+/**
+ * Structural read of a dialog agent's session id (the public Agent type is
+ * id-only; the runtime object carries `session.header`).
+ */
+function sessionKeyOf(agent: GateDialogAgent | undefined): string {
+  const id = (agent as { session?: { header?: { id?: unknown } } } | undefined)
+    ?.session?.header?.id
+  return typeof id === 'string' && id !== '' ? id : 'baf-unknown-session'
+}
+
+/** The queue identity of one gate pop: which gate, on which change. */
+export function gateQueueKey(gate: GateDialogInput): string {
+  return `gate:${gate.gateId}:${gate.changeId ?? ''}`
+}
+
+/**
+ * Queue controls for {@link askGateDialogQueued} — everything the queue needs
+ * beyond the dialog shape itself.
+ */
+export interface GateDialogQueueControls {
+  /** Session scope; defaults to the agent's session id. */
+  readonly sessionId?: string
+  /** Head-of-queue staleness check (true → drop without popping). */
+  readonly isMoot?: () => boolean | Promise<boolean>
+  /** External abort (tool exec signal / agent disposal). */
+  readonly signal?: AbortSignal
+}
+
+/**
+ * §22.19 — pop one §22 gate dialog through the session's single-flight ask
+ * queue. Same contract as {@link askGateDialog} plus the three queue guards
+ * (dedupe / moot / abort). A dropped entry maps to the paused shape —
+ * "already handled elsewhere or no longer due", never an answer.
+ *
+ * @param service - the resolved `ctx.userQuestions` service.
+ * @param agent - live agent scoping the waterfall to this session's UI.
+ * @param gate - which gate, with change id / resume candidates.
+ * @param controls - queue scope + staleness + abort.
+ * @returns the outcome; never throws — failures map to paused/unavailable.
+ */
+export async function askGateDialogQueued(
+  service: UserQuestionsLike,
+  agent: GateDialogAgent | undefined,
+  gate: GateDialogInput,
+  controls?: GateDialogQueueControls,
+): Promise<GateAskOutcome> {
+  const queueSession = controls?.sessionId ?? sessionKeyOf(agent)
+  const outcome = await enqueueAsk({
+    sessionId: queueSession,
+    key: gateQueueKey(gate),
+    ...(controls?.isMoot === undefined ? {} : { isMoot: controls.isMoot }),
+    ...(controls?.signal === undefined ? {} : { signal: controls.signal }),
+    run: controller => askGateDialog(service, agent, gate, controller.signal),
+  })
+  // 【变更】2026-09-23 (demo2 re-test): record the scaffold offer only AFTER
+  // the pop settles, and only when a dialog actually rendered (or an
+  // in-flight sibling owns one — it marks on its own settle). Recording at
+  // enqueue time self-tripped the orchestrator's own head-of-queue moot
+  // check; 'unavailable' (no dialog could show) and moot/abort drops
+  // correctly leave the marker cold so the turn-end evaluation still fires.
+  if (gate.gateId === 'scaffold'
+    && (outcome.kind === 'answered' && outcome.value.kind !== 'unavailable'
+      || outcome.kind === 'dropped' && outcome.reason === 'duplicate')) {
+    noteScaffoldDialogOffered(queueSession)
+  }
+  if (outcome.kind === 'answered') return outcome.value
+  return outcome.reason === 'aborted'
+    ? { kind: 'paused', reason: 'cancelled' }
+    : { kind: 'paused', reason: 'dismissed' }
 }
 /**
  * Options for one dialog — the same derivation `driveGateResolve` validates
@@ -220,11 +307,22 @@ function dialogOptions(gate: GateDialogInput): readonly GateOptionSpec[] {
       args: [node],
     }))
   }
+  if (spec.dynamicOptions === 'change-targets') {
+    // Same derivation as `bindOptions` in gate-cards — the answered label must
+    // map back to an option id `driveGateResolve` accepts.
+    return (gate.bindCandidates ?? []).map(changeId => ({
+      id: `bind-${changeId}`,
+      label: `接手 ${changeId}`,
+      command: '/baf-go',
+      args: [`change=${changeId}`],
+    }))
+  }
   return spec.options
 }
 
 /** One sentence under an option button: what clicking it will run. */
 function optionDescription(opt: GateOptionSpec, changeId: string | undefined): string {
+  if (opt.hint !== undefined) return opt.hint
   if (opt.command === '__noop__') return '本次不操作（工作流暂停，可用 /baf-go 重新弹出）'
   const invocation = [opt.command, ...(opt.args ?? [])].join(' ')
   return changeId === undefined || opt.id === 'init'
@@ -273,6 +371,7 @@ export async function askGateDialog(
   // folds into one running line.
   const detail = [
     spec.question + (gate.changeId === undefined ? '' : `（变更 ${gate.changeId}）`),
+    ...(gate.note ?? []),
     ...(gate.judgment === undefined ? [] : [
       `系统初步判断：${modeZh(gate.judgment.mode)} · ${kindZh(gate.judgment.kind)} · 置信 ${gate.judgment.confidence.toFixed(2)}`,
       `需求摘要：${gate.judgment.summary}`,

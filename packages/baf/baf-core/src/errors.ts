@@ -9,6 +9,7 @@ export const BAF_ERROR_CODES = [
   'openspec_unavailable',
   'baseline_unavailable',
   'baseline_incompatible',
+  'git_unavailable',
   'policy_missing',
   'invalid_transition',
   'intake_confirmation_required',

@@ -216,6 +216,17 @@ export function adjudicateFsWrite(
   const inChangeDir = state.changeDirRel !== undefined && matchesPathEntry(rel, state.changeDirRel)
   const stage = state.stage ?? 'intake'
   if (inChangeDir && (DOC_STAGES.has(stage) || stage === 'implement')) return allow
+  // 【变更】2026-09-22 (web walk, change 170b — user report #1): open's
+  // artifact is proposal.md, but open was never a DOC_STAGE — every
+  // change-dir write at open bounced as protected_path, so the model could
+  // not author the proposal at all (it misread the block as "artifacts are
+  // workflow-managed" and idled). Allow EXACTLY proposal.md at open, not the
+  // whole change dir: clarify/design/plan must stay unwritable until their
+  // stage begins, or the stage order the gates enforce becomes decorative.
+  if (inChangeDir && stage === 'open' && state.changeDirRel !== undefined
+    && rel === `${state.changeDirRel}/proposal.md`) {
+    return allow
+  }
   // §22.15 D: built-in protected paths apply even when the baseline omits
   // them. Once the change-dir allowance above has cleared the active change's
   // docs/implement artifacts, every other path under `.baf/**` / `openspec/**`

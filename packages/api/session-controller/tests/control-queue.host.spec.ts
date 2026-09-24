@@ -86,6 +86,27 @@ describe('Session control queue projection', () => {
     await iterator.next()
   })
 
+  it('projects a plugin-queued next-turn message as context, never as an editable queued row', async () => {
+    // A plugin's queued turn (the BAF `/baf-go` work order) is not the
+    // customer's text: `queued` is what the QueueDock offers edit / remove /
+    // steer on, so presenting it there would hand the customer a real edit
+    // affordance over words they never wrote.
+    const { control, inbox } = await harness()
+    const order = message('【BAF 工单】 fill clarify.md', 'plugin')
+    inbox.append('next-turn', order)
+
+    const abort = new AbortController()
+    const iterator = control.control(abort.signal)[Symbol.asyncIterator]()
+    const opened = await iterator.next()
+    if (opened.done || opened.value.type !== 'baseline') throw new Error('missing baseline')
+    expect(opened.value.value.queues['queue-session' as SessionId]).toEqual([
+      { id: order.id, placement: 'context', message: { id: order.id, content: order.content } },
+    ])
+
+    abort.abort()
+    await iterator.next()
+  })
+
   it('derives queue replacements from the completed projection regardless of registration order', async () => {
     const ctx = new Context()
     ownedContexts.add(ctx)

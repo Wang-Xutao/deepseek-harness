@@ -52,6 +52,7 @@ export * from './workflow-service.ts'
 export * from './tab-view.ts'
 export * from './lanes.ts'
 export * from './metrics.ts'
+export * from './dashboard.ts'
 export * from './stages/context.ts'
 export * from './stages/artifacts.ts'
 export * from './stages/gates.ts'
@@ -82,6 +83,41 @@ export {
   driveScaffold,
 } from './command-drives.ts'
 /**
+ * 【变更】2026-09-23 (user issue #1): the §18.4.2 work-order dispatcher, for
+ * host-plane consumers whose surface is a customer action (the Tab remotes).
+ * `makeGoDispatcher` builds from a live agent; the coordinator still refuses
+ * to dispatch without the customer-origin marker the inner drives stamp.
+ */
+export { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
+/**
+ * 【变更】2026-09-23 (demo1 issue #4): the §22.17 popup channel builder, for
+ * host-plane customer surfaces (the Tab 「推进」 remote) that must behave
+ * exactly like the typed `/baf-go` — pop the gate dialog, then let the click
+ * resolve through the registry with the work-order channel attached.
+ */
+export { makeGateAsk } from './gate-dialog.ts'
+/**
+ * 【变更】2026-09-23 (demo1 issue #1): the title marker a dispatched resting
+ * card carries — combining surfaces use it to keep「stopped because the model
+ * is now working」out of the error kind.
+ */
+export { DISPATCH_SENT_MARKER } from './go-coordinator.ts'
+/**
+ * 【变更】2026-09-23 (demo2 user issue #1): the parked-requirement continuation
+ * — host-plane consumers whose surface can leave a workspace freshly
+ * initialized (the Tab's scaffold gateResolve) re-enter
+ * `continueParkedRequirement` so the customer's stated requirement survives
+ * the scaffold as the 新建工作流 → 分类确认 chain.
+ */
+export {
+  clearParkedRequirement,
+  clearParkedRequirementFor,
+  continueParkedRequirement,
+  parkRequirement,
+  peekParkedRequirement,
+  resetParkedRequirements,
+} from './requirement-park.ts'
+/**
  * Cross-realm service resolution for host-plane consumers. `bafScaffold` (and
  * the baf-domain services generally) sit inside the entry-local isolate, so a
  * host ctx cannot see them directly — this helper looks through the receiving
@@ -108,6 +144,14 @@ export {
   driveVerify,
   type DriveAdapters,
 } from './command-drives.ts'
+/**
+ * §18 coordinator — re-exported here so the host Tab Remote can drive the
+ * 「推进」 button through the same coordinator the slash layer uses. The
+ * coordinator lives in `go-coordinator.ts` (not `command-drives.ts`) on
+ * purpose: it composes drives and owns none of its own, so the drives
+ * snapshot stays strictly "one drive = one stage transition".
+ */
+export { driveGo } from './go-coordinator.ts'
 export {
   isActiveChange,
   listActiveChanges,
@@ -115,6 +159,16 @@ export {
   resolveActiveChange,
   STALE_LOCK_MS,
 } from './projection.ts'
+/**
+ * §22.19 — the single intake mint entry, re-exported for host-plane
+ * consumers (the Tab Remote's startIntake used to call `service.intake`
+ * directly — a fifth mint surface with no active-check and no focus set).
+ * Everything that creates a change funnels through this; see
+ * `begin-intake.ts` for the mutex + reuse contract.
+ */
+export { beginIntake, type BeginIntakeOutcome } from './begin-intake.ts'
+/** §18.6 focus cache — host-plane readers (baf-guard ranking, §22.19 Phase 3). */
+export { focusFor, resetFocusCache } from './session-focus.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

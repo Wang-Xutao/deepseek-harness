@@ -3,10 +3,12 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import type {} from './remote-types.ts'
@@ -24,7 +26,7 @@ export type { WorkflowTabKey } from './locales.ts'
 
 /** Required services. */
 export const inject = [
-  'slots', 'locale', 'remote', 'remote.bafWorkflowView', 'sessions',
+  'slots', 'locale', 'remote', 'remote.bafWorkflowView', 'sessions', 'sidebarRight',
 ] as const
 
 /**
@@ -55,9 +57,12 @@ export function apply(ctx: ClientContext): void {
     inject: (sessionId: SessionId): WorkflowViewInjected => {
       const remote = ctx.remote.bafWorkflowView
       return {
-        refresh: async (): Promise<WorkflowTabView> => {
+        refresh: async (changeId?: string): Promise<WorkflowTabView> => {
           try {
-            return unwrap(await remote.getTabView({ sessionId })) as WorkflowTabView
+            return unwrap(await remote.getTabView({
+              sessionId,
+              ...(changeId === undefined ? {} : { changeId }),
+            })) as WorkflowTabView
           } catch (err) {
             return {
               ...buildClientEmptyTabView(),
@@ -68,6 +73,7 @@ export function apply(ctx: ClientContext): void {
         confirmIntake: async changeId => unwrap(await remote.confirmIntake({ sessionId, changeId })) as WorkflowTabView,
         rejectIntake: async changeId => unwrap(await remote.rejectIntake({ sessionId, changeId })) as WorkflowTabView,
         startIntake: async description => unwrap(await remote.startIntake({ sessionId, description })) as WorkflowTabView,
+        advance: async changeId => unwrap(await remote.advance({ sessionId, changeId })) as WorkflowTabView,
         transition: async (changeId, to, evidence) => unwrap(await remote.transition({
           sessionId,
           changeId,
@@ -83,6 +89,27 @@ export function apply(ctx: ClientContext): void {
           sessionId,
           ...request,
         })) as WorkflowTabView,
+        // 【变更】2026-09-23 (user issue #6): the 变更总览 dashboard payload.
+        dashboard: async () => unwrap(await remote.dashboard({ sessionId })),
+        // 2026-09-21 (session 5.jsonl) — the Tab's real "open this artifact"
+        // channel. Cards render in <pre> plain text (no clickable paths), so
+        // the artifact rows in the rail open the file in the right sidebar
+        // through the same address ui-chat's openFile builds.
+        openArtifact: (path: string) => {
+          const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+          ctx.sidebarRight.openResource(fileAddressFor(sessionId, cwd, path))
+        },
+        // §22.19 R5 — real-time Tab push. The host emits
+        // `baf-workflow/projection-appended` (per workspace, forwarded by
+        // api-remotes) after every appended event; this subscription pokes
+        // the view, which refreshes on a trailing debounce. The cwd filter
+        // keeps one session's Tab from reacting to another workspace's
+        // appends. Returns the `$on` disposer for the view's useEffect.
+        subscribe: (listener: () => void): (() => void) =>
+          ctx.remote.$on('baf-workflow/projection-appended', (event) => {
+            const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+            if (cwd !== undefined && cwd === event.cwd) listener()
+          }),
       }
     },
   }, WorkflowView)

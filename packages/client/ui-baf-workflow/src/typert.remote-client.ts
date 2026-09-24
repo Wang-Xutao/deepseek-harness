@@ -23,18 +23,22 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     startIntake: (request: BafWorkflowStartIntakeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     confirmIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     rejectIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
+    advance: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     transition: (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     resume: (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     gateResolve: (request: BafWorkflowGateResolveRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
+    dashboard: (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
   }
   interface TypertRemoteMap {
     'bafWorkflowView/getTabView': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/startIntake': (request: BafWorkflowStartIntakeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/confirmIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/rejectIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
+    'bafWorkflowView/advance': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/transition': (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/resume': (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
     'bafWorkflowView/gateResolve': (request: BafWorkflowGateResolveRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
+    'bafWorkflowView/dashboard': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabViewWire>>
   }
   interface TypertRemoteNamespaceMap {
     bafWorkflowView: TypertRemoteNamespace$bafWorkflowView
@@ -106,9 +110,11 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
     remoteDescriptor('startIntake', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowStartIntakeRequest'),
     remoteDescriptor('confirmIntake', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowChangeRequest'),
     remoteDescriptor('rejectIntake', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowChangeRequest'),
+    remoteDescriptor('advance', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowChangeRequest'),
     remoteDescriptor('transition', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowTransitionRequest'),
     remoteDescriptor('resume', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowResumeRequest'),
     remoteDescriptor('gateResolve', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowGateResolveRequest'),
+    remoteDescriptor('dashboard', '@deepseek-ai/dsh-client-ui-baf-workflow#BafWorkflowSessionRequest'),
   ],
 }
 

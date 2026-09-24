@@ -1,13 +1,14 @@
 /**
  * baf-scaffold: workspace init skeleton with no-overwrite + backup semantics.
  */
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { BafScaffold } from '../src/index.ts'
 import {
+  anchorGitWorkspace,
   applyScaffold,
   baselineTemplate,
   planScaffold,
@@ -138,6 +139,51 @@ describe('scaffoldWorkspace', () => {
     }
     expect(readFileSync(join(workspace, '.baf/baseline.yml'), 'utf8'))
       .toContain('baselineId: confirmed')
+  })
+})
+
+describe('anchorGitWorkspace (2026-09-22 user decision: scaffold owns the git anchor)', () => {
+  it('creates a repository and a commit anchor on a fresh workspace', () => {
+    applyScaffold(workspace, planScaffold({ baselineId: 'anchor' }), makeAt())
+    const anchor = anchorGitWorkspace(workspace)
+    // Best-effort contract: on a machine with git this lands; the note names
+    // the anchor. (A git-less machine reports the failure instead — covered by
+    // the shape, not simulated here.)
+    if (anchor.initialized) {
+      expect(anchor.revision).toBeDefined()
+      expect(anchor.note).toContain('锚点')
+      expect(existsSync(join(workspace, '.git'))).toBe(true)
+      // A second run never touches the repository it just created.
+      const again = anchorGitWorkspace(workspace)
+      expect(again.initialized).toBe(false)
+      expect(again.note).toContain('未改动')
+    } else {
+      expect(anchor.note).toContain('git init 未成功')
+    }
+  })
+
+  it('never touches a pre-existing repository', () => {
+    mkdirSync(join(workspace, '.git'), { recursive: true })
+    const anchor = anchorGitWorkspace(workspace)
+    expect(anchor.initialized).toBe(false)
+    expect(anchor.note).toContain('未改动')
+  })
+
+  it('rides on the scaffold outcome so the card can report it', () => {
+    const out = scaffoldWorkspace({
+      workspaceRoot: workspace,
+      humanConfirmed: true,
+      baselineId: 'with-git',
+      at: makeAt(),
+    })
+    expect(out.kind).toBe('done')
+    if (out.kind === 'done') {
+      expect(out.git).toBeDefined()
+      if (out.git !== undefined) {
+        expect(typeof out.git.note).toBe('string')
+        expect(out.git.note).not.toBe('')
+      }
+    }
   })
 })
 

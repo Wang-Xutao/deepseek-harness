@@ -36,9 +36,17 @@
       "types": "./lib/types/gate-ask.d.ts",
       "default": "./lib/gate-ask.js"
     },
+    "./question-ask": {
+      "types": "./lib/types/question-ask.d.ts",
+      "default": "./lib/question-ask.js"
+    },
     "./auto-pop": {
       "types": "./lib/types/auto-pop.d.ts",
       "default": "./lib/auto-pop.js"
+    },
+    "./orchestrator": {
+      "types": "./lib/types/orchestrator.d.ts",
+      "default": "./lib/orchestrator.js"
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
@@ -49,7 +57,9 @@
     "lib/cmdline.js",
     "lib/session-gate.js",
     "lib/gate-ask.js",
+    "lib/question-ask.js",
     "lib/auto-pop.js",
+    "lib/orchestrator.js",
     "lib/types/**/*.d.ts"
   ],
   "scripts": {
@@ -61,6 +71,7 @@
     "@deepseek-ai/dsh-baf-core": "workspace:^",
     "@deepseek-ai/dsh-baf-openspec": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",
+    "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",

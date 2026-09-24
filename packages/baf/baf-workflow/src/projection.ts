@@ -7,7 +7,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import {
   mkdir, open, readFile, rename, unlink, readdir,
 } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import {
   BafError,
   PROJECTION_DIR,
@@ -79,7 +79,6 @@ export const STALE_LOCK_MS = (() => {
   if (raw === undefined || raw === '') return fallback
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed) || parsed < 1_000) {
-    // eslint-disable-next-line no-console
     console.warn(`[baf] BAF_STALE_LOCK_MS=${JSON.stringify(raw)} is not a positive integer ≥ 1000; using ${fallback}ms`)
     return fallback
   }
@@ -236,6 +235,31 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
         }
       }
       break
+    case 'intake-settled': {
+      // 【变更】2026-09-23 (demo1 十问题 9): the archive-time settlement —
+      // a finished change must not show 待定 in 类型/影响范围 forever.
+      // 【变更】2026-09-24 (demo6 问题 2/6): per-field application — the settle
+      // now fires at the stage where each fact is known (kind at classify
+      // confirm, scope at plan completion, both at archive as the backstop).
+      // An event settles only the field it carries AND only while that field
+      // is still 待定; a replay that settles nothing appends nothing (the
+      // reasonCodes list must not grow on stray replays).
+      if (state.intake === undefined) break
+      const settleKind = event.kind !== undefined && state.intake.kind === 'unknown'
+        ? event.kind
+        : undefined
+      const settleScope = event.affectedScope !== undefined && state.intake.affectedScope === 'unknown'
+        ? event.affectedScope
+        : undefined
+      if (settleKind === undefined && settleScope === undefined) break
+      state.intake = {
+        ...state.intake,
+        ...(settleKind !== undefined ? { kind: settleKind } : {}),
+        ...(settleScope !== undefined ? { affectedScope: settleScope } : {}),
+        reasonCodes: Object.freeze([...state.intake.reasonCodes, ...(event.reasonCodes ?? ['settled-at-archive'])]),
+      }
+      break
+    }
     case 'intake-confirmed':
       if (state.intake !== undefined) {
         state.intake = { ...state.intake, confirmation: 'confirmed', requiresUserConfirmation: false }
@@ -243,12 +267,27 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
       state.nodes.intake = 'completed'
       break
     case 'intake-mode-set': {
-      // §22.17 J — customer path override at the classify gate. Legal only
-      // while the intake is pending; anything else stays audit-only so a
-      // replayed log never resurrects a confirmed change's mode.
-      if (state.intake === undefined || state.intake.confirmation === 'confirmed') break
+      // §22.17 J — customer path override at the classify gate. Legal while
+      // the intake is pending, or — the rescue arm mirroring `setIntakeMode`
+      // — while a confirmed intake still sits on the unresolved
+      // `clarify-required` verdict; anything else stays audit-only so a
+      // replayed log never resurrects a confirmed change's chosen path.
+      if (state.intake === undefined) break
+      if (state.intake.confirmation === 'confirmed' && state.intake.mode !== 'clarify-required') break
       if (event.to === state.intake.mode) break
       state.intake = { ...state.intake, mode: event.to }
+      // 【变更】2026-09-23 (demo1 issue #2): choosing the bug-fix fast path IS
+      // the assertion「这是缺陷」— the customer settles the one field the
+      // keyword heuristic left at 'unknown'. The full-go choice settles
+      // nothing (a feature, a refactor and a cross-module bug all take it),
+      // so only the bug-fix override writes kind.
+      if (event.to === 'bug-fix-path' && state.intake.kind === 'unknown') {
+        state.intake = {
+          ...state.intake,
+          kind: 'bug',
+          reasonCodes: [...state.intake.reasonCodes, 'kind-settled-by-path'],
+        }
+      }
       state.mode = event.to
       if (event.to === 'bug-fix-path') {
         // Same shape the classified-bug fold applies (§ intake-classified):
@@ -387,6 +426,29 @@ export interface ProjectionStoreOptions {
 }
 
 /**
+ * §13 R8 / §22.19 R5 — per-workspace, process-global append bus. Every
+ * {@link ProjectionStore} of the same workspace root (and the host remote
+ * deliberately constructs short-lived ones per drive — `beginIntake`,
+ * `driveGo`, the orchestrator each build their own) fans appends out to the
+ * SAME subscriber set: before §22.19 the bus was per-instance, so a
+ * persistent subscriber could only hear its own writes and never the ones
+ * it actually cares about — the drives' appends.
+ *
+ * The bus is intentionally **not** persisted and **not** cross-process: a
+ * second dsh instance writing the same workspace won't poke this process —
+ * the Tab's visibility refresh + poll fallback is the safety net for that
+ * case. The point is to remove the latency on the same-process hot path,
+ * where the bus pays for itself.
+ */
+const WORKSPACE_LISTENERS = new Map<string, Set<(changeId: string) => void>>()
+
+/** Registry key for one workspace root (Windows paths compare case-blind). */
+function workspaceBusKey(root: string): string {
+  const resolved = resolve(root)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+/**
  * Single-writer projection store for one workspace.
  * Holds an in-process queue and a lock file to refuse a second OS writer.
  */
@@ -396,21 +458,6 @@ export class ProjectionStore {
   private readonly eventId: () => string
   private readonly queues = new Map<string, Promise<unknown>>()
   private lockHeld = false
-  /**
-   * §13 R8 — in-process subscribers that want a poke whenever any change
-   * in this workspace gets a new event appended. The Tab UI subscribes
-   * once per workspace render and unsubscribes on unmount, so a `clear`
-   * prediction at a stale `current: 'design'` card never reaches the
-   * user (the customer types `/baf-go` in chat, the new event lands,
-   * the Tab refetches, the gate card swaps for the next stage).
-   *
-   * The bus is intentionally **not** persisted and **not** cross-process:
-   * a second dsh instance writing the same workspace won't poke this
-   * instance — the Tab's `getTabView` poll / refresh path is still the
-   * safety net for that case. The point is to remove the latency on the
-   * same-process hot path, where the bus pays for itself.
-   */
-  private readonly listeners = new Set<(changeId: string) => void>()
 
   constructor(options: ProjectionStoreOptions) {
     this.root = options.workspaceRoot
@@ -612,22 +659,34 @@ export class ProjectionStore {
   }
 
   /**
-   * §13 R8 — register a subscriber. Returns an unsubscribe function so
-   * the Tab can `useEffect` pair subscribe/unsubscribe without leaking
-   * the listener when the workspace unmounts. Subscribers are called
-   * once per successfully appended event on the change they were
-   * notified about — passing the `changeId` so a single listener that
-   * watches every change can still index cheaply.
+   * §13 R8 / §22.19 R5 — register a workspace subscriber. Returns an
+   * unsubscribe function so the Tab can `useEffect` pair subscribe/unsubscribe
+   * without leaking the listener when the workspace unmounts. The listener is
+   * poked once per successfully appended event **on any store instance of this
+   * workspace** — the drives construct their own stores, and the subscriber
+   * must hear those appends too — passing the `changeId` so a single listener
+   * that watches every change can still index cheaply.
    * @param listener - callback fired with the affected changeId.
    * @returns unsubscribe function.
    */
   subscribe(listener: (changeId: string) => void): () => void {
-    this.listeners.add(listener)
-    return () => { this.listeners.delete(listener) }
+    const key = workspaceBusKey(this.root)
+    let set = WORKSPACE_LISTENERS.get(key)
+    if (set === undefined) {
+      set = new Set()
+      WORKSPACE_LISTENERS.set(key, set)
+    }
+    set.add(listener)
+    return () => {
+      set.delete(listener)
+      if (set.size === 0) WORKSPACE_LISTENERS.delete(key)
+    }
   }
 
   private emit(changeId: string): void {
-    for (const listener of this.listeners) {
+    const set = WORKSPACE_LISTENERS.get(workspaceBusKey(this.root))
+    if (set === undefined) return
+    for (const listener of set) {
       try {
         listener(changeId)
       } catch (error) {

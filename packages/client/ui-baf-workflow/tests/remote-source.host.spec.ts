@@ -74,7 +74,7 @@ describe('Remote source contracts (§22.15 B / §22.16 P3)', () => {
     const lines: string[] = []
     try {
       await driveGateResolve(
-        root, 'design-confirm', 'confirm', {}, undefined, 'gate-card',
+        root, 'design-confirm', 'confirm', {}, undefined, undefined, 'gate-card',
         { changeId, audit: line => lines.push(line) },
       )
       const line = lines.find(l => l.includes('session baf:gate'))
@@ -93,7 +93,7 @@ describe('Remote source contracts (§22.15 B / §22.16 P3)', () => {
     try {
       // No audit param — should run silently (CLI smoke path).
       const result = await driveGateResolve(
-        root, 'design-confirm', 'confirm', {}, undefined, 'gate-card',
+        root, 'design-confirm', 'confirm', {}, undefined, undefined, 'gate-card',
         { changeId },
       )
       expect(result.kind).toBeDefined()

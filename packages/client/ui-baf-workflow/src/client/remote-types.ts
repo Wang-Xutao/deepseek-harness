@@ -4,7 +4,7 @@
  * depending on Host build artifacts beyond the committed remote contribution.
  */
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import type { WorkflowTabView } from '@deepseek-ai/dsh-baf-core/types'
+import type { WorkflowDashboardView, WorkflowTabView } from '@deepseek-ai/dsh-baf-core/types'
 import type {
   BafWorkflowChangeRequest,
   BafWorkflowResumeRequest,
@@ -16,6 +16,7 @@ import type {
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$626166576f726b666c6f7756696577 {
     confirmIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
+    dashboard: (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowDashboardView>>
     getTabView: (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabView>>
     rejectIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
     resume: (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabView>>
@@ -23,6 +24,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     transition: (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabView>>
   }
   interface TypertRemoteMap {
+    'bafWorkflowView/dashboard': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowDashboardView>>
     'bafWorkflowView/confirmIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
     'bafWorkflowView/getTabView': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabView>>
     'bafWorkflowView/rejectIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>

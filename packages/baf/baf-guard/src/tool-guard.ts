@@ -89,7 +89,8 @@ export function renderDenial(decision: GuardDecision): string | undefined {
 /** Injectable state/config readers (tests substitute deterministic ones). */
 export interface ToolGuardSources {
   readonly readConfig: (workspaceRoot: string) => GuardPolicyConfig
-  readonly readState: (workspaceRoot: string) => GuardWorkflowState
+  /** §22.19: the optional target path drives ranking rule 1 for fs-writes. */
+  readonly readState: (workspaceRoot: string, targetPath?: string) => GuardWorkflowState
 }
 
 /** Default sources: sync disk reads of `.baf/`. */
@@ -108,6 +109,26 @@ export interface BafToolGuardOptions {
 
 /** The generic question tool the BAF composition exposes (tool-ask-user row). */
 const ASK_USER_TOOL = 'ask_user_question'
+
+/**
+ * 2026-09-21 standing rule: does this `ask_user_question` payload carry at
+ * least one question with a non-empty `options` array? Option-bearing asks are
+ * selection questions, and every selection must pop through the BAF channels
+ * (`baf_question_ask`, or `baf_gate_ask` for workflow decisions) so the
+ * customer always clicks the same kind of card and the result text is the
+ * click — a generic-tool option list looks identical to a registry gate to
+ * the customer but bypasses the popup discipline entirely. Free-text-only
+ * clarification (no options) stays legal.
+ */
+function hasOptionBearingQuestion(args: unknown): boolean {
+  if (typeof args !== 'object' || args === null) return false
+  const questions = (args as { questions?: unknown }).questions
+  if (!Array.isArray(questions)) return false
+  return questions.some(q =>
+    typeof q === 'object' && q !== null && Array.isArray((q as { options?: unknown }).options)
+    && ((q as { options?: unknown }).options as unknown[]).length > 0,
+  )
+}
 
 /**
  * Create the synchronous ToolGuard for one agent workspace. Every call
@@ -132,12 +153,23 @@ export function createBafToolGuard(options: BafToolGuardOptions) {
       if (state.active && state.gatePending === true) {
         return `${BAF_GUARD_PREFIX} gate_pending_ask_blocked: 当前有未决的工作流确认（分类 / 设计确认 / 归档确认）。请改用 baf_gate_ask 弹出注册表确认卡让客户点选，不得用通用提问工具代答或代问工作流决策。`
       }
+      // 2026-09-21 standing rule (session 6.jsonl): option-bearing generic
+      // asks are selection questions — they must ride the BAF popup channels,
+      // not the generic tool. Checked outside the pending-gate window because
+      // the rule holds at every workflow state, not just parked gates.
+      if (hasOptionBearingQuestion(execution.arguments)) {
+        return `${BAF_GUARD_PREFIX} ask_options_blocked: 选择类问题必须用 baf_question_ask 弹卡让客户点选（工作流决策用 baf_gate_ask），返回文本就是客户的点选结果；不得用通用提问工具携带自创选项。不带选项的纯文本澄清仍可用 ask_user_question。`
+      }
       return undefined
     }
     const call = classifyToolCall(execution.name, execution.arguments)
     if (call.kind === 'unrecognized') return undefined
     const config = sources.readConfig(options.workspaceRoot)
-    const state = sources.readState(options.workspaceRoot)
+    // §22.19 ranking rule 1: an fs-write names its own change — the path
+    // landing inside `openspec/changes/<id>/` selects that change for
+    // adjudication, even when another row is fresher (session 7.jsonl R3).
+    // Shell calls adjudicate without a path (focus / seq ranking applies).
+    const state = sources.readState(options.workspaceRoot, call.kind === 'fs-write' ? call.path : undefined)
     const decision = call.kind === 'fs-write'
       ? adjudicateFsWrite(config, state, {
         root: options.workspaceRoot,

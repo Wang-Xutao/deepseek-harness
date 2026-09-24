@@ -13,4 +13,4 @@ export type {
   RouteStatusView,
 } from './route-policy.ts'
 export type { TerminalState, WorkflowNode } from './workflow.ts'
-export type { WorkflowTabView } from './tab-view.ts'
+export type { WorkflowDashboardRow, WorkflowDashboardView, WorkflowTabView } from './tab-view.ts'

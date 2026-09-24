@@ -255,7 +255,7 @@ describe('BAF session gate · startup binding (§18.3.1)', () => {
       const card = renderWelcomeCard({ cwd: root, probe: await probeToolchain(root), binding })
       expect(card.text).toContain('工作区里有没做完的工作流')
       expect(card.text).toContain('CHG-ONE · 完整流程 · 进行到 intake')
-      expect(card.text).toContain('回复 /baf-go continue 接着做 CHG-ONE')
+      expect(card.text).toContain('回复 /baf-go 接着做 CHG-ONE')
       expect(card.text).toContain('本会话还没接手')
     } finally {
       await cleanup(root)

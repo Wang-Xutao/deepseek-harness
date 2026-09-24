@@ -2270,13 +2270,13 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 | `intake`（已 confirm，未 open） | `pipeline.driveOpenStage` / `driveFastPathOpenStage`（mode 由 intake 决定） | `open` | — |
 | `open` | `pipeline.beginDocStage('clarify')` | `clarify` in-progress | — |
 | `clarify` in-progress | `pipeline.completeDocStage('clarify')` | `design` | — |
-| `clarify` available（已装模板未填） | 等模型在会话中填模板；coordinator 不动 | `design` | — |
+| `clarify` available（已装模板未填） | 装模板停靠点：coordinator 不动状态，但客户手敲 `/baf-go` 会**派单**（§18.4.2 「/baf-go 派单」）唤醒模型填模板 | `design` | — |
 | `design` in-progress | `pipeline.completeDocStage('design')` | **进入门 A** | **■** |
 | `plan` in-progress | `pipeline.completeDocStage('plan')` | `implement` | — |
-| `plan` available | 等模型写 `plan.json`；coordinator 不动 | `implement` | — |
-| `implement` in-progress（full-go-path） | 检查 `plan.json`：有未完成 → 等模型；全 done → `driveImplementStage` | `verify` | — |
+| `plan` available | 等模型写 `plan.json`；coordinator 不动状态，客户手敲 `/baf-go` 同样派单 | `implement` | — |
+| `implement` in-progress（full-go-path） | 检查 `plan.json`：有未完成 → 等模型（手敲 `/baf-go` 派单）；全 done → `driveImplementStage` | `verify` | — |
 | `implement` in-progress（fast-path） | 检查 `fastpath-ledger.json`：有未完成 → 等模型；全 done → `driveImplementStage` | 触发 T15 则升级（见下）；否则 `verify` | — |
-| `verify`（`enterStage` 成功） | `pipeline.driveVerifyStage` | 通过 → **门 B**；失败 → 回 `implement` | 通过时 **■** |
+| `verify`（`enterStage` 成功） | `pipeline.driveVerifyStage` | 通过 → **门 B**；失败 → 回 `implement`（T11 退回卡同样派单） | 通过时 **■** |
 | `archive`（已通过 verify） | `pipeline.driveArchiveStage(..., humanConfirmed: true)`（**只在客户确认后**） | `archived` | **■** |
 | `drift` | **转 `/baf-workflow-resume` 候选卡**（§19.4） | 客户选点后回到该节点 | **■** |
 | `completed` / `abandoned` | 错误卡「当前工作流已终态；请新开一个会话」 | — | — |
@@ -2287,6 +2287,21 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 
 - coordinator **不重写** drive 函数；`driveGo` 是纯路由器（switch over `status.current` × `status.mode`），只调现有 `driveOpen` / `driveClassify` / `pipeline.{beginDocStage,completeDocStage,driveImplementStage,driveVerifyStage,driveArchiveStage}`。
 - 「等模型在会话中填模板」分支：coordinator 返回「当前在 N2 clarify，请回答模板问题后再次 `/baf-go`」卡，**不阻塞新 turn**——模型在同一 session 的下一次自然语言回复中继续写产物。
+
+**§18.4.2 「/baf-go 派单」（2026-09-22 客户决策，工作区 `demo_1` 事件）**
+
+问题：工作流会停在「下一步是模型补产物」的停靠点（clarify/design/plan 模板装好待填、`open` 的 proposal 裁决门未过、implement 等 ledger、verify T11 退回）。这些点上**没有任何东西唤醒模型**：客户在弹窗点「推进」把 open 推到 clarify 后，模型空闲、clarify.md 一直没人填；再敲 `/baf-go` 只重渲染同一张拒绝卡，客户读作「报异常」。客户决策：**`/baf-go` 必须掌管全流程——凡「等模型补产物」的停靠点，敲这个指令就给同会话模型派工单，流程接着跑**。
+
+- **形态**：独立只读派单条目。派单 = `agent.followup(createUserMessage({ source: { kind:'plugin', plugin:'baf-commands', form:'go-dispatch', changeId, node, missing } }))`——入 next-turn inbox 并唤醒 driver（先例 `/goal`）。插件源 + `form: 'go-dispatch'` 让客户端把它渲染成**只读 context 行**（展开见分段 work-order 文本），无 composer、无客户气泡、不可编辑，绝不被误认为客户原话。
+- **红线（不违背「四修」拆除；2026-09-23 修订授权面）**：拆除的是**宿主未经客户动作**的 relay。派单只发生在**客户动作面**——手敲 `/baf-go` / `/baf-go-confirm`、弹窗选项点击（orchestrator/auto-pop/gate-ask 的 answered 解析）、工作流页签「推进」与门卡点击——且 coordinator 侧双保险要求 `dispatchOrigin: 'customer'` 盖章：宿主内部自动驱动（orchestrator 的 verify 驱动）、模型工具、CLI 不带章，永远派不了单。派单是 **ask 侧**下工单，不写 projection 事件、不改状态、不是门裁决（§22.1 不变式 2 不变）。2026-09-23 客户问题 #1 的决策：门确认点击本身就是授权——点「推进」后流程必须接着跑。
+- **工单内容**：唯一内容源是裁决门自己的 `missing` 行 + `DOC_REQUIREMENTS_ZH[node]`（implement 引用 `implementGate` 的 ledger 条件），加四条执行要求（直接编辑产物、补齐后立刻结束回合、需决策用 `baf_question_ask`、本单由客户敲 `/baf-go` 生成）。工单不可能承诺门不检查的东西；已出现在 `missing` 里的条件行不重复印。
+- **客户端呈现**：只读 context 行 = 头部「`/baf-go 派单` · node · changeId」+ 缺口逐项列表（`[data-context-go-dispatch-missing]`），**工单全文默认折叠**在一层 disclosure 里——正文逐字重复上方列表，默认展开会把同一份清单印两遍。折叠行摘要「`/baf-go 派单 · <node> · 待补 N 项`」。字段不可读（历史/外来日志）→ opaque 只读行，仍无 composer、非客户气泡。
+- **队列投影**：派单是插件源 `next-turn`，`queueItemsFromInbox` 按来源分位——只有 `source.kind === 'user'` 才 `placement:'queued'`。`queued` 是 QueueDock 提供 编辑/删除/插话 的可编辑窗口，把插件派的工单放进去等于给客户一份「他们没写过的话」的真实编辑权；与既有非用户 `next-step` → `context` 的规则一致。
+- **去重账本（2026-09-23 问题 #4 修订）**：进程内 `Set`，key `cwd | changeId | node | missing 连接`。语义 = 「这一单还在排队/在飞」：模型回合进行中（`agent.status === 'running'`）= `busy` 不派；回合内同缺口二敲 = `deduped`。**每个完成回合结束时 orchestrator 清空该工作区的账本**（`expireDispatchLedger`）——被派回合结束后缺口仍在（模型没补齐就收工）时，客户再敲 `/baf-go` 重派新单，不再永远回答「已派单 · 等待补齐」而模型 idle。缺口变小 = 新 key = 合法重派；host 重启后同缺口重派一次（幂等散文，无害）。配套：orchestrator popGate 的 OFFERED 指纹从 `v<version>` 扩为 `v<version>:<产物 size>-<mtime>`——模型填产物不写 projection 事件，曾被 pause 的推进门靠产物签名重弹。
+- **回合结束自动弹门已存在**：模型填完产物 → 回合结束 → §22.19 orchestrator 的 `docAdvanceDue` 重跑文件门并弹下一阶段裁决卡（implement 完成分支驱动 verify）。**填完产物后的弹窗零新增工作**。
+- **卡片标注**：派单点卡片标题带「已派单」/「已派单 · 等待补齐」/「模型回合进行中」marker，「下一步」段改写成「工单已送达本会话…模型结束回合后系统自动弹出下一阶段裁决卡」。无 dispatcher 或无 origin 盖章（CLI/测试/宿主内部）时文案与派单前**逐字节相同**。
+- **persona 加固（belt-and-braces）**：`agent.cordis.yml` 的 baf persona（中/英）各加一句——见到「【BAF 工单 · /baf-go 派单】」条目按「缺什么」逐项补齐、补齐后结束回合；该条目是客户授权的工作单，不是客户原话。
+- **待决弹窗并存**：派单不动 ask 队列；回合结束 orchestrator 重派生 gate + 单飞队列去重（既有行为）。
 - `verify` 失败回 `implement` 是 §5.2 T11 既有路径；`driveVerifyStage` 返回 `backToImplement` 时 coordinator 直接渲染「修复后再次 `/baf-go`」卡，不另写逻辑。
 
 #### 18.4.3 双泳道视图（fast-path → full-go-path 升级）
@@ -2833,6 +2848,8 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 2. **Ask 与 Resolve 能力分离**。模型（以及任何自动驱动器）只能**弹卡**（ask）；只有真实人因输入才能**答题**（resolve）——GUI 按钮点击、输入框 slash 键击、Tab 按钮、CLI 键击。**模型侧不存在任何 resolve 工具**——「代答」不是被禁止，而是物理不存在。
 3. **标准外操作不接受 = 机械强制**。confirm 类转换在状态机层校验 `evidence.source`（由宿主入口写死，模型不可传参伪造）；`.baf/` 与 `openspec/` 列入 `baf-guard` 防护路径，**「模型手写 scaffold」物理不可能**。
 
+不变式 2 的边界（2026-09-22 补齐，**2026-09-23 修订**，见 §18.4.2 「/baf-go 派单」）：**宿主主动往会话里塞话**（未经客户动作的 relay）违反不变式 2 的「ask 面不产生人因输入」精神，已在「四修」中拆除且不再回归。派单与之相反——它是**客户动作之后**系统把「缺什么」写成一张只读工单交给模型，属于 ask 侧下工单：不 resolve 任何门、不写 projection、不改状态，署名 `source.kind: 'plugin'`（渲染为只读 context 行，不是客户原话）。授权面 = 客户动作面：手敲 `/baf-go` / `/baf-go-confirm`、弹窗选项点击、工作流页签「推进」/门卡点击（coordinator 侧要求 `dispatchOrigin: 'customer'` 盖章，宿主内部自动驱动、CLI、模型工具不带章、永远派不了单——这是第二道）。2026-09-23 客户问题 #1 把门确认点击纳入授权面：点「推进」本身就该让流程接着跑。
+
 ### 22.2 现状缺口（与本章一起补齐）
 
 | 缺口 | 修复点 |
@@ -3298,6 +3315,106 @@ GATE_REGISTRY 选项（如门 A「确认设计」）的 `command: '/baf-go'` 在
 **J5. 附带修复：projection 原子写 rename EPERM 竞态（2026-09-20 深夜，真机级）**：J3 落地后的满载压测抓到 auto-pop 确认链偶发（约 1/7）返回错误卡——给行链路加 `classify/resolved` 审计日志后定位：`writeAtomic` 的裸 `rename(tmp, path)` 在 Windows 上撞并发读句柄（Tab 刷新轮询 / 测试轮询正打开 index.json 或变更 jsonl）→ EPERM 瞬时失败 → `setIntakeMode` 的追加被 `改道失败` 卡吞掉 → 客户的确认点击死在错误卡上。**真机同款形态**（Tab 刷新就是并发读方）。修法：rename 对 EPERM/EBUSY/EACCES 短退避重试（25ms 起步 ×5，读方毫秒级释放）。配套：BAF 集成测试套（`packages/baf/*/tests/**`）在 vitest 配置里独立成 `baf-integration` 项目（`testTimeout: 60_000`）——满载并行下多阶段流水线测试屡撞默认 5s 预算（stages/bug-fix-path/lanes/resume/gate-dialog/tool-guard 各中过一次，都在 ~5.0s 顶点），单测默认 5s 不变。
 
 **测试（as-built）**：[`auto-pop.spec.ts`](packages/baf/baf-workflow/tests/auto-pop.spec.ts) 新 5 项（真需求 → 预问 → 分类 → 确认全链落到 confirmed；「只是聊天」零铸；斜杠 / 短句 / 插件源不弹；未初始化 / 忙工作区不弹；每会话至多一次）；[`gate-dialog.spec.ts`](packages/baf/baf-workflow/tests/gate-dialog.spec.ts) §22.17 J 组 3 项（草案五字段渲染进 detail；full 判定点缺陷路径 → `已确认并进入 open` + `intake-mode-set` 事件落证 + openspecSkipped；无草案点缺陷路径 → 缺字段卡但改道已记录）；`gate-cards.spec` 两路径选项与 `mode=` 派发串；`go.spec` askAnswer 改 `confirm-full`；[`tool-guard.spec.ts`](packages/baf/baf-guard/tests/tool-guard.spec.ts) §22.17 J 组 4 项（未决门拦并指向 baf_gate_ask / 无未决门放行 / 空闲工作区放行（J3 之域）/ 磁盘态：未确认 intake ⇒ gatePending，confirm ⇒ 清除）。全量 `packages/baf/` + `packages/client/ui-baf-workflow/` + `packages/client/ui-user-questions/` = 37 文件 / 351 项 **6 连跑全绿**（含 J5 修复后压测）。
+
+### §22.18 一切选择皆弹卡：active-conflict 门 + `baf_question_ask` 非工作流选择通道（2026-09-21，session 6.jsonl 修订）
+
+> 触发：真机 session 6.jsonl 暴露两处死局——**转 1**（line 29-33）：`baf_gate_ask(intake-classify)` 撞上已存在活动变更（design 阶段），工具只回**纯文字拒绝**，模型随即在消息里写「A. 继续推进已有变更 / B. 新开会话」，客户被迫打字回「A」；**转 2**（line 78）：模型把两个内容选择写成散文「问题1 (A/B) + 问题2 (A/B/C)…请回 1A 2C」，会话就此搁置。I 节立法的「弹窗触发」在碰撞场景与非工作流选择场景各缺一块。本节补齐后规则升格为：**凡要客户在选项里做选择——无论是否影响工作流走向——必须弹卡点选；打字回答选择的时代结束。**
+
+#### A. active-conflict 门：碰撞本身就是一张可点卡
+
+GATE_REGISTRY 新成员 **`active-conflict`**（第 12 个注册门）：工作区已有活动变更、客户又提出新需求时弹出，三选项——**继续推进现有变更**（派发 `/baf-go change=<id>`）、**放弃现有变更，稍后再提新需求**（`/baf-workflow-abandon confirm change=<id>`）、**暂不处理**（`__noop__`）。`baf_gate_ask` 的 actives 拒绝分支从「纯文字 + 让模型自行转述」改为：`pickActiveChange` 选焦（多活动时取最高 seq 候选，与全表面一致的排序）→ `askGateDialog` 弹 active-conflict，note 段落带两行上下文（现有变更进行到哪一步 / 客户新需求原话）→ 点选经 `driveGateResolve` 真派发。**点「放弃」后的工具返回文本明确指示模型：立刻用客户原话重调 `baf_gate_ask(intake-classify, requirement=…)`——新需求从分类卡无缝续上，客户零打字。** 关闭弹窗（暂停）与不可用分支同样回冲突卡 + 指令化下一步。`driveGateResolve` 的 abandon 派发改带 `change=<id>`，确保放弃的就是卡上点名的那条（多活动时不误杀）。
+
+#### B. `baf_question_ask`：非工作流选择的官方弹卡通道
+
+新工具（preset 新宿主面行 `baf-question-ask`，包导出 `@deepseek-ai/dsh-baf-workflow/question-ask`）：参数 `questions`（1-4 问 × 2-4 选项，label + 可选 description），经 `userQuestions.ask` **一次弹多问卡、阻塞等点选**。返回卡逐问报告：`客户选择：<label>` / `客户补充：「<custom>」` / `客户未选择（该问题被跳过）——不要替客户补一个答案`；取消（X/abort）回「客户暂未选择…不要替客户决定；可再次调用本工具重弹这张卡」；无 answerer 环境降级为逐字转述卡并明令**不得改为消息里罗列 A/B/C**；参数不合法（选项数越界 / label 重复 / 空问题）拒绝弹出。**分工成文**（写入 `baf_gate_ask` 工具描述）：工作流走向决策走 `baf_gate_ask`（注册表门），其余一切选择走 `baf_question_ask`——两者都是弹卡，都不许散文选项。
+
+#### C. 硬拦升级：`ask_options_blocked`
+
+baf-guard 在 `gate_pending_ask_blocked` 之后新增性能分支：工具 `ask_user_question` 的参数里出现**带选项的问题**（任一 question 的 options 非空）即拒——`[baf-guard] ask_options_blocked`，提示改走 `baf_question_ask`（工作流决策走 `baf_gate_ask`）。带选项的通用提问自此在任何工作流状态都无路；**不带选项的纯文本澄清不受影响**（ask_user_question 的本职）。未决门场景 `gate_pending_ask_blocked` 仍优先（先命中先拒）。
+
+#### D. 规则面同步（session-gate / SKILL.md）
+
+session-gate：通用提问规则改「只用于与工作流走向无关、**且不带选项**的纯文本澄清」；新增独立条——需要客户在多个选项里做选择时（无论是否影响走向）必须弹卡（工作流决策 `baf_gate_ask` / 其余 `baf_question_ask`），**不得在消息里罗列 A/B/C 让客户回编号或字母（如「回 1A 2C」）**；客户没点选就如实说明，聊天里的字母/口头同意不算点选。`baf-go` SKILL.md 同步立法（新规则 7；原 8 改写为 active-conflict 弹窗行为，顺延 9/10）。
+
+**测试（as-built）**：`gate-cards.spec` +1（active-conflict 渲染：两真派发命令带 `change=CHG-006` / 暂不处理）；`gate-dialog.spec` 新「active-conflict: the collision pops as a dialog」组 3 项（`mintOpenedChange` 铸 open 态变更后：碰撞弹卡形态与 note 段；点「继续推进」→ clarify 卡 + 仍 1 条活动；点「放弃」→ 已放弃 + 「重新调用 baf_gate_ask」指令 + requirement 原话入卡 + 0 活动）+ note 段渲染 1 项；[`question-ask.spec.ts`](packages/baf/baf-workflow/tests/question-ask.spec.ts) 新 8 项（session-6 双问一弹 / 点选标签逐字回 / custom 补充 / 跳过问不代答 / 取消暂停措辞 / 无 answerer 降级 / 单选项拒绝 / >4 选项·>4 问·label 重复拒绝）；`tool-guard.spec` +3（带选项 ask 全状态拦 / 未决门优先级 / 纯文本与空选项放行）。全量 baf-integration **31 文件 / 325 项全绿** + ui-baf-workflow 2 文件 / 7 项；`build:lib:host` 与 `build:lib:client` 零错误。
+
+**遗留（按序）**：① `/baf-go` 绑定守卫卡「本会话已有工作流」多活动边界仍是纯文字卡（单活动已被 §22.18 A 覆盖，多活动罕见）；② `ask_user_question` 选项形态识别是结构化扫描（`options` 数组非空）——模型若把选项写进 question 文本里则拦不住，靠 SKILL/session-gate 规则兜底；③ 真机回归随下一版打包（本轮仅 build:lib，未出 NSIS）。
+
+### §22.19 编排权收归 harness：单一铸造 · 弹窗单飞 · 排序统一 · bind 门 · orchestrator · Tab 实时推送（2026-09-21，session 7.jsonl 修订）
+
+> 触发：真机 web 端 session 7.jsonl 暴露六连锁事故，用户并立下架构原则（不可协商）：**工作流是一条固定的单线——什么时候弹窗、什么时候等输入、什么时候推进，全部固定在代码里。所有工作流控制归 harness（标准流程、与项目无关），模型不能操控或跳过转移，只做业务逻辑（澄清内容、设计起草、实现）。弹卡一律 harness 弹：工作流需要决策时弹，模型业务上需要客户选择时经受控通道强制弹。** 本节把「模型自觉 + guard 事后拦」改为「harness 独家驱动」。
+>
+> 事故链：**R1 双铸**——auto-pop 预问卡与模型 `baf_gate_ask` 并发，各自检查时对方未落盘（TOCTOU），同一句话铸出两条变更（fd23 推进 + 545e 卡 intake:pending）；**R2 弹窗覆盖**——平台允许 N 个并发 ask，客户端同优先级后到者顶掉先到者，分类卡盖掉预问卡，被盖流程事后又铸一条；**R3 三套排序各选各的**——guard 按 updatedAt、Tab 兜底按字典序（含终态！）、驱动按 pickActiveChange，写 fd23 产物被要求先确认 545e；**R4 多活动绑定是纯文字卡**——`/baf-go` ≥2 活动只回「回复 `/baf-go change=<id>`」；**R5 Tab 纯拉取**——只在 mount/聚焦/可见/手动刷新时取数，聊天里 mint 不触发任何一条，Tab 停在 80de「已放弃」死画面（该视图构造性无按钮），模型还指导客户「去点工作流页签 / 敲斜杠命令」；**R6 模型终局散文**——被 guard 连拒后模型输出「A/B 二选一 + 手把手教命令」。
+
+#### A. beginIntake 单一铸造入口（R1 根修）
+
+新文件 [`begin-intake.ts`](packages/baf/baf-workflow/src/begin-intake.ts)：`beginIntake(cwd, rawInput, source?)` 是**一切 mint 的唯一入口**——per-cwd 进程内互斥（Promise 链，仿 ProjectionStore.queues）+ **锁内重读 index**（杀死 TOCTOU 窗口）。结果三态：`minted`（零活动 → 现行 open 驱动逻辑：校验 + baseline + intake + focus.set）；`reused`（唯一活动是**未确认 intake 且同需求** → 复用，进程重启无 lastRequirement 记录时无条件复用，绝不双铸）；`refused-active`（其它活动在场 → 携 pickActiveChange 排序的活动列表，调用方弹 active-conflict）。`driveOpen` 签名不变、内部委托，斜杠面零改动；gate-ask / auto-pop / go-coordinator 三处「事后 diff index 识别刚铸的变更」全部改读结构化结果；**Tab remote `startIntake`（原直调 `service.intake`，第 5 个无守卫 mint 面）收编走 beginIntake**。
+
+#### B. ask-queue 弹窗单飞队列（R2 根修）
+
+新文件 [`ask-queue.ts`](packages/baf/baf-workflow/src/ask-queue.ts)：`enqueueAsk({sessionId, key, isMoot?, signal?, run})`——每会话 FIFO promise 链、**key 去重**（同 key 在队/在飞 → 立即 `dropped/duplicate`，这是三路同门收敛的机制）、队首跑 `isMoot()` 过期丢弃、外部 AbortSignal 桥内部控制器。BAF 内一切 `userQuestions.ask` 只经 `askGateDialogQueued`（key `gate:<gateId>:<changeId>`）：分类/推进/确认门/复位/接手选择全部同队；auto-pop 预问入队（key `autopop:<sid>`）+ per-agent 中止；`baf_question_ask` 入队（key `question:<qid>`）。**每会话至多一个 BAF 弹窗在飞 ⇒ 客户端「后到顶先到」规则构造性失效。** dropped 一律按「暂停/已由他路处理」措辞返回，绝不当作客户点选。
+
+#### C. 排序统一（R3）
+
+「哪条是当前变更」全仓只剩一套答案：① 写入路径落在某活动变更的 `openspec/changes/<id>/` 内 → 该变更；② `focusFor(cwd).get()` 命中活动集 → 它；③ `pickActiveChange`（active-only，seq 降序，平手字典序）。baf-guard `readGuardWorkflowState` 弃用 updatedAt 排序改走此序（写路径分支传 `call.path`）；Tab 兜底（tab-view.ts）弃用字典序（那条路会把终态变更选出来）改 `pickActiveChange`；guard 已依赖 baf-workflow，`focusFor` 自包根导出。
+
+#### D. bind-workflow 门（R4）
+
+GATE_REGISTRY 新成员 **`bind-workflow`**（dynamicOptions `change-targets`，选项由调用方候选动态生成：`接手 <changeId>` → 派发 `/baf-go change=<id>`）。`driveGateResolve` 新第 6 位参数 `bindCandidates?: readonly string[]`（镜像 resume-targets 分支）；`/baf-go` 协调器多活动分支：有 ask 通道 → 经队列弹 bind-workflow（候选 = 排序后的活动列表，note 段逐行「`<id>` · 当前 `<stage>`」）→ 点选解码校验 → **focus 记录在派发之外**（内层 /baf-go 派发看不到会话 focus 缓存）→ 经同一解析面派发；暂停 → 停卡 + 「/baf-go 重新弹出确认框」；无 answerer → 与旧文字卡字节一致（既有测试钉死）。
+
+#### E. orchestrator：harness 独家的回合驱动（用户原则核心，R6 根修）
+
+新文件 [`orchestrator.ts`](packages/baf/baf-workflow/src/orchestrator.ts) + preset 宿主面行 `baf-orchestrator`（baf-auto-pop 旁、baf-domain isolate 外）：订阅 `session/event`，**每个 completed 回合结束**重derive 停靠点并弹到期门——这是「工作流单线固定在代码里」的可执行形态。规则纯函数 `dueGateFor(status, events)`（自协调器判断抽出，不加新规则）：无 baseline → scaffold（每会话一次）；终态/implement 进行中 → 无（模型之域）；drift → resume（候选项实时重读）；intake 未确认 → intake-classify（带判定摘要 §22.17 I）；尾部停靠 awaiting-confirm → design-confirm / verify-archive；open/clarify/design/plan 休息点 → 对应 advance 门。**弹**走 askGateDialogQueued——同 key 已在飞即 duplicate 静默（与 auto-pop/gate-ask 三路自动收敛，R2 机制的直接受益者）；**答**走 driveGateResolve（与 Tab/协调器同解析面，内层派发无 ask 通道不会递归弹）。防骚扰台账 `cwd | changeId | gateId → projectionVersion`：同投影不重弹，模型的下一次真实工作改变投影即重新武装。绑定选择：focus 未设 → pickActiveChange；ambiguous → 弹 bind-workflow（D）。**gate-ask 降权**：bootstrap 经 beginIntake（会话中途新需求仍可铸——那是模型独有的信号；冲突/去重与 harness 同一套规则），描述文案改写为 §22.19 分工声明；session-gate 与 baf-go SKILL.md 同步立法——**模型不得指导客户点页签、敲斜杠命令、复述操作步骤（投诉 #4 的出处就是旧规则文案），系统会在下一个回合结束时自动弹出到期的卡**。
+
+#### F. Tab 实时推送 + 死端修复（R5）
+
+投影总线升格：`ProjectionStore` 的 §13 R8 追加通知从 per-instance 改为 **per-workspace 进程内全局**（驱动们各自 new 出来的短命 store 的 append 也能 poke 到常驻订阅者——这是推送能成立的前提）。宿主 remote 持 **per-cwd 常驻 store 池**（`createProjectionStorePool`：同 cwd 单实例单订阅，dispose 时逐个退订——进程内全局总线不退订就是泄漏），每次 append → `ctx.emit('baf-workflow/projection-appended', {cwd, changeId})`；api-remotes 白名单加该事件（emit 模式），类型声明在 ui-baf-workflow 的 client-safe `./types` 面。客户端注入面新增 `subscribe`（`ctx.remote.$on` + cwd 比对）与 `refresh(changeId?)`；[`refresh-scheduler.ts`](packages/client/ui-baf-workflow/src/client/refresh-scheduler.ts) 纯函数调度器：**推送 poke → 200ms 尾去抖**（一次派发连发多事件只刷一次）+ **2s 可见轮询兜底**（跨进程写、丢事件时的地板）+ ready 门（隐藏/在飞不刷）。死端修复：Dashboard 列表行改可点按钮（`refresh(changeId)` 聚焦任意变更，含终态）；终态死端视图（如聚焦已放弃）在有活动变更时出「**回到进行中的变更**」行动条——裸 `refresh()` 走 C 节排序兜底即落回活动变更。
+
+**测试（as-built）**：[`begin-intake.spec.ts`](packages/baf/baf-workflow/tests/begin-intake.spec.ts)（含 session 7 并发竞态重放：双 beginIntake → 一 minted 一 reused、index 恰一条）；[`ask-queue.spec.ts`](packages/baf/baf-workflow/tests/ask-queue.spec.ts)（串行/同 key duplicate/moot/signal）；tool-guard + tab-view 排序组；`gate-cards.spec`/`gate-dialog.spec` bind-workflow 组；[`go.spec.ts`](packages/baf/baf-workflow/tests/go.spec.ts) §22.19 R4 组（多活动弹卡绑定 / 暂停停卡 / 无 answerer 字节一致）；[`orchestrator.spec.ts`](packages/baf/baf-workflow/tests/orchestrator.spec.ts) 8 项（门 A 弹+点选入 plan / implement 沉默 / aborted·max-tokens 不弹 / 暂停后同投影不重弹·新投影弹新门 / 同 key 在飞 collapse / 空闲沉默 / scaffold 每会话一次 / 多活动 bind 弹+focus 落定）；[`projection-broadcast.host.spec.ts`](packages/client/ui-baf-workflow/tests/projection-broadcast.host.spec.ts) 4 项（**跨实例 append（驱动形态）→ 转发 {cwd, changeId}**、同 cwd 单实例、cwd 隔离、dispose 退订——此项当场抓出「进程内全局总线不退订即泄漏」真 bug）；[`refresh-scheduler.client.spec.ts`](packages/client/ui-baf-workflow/tests/refresh-scheduler.client.spec.ts) 6 项（去抖合并 / 重起不叠加 / ready 门 / 轮询地板 / pollMs:0 / dispose）。全量 baf-integration **34 文件 / 360 项全绿**；ui-baf-workflow + api-remotes thread-safe **5 文件 / 22 项全绿**；`tsc -b` host 与 client 两面零错误。
+
+**遗留（按序）**：① 跨进程 mint 锁（第二个 host/CLI 子进程同 cwd 仍可双铸；`.baf/intake.lock` + STALE_LOCK_MS 回收模式留待）；② focus 持久化（会话绑定重启即失）；③ orchestrator 对 blocked/error 回合与 step 粒度的响应；④ `ask_user_question` 文本内嵌选项识别（§22.18 遗留②延续）；⑤ 弹窗串行 + Tab 推送的 GUI 自动化端到端（本轮手工回归：dev:web + dsh web 重放 session 7 场景）；⑥ 双 GUI 会话同 cwd 的 focus 语义。真机回归与打包同 §22.18 遗留③（用户指示：调试完一起打包）。
+
+### §22.20 scaffold 后需求接续 + 分类确认必派单 + Tab 顶部决策按钮（2026-09-23，demo2 修订）
+
+> 触发：demo2 工作区（会话「重构ecum模块」）两问题。① 未初始化工作区：scaffold 弹窗点「暂不」→ `/baf-go` 重弹 → 点「初始化工作区」后**流程死寂**——需求原话只活在会话里、初始化后无人接续、后续 `/baf-go` 永远只回「没有进行中的工作流」，客户只能打「继续」自救（用户明言：要指令驱动，不要打字续命）。② 会话里推动流程的弹窗选择（初始化工作区、完整流程/缺陷修复路径）没有在工作流页签顶部以按钮同步出现。
+
+**A. 停靠需求记忆（requirement-park.ts 新文件）**：`baf-auto-pop` 在未初始化工作区收到真实客户消息时 `parkRequirement(sessionKey, text)` 停靠原话（初始化后的下一条真实消息反选清除——新陈述接管）。`continueParkedRequirement(ctx, agent, cwd)`：有停靠 + baseline 存在 → 空闲工作区走 §1 链（弹 `new-workflow`（note 引用原话）→ 新建 → `beginIntake` → 弹 `intake-classify`（带判定）→ 点选经 `driveGateResolve`（带本会话派单通道））；**忙工作区弹注册表 `active-conflict`**（note 引用原话与现有变更进度：「继续推进现有变更」驱动现有变更并清停靠 /「放弃现有变更」腾出工作区后同一次 /baf-go 内续走新建→分类链 / 暂不或关框保留停靠）。四个客户动作面在初始化落定后调用：typed `/baf-go` 与 `/baf-go-confirm`（commands.ts，卡片合并返回；confirm 模式的接续**仍弹新建卡**——§1 创建决策必须落卡）、orchestrator ① 的 scaffold popGate 之后、Tab gateResolve 的 `scaffold+init`（ui-baf-workflow）。
+**停靠生命周期（demo3 统一取消规则，2026-09-23 第三轮）**：**两种取消形态（关框、点暂不处理）都保留停靠**——每个 BAF 弹窗取消后 `/baf-go` 必须能重弹同一决策并在确认后推进；停靠只在需求真正落定时清除（铸造成功 / 冲突卡点「继续推进现有变更」/ 被更新陈述取代）。进程内记忆经 host-memory 锚定跨 bundle 共享，重启即忘。
+**配套（同轮）**：`host-memory.ts`（globalThis 锚点）——tsdown 按 preset 入口独立打包使模块级单例每 bundle 一份（停靠 Map、focus 缓存、mint 锁、派单账本、ask 队列跨 bundle 全失联），五处单例全部上锚；`scaffold-offer.ts` 共享标记由 `askGateDialogQueued` 咽喉点在解析后记录（弹过 scaffold 即记，orchestrator 回合末查它闭嘴——修 gate-ask 中途弹过+点暂随后回合末立即重弹的同题双弹），`/baf-go` 重弹不受限。
+
+**B. 分类确认必派单（command-drives.ts resolveGateDispatch classify 分支）**：confirm 类选项 + 成功 + 调用方带 `dispatch` → 跟进一次 `driveGo`（customer origin）落确认后的 authoring rest 并派工单——full-go-path → open proposal 拒绝卡 + 工单；bug-fix-path → 进入 implement + 工单（go-coordinator 的 bug-fix `advanceOpen` 分支补上此前漏掉的第五个派单点）。一处修复覆盖全部分类确认面（对话框点击 / orchestrator 回合末 / auto-pop / gate-ask / Tab / 接续链）；模型在跑报 busy 不排队，gate-ask 中途调用语义零变化。Tab `transition` remote 的 `case 'open'`（进入建立变更重试）同样跟进派单。
+
+**C. Tab 顶部决策按钮**：`WorkflowTabPendingGate`（baf-core）扩为 `scaffold | intake-classify` + `changeId?` + `detail?`；`buildWorkflowTabView`（baf-workflow）在聚焦变更停 intake 待确认（或 clarify-required）时挂分类 pendingGate——停靠点判断与 `dueGateFor` 同规则，Tab 按钮与会话弹窗构造性同拍；无 baseline 时 scaffold 门优先。客户端：pendingGate 卡渲染判定摘要、点击带 changeId 走 `gateResolve`；**门 A/B（view.gate）新增页顶横幅**（question + 选项按钮，verify-archive confirm 走 §13 R1 modal）；rail 分类按钮与 bug-fix 五字段表单全部改走 `gateResolve('intake-classify', …)`（表单值作 `extraArgs` 随点选提交，§22.17 J），自动获得 B 的跟进派单。`BafWorkflowGateResolveRequest` 加 `extraArgs`（typert 直通）。同步沿用 §22.19 F：mint/confirm 投影事件推送刷新 + 2s 可见轮询兜底。
+
+**测试（as-built）**：新 `requirement-park.spec.ts` 8 项（demo2 全链路含工单送达断言 / 暂不清理 / 关框保留 / 分类关框落 intake / 三 decline / running 零排队 / 原语 / bug-fix extraArgs 直连 resolve）；新 `tab-pending-gate.spec.ts` 3 项；auto-pop 停靠与反选断言。全量 37 文件 / 377 项全绿；`pnpm build:lib` 零错误。全景：`.agents/notes/implemented/feature/2026-09-23-baf-scaffold-continuation-tab-top-buttons.md`（含剩余问题排序：顶部 bug-fix 裸点报错形态、new-workflow/active-conflict/bind 的 Tab 对位、scaffold 门轮询依赖、停靠记忆进程内等）。
+
+### §22.21 demo1 四问题：分类确认组合卡成功态 / intake 字段语义化 / Tab 推进=/baf-go（2026-09-23）
+
+> 触发：demo1 工作区会话四问题（取证见全景图 §0）。① 分类确认成功但 `/baf-go` 结果行 `kind:error` + 标题「分类确认 / **拒绝**」，客户读作「被拒绝」；② 工作流页右栏「变更分类」裸渲染枚举（unknown / full-go-path / 40%）无语义说明，标题带「（intake）」；③ 阶段产物模板出处与标准（答复性，无代码）；④ Tab「推进」只推显示：无弹窗、会话零痕迹、模型不参与（虚假推进）。
+
+**A. 组合卡成功态规则（§18.4.2 补充）**：派单停靠卡（`errorCard` + `已派单` 标记）是**正常等待态**而非失败。任何「主结果 success + 跟进停靠卡」的组合面，组合 `kind` 只在跟进**真失败**时才 error——跟进文本含 `DISPATCH_SENT_MARKER`（新导出常量，sent/deduped 两标记同源）即保持 success。落点：`resolveGateDispatch` classify 跟进、Tab `transition` 的 `followWithDispatch`。SLASH_DESC 分类描述去掉「/ 拒绝」（能力枚举在折叠行读成结果）。
+
+**B. intake 字段语义（展示 + 一处折叠落定）**：kind（新需求/缺陷/维护/待定）、affectedScope（单文件/局部小改/跨模块/公共API/待定）、confidence（启发式自评 0.4/0.7）= **系统关键词初判，确认分类不改写**；mode = 客户点选。投影 fold `intake-mode-set`→`bug-fix-path` 且 kind='unknown' 时落定 `kind='bug'`（reasonCode `kind-settled-by-path`；full-go 不落定）。侧栏全字段本地化 + 「确认状态」行 + 启发式说明行；标题去「（intake）」。模板出处立档：`baf-openspec/templates.ts` 自有，标准=各阶段裁决门（gates.ts）与 `DOC_REQUIREMENTS_ZH` 同源。
+
+**C. Tab 推进 = /baf-go（含致命注入修复）**：`BafWorkflowTabRemote.static inject` 补 `'agents'`——cordis 未声明时 `ctx.agents` 抛 "cannot get property without inject"，被 `liveAgentFor` catch 吞成 undefined：派单通道永远缺失（demo1「无模型参与」根因）、ask 落到无会话作用域的 host 级 service 永远 `unavailable`（点击无任何可见效果）。补注后 advance remote 以 `makeGateAsk(ctx, agent)`+`makeGoDispatcher(cwd, agent)`（与 commands.ts `/baf-go` 同对）驱动：停靠门弹同款 §22 弹窗，确认落定的 authoring rest 派工单；无弹窗通道才回落 `confirm:true`。transition remote 的 clarify/design/plan/implement 分支经 `followWithDispatch`（customer-origin 跟进派单，规则同 A）补齐静默洞。
+
+**D. 停靠随铸造落定清除（requirement-park 补丁）**：模型 `baf_gate_ask` 引导链两处 `beginIntake` 后 `clearParkedRequirementFor(agent)`（Tab `startIntake` 同）；`continueParkedRequirement` 入口短路——活动变更的 `intake.summary` 与停靠原话相合（全等，>500 字 startsWith）即花掉停靠返回 undefined，不再对自家变更弹 active-conflict。
+
+**测试（as-built）**：446 用例全绿（新 3：full-go 分类确认 kind、kind 落定 fold+重放、停靠已落定短路；改 1 旧断言 error→success）。真机（隔离 host 3280 + demo1v4）：问题 1 done kind=success 无「拒绝」；问题 2 侧栏全中文+确认状态行；问题 4 推进→弹窗→确认→clarify 工单→模型自起回合→投影 seq+1。全景：`.agents/notes/implemented/feature/2026-09-23-baf-demo1-four-issues.md`。
+
+### §22.22 demo1 五问题：plan 账本宽容解析 + 回合末缺口派单 + 节点卡 tokens + 右栏紧凑（2026-09-23 晚）
+
+> 触发：用户复测推进至「计划」后 弹窗丢失/卡滞、plan.md 仍模板、节点卡无 tokens、右栏行话。根因一层：**plan.json 键名契约三方不一致**（模板空数组无示例 + 工单文案「affected files」诱导 `affected_files`/`verify_cmd`/`rollback_point`，读者只认 `files`/`verify`/`rollback`）→ 门永不过 → 回合末无到期卡（弹窗丢失）→ 工单循环重派同一缺口（卡滞）。
+
+**A. plan-ledger 宽容规范化（新 `stages/plan-ledger.ts`）**：任务行别名 files/affected_files/affectedFiles…、verify/verify_cmd/…（字符串→单元素数组）、rollback/rollback_point/…；顶层 allowlist/allow_list、touched；`bugFixPath` 透传。三读者统一：plan 门（readPlan）、implement 门+allowlist（readLedger）、plan.md 渲染。模板带 `_schema` 自述（`PLAN_SCHEMA_HINT`，读者剥离）；缺失清单与 DOC_REQUIREMENTS_ZH.plan 点名规范键名并声明认别名。
+
+**B. 回合末缺口派单（orchestrator `dispatchRestingGap`）**：停靠阶段的门未过时，回合结束把剩余缺口作为工单发给模型——同 /baf-go 通道与 SENT 账本（同缺口下回合重臂后再派，语义=/baf-go）。替代旧的「完全沉默」（demo1 卡滞形态：模型闲坐到客户手敲 /baf-go）。plugin 只读工单，非合成客户消息；授权链 = 开启本阶段工作的确认链。
+
+**C. 节点卡 tokens（补 inject）**：`BafWorkflowTabRemote.static inject` 再补 `'sessionQuery'`——分阶段 token 归属读它，未声明时 cordis 抛错被 usagePointsFor 吞成永久空数组（节点卡 '—' 而合计行正常）。教训固化：**typert remote 新增 ctx 服务必须同步补 static inject**（本日第二次同型）。
+
+**D. 右栏三卡紧凑**：变更分类删解释段（语义说明移入置信度 title、待确认 warn 高亮、模式前置）；阶段产物文件名即打开控件、缺口折叠「缺 N 项（悬停查看）」；会话统计两行紧凑 grid、token 明细移入合计 title。
+
+**测试（as-built）**：plan 门别名 + readLedger 同形 + 渲染别名行 + 缺口派单（含重臂）新 4 例，改「stays silent」1 例；全量绿 + build:lib 零错。真机（demo1v5 离线种子停 plan）：/baf-go → 工单 → 模型回合 → 回合末自动弹「进入实现」→ 确认 → implement + plan.md 账本渲染；节点卡 计划 398869/实现 570099。全景 §7（同文件）。
 
 ---
 

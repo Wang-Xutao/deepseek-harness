@@ -166,6 +166,12 @@ export async function driveEscalate(
 /**
  * Rename the fast-path plan.json aside so the backfilled plan stage can
  * write a fresh ledger without clobbering the fast-path audit trail.
+ * 【变更】2026-09-23 (demo5 issue #1 follow-up): the implement-entry renders
+ * (plan.md / tasks.md drawn from the fast-path ledger) are renamed aside the
+ * same way — kept for audit (§18.4.3 升级前产物不删), but off the artifact
+ * names so the OpenSpec backfill's template installs don't hit writeArtifact's
+ * filled-content guard (the backfilled stages re-render both from the new
+ * full-go ledger when plan completes).
  * @param workspaceRoot - absolute workspace root.
  * @param changeId - change id.
  * @returns whether a ledger was preserved.
@@ -183,6 +189,8 @@ async function preserveBugFixPathLedger(
   } catch {
     // Destination free — proceed to move the ledger when it exists.
   }
+  await renameAsideIfExists(join(dir, ARTIFACT_FILES.plan), join(dir, 'plan.fast-path.md'))
+  await renameAsideIfExists(join(dir, ARTIFACT_FILES.tasks), join(dir, 'tasks.fast-path.md'))
   try {
     await stat(source)
   } catch {
@@ -190,6 +198,20 @@ async function preserveBugFixPathLedger(
   }
   await rename(source, destination)
   return true
+}
+
+/** Move `source` to `destination` when it exists and the destination is free. */
+async function renameAsideIfExists(source: string, destination: string): Promise<void> {
+  try {
+    await stat(source)
+  } catch {
+    return
+  }
+  try {
+    await stat(destination)
+  } catch {
+    await rename(source, destination)
+  }
 }
 
 /**

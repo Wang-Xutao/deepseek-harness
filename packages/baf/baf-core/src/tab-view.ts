@@ -118,6 +118,27 @@ export interface WorkflowTabResume {
   readonly candidates: readonly WorkflowNode[]
 }
 
+/**
+ * One customer-editable change artifact, as the Tab rail renders it
+ * (2026-09-21 §22 follow-up, session 5.jsonl): stage outputs stop being
+ * prose inside cards and become first-class Tab rows — file, workspace
+ * path, and a customer-facing state the open button keys off.
+ */
+export interface WorkflowTabArtifact {
+  /** Artifact file name inside the change directory (e.g. `clarify.md`). */
+  readonly file: string
+  /** Workspace-relative path — what the Tab's open button hands to the file sidebar. */
+  readonly path: string
+  /**
+   * Customer-facing classification: file absent / template unfilled / filled.
+   * 【变更】2026-09-23 (demo5 issue #4): `planned` is tasks.md's 中间态 —
+   * 计划完成（todo list 已渲染）但实现未完成.
+   */
+  readonly state: 'missing' | 'template' | 'planned' | 'filled'
+  /** Missing items when state is not `filled` (Chinese, one line each). */
+  readonly missing: readonly string[]
+}
+
 /** One node card in the Tab. */
 export interface WorkflowTabNode {
   readonly id: WorkflowNode
@@ -165,16 +186,87 @@ export interface WorkflowTabView {
   readonly lanes?: WorkflowTabLanes
   /** Set while the change is parked in drift, so the Tab offers a rollback (§19.5). */
   readonly resume?: WorkflowTabResume
+  /**
+   * Customer-editable artifacts of the focused change, one row per file in
+   * stage order (2026-09-21 §22 follow-up). Present only when a change is
+   * selected and its status read succeeds; the Tab rail renders one
+   * open-in-sidebar button per row.
+   */
+  readonly artifacts?: readonly WorkflowTabArtifact[]
+  /**
+   * 【变更】2026-09-24 (demo6 问题 2): the plan ledger's frozen file allowlist
+   * once the plan stage completed (live path, archive path for terminal
+   * changes). The rail's 影响范围 cell reads the real file count from it;
+   * absent before plan or when no ledger is readable.
+   */
+  readonly planAllowlist?: readonly string[]
+  /**
+   * Whether the Tab 「推进」 button may advance the change right now
+   * (2026-09-22 user report #4): the button used to be always clickable, so
+   * tab clicks walked a change through stages whose artifacts were still
+   * TODO templates. `ready` is the current node's file gate — the same
+   * judgment `/baf-go` runs; `missing` carries the gate's customer-facing
+   * lines for the disabled state's tooltip. Absent on empty/blocked views
+   * (the button hides).
+   */
+  readonly advance?: {
+    readonly ready: boolean
+    readonly missing: readonly string[]
+  }
 }
 
 /**
- * Workspace-level pending gate payload — currently just `scaffold`. Carried
- * alongside `gate` (change-level) so the Tab renders both views from one shape.
+ * 【变更】2026-09-23 (user issue #6): one row of the 变更总览 dashboard —
+ * every change in the workspace, active and terminal, with the rollup the
+ * dashboard table renders (phase pill, task progress, duration, tokens).
+ */
+export interface WorkflowDashboardRow {
+  readonly changeId: string
+  readonly mode: WorkflowMode
+  readonly current: WorkflowNode | TerminalState
+  /** Set only for terminal rows; drives the archived section's grouping. */
+  readonly endedAt?: string
+  /** Plan-ledger task rollup (absent when no readable ledger). */
+  readonly tasks?: { readonly done: number; readonly total: number }
+  readonly durationMs?: number
+  readonly inputTokens?: number
+  readonly outputTokens?: number
+}
+
+/** The 变更总览 dashboard payload: every change row, newest first. */
+export interface WorkflowDashboardView {
+  readonly rows: readonly WorkflowDashboardRow[]
+  /** Convenience rollups the header tiles render. */
+  readonly summary: {
+    readonly active: number
+    readonly archived: number
+    readonly abandoned: number
+    readonly tasksDone: number
+    readonly tasksTotal: number
+  }
+}
+
+/**
+ * Workspace- or change-level pending gate payload — `scaffold` (no baseline,
+ * workspace scope) and, 【变更】2026-09-23 (demo2 user issue #2), the
+ * change-scoped `intake-classify` resting point (a change parked at intake
+ * whose classification is still the live decision). Carried alongside `gate`
+ * (the §18.5 design/verify gates) so the Tab renders every pending decision
+ * from one shape, each button dispatching through the same `gateResolve`
+ * channel the session dialogs use.
  */
 export interface WorkflowTabPendingGate {
-  readonly gateId: 'scaffold'
+  readonly gateId: 'scaffold' | 'intake-classify'
+  /** Present iff `gateId === 'intake-classify'` — the change awaiting classification. */
+  readonly changeId?: string
   readonly question: string
   readonly options: readonly { readonly id: string; readonly label: string }[]
+  /**
+   * Extra context paragraphs under the question (intake-classify: the
+   * classifier's verdict — path / kind / confidence / summary — so the two
+   * path buttons confirm a visible judgment, §22.17 I parity).
+   */
+  readonly detail?: readonly string[]
 }
 
 /**
@@ -289,9 +381,22 @@ export function statusToTabView(
     const live = status.nodes[catalog.id]
     const annotation = status.annotations?.[catalog.id]
     const nodeMetrics = metrics?.byNode?.[catalog.id]
+    // 【变更】2026-09-23 (demo1 十问题 9): terminal-context node statuses. A
+    // finished change renders every on-path node reached by the live feed as
+    // its recorded outcome, an abandoned one likewise, and every node the
+    // flow never touched reads 已忽略 (skipped) — never 锁定/空闲: past the
+    // terminal state nothing is locked or pending.
+    let nodeStatus: WorkflowTabNode['status']
+    if (live !== undefined) {
+      nodeStatus = live
+    } else if (status.terminal !== undefined) {
+      nodeStatus = 'skipped'
+    } else {
+      nodeStatus = onPath.has(catalog.id) ? 'locked' : 'skipped'
+    }
     return {
       id: catalog.id,
-      status: live ?? (onPath.has(catalog.id) ? 'locked' : 'skipped'),
+      status: nodeStatus,
       catalog,
       onPath: onPath.has(catalog.id) || catalog.id === 'drift',
       ...(annotation?.reasonCodes === undefined ? {} : { reasonCodes: annotation.reasonCodes }),

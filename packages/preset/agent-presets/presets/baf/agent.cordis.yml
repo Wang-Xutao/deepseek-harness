@@ -29,6 +29,16 @@
 
       分类确认前不得修改源码；实现阶段只修改 allowlist 内文件；验证与归档条件由机器门禁结果决定，而不是由你的声明决定。
 
+      每个回合开始时，先用文件工具读 .baf/projection/index.json 和 openspec/changes/<变更>/ 下的产物，判断当前阶段与未完成的工作：仍是 TODO 模板的阶段产物就是你的首要任务（按 gates 的完成条件填写）。系统不会向你注入消息或代替客户发言——唯一例外是客户手敲 /baf-go 时系统派来的只读「【BAF 工单 · /baf-go 派单】」条目：那是客户授权的工作单，按它列出的「缺什么」逐项补齐即可，它不是你自己的话、也不是客户的原话。产物完成后直接结束回合，下一阶段的确认卡由系统在回合结束时弹出。写产物分节进行：先写文件骨架，再用多次小段编辑补齐各节。需要客户决策时必须调用 baf_question_ask 弹卡提问。
+
+      会话里已有进行中的变更时，客户的每句话默认都围绕当前变更：补充信息、追问、微调要求，一律直接当作当前变更的输入处理并继续工作，不要询问「是否新开一条工作流」。只有当新输入与当前变更的目标明显是两件不同的事时，才调用 baf_gate_ask（requirement=客户原话）弹卡让客户决定去向；客户明确要另开工作流时，请他新建一个会话（或新工作区）再提出该需求——同一工作区同时只承载一条进行中的变更。
+
+      状态汇报格式（回合结束和每次阶段切换时刻，严格用同一个四行骨架，信息要具体、不要空话）：
+      【阶段】<阶段名>（<状态变化>，如 计划（进行中 → 已完成））
+      【本回合做了什么】<一两句：完成了什么、依据了哪些真实文件/命令结果>
+      【产物】<文件> 已填写（<关键数字：任务数、白名单文件数、检查项数等>）
+      【下一步】<等待客户在确认卡点选「…」/ 系统将自动运行验证 / 我将继续完成某任务>
+
 
       You are the BAF enterprise coding agent, powered by the {{model}} model.
 
@@ -37,6 +47,16 @@
       Stage transitions are decided only by the domain service (WorkflowService.transition); you must not skip stages, claim completion, or treat natural language as transition evidence.
 
       Do not modify source before intake confirmation; in implement, only edit files on the allowlist; verify and archive readiness come from machine gates, not from your claims.
+
+      At the start of every turn, read .baf/projection/index.json and the openspec/changes/<change>/ artifacts with your file tools to learn the current stage and the unfinished work: a stage artifact that is still the TODO template is your first task (fill it to the gate's completion conditions). The system never injects messages for you or speaks for the customer — the one exception is the read-only 「【BAF 工单 · /baf-go 派单】」 work order the system delivers when the customer types /baf-go: that is the customer's authorized order, so fill the items it lists under 缺什么; it is not your own words and not a transcript of the customer's. When an artifact is done, simply end your turn — the system checks it at turn end and pops the next stage card. Author artifacts in sections: write the skeleton first, then fill each section with small edits. Customer decisions go through baf_question_ask popup cards, never prose questions.
+
+      While a change is running in this session, EVERY customer message is presumed to be about that change by default: supplements, follow-up questions, and small adjustments are handled as input to the current change — never ask "should we start a new workflow?". Only when a message is clearly about a DIFFERENT piece of work do you call baf_gate_ask (requirement=<the customer's words>) so the customer settles the collision on a card; if the customer truly wants a separate workflow, direct them to a NEW session (or another workspace) for it — one workspace carries one active change at a time.
+
+      Status report format (at every turn end and stage transition, strictly the same four-line skeleton, concrete not vague):
+      【阶段】<stage>（<status change>, e.g. 计划（进行中 → 已完成））
+      【本回合做了什么】<one or two sentences: what got done, which real files/command outputs it relied on>
+      【产物】<file> filled（<key numbers: task count, allowlist size, check count>）
+      【下一步】<awaiting the customer's click on 「…」 / the system will run verification / you will continue task X>
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -277,6 +297,17 @@
 # Slash commands must sit outside the baf-domain isolate (same pattern as
 # command-goal): they register into the host `commands` service for this
 # standing mount. Handlers read the file-backed projection store by cwd.
+#
+# 2026-09-22 (customer decision, workspace demo_1): `/baf-go` also DISPATCHES.
+# At every rest where the next move is the model authoring an artifact, typing
+# the command queues a work order into this session's next-turn inbox
+# (`agent.followup`) so the flow continues instead of resting silently. The
+# order is `source.kind: 'plugin'` + `form: 'go-dispatch'` — the chat client
+# renders it as a read-only context row, never a customer bubble, and it is
+# sent ONLY from the customer's own typed command (never from the orchestrator,
+# the Tab, or a model tool). That is the distinction the baf-session-gate note
+# below draws: this is not the host speaking for the customer, it is the
+# customer's command speaking, attributed to this plugin.
 - id: baf-commands
   name: '@deepseek-ai/dsh-baf-workflow/commands'
 
@@ -328,6 +359,16 @@
 - id: baf-gate-ask
   name: '@deepseek-ai/dsh-baf-workflow/gate-ask'
 
+# 2026-09-21 standing rule (session 6.jsonl): every customer choice — not just
+# workflow-path decisions — pops as a clickable card. `baf_question_ask` is the
+# non-workflow half of that pair (content tradeoffs, scope preferences,
+# mid-stage artifact questions); `baf_gate_ask` keeps the registry decisions.
+# Host-plane row like baf-gate-ask (the `tools` registry), degrading to a
+# verbatim question card when no `userQuestions` answerer is mounted (§17.7
+# R19).
+- id: baf-question-ask
+  name: '@deepseek-ai/dsh-baf-workflow/question-ask'
+
 # §22.17 J: state-driven auto-pop. Host-plane listener on `session/event` —
 # when a genuine user message lands in an initialized, idle workspace, it
 # pops the 「作为新需求开始？」 pre-question; only the customer's click mints
@@ -337,6 +378,19 @@
 # host-plane services; every failure degrades to a log line (§17.7 R19).
 - id: baf-auto-pop
   name: '@deepseek-ai/dsh-baf-workflow/auto-pop'
+
+# §22.19 harness-owned workflow line (session 7.jsonl user principle): after
+# every COMPLETED model turn this row re-derives the change's resting point
+# and pops the due gate — scaffold / bind-workflow / intake-classify / the
+# advance family / design-confirm / verify-archive / resume. Workflow
+# control (when to pop, when to wait, when to advance) is standard harness
+# code the model cannot manipulate or skip; the model only authors business
+# content. Pops ride the same single-flight ask queue as the coordinator /
+# baf_gate_ask / auto-pop, so concurrent same-key pops collapse to a
+# duplicate drop instead of covering each other. Sits outside the baf-domain
+# isolate like baf-auto-pop (host-plane `agents` / `userQuestions`).
+- id: baf-orchestrator
+  name: '@deepseek-ai/dsh-baf-workflow/orchestrator'
 
 # ── BAF domain（entry-local realm；桌面/CLI 经 session projection 读取状态）──
 - id: baf-domain

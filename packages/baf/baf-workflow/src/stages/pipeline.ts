@@ -16,7 +16,7 @@ import {
   type WorkflowStatus,
   type WorkflowNode,
 } from '@deepseek-ai/dsh-baf-core'
-import { ARTIFACT_FILES, createLocalOpenSpecAdapter } from '@deepseek-ai/dsh-baf-openspec'
+import { ARTIFACT_FILES, createLocalOpenSpecAdapter, tasksTemplate } from '@deepseek-ai/dsh-baf-openspec'
 import { assertTransitionAccepted, decideTransition } from '../transition.ts'
 import { ProjectionStore } from '../projection.ts'
 import { createStageContext, type StageContext } from './context.ts'
@@ -31,9 +31,12 @@ import { driveDesign, renderDesignBody, type DesignInput, type DesignStageResult
 import {
   drivePlan,
   renderPlanBody,
+  renderPlanMdFromLedger,
+  renderTasksMdFromLedger,
   type PlanInput,
   type PlanStageResult,
 } from './plan.ts'
+import { PLAN_SCHEMA_HINT } from './plan-ledger.ts'
 import {
   driveImplementComplete,
   readLedger,
@@ -184,10 +187,16 @@ export class StagePipeline {
         })
       }
       if (this.ctx.workspace.git?.revision === undefined) {
-        await this.recordRejectionQuiet(changeId, pre, 'open', 'invalid_transition')
+        // The audit reason names the actual precondition — and the thrown code
+        // must too: `invalid_transition` sent incident triage down the
+        // state-machine path when the fix was `git init` (2026-09-20 incident
+        // 3.jsonl); the slash surface then translated it to the misleading
+        // 「当前状态不允许这个操作」. `git_unavailable` keeps the state machine
+        // out of it and carries an actionable remedy row.
+        await this.recordRejectionQuiet(changeId, pre, 'open', 'git_unavailable')
         throw new BafError(
-          'invalid_transition',
-          'full-go-path open blocks when local Git is unavailable',
+          'git_unavailable',
+          'full-go-path open blocks when local Git is unavailable (no repository, or no commit anchor yet)',
           { changeId },
         )
       }
@@ -315,6 +324,13 @@ export class StagePipeline {
    */
   async enterImplementStage(changeId: string, source?: TransitionSource): Promise<WorkflowStatus> {
     const pre = await this.readCurrent(changeId)
+    // 【变更】2026-09-23 (demo1 十问题 7/9): the implement entry (计划确认、
+    // 正式落代码前) renders tasks.md from the ledger — the task checklist the
+    // implementation will tick off, generated the moment coding starts (and
+    // refreshed again at implement completion). plan.md renders alongside, so
+    // neither doc can sit as a stale template beside a finished ledger.
+    await renderTasksMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+    await renderPlanMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
     if (pre.mode === 'bug-fix-path') {
       return this.enterStage(changeId, 'implement', {
         rootCauseRecorded: await rootCauseRecorded(this.ctx.workspace.root, changeId),
@@ -361,6 +377,15 @@ export class StagePipeline {
     }
     const result = await driveImplementComplete(this.ctx, changeId)
     await this.completeStage(changeId, 'implement', result.artifacts)
+    // 2026-09-23 issue #2: the done flags are final now — refresh plan.md so
+    // the doc keeps mirroring the ledger it was rendered from. Render
+    // failures are tolerated the same way as at plan completion: the gate
+    // already judged the ledger, and a doc refresh must not unwind a
+    // completed stage.
+    // 【变更】2026-09-23 (demo1 十问题 9): tasks.md refreshes with the same
+    // done flags — a finished change must not show a stale unchecked list.
+    await renderTasksMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+    await renderPlanMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
     return { node: 'implement', result, status }
   }
 
@@ -411,13 +436,56 @@ export class StagePipeline {
       throw new BafError(
         'invalid_transition',
         `${node} gate failed: ${gate.reasonCodes.join(', ')} — ${gate.detail ?? ''}`,
-        { changeId, node, reasonCodes: gate.reasonCodes },
+        {
+          changeId,
+          node,
+          reasonCodes: gate.reasonCodes,
+          // Customer-facing fill list — the /baf-go refusal card renders this
+          // as 【缺什么】 so the blocked stage names the work (5.jsonl).
+          ...(gate.missing === undefined ? {} : { missing: gate.missing }),
+        },
       )
     }
     const artifacts = stageArtifactPaths(this.ctx.workspace.root, changeId, [
       node === 'clarify' ? ARTIFACT_FILES.clarify : node === 'design' ? ARTIFACT_FILES.design : ARTIFACT_FILES.plan,
     ])
     await this.completeStage(changeId, node, artifacts)
+    // 【变更】2026-09-23 (user issue #2): plan.md is the human-readable face
+    // of plan.json — the gate judges the JSON ledger, so the model only ever
+    // authors that. Rendering the doc from the ledger at the SAME transition
+    // that completes the stage makes the pair atomic by construction: the
+    // file can no longer sit as an unfilled template beside a finished
+    // ledger, and the two can never disagree.
+    // 【变更】2026-09-23 (demo5 issue #1/#4): tasks.md renders here too — 计划
+    // 完成即「已计划」(the todo list exists before the advance dialog pops),
+    // so the rail shows three real plan artifacts before the customer is
+    // asked to 推进到实现. done flags tick later at implement completion.
+    if (node === 'plan') {
+      await renderPlanMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+      await renderTasksMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+      // 【变更】2026-09-24 (demo6 问题 2): the plan just froze the file
+      // allowlist — the pre-judgment 影响范围 derives from the REAL file
+      // count at this exact transition (1→single-file, ≤3→small-local,
+      // else cross-module) instead of waiting for the archive-time
+      // backstop. tasks.md 已计划 and the scope settle land together, so
+      // the rail's 变更分类 card shows a determined scope by the time the
+      // plan-advance dialog asks to enter implement.
+      const afterRender = await this.readCurrent(changeId)
+      if (afterRender.intake?.affectedScope === 'unknown') {
+        const ledger = await readLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+        if (ledger !== undefined && ledger.allowlist.length > 0) {
+          const affectedScope = ledger.allowlist.length <= 1
+            ? 'single-file'
+            : ledger.allowlist.length <= 3 ? 'small-local' : 'cross-module'
+          await this.store.append(changeId, afterRender.projectionVersion, meta => ({
+            type: 'intake-settled' as const,
+            affectedScope: affectedScope as 'single-file' | 'small-local' | 'cross-module',
+            reasonCodes: ['settled-at-plan'] as const,
+            ...meta,
+          })).catch(() => undefined)
+        }
+      }
+    }
     return this.readCurrent(changeId)
   }
 
@@ -449,11 +517,26 @@ export class StagePipeline {
       await writeArtifact(this.ctx.workspace.root, changeId, ARTIFACT_FILES.plan, renderPlanBody({
         changeId, tasks: [], allowlist: [],
       }))
+      // 【变更】2026-09-23 (demo1 五问题 1–3): the template carries a
+      // `_schema` self-description — the empty arrays alone gave the model no
+      // key names, and the order wording（affected files…）invited
+      // `affected_files` keys the (pre-fix) reader rejected. Readers strip the
+      // hint; it exists for the author.
       await writeArtifact(
         this.ctx.workspace.root,
         changeId,
         ARTIFACT_FILES.planJson,
-        `${JSON.stringify({ tasks: [], allowlist: [], touched: [] }, null, 2)}\n`,
+        `${JSON.stringify({ tasks: [], allowlist: [], touched: [], _schema: PLAN_SCHEMA_HINT }, null, 2)}\n`,
+      )
+      // 【变更】2026-09-22 (user report #2): tasks.md travels with the plan
+      // stage (the same 「enter → template」 contract as every other artifact).
+      // open() no longer installs it eagerly, so before plan entry the rail
+      // reads 「尚未生成」; `writeArtifact` keeps it idempotent on re-begin.
+      await writeArtifact(
+        this.ctx.workspace.root,
+        changeId,
+        ARTIFACT_FILES.tasks,
+        tasksTemplate(changeId),
       )
     }
     return this.readCurrent(changeId)
@@ -523,12 +606,63 @@ export class StagePipeline {
     // T10 requires the verify gate's machine evidence, not narration.
     await this.enterStage(changeId, 'archive', { checksPassed: true }, undefined, source)
     const result = await driveArchive(this.ctx, changeId, humanConfirmed)
-    const { status: final } = await this.store.append(changeId, result.status.projectionVersion, meta => ({
+    // 【变更】2026-09-23 (demo1 十问题 9): settle the intake's pre-judgment
+    // fields right before the terminal event — a finished change must not
+    // show 待定 forever. kind settles from the driven path when the keyword
+    // heuristic never landed one; scope settles from the ledger's allowlist.
+    const settle = await this.deriveIntakeSettlement(changeId).catch(() => undefined)
+    let version = result.status.projectionVersion
+    if (settle !== undefined) {
+      const { status: settled } = await this.store.append(changeId, version, meta => ({
+        type: 'intake-settled',
+        ...settle,
+        ...meta,
+      }))
+      version = settled.projectionVersion
+    }
+    const { status: final } = await this.store.append(changeId, version, meta => ({
       type: 'change-archived',
       ...(source === undefined ? {} : { source }),
       ...meta,
     }))
     return { node: 'archive', result, status: final }
+  }
+
+  /**
+   * The archive-time intake settlement (demo1 十问题 9): `kind` from the
+   * driven path when still unknown (bug-fix→bug, full-go→new-requirement);
+   * `affectedScope` from the ledger allowlist size (1→single-file, ≤3→
+   * small-local, else cross-module). Returns undefined when nothing to
+   * settle (both fields already decided earlier in the flow).
+   * @param changeId - change id.
+   * @returns settlement event fields, or undefined.
+   */
+  private async deriveIntakeSettlement(
+    changeId: string,
+  ): Promise<{ kind: 'new-requirement' | 'bug' | 'maintenance'; affectedScope: 'single-file' | 'small-local' | 'cross-module' | 'public-api'; reasonCodes: string[] } | undefined> {
+    const status = await this.store.readStatus(changeId)
+    const intake = status.intake
+    if (intake === undefined) return undefined
+    const kindUnknown = intake.kind === 'unknown'
+    const scopeUnknown = intake.affectedScope === 'unknown'
+    if (!kindUnknown && !scopeUnknown) return undefined
+    const kind = kindUnknown
+      ? (status.mode === 'bug-fix-path' ? 'bug' : 'new-requirement')
+      : intake.kind
+    let affectedScope: 'single-file' | 'small-local' | 'cross-module' | 'public-api' | 'unknown' = intake.affectedScope
+    if (scopeUnknown) {
+      const ledger = await readLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+      if (ledger === undefined) return undefined
+      affectedScope = ledger.allowlist.length <= 1
+        ? 'single-file'
+        : ledger.allowlist.length <= 3 ? 'small-local' : 'cross-module'
+    }
+    if (affectedScope === 'unknown') return undefined
+    return {
+      kind,
+      affectedScope,
+      reasonCodes: ['settled-at-archive'],
+    }
   }
 
   /**

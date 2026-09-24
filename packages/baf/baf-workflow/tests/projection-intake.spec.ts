@@ -100,6 +100,45 @@ describe('intake rules', () => {
     expect(intake.mode).toBe('bug-fix-path')
     expect(intake.openspecRequired).toBe(false)
   })
+
+  it('settles kind = bug when the customer overrides to bug-fix-path, and keeps unknown for full-go (demo1 issue #2)', async () => {
+    // The demo1 rail showed 类型 unknown forever: the keyword heuristic left
+    // kind 'unknown' and nothing ever revisited it. Choosing the bug-fix fast
+    // path IS the assertion「这是缺陷」— the fold settles kind there; the
+    // full-go choice settles nothing (features, refactors and cross-module
+    // bugs all take it).
+    const root = await mkdtemp(join(tmpdir(), 'baf-kind-settle-'))
+    try {
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const service = createWorkflowService({ store })
+      // No feature/bug keywords → heuristic kind 'unknown'.
+      const bugish = await service.intake({
+        description: '重构 ecum 模块',
+        workspace: { root },
+      })
+      const { setIntakeMode } = await import('../src/workflow-service.ts')
+      const rerouted = await setIntakeMode(store, bugish.intake.changeId, 'bug-fix-path')
+      expect(rerouted.intake?.kind).toBe('bug')
+      expect(rerouted.intake?.reasonCodes).toContain('kind-settled-by-path')
+
+      const kept = await service.intake({
+        description: '梳理 ecum 模块的接口',
+        workspace: { root: `${root}-2` },
+      })
+      const fullGo = await setIntakeMode(store, kept.intake.changeId, 'full-go-path')
+      expect(fullGo.intake?.kind).toBe('unknown')
+
+      // Replay derives the same settled kind from the event log alone.
+      const replayed = replay(
+        rerouted.changeId,
+        (await store.readEvents(rerouted.changeId)).events,
+      )
+      expect(replayed.intake?.kind).toBe('bug')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(`${root}-2`, { recursive: true, force: true }).catch(() => undefined)
+    }
+  })
 })
 
 describe('transition gates', () => {

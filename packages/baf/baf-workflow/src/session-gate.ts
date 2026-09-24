@@ -282,12 +282,42 @@ async function probeDriftFor(cwd: string, store: ProjectionStore, changeId: stri
  * @param input - workspace, probe, binding.
  * @returns the command result the customer sees.
  */
+/**
+ * One-line summary of a `baf-guard` report (the verify + secret-scan sweep
+ * run on `baf-welcome`). Rendered in the welcome card under 【环境体检】 as a
+ * single short line so the customer sees the environment is OK at session
+ * open, instead of having to type `/baf-check-guard` by hand. Plain Chinese by
+ * design: success/failure state plus the count of touched files examined, with
+ * no internal ids.
+ */
+export interface GuardReportSummary {
+  readonly state: 'ok' | 'fail' | 'unavailable'
+  readonly detail: string
+  readonly hint?: string
+}
+
+/**
+ * Render the §20.3 welcome card.
+ *
+ * The card includes a 【安全检查】 line summarising the `baf-guard` sweep.
+ * `guardSummary` is optional: when the welcome fires from `runSessionGate`
+ * (the session-open path) the gate has already run the guard in parallel
+ * with the toolchain probe, so the summary lands as one extra line. When it
+ * fires from the `/baf-welcome` slash handler it runs the guard inline and
+ * renders whatever comes back. When the `baf-guard` service is absent (CLI /
+ * tests), `state` is `unavailable` and the line renders as 「已跳过」 — the
+ * customer's environment isn't broken; the sweep just lives in a different
+ * process.
+ * @param input - workspace, probe, binding, optional guard summary.
+ * @returns the command result the customer sees.
+ */
 export function renderWelcomeCard(input: {
   readonly cwd: string
   readonly probe: ToolchainProbe
   readonly binding: StartupBinding
+  readonly guardSummary?: GuardReportSummary
 }): CommandResult {
-  const { cwd, probe, binding } = input
+  const { cwd, probe, binding, guardSummary } = input
   const actives = binding.actives
   const headline = `BAF 已就绪 · ${basename(cwd) || cwd} · ${bindingConclusion(binding)} · 点本行展开/折叠详情`
 
@@ -295,11 +325,15 @@ export function renderWelcomeCard(input: {
     { title: '当前状态', lines: bindingLines(actives) },
     { title: '下一步', lines: nextStepLines(actives, binding.drifted) },
     { title: '环境体检', lines: renderProbeLines(probe) },
+    ...(guardSummary === undefined
+      ? []
+      : [{ title: '安全检查', lines: renderGuardSummaryLines(guardSummary) }]),
     {
       title: '常用命令',
       lines: [
         '/baf-welcome                 重新显示本卡（状态 + 体检）',
         '/baf-go                      把工作流推进到下一个需要你确认的点',
+        '/baf-go-confirm              不弹确认框，直接继续工作流',
         '/baf-gate [名称]             重新弹出确认卡（如 scaffold）',
         '/baf-workflow-resume [阶段]   流程出现偏差后，退回指定阶段重来',
         '/baf-status                  完整状态 · /baf-doctor 体检明细',
@@ -308,6 +342,20 @@ export function renderWelcomeCard(input: {
     },
   ]
   return { kind: 'success', text: formatCommandReport(true, headline, sections) }
+}
+
+/**
+ * 【安全检查】 section lines: one short, plain-Chinese summary. The customer
+ * should be able to tell at a glance whether the workspace passed — without
+ * knowing what `verify` or `secret-scan` are.
+ */
+function renderGuardSummaryLines(summary: GuardReportSummary): readonly string[] {
+  const head = summary.state === 'ok'
+    ? `✓ 安全检查  通过 · ${summary.detail}`
+    : summary.state === 'fail'
+      ? `✗ 安全检查  未通过 · ${summary.detail}`
+      : `? 安全检查  ${summary.detail}`
+  return summary.hint === undefined ? [head] : [head, `   → 怎么处理：${summary.hint}`]
 }
 
 /**
@@ -364,12 +412,25 @@ export function sessionGateSection(cwd: string): string {
     // or any other path outside the registry. Customer's typed agreement is
     // not evidence; point them at the Tab button or the mapped slash command.
     '被确认门挡住时，唯一动作是调用 baf_gate_ask(gateId)：它会向客户弹出确认框并等待选择，返回的就是选择后的真实结果；选项由注册表决定，不得自创、改写或在卡外建议其他路径；客户没选就如实说明，口头同意不是证据。',
+    // §22.19 (session 7.jsonl user principle): the workflow line is
+    // harness-owned. The system itself re-derives the resting point after
+    // every completed turn and pops the due gate — so the model never needs
+    // to instruct the customer through manual UI steps. The old wording
+    // (「请客户点工作流页签/输入命令」) was complaint #4's exact origin: the
+    // customer was told to do the harness's job.
+    '工作流何时弹卡、何时等待、何时推进由系统固定驱动：你每个回合结束后，系统会自动弹出到期的确认卡（分类/推进/确认门/复位/接手选择）。客户没点选时，如实说明状态即可，不得指导客户点页签按钮、敲斜杠命令或复述操作步骤——弹卡是系统的事，你只做业务内容。',
     // §22.17 as-built hardening: a model that cannot reach a gate (service
     // missing) must NOT fill the vacuum with a self-made question — generic
     // ask tools (ask_user_question) pop real dialogs, so invented options
     // look exactly like registry gates to the customer. Workflow decisions
     // (classification, gates, initialization) go through baf_gate_ask only.
-    '不得用通用提问工具（如 ask_user_question）替代确认门、预演分类或为工作流决策自创选项：初始化、分类、确认门、放弃、复位等工作流决策只能经 baf_gate_ask 弹出的注册表选项或对应斜杠指令；通用提问工具只用于与工作流走向无关的澄清。',
+    '不得用通用提问工具（如 ask_user_question）替代确认门、预演分类或为工作流决策自创选项：初始化、分类、确认门、放弃、复位等工作流决策只能经 baf_gate_ask 弹出的注册表选项或对应斜杠指令；通用提问工具只用于与工作流走向无关、且不带选项的纯文本澄清。',
+    // 2026-09-21 standing rule (session 6.jsonl): the model twice ended a
+    // live workflow on an unanswered prose choice — once an "A or B" bridge
+    // over the active-change collision, once a 「问题1 A/B · 问题2 A/B/C，请回
+    // 1A 2C」 artifact question. Every choice the customer must make pops a
+    // card they click; a typed letter is not a click and not evidence.
+    '需要客户在多个选项里做选择时（无论是否影响工作流走向），必须以弹窗卡让客户点选：工作流决策用 baf_gate_ask，其余一切选择用 baf_question_ask（工具会等待客户点选并返回真实结果）。不得在消息里罗列 A/B/C 选项让客户回复编号或字母（如「回 1A 2C」）；客户没点选就如实说明，不得把聊天里的字母或口头同意当作点选结果。',
     // §22.17 I: every workflow-advancing decision pops a registry dialog the
     // customer clicks — including "the customer just stated a requirement".
     // The tool's requirement bootstrap is the sanctioned one-call path; prose
@@ -659,7 +720,10 @@ function nextStepLines(
     ...driftHint,
     only === undefined
       ? '回复 /baf-go change=<编号> 指定接手哪一条（不会替你猜）'
-      : `回复 /baf-go continue 接着做 ${only}`,
+      // A lone active change binds directly (2026-09-20 incident: the old
+      // `continue`-word requirement stranded sessions that minted via the
+      // tool/auto-pop or restarted the host — focus is process-local).
+      : `回复 /baf-go 接着做 ${only}`,
     '想改做别的需求：先 /baf-workflow-abandon change=<编号> confirm 放弃当前这条，或新开一个会话',
   ]
 }

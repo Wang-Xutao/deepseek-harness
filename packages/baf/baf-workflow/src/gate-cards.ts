@@ -21,7 +21,15 @@ import type { WorkflowNode } from '@deepseek-ai/dsh-baf-core'
 /** The closed set of confirmation gates (new gates must extend this union). */
 export type GateId =
   | 'scaffold'
+  | 'new-workflow'
   | 'intake-classify'
+  | 'active-conflict'
+  | 'bind-workflow'
+  | 'open-advance'
+  | 'clarify-advance'
+  | 'design-advance'
+  | 'plan-advance'
+  | 'verify-advance'
   | 'design-confirm'
   | 'verify-archive'
   | 'abandon'
@@ -37,11 +45,30 @@ export interface GateOptionSpec {
   readonly command: string
   /** Positional / key=value args appended to the slash invocation. */
   readonly args?: readonly string[]
+  /**
+   * Custom one-sentence hint shown under the option. Gates whose click is
+   * continued by the caller instead of dispatching a slash (the
+   * `baf_gate_ask` bootstrap gates) use this — the derived 「将执行 /xxx」
+   * line would advertise a command nobody runs.
+   */
+  readonly hint?: string
 }
+
+/**
+ * Option-command sentinels (never dispatched as slashes):
+ * - `__noop__` — the dismiss shape: clicking means "no choice / walk away",
+ *   the dialog resolves it to the paused outcome.
+ * - `__continued__` — the caller-continued shape: clicking is a real choice
+ *   the caller (the `baf_gate_ask` bootstrap, which holds the requirement)
+ *   continues in-call; the dialog resolves it to an answered outcome whose
+ *   optionId the caller branches on. No Tab/slash surface can dispatch it.
+ */
+export const OPTION_COMMAND_SENTINELS = ['__noop__', '__continued__'] as const
 
 /** Dynamic option set — gate cards that derive options from projection. */
 export type GateDynamicOptions =
   | 'resume-targets'
+  | 'change-targets'
 
 /** A registered gate. */
 export interface GateSpec {
@@ -59,6 +86,8 @@ export interface GateContext {
   /** Resume gate — derived target nodes. */
   readonly resumeCandidates?: readonly WorkflowNode[]
   readonly resumeAnchor?: WorkflowNode
+  /** Bind gate — the active change ids this session could take over. */
+  readonly bindCandidates?: readonly string[]
 }
 
 /** Stable headline for the collapsed card row. */
@@ -82,6 +111,23 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
       { id: 'cancel', label: '暂不初始化', command: '__noop__' },
     ],
   },
+  // User decision 2026-09-22 (workflow spec §1, literal reading): the FIRST
+  // dialog of a new requirement is always the bind-or-create check. With no
+  // active change the requirement itself is evidence of intent, but the
+  // customer still sees an explicit 新建工作流 card before anything is
+  // minted. Popped only by the `baf_gate_ask` requirement bootstrap (and
+  // after a scaffold leg); clicking 新建 continues to the classification
+  // dialog inside the same tool call — hence the `hint`s instead of
+  // dispatchable commands: no standalone slash carries the requirement.
+  'new-workflow': {
+    id: 'new-workflow',
+    title: '未发现进行中的工作流',
+    question: '这个工作区没有未结束的工作流。要为下面这个需求新建一条工作流吗？确认后进入分类确认（完整流程 / 缺陷修复路径）。',
+    options: [
+      { id: 'create', label: '新建工作流', command: '__continued__', hint: '确认新建，随即进入分类确认' },
+      { id: 'hold', label: '暂不处理', command: '__continued__', hint: '本次不新建工作流（再敲 /baf-go 或再次提出需求时会重新询问）' },
+    ],
+  },
   'intake-classify': {
     id: 'intake-classify',
     title: '需求分类待确认',
@@ -94,6 +140,95 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
       { id: 'confirm-full', label: '确认 · 完整流程', command: '/baf-workflow-classify', args: ['confirm', 'mode=full-go-path'] },
       { id: 'confirm-bugfix', label: '确认 · 缺陷修复路径', command: '/baf-workflow-classify', args: ['confirm', 'mode=bug-fix-path'] },
       { id: 'reject', label: '重新描述需求', command: '/baf-workflow-classify', args: ['reject'] },
+    ],
+  },
+  // 2026-09-21 (session 6.jsonl): a stated requirement while another change is
+  // still active used to come back as a text-only refusal card, and the model
+  // bridged the gap with a prose "A. 继续推进 / B. 新开会话" question the
+  // customer had to answer by typing "A". The two real actions were registered
+  // commands all along — this gate makes them the clickable options, so the
+  // conflict itself is a dialog the customer settles with one click. Popped by
+  // the `baf_gate_ask` requirement bootstrap (and legal as an explicit re-pop).
+  'active-conflict': {
+    id: 'active-conflict',
+    title: '已有进行中的变更',
+    question: '这个工作区已有一条进行中的变更，还不能直接开始新需求。请先决定现有变更的去向：继续推进它，或放弃它之后再重新提出新需求。',
+    options: [
+      { id: 'advance', label: '继续推进现有变更', command: '/baf-go' },
+      { id: 'abandon', label: '放弃现有变更，稍后再提新需求', command: '/baf-workflow-abandon', args: ['confirm'] },
+      { id: 'pause', label: '暂不处理', command: '__noop__' },
+    ],
+  },
+  // §22.19 (session 7.jsonl R4): `/baf-go` with ≥2 active changes used to be
+  // a text-only card whose escape was typing `/baf-go change=<id>` — another
+  // prose A/B the customer had to answer by hand. The binding choice is a
+  // workspace-scope workflow decision, so it is a registered gate like every
+  // other: the coordinator pops it (candidates = actives) and the click
+  // re-dispatches the same `/baf-go change=<id>` the text card advertised.
+  'bind-workflow': {
+    id: 'bind-workflow',
+    title: '多条未完成的变更，请选择接手对象',
+    question: '这个工作区有多条未完成的变更，本会话要接手哪一条？选定后本会话将绑定并推进它，其余变更保持原状。',
+    options: [], // populated dynamically from `ctx.bindCandidates`
+    dynamicOptions: 'change-targets',
+  },
+  // User-facing advancement gates (§22 user-request 2026-09-20). Every
+  // transition that requires explicit customer agreement — not just the two
+  // machine-checked confirm gates — pops a dialog so the customer can see
+  // what they're agreeing to. `advance` routes through `/baf-go-confirm`
+  // (driveGateResolve handles it) so the click resolves into driveGo with
+  // `confirm:true` and skips the next popup; `/baf-go` would loop because
+  // the advance family has no parked state.
+  'open-advance': {
+    id: 'open-advance',
+    title: '提案已完成 · 请确认推进',
+    // 【变更】2026-09-22 (user report #1/#4): this card pops only after
+    // proposal.md passes its gate — it is the customer confirming the open
+    // stage's artifact, not a bare "next step" nod.
+    question: '提案（proposal.md）已完成并通过完成门：Why / Scope / Impact 均已填写。确认后进入澄清阶段，系统会装好模板，等模型把澄清文档填好后，再弹下一次确认卡。',
+    options: [
+      { id: 'advance', label: '确认提案 · 进入澄清', command: '/baf-go-confirm' },
+      { id: 'back', label: '暂不推进', command: '__noop__' },
+    ],
+  },
+  'clarify-advance': {
+    id: 'clarify-advance',
+    title: '进入设计 · 请确认',
+    question: '澄清文档已经齐了。系统会装好设计模板，等模型把设计文档填好后，再敲一次 /baf-go 继续。',
+    options: [
+      { id: 'advance', label: '确认进入设计', command: '/baf-go-confirm' },
+      { id: 'back', label: '暂不推进', command: '__noop__' },
+    ],
+  },
+  'design-advance': {
+    id: 'design-advance',
+    title: '进入计划 · 请确认',
+    question: '设计文档已经齐了。系统会装好计划模板，等模型把计划文档填好后，再敲一次 /baf-go 继续。',
+    options: [
+      { id: 'advance', label: '确认进入计划', command: '/baf-go-confirm' },
+      { id: 'back', label: '暂不推进', command: '__noop__' },
+    ],
+  },
+  'plan-advance': {
+    id: 'plan-advance',
+    title: '进入实现 · 请确认',
+    question: '计划已经齐了。系统会进入实现阶段，你只需要按计划改白名单内的文件。',
+    options: [
+      { id: 'advance', label: '确认进入实现', command: '/baf-go-confirm' },
+      { id: 'back', label: '暂不推进', command: '__noop__' },
+    ],
+  },
+  // 【变更】2026-09-23 (demo1 十问题 8): verify entry is a customer-gated
+  // transition — implement finishing used to auto-run verification. The
+  // confirm names the checklist the run will execute and the acceptance
+  // document it writes (verify.md, demo5 issue #3).
+  'verify-advance': {
+    id: 'verify-advance',
+    title: '实现完成 · 请确认验证',
+    question: '计划内的任务已全部完成（改动均在白名单内）。确认后进入验证阶段：系统按检查单运行验证，并生成验收文档 verify.md。验证未通过会带着失败项回到实现阶段。',
+    options: [
+      { id: 'advance', label: '确认开始验证', command: '/baf-go-confirm' },
+      { id: 'back', label: '暂不验证', command: '__noop__' },
     ],
   },
   'design-confirm': {
@@ -139,6 +274,9 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
  */
 function renderOptionLine(spec: GateOptionSpec, index: number, changeId: string | undefined): string {
   const num = `[${index + 1}]`
+  if (spec.hint !== undefined) {
+    return `${num} ${spec.label}    → ${spec.hint}`
+  }
   if (spec.command === '__noop__') {
     return `${num} ${spec.label}    → 本次不操作`
   }
@@ -166,6 +304,20 @@ function resumeOptions(ctx: GateContext): readonly GateOptionSpec[] {
 }
 
 /**
+ * Render the bind card's dynamic options — one per active change id. The
+ * dispatch is the `/baf-go change=<id>` the old text card advertised, so a
+ * click and a typed command run the exact same drive.
+ */
+function bindOptions(ctx: GateContext): readonly GateOptionSpec[] {
+  return (ctx.bindCandidates ?? []).map(changeId => ({
+    id: `bind-${changeId}`,
+    label: `接手 ${changeId}`,
+    command: '/baf-go',
+    args: [`change=${changeId}`],
+  }))
+}
+
+/**
  * Build the §22 gate card sections (the canonical structured form every
  * surface composes from). Pure — no I/O, no projection reads. Used by
  * `renderWelcomeCard` (session card), by `baf_gate_ask` (model tool), and
@@ -183,7 +335,9 @@ function resumeOptions(ctx: GateContext): readonly GateOptionSpec[] {
 export function gateCardSections(spec: GateSpec, ctx?: GateContext): readonly { title: string; lines: readonly string[] }[] | undefined {
   const options = spec.dynamicOptions === 'resume-targets'
     ? resumeOptions(ctx ?? { cwd: '' })
-    : spec.options
+    : spec.dynamicOptions === 'change-targets'
+      ? bindOptions(ctx ?? { cwd: '' })
+      : spec.options
   if (options.length === 0) return undefined
   const changeId = ctx?.changeId
   const sections: { title: string; lines: readonly string[] }[] = [
@@ -264,7 +418,7 @@ export function renderGate(gateId: string, ctx?: GateContext): CommandResult {
  * resolution.
  */
 export function isGateResolvingCommand(command: string): boolean {
-  if (command === '__noop__') return false
+  if (command === '__noop__' || command === '__continued__') return false
   if (command === '/baf-scaffold') return true
   if (command === '/baf-workflow-resume') return true // dynamic-options gate
   if (command === '/baf-go') return true

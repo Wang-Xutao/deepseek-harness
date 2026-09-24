@@ -88,7 +88,7 @@ describe('e2e acceptance (§22.16 P3)', () => {
       // probe, which is outside this spec's contract; what we DO cover here
       // is the gateResolve audit-line shape, which is the §22.16 P3 deliverable.
       const result = await driveGateResolve(
-        root, 'design-confirm', 'confirm', {}, undefined, 'gate-card',
+        root, 'design-confirm', 'confirm', {}, undefined, undefined, 'gate-card',
         { changeId, audit: line => auditLines.push(line) },
       )
       // The dispatched `/baf-go` will surface an error card without a model

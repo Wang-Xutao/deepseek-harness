@@ -23,11 +23,13 @@ import {
 import { pickActiveChange, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
 import { rerunChain } from './stages/drift.ts'
 import { GATE_REGISTRY, type GateOptionSpec, type GateSpec } from './gate-cards.ts'
-import { confirmIntake, createWorkflowService, rejectIntake, setIntakeMode } from './workflow-service.ts'
-import { driveGo } from './go-coordinator.ts'
+import { confirmIntake, rejectIntake, setIntakeMode } from './workflow-service.ts'
+import { DISPATCH_SENT_MARKER, driveGo } from './go-coordinator.ts'
+import type { GoDispatch } from './go-dispatch.ts'
 import { readLedger } from './stages/implement.ts'
-import { formatCommandReport, modeZh } from './command-format.ts'
+import { formatCommandReport, modeZh, cardTitle } from './command-format.ts'
 import { parseArgs, valueOf, valuesOf } from './cli-args.ts'
+import { beginIntake } from './begin-intake.ts'
 import {
   WORKSPACE_BASELINE_PATH,
   loadWorkspaceBaseline,
@@ -48,36 +50,10 @@ export {
   type ScaffoldAdapterOutcome,
 } from './pipeline-factory.ts'
 
-/** Slash → description map (mirrors the descriptors in `commands.ts`). */
-const SLASH_DESC: Record<string, string> = {
-  '/baf-go': '自动驱动到下一个客户确认点 · ★★★',
-  '/baf-workflow-open': '启动变更：intake 分类 · ★★★',
-  '/baf-workflow-classify': '分类确认 / 拒绝 · ★★',
-  '/baf-workflow-clarify': '澄清阶段（N2） · ★★',
-  '/baf-workflow-design': '设计阶段（N3） · ★★',
-  '/baf-workflow-plan': '计划阶段（N4） · ★★',
-  '/baf-workflow-implement': '实现阶段（N5 进入/完成） · ★★★',
-  '/baf-workflow-verify': '验证阶段（N6） · ★★★',
-  '/baf-workflow-archive': '归档变更（N7/T14，需 confirm） · ★★★',
-  '/baf-workflow-abandon': '放弃变更（T16，需 confirm） · ★',
-  '/baf-workflow-resume': 'drift 复位（T13，需选目标节点） · ★★★',
-  '/baf-check-quality': '基线 C 栈质量检查 · ★★',
-  '/baf-check-guard': '安全门禁（verify + secret-scan） · ★★',
-  '/baf-scaffold': '初始化工作区（scaffold） · ★★（与 §22 scaffold 门同源）',
-}
-
-/**
- * Build a slash-command card title from its description + optional runtime info.
- * @param slash - slash command name (must have a {@link SLASH_DESC} row).
- * @param runtime - optional runtime qualifier (change id, outcome, …).
- * @returns rendered card title.
- */
-export function cardTitle(slash: string, runtime?: string): string {
-  const desc = SLASH_DESC[slash] ?? slash
-  return runtime === undefined
-    ? `${desc} · 点本行展开/折叠详情`
-    : `${desc} · ${runtime} · 点本行展开/折叠详情`
-}
+// Card-title helper moved to `command-format.ts` (§22.19 — `begin-intake.ts`
+// builds the same cards without importing this module); re-exported here so
+// existing importers (`go-coordinator.ts`) keep their import path.
+export { cardTitle } from './command-format.ts'
 
 /** Outcome of resolving the change a command addresses. */
 type ChangeResolution =
@@ -97,10 +73,12 @@ function resolveChange(index: IndexShape, explicit?: string): ChangeResolution {
       ? { kind: 'ok', changeId: explicit }
       : { kind: 'none' }
   }
-  // Same tie-breaker as the Tab / `/baf-status` / session-gate surfaces
-  // (highest seq, then lexical changeId) so a slash command and a Tab click
-  // agree on the focus even when several changes are still in-flight
-  // (§13 issue #2: three surfaces used to diverge here).
+  // Same tie-breaker as the Tab / `/baf-status` / session-gate / guard
+  // surfaces (§22.19 ranking: highest seq, then lexical changeId) so a slash
+  // command and a Tab click agree on the focus even when several changes
+  // are still in-flight (§13 issue #2: three surfaces used to diverge
+  // here; the guard additionally honors write-path and session focus
+  // before falling back to this same seq ranking).
   const fullIndex = { changes: index.changes as readonly ProjectionIndexEntry[] }
   const picked = pickActiveChange(fullIndex.changes)
   if (picked.kind === 'none') return { kind: 'none' }
@@ -114,11 +92,34 @@ function resolveChange(index: IndexShape, explicit?: string): ChangeResolution {
  * @param error - thrown value.
  * @returns error CommandResult.
  */
+/**
+ * Actionable 处理 rows keyed by error code. Codes without an entry fall back
+ * to the generic retry line — only environment blocks whose fix a customer
+ * can actually perform belong here (2026-09-22: the git-blocked open card
+ * said 「按原因补齐后重试」 while the reason row was an English sentence; the
+ * customer had no idea `git init` was the fix).
+ */
+const ERROR_REMEDIES: Partial<Record<string, string>> = {
+  git_unavailable: '在工作区目录初始化仓库并提交一次（git init && git add -A && git commit -m "init"），或按 /baf-welcome 环境体检卡的指引处理；完成后输入 /baf-go 重试推进',
+}
+
+/**
+ * Render a domain failure as the stable error card.
+ *
+ * Error codes (`invalid_transition`, `stage_incomplete`, …) are translated to
+ * plain Chinese titles instead of leaking the domain-layer vocabulary to the
+ * customer — §22 user-request 2026-09-20 (workflow dialogs must use plain
+ * language, no internal terms like `WorkflowService.transition`).
+ * @param command - command label for the headline.
+ * @param error - thrown value.
+ * @returns error CommandResult.
+ */
 export function renderDomainError(command: string, error: unknown): CommandResult {
   if (isBafError(error)) {
+    const plainTitle = translateErrorCode(error.code)
     return {
       kind: 'error',
-      text: formatCommandReport(false, `${command} · ${error.code} · 点本行展开/折叠详情`, [
+      text: formatCommandReport(false, `${command} · ${plainTitle} · 点本行展开/折叠详情`, [
         {
           title: '原因',
           lines: [
@@ -128,15 +129,45 @@ export function renderDomainError(command: string, error: unknown): CommandResul
               : []),
           ],
         },
-        { title: '处理', lines: ['按原因补齐后重试；查看 /baf-status 与「工作流」页签'] },
+        { title: '处理', lines: [ERROR_REMEDIES[error.code] ?? '按原因补齐后重试；查看 /baf-status 与「工作流」页签'] },
       ]),
     }
   }
   return {
     kind: 'error',
-    text: formatCommandReport(false, `${command} · 失败 · 点本行展开/折叠详情`, [
+    text: formatCommandReport(false, `${command} · 执行失败 · 点本行展开/折叠详情`, [
       { title: '原因', lines: [error instanceof Error ? error.message : String(error)] },
+      { title: '处理', lines: ['稍后重试，或输入 /baf-status 查看当前状态'] },
     ]),
+  }
+}
+
+/**
+ * Translate a `BafError.code` into a plain-Chinese short label. Unknown codes
+ * fall through to a generic phrasing so the customer never sees raw domain
+ * vocabulary.
+ *
+ * Keep the table exhaustive over the codes `BafError` actually emits (see
+ * `@deepseek-ai/dsh-baf-core`). Adding a new code requires one line here.
+ * @param code - error code from a `BafError`.
+ * @returns plain-Chinese title suffix.
+ */
+function translateErrorCode(code: string): string {
+  switch (code) {
+    case 'invalid_transition': return '当前状态不允许这个操作'
+    case 'baseline_unavailable': return '工作区缺少基线配置'
+    case 'baseline_incompatible': return '工作区基线版本不兼容'
+    case 'git_unavailable': return '本地 Git 不可用，暂时无法建立变更'
+    case 'intake_confirmation_required': return '需要先确认需求分类'
+    case 'model_route_unavailable': return '没有可用的模型路由'
+    case 'model_route_incompatible': return '模型路由配置不兼容'
+    case 'model_fallback_blocked': return '模型降级被禁止'
+    case 'policy_missing': return '缺少所需的策略配置'
+    case 'projection_corrupted': return '工作区状态文件已损坏'
+    case 'scope_exceeded': return '改动超出了允许范围'
+    case 'verify_required': return '必须先完成验证阶段'
+    case 'writer_conflict': return '其他进程正在写入同一变更'
+    default: return '执行失败'
   }
 }
 
@@ -156,56 +187,18 @@ export function statusLines(status: WorkflowStatus): string[] {
 
 /**
  * `/baf-workflow-open <描述>` — run the intake classifier (T1).
+ *
+ * §22.19: the body lives in {@link beginIntake} — the single mint entry every
+ * surface (slash, `baf_gate_ask` bootstrap, auto-pop, `/baf-go` edge form, the
+ * Tab remote) funnels through, so a TOCTOU race between two of them can no
+ * longer double-mint one requirement into two changes (session 7.jsonl R1).
+ * This wrapper keeps the slash signature and returns the outcome's card.
  * @param cwd - workspace root.
  * @param rawInput - free-form change description.
  * @returns classification card.
  */
 export async function driveOpen(cwd: string, rawInput: string, _source: TransitionSource = 'slash'): Promise<CommandResult> {
-  const description = rawInput.trim()
-  if (description === '') {
-    return {
-      kind: 'error',
-      text: formatCommandReport(false, cardTitle('/baf-workflow-open', '缺少描述'), [
-        { title: '用法', lines: ['/baf-workflow-open <需求或 Bug 描述>'] },
-      ]),
-    }
-  }
-  const store = new ProjectionStore({ workspaceRoot: cwd })
-  const baseline = await loadWorkspaceBaseline(cwd)
-  const service = createWorkflowService({ store })
-  const { intake } = await service.intake({
-    description,
-    workspace: { root: cwd },
-    ...(baseline === undefined ? {} : { baseline }),
-  })
-  return {
-    kind: 'success',
-    text: formatCommandReport(
-      true,
-      cardTitle('/baf-workflow-open', `分类完成 · ${modeZh(intake.mode)}`),
-      [
-        {
-          title: '分类卡',
-          lines: [
-            `change: ${intake.changeId}`,
-            `kind: ${intake.kind}`,
-            `mode: ${intake.mode}`,
-            `affectedScope: ${intake.affectedScope}`,
-            `confidence: ${intake.confidence.toFixed(2)}`,
-            `openspecRequired: ${String(intake.openspecRequired)}`,
-            `reasonCodes: ${intake.reasonCodes.join(', ') || '（无）'}`,
-          ],
-        },
-        {
-          title: '下一步',
-          lines: [
-            `确认：/baf-workflow-classify confirm mode=${intake.mode === 'bug-fix-path' ? 'bug-fix-path problem=… root-cause=… file=… test=… test-cmd=…' : 'full-go-path title=…'}`,
-            '拒绝：/baf-workflow-classify reject',
-          ],
-        },
-      ],
-    ),
-  }
+  return (await beginIntake(cwd, rawInput)).card
 }
 
 /**
@@ -296,6 +289,32 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
           { title: '说明', lines: ['分类确认后不能再改道；如需换路径，请重新描述需求新开一条'] },
         ]),
       }
+    }
+  }
+
+  // A `clarify-required` verdict carries no drivable path: confirming it
+  // without `mode=` would park the change at `confirmed + clarify-required`,
+  // where setIntakeMode's regular guard refuses and no transition rule can
+  // fire (the second deadlock of the 2026-09-20 incident review). Demand the
+  // path up front instead of half-confirming.
+  const preConfirm = await store.readStatus(changeId)
+  if (preConfirm.intake !== undefined
+    && preConfirm.intake.mode === 'clarify-required'
+    && preConfirm.intake.confirmation === 'pending'
+    && requestedMode === undefined) {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('/baf-workflow-classify', '分类器未定路径，需要客户选择'), [
+        { title: '原因', lines: ['这条需求的分类是 clarify-required（分类器不能自行定路）；确认时必须带上 mode='] },
+        {
+          title: '用法',
+          lines: [
+            `/baf-workflow-classify confirm mode=full-go-path change=${changeId}`,
+            `/baf-workflow-classify confirm mode=bug-fix-path change=${changeId} problem=… root-cause=… file=… test=… test-cmd=…`,
+            `/baf-workflow-classify reject change=${changeId}`,
+          ],
+        },
+      ]),
     }
   }
 
@@ -951,6 +970,11 @@ export async function driveScaffold(
       ...(created.length === 0 ? [] : [{ title: '新增', lines: created } as const]),
       ...(skipped.length === 0 ? [] : [{ title: '已存在（内容一致，未改动）', lines: skipped } as const]),
       ...(backedUp.length === 0 ? [] : [{ title: '已备份并改写', lines: backedUp } as const]),
+      // 2026-09-22 user decision: the scaffold also anchors the workspace in
+      // Git (init + commit) when no repository exists — full-go-path open
+      // hard-blocks without a revision, and the customer should never have to
+      // open a terminal for a workflow-owned precondition.
+      ...(outcome.git === undefined ? [] : [{ title: 'Git 仓库', lines: [outcome.git.note] } as const]),
       { title: '下一步', lines: ['/baf-workflow-open <需求> 启动第一条变更', '或输入 /baf-status 查看当前状态'] },
     ]),
   }
@@ -972,32 +996,60 @@ export async function driveScaffold(
  *
  * @param cwd - workspace root.
  * @param gateId - §22 gate id from the Tab payload.
- * @param optionId - registered option id (or `resume-<node>` for the dynamic resume gate).
+ * @param optionId - registered option id (or `resume-<node>` / `bind-<changeId>` for the dynamic gates).
  * @param adapters - drive adapters (scaffold / guard / stack as needed by the dispatched slash).
  * @param resumeCandidates - required when `gateId === 'resume'`; the Tab supplies them from the drift payload.
+ * @param bindCandidates - required when `gateId === 'bind-workflow'`; the active change ids the coordinator offered.
  * @returns the dispatched slash's card, the dismissal card, or a refusal.
  */
+/** Options {@link driveGateResolve} and its inner dispatch share (2026-09-23: + dispatch). */
+interface GateResolveOpts {
+  /** Active change id for the audit line; falls back to the projection index. */
+  changeId?: string
+  /** Audit-line emitter; omitted callers get silent runs (e.g. CLI smoke). */
+  audit?: (line: string) => void
+  /**
+   * §22.17 J — extra key=value tokens spliced into the dispatched classify
+   * confirm invocation. The registry's option args are static; the bug-fix
+   * fields (problem/root-cause/file/test/test-cmd) are per-call payload the
+   * dialog gathered from `baf_gate_ask`, so they ride along here. Only the
+   * confirm subcommand consumes them; reject ignores stray kv pairs.
+   */
+  extraArgs?: readonly string[]
+  /**
+   * 【变更】2026-09-23 (user issue #1): §18.4.2 work-order channel. Present
+   * only when the caller is a customer action (dialog click, Tab click) that
+   * happened to have a live agent; the inner /baf-go and /baf-go-confirm
+   * re-drives carry it with `dispatchOrigin: 'customer'`, so a gate confirm
+   * that advances into a template rest dispatches the order that wakes the
+   * model instead of leaving the click looking dead.
+   */
+  dispatch?: GoDispatch
+}
+
 export async function driveGateResolve(
   cwd: string,
   gateId: string,
   optionId: string,
   adapters: DriveAdapters,
   resumeCandidates?: readonly WorkflowNode[],
+  bindCandidates?: readonly string[],
   source: TransitionSource = 'slash',
-  opts?: {
-    /** Active change id for the audit line; falls back to the projection index. */
-    changeId?: string
-    /** Audit-line emitter; omitted callers get silent runs (e.g. CLI smoke). */
-    audit?: (line: string) => void
-    /**
-     * §22.17 J — extra key=value tokens spliced into the dispatched classify
-     * confirm invocation. The registry's option args are static; the bug-fix
-     * fields (problem/root-cause/file/test/test-cmd) are per-call payload the
-     * dialog gathered from `baf_gate_ask`, so they ride along here. Only the
-     * confirm subcommand consumes them; reject ignores stray kv pairs.
-     */
-    extraArgs?: readonly string[]
-  },
+  opts?: GateResolveOpts,
+): Promise<CommandResult> {
+  const result = await resolveGateDispatch(cwd, gateId, optionId, adapters, resumeCandidates, bindCandidates, source, opts)
+  return result
+}
+
+async function resolveGateDispatch(
+  cwd: string,
+  gateId: string,
+  optionId: string,
+  adapters: DriveAdapters,
+  resumeCandidates?: readonly WorkflowNode[],
+  bindCandidates?: readonly string[],
+  source: TransitionSource = 'slash',
+  opts?: GateResolveOpts,
 ): Promise<CommandResult> {
   const spec: GateSpec | undefined = (GATE_REGISTRY as Record<string, GateSpec | undefined>)[gateId]
   if (spec === undefined) {
@@ -1010,10 +1062,10 @@ export async function driveGateResolve(
     }
   }
 
-  // §22.5: dynamic options (resume) are derived from the caller's payload
-  // because the registry cannot enumerate them at definition time. We
-  // re-validate against the supplied candidates so a stale Tab can't drive
-  // a node that the projection no longer considers legal.
+  // §22.5: dynamic options (resume / bind-workflow) are derived from the
+  // caller's payload because the registry cannot enumerate them at definition
+  // time. We re-validate against the supplied candidates so a stale Tab can't
+  // drive a node that the projection no longer considers legal.
   const options: readonly GateOptionSpec[] = spec.dynamicOptions === 'resume-targets'
     ? (resumeCandidates ?? []).map(node => ({
       id: `resume-${node}`,
@@ -1021,7 +1073,14 @@ export async function driveGateResolve(
       command: '/baf-workflow-resume',
       args: [node],
     }))
-    : spec.options
+    : spec.dynamicOptions === 'change-targets'
+      ? (bindCandidates ?? []).map(changeId => ({
+        id: `bind-${changeId}`,
+        label: `接手 ${changeId}`,
+        command: '/baf-go',
+        args: [`change=${changeId}`],
+      }))
+      : spec.options
 
   const opt = options.find(o => o.id === optionId)
   if (opt === undefined) {
@@ -1038,11 +1097,15 @@ export async function driveGateResolve(
   // Dismissal = no-op. The Tab will re-render and the gate's condition
   // (e.g. "no baseline") still holds, so the pendingGate stays visible.
   // No audit line: dismissal is a UI event, not a workflow drive.
-  if (opt.command === '__noop__') {
+  // `__continued__` (caller-continued options, e.g. new-workflow) is not
+  // dispatchable from a Tab either — same calm card, different explanation.
+  if (opt.command === '__noop__' || opt.command === '__continued__') {
     return {
       kind: 'success',
-      text: formatCommandReport(true, cardTitle('gateResolve', '已收起确认门'), [
-        { title: '状态', lines: ['取消未动作；门条件未解除，Tab 仍保留此卡'] },
+      text: formatCommandReport(true, cardTitle('gateResolve', opt.command === '__continued__' ? '此确认项只在对话确认框中选择' : '已收起确认门'), [
+        { title: '状态', lines: [opt.command === '__continued__'
+          ? '这张卡由对话中的确认框弹出并在那里续接；Tab 上不提供按钮'
+          : '取消未动作；门条件未解除，Tab 仍保留此卡'] },
         { title: '重弹方式', lines: ['在 Tab 上重选，或敲 /baf-go 让协调器重渲染'] },
       ]),
     }
@@ -1082,7 +1145,46 @@ export async function driveGateResolve(
     const withExtra = base.split(/\s+/).includes('confirm') && opts?.extraArgs !== undefined && opts.extraArgs.length > 0
       ? `${base} ${opts.extraArgs.join(' ')}`.trim()
       : base
-    return driveClassify(cwd, withExtra, innerSource)
+    const result = await driveClassify(cwd, withExtra, innerSource)
+    // 【变更】2026-09-23 (demo2 user issue #1): a classify confirm lands the
+    // change on a model-authoring rest (full-go-path → open with a template
+    // proposal; bug-fix-path → open, one step from the regression-test
+    // ledger). Every classify-confirm surface except a mid-turn
+    // `baf_gate_ask` has an IDLE model at this point (the dialog pops after
+    // the turn ended, or the click came from the Tab / auto-pop / the
+    // orchestrator's turn-end pop) — the old return left the flow parked at
+    // the rest with nobody awake, and the customer's only escape was typing
+    // 继续. Re-enter the coordinator once with the customer-origin dispatch
+    // channel: it routes to the fresh rest and hands the model the work
+    // order (a running model reports busy and nothing is queued — the
+    // mid-turn tool path stays exactly as before).
+    if (result.kind === 'success' && (opt.args ?? []).includes('confirm') && opts?.dispatch !== undefined) {
+      const changeTail = opts.changeId === undefined ? '' : `change=${opts.changeId}`
+      const follow = await driveGo({
+        cwd,
+        adapters,
+        rawInput: changeTail,
+        source: 'gate-card',
+        dispatch: opts.dispatch,
+        dispatchOrigin: 'customer',
+      })
+      // 【变更】2026-09-23 (demo1 issue #1): the follow-up's resting card is
+      // `kind: 'error'` by §22 design ("the only kind the surface renders as a
+      // stop") even when the work order was just delivered — the model is
+      // working and nothing failed. Mirroring that kind onto the combined
+      // card made a successful classify-confirm read as「分类确认被拒绝」
+      // (error styling on a ✓ card). The overall kind stays 'success' when
+      // the follow dispatched (or genuinely succeeded); only a real failure
+      // keeps the error kind.
+      if ((follow.text ?? '') !== '') {
+        const dispatched = (follow.text ?? '').includes(DISPATCH_SENT_MARKER)
+        return {
+          kind: follow.kind === 'error' && !dispatched ? 'error' : 'success',
+          text: `${result.text}\n\n${follow.text}`,
+        }
+      }
+    }
+    return result
   }
   if (opt.command === '/baf-workflow-clarify') {
     return driveClarify(cwd, invocations.replace('/baf-workflow-clarify', '').trim(), innerSource)
@@ -1091,7 +1193,11 @@ export async function driveGateResolve(
     return driveImplement(cwd, invocations.replace('/baf-workflow-implement', '').trim(), innerSource)
   }
   if (opt.command === '/baf-workflow-abandon') {
-    return driveAbandon(cwd, invocations.replace('/baf-workflow-abandon', '').trim(), innerSource)
+    // Carry the gate's change id the same way the /baf-go dispatch does: a
+    // dialog click (2026-09-21 active-conflict) must abandon exactly the
+    // change the customer saw on the card, not the resolver's tie-break pick.
+    const changeArg = opts?.changeId === undefined ? '' : ` change=${opts.changeId}`
+    return driveAbandon(cwd, `${invocations.replace('/baf-workflow-abandon', '').trim()}${changeArg}`.trim(), innerSource)
   }
   if (opt.command === '/baf-workflow-resume') {
     return driveResume(cwd, invocations.replace('/baf-workflow-resume', '').trim(), innerSource)
@@ -1103,12 +1209,37 @@ export async function driveGateResolve(
     // (§18.6.4) refuses an unfocused second `/baf-go`, and the dispatch has
     // no session focus cache — without `change=` a dialog/Tab confirm click
     // would die on "请选择本会话的工作流" instead of unlocking the gate.
+    // Bind-workflow options already carry their own `change=<id>` arg, so
+    // the fallback appends only when the invocation has none — a duplicate
+    // token would make the bound change depend on the tokenizer's tie-break.
+    const tail = invocations.replace('/baf-go', '').trim()
+    const hasChangeArg = tail.split(/\s+/).some(token => token.startsWith('change='))
+    const changeArg = opts?.changeId === undefined || hasChangeArg ? '' : ` change=${opts.changeId}`
+    return driveGo({
+      cwd,
+      adapters,
+      rawInput: `${tail}${changeArg}`.trim(),
+      source: innerSource,
+      // 2026-09-23 issue #1: the gate option click is the customer action.
+      ...(opts?.dispatch === undefined ? {} : { dispatch: opts.dispatch, dispatchOrigin: 'customer' as const }),
+    })
+  }
+  // §22 user-request 2026-09-20 — the user-facing advancement gates
+  // (open-advance / clarify-advance / design-advance / plan-advance) dispatch
+  // `/baf-go-confirm` so the click resolves into driveGo with `confirm:true`
+  // and skips the next popup. Routing through `/baf-go` here would loop on
+  // the same gate (no parked state for the advance family).
+  if (opt.command === '/baf-go-confirm') {
     const changeArg = opts?.changeId === undefined ? '' : ` change=${opts.changeId}`
     return driveGo({
       cwd,
       adapters,
-      rawInput: `${invocations.replace('/baf-go', '').trim()}${changeArg}`.trim(),
+      rawInput: `${invocations.replace('/baf-go-confirm', '').trim()}${changeArg}`.trim(),
       source: innerSource,
+      confirm: true,
+      // 2026-09-23 issue #1: the advance-gate click lands here — confirm may
+      // now dispatch at the template rest it opens.
+      ...(opts?.dispatch === undefined ? {} : { dispatch: opts.dispatch, dispatchOrigin: 'customer' as const }),
     })
   }
   return {

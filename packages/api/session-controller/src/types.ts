@@ -524,6 +524,12 @@ export type SessionFollowFrame =
 /** One pending inbox occurrence in the authoritative queue snapshot. */
 export interface SessionQueuedItem {
   readonly id: MessageId
+  /**
+   * `queued`/`steering` are the customer-editable pending-input rows (the
+   * QueueDock's edit / remove / steer affordances); `context` is non-user
+   * input the customer never wrote and must not be offered for editing
+   * (mid-turn context, a plugin's queued work order).
+   */
   readonly placement: 'queued' | 'steering' | 'context'
   /** Prompt-RPC identity from the queued message's user source; clients retire the matching local submission echo on it. */
   readonly rpcId?: SessionRequestId

@@ -53,10 +53,22 @@ export interface ScaffoldAdapterOptions {
   readonly at?: Date
 }
 
+/** Mirror of `GitAnchor` from `baf-scaffold` — the best-effort init+commit report. */
+export interface ScaffoldGitAnchor {
+  readonly initialized: boolean
+  readonly revision?: string
+  readonly note: string
+}
+
 /** Mirror of `ScaffoldOutcome` — `kind: 'done' | 'refused'`. */
 export type ScaffoldAdapterOutcome =
   | { readonly kind: 'refused'; readonly reason: 'human_confirmation_required' }
-  | { readonly kind: 'done'; readonly changes: { readonly created: readonly string[]; readonly skipped: readonly string[]; readonly backedUp: readonly string[] } }
+  | {
+    readonly kind: 'done'
+    readonly changes: { readonly created: readonly string[]; readonly skipped: readonly string[]; readonly backedUp: readonly string[] }
+    /** 2026-09-22 user decision: the scaffold also anchors the workspace in Git when none exists. */
+    readonly git?: ScaffoldGitAnchor
+  }
 
 /**
  * Load the workspace's governing baseline.

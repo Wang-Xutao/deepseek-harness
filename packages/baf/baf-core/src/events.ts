@@ -54,6 +54,25 @@ export type ProjectionEvent =
     to: 'full-go-path' | 'bug-fix-path'
     by: 'user'
   })
+  | (ProjectionEventBase & {
+    /**
+     * 【变更】2026-09-23 (demo1 十问题 9): one-time settlement of the intake's
+     * pre-judgment fields — a finished change must not read
+     * 待定 forever. `kind` settles from the driven path (bug-fix→bug,
+     * full-go→new-requirement) when the heuristic left it unknown;
+     * `affectedScope` settles from the ledger's allowlist size (1→single-file,
+     * ≤3→small-local, else cross-module). Written by the archive drive right
+     * before `change-archived`; the fold applies it once.
+     * 【变更】2026-09-24 (demo6 问题 2/6): both fields optional — the settle
+     * now fires at the stage where the fact is KNOWN (kind at classify
+     * confirm, scope at plan completion) and each event settles only what it
+     * carries. The archive-time settle remains the backstop with both.
+     */
+    type: 'intake-settled'
+    kind?: 'new-requirement' | 'bug' | 'maintenance'
+    affectedScope?: 'single-file' | 'small-local' | 'cross-module' | 'public-api'
+    reasonCodes?: readonly string[]
+  })
   | (ProjectionEventBase & { type: 'baseline-locked'; lock: BaselineLock })
   | (ProjectionEventBase & { type: 'stage-entered'; node: WorkflowNode; cause?: string; source?: TransitionSource })
   | (ProjectionEventBase & { type: 'stage-completed'; node: WorkflowNode; artifacts: string[] })

@@ -536,14 +536,89 @@ function noticeSummary(source: unknown): string | null {
   return typeof summary === 'string' && summary !== '' ? summary : null
 }
 
+/** One `/baf-go` work order, as the durable source records it. */
+interface GoDispatchOrder {
+  changeId: string
+  node: string
+  missing: string[]
+}
+
+/** A work order read off the source, or null when the record is unusable. */
+function goDispatchOrder(source: unknown): GoDispatchOrder | null {
+  const record = asRecord(source)
+  if (record === null) return null
+  const changeId = record['changeId']
+  const node = record['node']
+  const missing = record['missing']
+  if (typeof changeId !== 'string' || changeId === '' || typeof node !== 'string' || node === '') return null
+  // The work list is the whole point of the row: an order whose list cannot be
+  // read falls through to the opaque body rather than showing a confident
+  // header over an empty "待补 0 项" — the same rule `recall` applies to
+  // completeness.
+  if (!Array.isArray(missing) || missing.some(item => typeof item !== 'string')) return null
+  return { changeId, node, missing: missing as string[] }
+}
+
+/**
+ * `go-dispatch` form: the work order the BAF workflow handed this session,
+ * with the artifact gaps it asks the model to fill.
+ *
+ * The header states the stage and change, then the per-item work list. The
+ * model-facing order text sits inside a collapsed disclosure: the whole order
+ * duplicates the list right above it, so opening it by default would print the
+ * same work twice and push everything after it off screen.
+ *
+ * This row is read-only by construction — it is a plugin-sourced message, so no
+ * composer and no customer bubble render around it; what it must NOT be mistaken
+ * for is something the customer said.
+ * @param props - Durable content, its source, and the locale seat.
+ * @returns The go-dispatch context body, or the opaque body when unreadable.
+ */
+export function GoDispatchBody({ content, source, t }: {
+  content: ContextMessageNode['content']
+  source: unknown
+  t: Translate
+}): ReactNode {
+  const order = goDispatchOrder(source)
+  /* v8 ignore next -- contextBody reads the order before choosing this body. */
+  if (order === null) return <OpaqueBody content={content} source={source} t={t} />
+  return (
+    <>
+      <p className={css.relaySender} data-context-go-dispatch-head>
+        {t('message.context.goDispatch.head', {
+          node: order.node,
+          missing: order.missing.length,
+          changeId: order.changeId,
+        })}
+      </p>
+      <ul className={css.entries} data-context-go-dispatch-missing>
+        {order.missing.map((line, index) => (
+          // Index key: the gate's own list can repeat a line, and a duplicate
+          // React key would drop a row the model was asked to fill.
+          <li key={index} className={css.entry}>
+            <span className={css.entryDescription}>{line}</span>
+          </li>
+        ))}
+      </ul>
+      <details>
+        <summary className={css.orderTextLabel} data-context-go-dispatch-text-label>
+          {t('message.context.goDispatch.text')}
+        </summary>
+        <ModelFacingContent content={content} t={t} />
+      </details>
+    </>
+  )
+}
+
 /**
  * Choose the body for one context node.
  *
  * Returns the form the body actually rendered as, which is not always the
  * declared one: a declared form whose fields are unreadable falls back to
  * opaque, and the caller labels the row with what it really shows.
- * `summary` is the collapsed row's one-line account, which only a `notice`
- * records: its whole point is being readable without expanding.
+ * `summary` is the collapsed row's one-line account, which only `notice` and
+ * `go-dispatch` record: for them the collapsed row IS the reading, and
+ * expanding only adds what the summary already said.
  * @param form - the producer-declared form projected onto the node.
  * @param props - durable content, its source, and the locale seat.
  * @returns the rendered form (null for opaque), its collapsed summary, and its body.
@@ -580,6 +655,22 @@ export function contextBody(
       return recalledSessions(props.source) === null
         ? opaque
         : { rendered: 'recall', summary: null, body: <RecallBody {...props} /> }
+    case 'go-dispatch': {
+      const order = goDispatchOrder(props.source)
+      return order === null
+        ? opaque
+        : {
+          rendered: 'go-dispatch',
+          // A work order's whole content is which gaps are open, so the
+          // collapsed row states the count instead of forcing an expand —
+          // mirrored by the row's `data-context-summary` seat.
+          summary: props.t('message.context.goDispatch.summary', {
+            node: order.node,
+            missing: order.missing.length,
+          }),
+          body: <GoDispatchBody {...props} />,
+        }
+    }
     case null:
       return opaque
     /* v8 ignore next 4 -- closed-union backstop; the compiler rejects a new

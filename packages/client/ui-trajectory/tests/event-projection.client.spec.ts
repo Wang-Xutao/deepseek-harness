@@ -25,7 +25,7 @@ describe('Trajectory event projection', () => {
   })
 
   it('accepts only forms supported by the target', () => {
-    for (const form of ['instructions', 'catalog', 'snapshot', 'notice', 'relay', 'recall']) {
+    for (const form of ['instructions', 'catalog', 'snapshot', 'notice', 'relay', 'recall', 'go-dispatch']) {
       expect(contextForm({ form })).toBe(form)
     }
     expect(contextForm({ form: 'future' })).toBeNull()

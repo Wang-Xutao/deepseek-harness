@@ -182,13 +182,31 @@ export async function confirmIntake(
     by,
     ...meta,
   }))
+  // 【变更】2026-09-24 (demo6 问题 6): settle the pre-judgment KIND at the
+  // moment the path is settled — the customer just picked 完整流程 /
+  // 缺陷修复路径, so an unknown keyword kind derives from that pick
+  // (bug-fix→bug, full-go→new-requirement) instead of reading
+  // 「待分类/归档确定」 for the whole flow. Scope stays 待定 until the plan
+  // freezes the allowlist (its own settle at plan completion).
+  if (next.intake?.kind === 'unknown') {
+    const kind = next.mode === 'bug-fix-path' ? 'bug' : 'new-requirement'
+    const { status: settled } = await store.append(next.changeId, next.projectionVersion, meta => ({
+      type: 'intake-settled' as const,
+      kind,
+      reasonCodes: ['settled-at-confirm'] as const,
+      ...meta,
+    }))
+    return settled
+  }
   return next
 }
 
 /**
  * §22.17 J — record the customer's path override at the classify gate
- * (`/baf-workflow-classify confirm mode=…`). Only legal while the intake is
- * still pending confirmation; a no-op when the requested mode already holds.
+ * (`/baf-workflow-classify confirm mode=…`). Legal while the intake is still
+ * pending confirmation, or — the rescue arm — while a confirmed intake still
+ * sits on the unresolved `clarify-required` verdict; a no-op when the
+ * requested mode already holds.
  * @param store - projection store.
  * @param changeId - change id.
  * @param to - the customer's chosen path.
@@ -207,7 +225,13 @@ export async function setIntakeMode(
   // always carry `mode=`, so retrying a bug-path confirm after a
   // missing-fields park must sail through (§22.17 J).
   if (status.intake.mode === to) return status
-  if (status.intake.confirmation !== 'pending') {
+  // A confirmed change with a *drivable* mode can no longer re-route. The one
+  // exception is `clarify-required`: that mode can never drive (no transition
+  // rule matches it), so it is not a chosen path but an unresolved verdict —
+  // historically reachable via confirm-without-mode (Tab button / hand-typed
+  // slash). Accepting the override here is the only recovery short of
+  // abandoning the change (2026-09-20 incident review).
+  if (status.intake.confirmation !== 'pending' && status.intake.mode !== 'clarify-required') {
     throw new BafError('invalid_transition', 'intake already confirmed; mode can no longer change', { changeId })
   }
   // `from` is audit-only (the fold keys off `to`); narrow WorkflowMode for

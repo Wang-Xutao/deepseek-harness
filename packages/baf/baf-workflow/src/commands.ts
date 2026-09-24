@@ -34,6 +34,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { formatCommandReport, modeZh } from './command-format.ts'
 import { ProjectionStore } from './projection.ts'
 import { resolveBafProductVersions } from './product-versions.ts'
@@ -53,10 +54,15 @@ import {
   driveScaffold,
   driveVerify,
   type DriveAdapters,
+  loadWorkspaceBaseline,
+  renderDomainError,
 } from './command-drives.ts'
 import { driveGo } from './go-coordinator.ts'
+import { makeGoDispatcher } from './go-dispatch.ts'
+import { continueParkedRequirement } from './requirement-park.ts'
 import { makeGateAsk, type GateDialogAgent } from './gate-dialog.ts'
 import { renderGate } from './gate-cards.ts'
+import { artifactLine, changeArtifactStatus } from './stages/gates.ts'
 import { focusFor } from './session-focus.ts'
 import {
   probeMountFlags,
@@ -66,6 +72,7 @@ import {
   resolveIsolateService,
   resolveScaffoldService,
   resolveStartupBinding,
+  type GuardReportSummary,
 } from './session-gate.ts'
 
 export const name = 'baf-commands'
@@ -79,10 +86,35 @@ function withHint(description: string, runtime?: string): string {
 }
 
 /** Shape of the args Cordis passes to a slash handler. The runtime agent also
- * carries its realm `ctx`; declared optional because only the probes read it. */
+ * carries its realm `ctx`; declared optional because only the probes read it.
+ * `followup`/`status` are the §18.4.2 work-order channel — the live registry
+ * `Agent` always has both, but this local structural view declares them
+ * optional so a test double that only fills `session.header.cwd` (the shape
+ * every existing probe uses) stays valid and simply cannot dispatch. */
 type SlashHandlerArgs = {
-  agent: { session: { header: { cwd?: string } }; ctx?: Context }
+  agent: {
+    session: { header: { cwd?: string } }
+    ctx?: Context
+    followup?(message: UserMessage): void
+    status?: 'idle' | 'running'
+  }
   rawInput: string
+}
+
+/**
+ * Run a stage drive for a slash handler, collapsing a thrown `BafError` into
+ * the stable translated error card. /baf-go already did this inside
+ * driveGo's top-level catch; the per-stage slashes returned the drive promise
+ * directly, so a blocked drive (e.g. git-unavailable open) surfaced as a bare
+ * host runner rejection instead of the「原因/处理」card — the customer saw no
+ * card at all on exactly the steps that block most.
+ */
+async function guardedDrive(command: string, run: () => Promise<CommandResult>): Promise<CommandResult> {
+  try {
+    return await run()
+  } catch (error) {
+    return renderDomainError(command, error)
+  }
 }
 
 const HELP_CORE = [
@@ -165,7 +197,14 @@ export function apply(ctx: Context): void {
           probeToolchain(cwd, probeMountFlags(ctx, agent)),
           resolveStartupBinding(cwd),
         ])
-        return renderWelcomeCard({ cwd, probe, binding })
+        // Run the same `baf-guard` sweep the verify stage uses, so the
+        // welcome card tells the customer at session-open whether the
+        // environment is clean — instead of silently dropping the check when
+        // everything is OK (2026-09-20 incident 4.jsonl). Guard may be
+        // absent (CLI / tests); degraded summary surfaces as 已跳过, not as
+        // an error.
+        const guardSummary = await runGuardSummary(cwd, resolveAdapters(ctx, agent, cwd))
+        return renderWelcomeCard({ cwd, probe, binding, ...(guardSummary === undefined ? {} : { guardSummary }) })
       },
     }),
     ctx.commands.register({
@@ -202,13 +241,30 @@ export function apply(ctx: Context): void {
         // whole); the local structural type cannot express the branded id,
         // hence the single cast.
         const ask = makeGateAsk(ctx, agent as unknown as GateDialogAgent | undefined)
-        return driveGo({
+        // §18.4.2: a typed command is a customer action — the dispatcher plus
+        // the origin marker together authorize the work order (2026-09-23
+        // issue #1 widened the surface: gate-dialog and Tab clicks build the
+        // same pair where they have a live agent).
+        const dispatch = makeGoDispatcher(cwd, agent)
+        const adapters = resolveDriveAdapters(ctx, agent, cwd)
+        const result = await driveGo({
           cwd,
           rawInput,
           focus: focusFor(cwd),
           ...(ask === undefined ? {} : { ask }),
-          adapters: resolveDriveAdapters(ctx, agent, cwd),
+          ...(dispatch === undefined ? {} : { dispatch, dispatchOrigin: 'customer' as const }),
+          adapters,
         })
+        // 【变更】2026-09-23 (demo2 user issue #1): the parked-requirement
+        // continuation. A /baf-go that just resolved the scaffold gate (or one
+        // typed into an initialized-but-idle workspace whose requirement never
+        // landed) used to dead-end: the next decision — 新建工作流 → 分类确认 —
+        // never popped and the model was never woken. With a parked statement
+        // this run continues the chain itself, so the command keeps driving
+        // the flow end to end without the customer re-typing the requirement.
+        const follow = await continueParkedRequirement(ctx, agent, cwd, adapters)
+        if (follow !== undefined) return { kind: follow.kind, text: `${result.text}\n\n${follow.text}` }
+        return result
       },
     }),
     ctx.commands.register({
@@ -221,13 +277,26 @@ export function apply(ctx: Context): void {
         // (scaffold init / intake confirm / gates A+B unlock) without any
         // popup. Drift still asks — auto-picking a rollback node is §19's
         // one forbidden shortcut.
-        return driveGo({
+        // 【变更】2026-09-23 (user issue #1): the customer typed this command,
+        // so its confirm path dispatches too — a confirm that advances into a
+        // template rest must wake the model exactly like /baf-go would.
+        const dispatch = makeGoDispatcher(cwd, agent)
+        const adapters = resolveDriveAdapters(ctx, agent, cwd)
+        const result = await driveGo({
           cwd,
           rawInput,
           focus: focusFor(cwd),
           confirm: true,
-          adapters: resolveDriveAdapters(ctx, agent, cwd),
+          ...(dispatch === undefined ? {} : { dispatch, dispatchOrigin: 'customer' as const }),
+          adapters,
         })
+        // 【变更】2026-09-23 (demo2 user issue #1): same continuation as /baf-go
+        // — a /baf-go-confirm that just initialized the workspace picks the
+        // parked requirement back up. The 新建工作流 confirmation still pops
+        // (spec §1: create/bind settles on a card, even in confirm mode).
+        const follow = await continueParkedRequirement(ctx, agent, cwd, adapters)
+        if (follow !== undefined) return { kind: follow.kind, text: `${result.text}\n\n${follow.text}` }
+        return result
       },
     }),
     ctx.commands.register({
@@ -307,7 +376,25 @@ export function apply(ctx: Context): void {
             ]),
           }
         }
-        const changeId = ids.at(-1)
+        // 【变更】2026-09-23 (user issue #4): the pick mirrors driveGo's
+        // binding — focus (while active) → lone active → newest active — so
+        // /baf-status can never name a different change than the /baf-go the
+        // customer types right after it (the old lexical-last pick reported
+        // the active change while a stale focus dead-ended /baf-go on a
+        // terminal one).
+        const focused = focusFor(cwd).get()
+        const actives = index.changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+        const newest = [...index.changes].sort((a, b) =>
+          a.seq !== b.seq ? b.seq - a.seq : a.changeId.localeCompare(b.changeId))[0]?.changeId
+        const changeId = focused !== undefined && actives.some(c => c.changeId === focused)
+          ? focused
+          : actives.length === 1 ? actives[0]?.changeId
+            : actives.length > 1
+              ? [...actives].sort((a, b) =>
+                a.seq !== b.seq ? b.seq - a.seq : a.changeId.localeCompare(b.changeId))[0]?.changeId
+              // Everything terminal: still report the most recently ended
+              // change (with its terminal state) rather than an empty card.
+              : newest
         if (changeId === undefined) {
           return {
             kind: 'success',
@@ -321,24 +408,32 @@ export function apply(ctx: Context): void {
         const others = index.changes
           .filter(c => c.changeId !== changeId)
           .map(c => `${c.changeId} · ${modeZh(c.mode)} · ${String(c.current)}`)
+        // 产物状态（2026-09-21 用户需求 3）：每个文档产物一行——路径 + 状态，
+        // 让 /baf-status 成为「不用敲 /baf-go 也能看清门挡在哪」的主动查询面。
+        const artifactRows = await changeArtifactStatus({
+          workspaceRoot: cwd,
+          changeId,
+          mode: status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+        })
         return {
           kind: 'success',
           text: formatCommandReport(
             true,
-            withHint('查看当前变更：模式/阶段/intake · ★★★', `${modeZh(status.mode)} · 当前 ${String(status.current)}`),
+            withHint('查看当前变更：模式/阶段/intake · ★★★', `${modeZh(status.mode)} · 当前 ${status.current}`),
             [
               {
                 title: '焦点变更',
                 lines: [
                   `change: ${status.changeId}`,
                   `mode: ${status.mode}（${modeZh(status.mode)}）`,
-                  `current: ${String(status.current)}`,
+                  `current: ${status.current}`,
                   `projection: v${status.projectionVersion}`,
                   status.intake === undefined
                     ? 'intake: （无）'
                     : `intake: ${status.intake.kind} / ${status.intake.mode} / ${status.intake.confirmation}`,
                 ],
               },
+              { title: '产物', lines: artifactRows.map(artifactLine) },
               {
                 title: '同工作区其他变更',
                 lines: others.length === 0 ? ['（无）'] : others,
@@ -417,17 +512,17 @@ export function apply(ctx: Context): void {
       description: '启动变更：先分类 · ★★★',
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
-        if (cwd === undefined || cwd === '') return missingCwd(`/baf-${stage}`)
-        return driveOpen(cwd, rawInput)
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-open')
+        return guardedDrive('/baf-workflow-open', () => driveOpen(cwd, rawInput))
       },
     })),
     ctx.commands.register({
       name: 'baf-workflow-classify',
-      description: '分类确认 / 拒绝 · ★★',
+      description: '分类确认 · ★★',
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-classify')
-        return driveClassify(cwd, rawInput)
+        return guardedDrive('/baf-workflow-classify', () => driveClassify(cwd, rawInput))
       },
     }),
     ctx.commands.register({
@@ -436,7 +531,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-clarify')
-        return driveClarify(cwd, rawInput)
+        return guardedDrive('/baf-workflow-clarify', () => driveClarify(cwd, rawInput))
       },
     }),
     ctx.commands.register({
@@ -445,7 +540,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-design')
-        return driveDesign(cwd, rawInput)
+        return guardedDrive('/baf-workflow-design', () => driveDesign(cwd, rawInput))
       },
     }),
     ctx.commands.register({
@@ -454,7 +549,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-plan')
-        return drivePlan(cwd, rawInput)
+        return guardedDrive('/baf-workflow-plan', () => drivePlan(cwd, rawInput))
       },
     }),
     ctx.commands.register({
@@ -463,7 +558,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-implement')
-        return driveImplement(cwd, rawInput)
+        return guardedDrive('/baf-workflow-implement', () => driveImplement(cwd, rawInput))
       },
     }),
     ctx.commands.register({
@@ -473,7 +568,7 @@ export function apply(ctx: Context): void {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-verify')
         const { stack, guard } = resolveAdapters(ctx, agent, cwd)
-        return driveVerify(cwd, rawInput, { ...(stack === undefined ? {} : { stack }), ...(guard === undefined ? {} : { guard }) })
+        return guardedDrive('/baf-workflow-verify', () => driveVerify(cwd, rawInput, { ...(stack === undefined ? {} : { stack }), ...(guard === undefined ? {} : { guard }) }))
       },
     }),
     ctx.commands.register({
@@ -482,7 +577,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-archive')
-        return driveArchive(cwd, rawInput)
+        return guardedDrive('/baf-workflow-archive', () => driveArchive(cwd, rawInput))
       },
     }),
     ctx.commands.register({
@@ -491,7 +586,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-abandon')
-        return driveAbandon(cwd, rawInput)
+        return guardedDrive('/baf-workflow-abandon', () => driveAbandon(cwd, rawInput))
       },
     }),
     ctx.commands.register({
@@ -500,7 +595,7 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-workflow-resume')
-        return driveResume(cwd, rawInput)
+        return guardedDrive('/baf-workflow-resume', () => driveResume(cwd, rawInput))
       },
     }),
     ctx.commands.register({
@@ -510,7 +605,7 @@ export function apply(ctx: Context): void {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-check-quality')
         const { stack } = resolveAdapters(ctx, agent, cwd)
-        return driveQuality(cwd, { ...(stack === undefined ? {} : { stack }) })
+        return guardedDrive('/baf-check-quality', () => driveQuality(cwd, { ...(stack === undefined ? {} : { stack }) }))
       },
     }),
     ctx.commands.register({
@@ -520,7 +615,7 @@ export function apply(ctx: Context): void {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-check-guard')
         const { guard } = resolveAdapters(ctx, agent, cwd)
-        return driveGuard(cwd, { ...(guard === undefined ? {} : { guard }) })
+        return guardedDrive('/baf-check-guard', () => driveGuard(cwd, { ...(guard === undefined ? {} : { guard }) }))
       },
     }),
     ctx.commands.register({
@@ -546,7 +641,7 @@ export function apply(ctx: Context): void {
           }
         }
         const baselineId = rawInput.trim() === '' ? 'baf-baseline-init' : rawInput.trim()
-        return driveScaffold(cwd, { scaffold: { scaffold: opts => scaffold.scaffold(opts) } }, baselineId)
+        return guardedDrive('/baf-scaffold', () => driveScaffold(cwd, { scaffold: { scaffold: opts => scaffold.scaffold(opts) } }, baselineId))
       },
     }),
   ]
@@ -565,6 +660,75 @@ function missingCwd(command: string): CommandResult {
       { title: '处理', lines: ['为会话绑定工作区目录后重试'] },
     ]),
   }
+}
+
+/**
+ * Run the `baf-guard` sweep for the welcome card. The returned summary is
+ * plain-Chinese: "通过 · 受检 0 个文件" or "未通过 · …" with one actionable
+ * hint, so the customer sees the environment's health at session open.
+ * Returns undefined when the `baf-guard` service is not mounted (CLI / tests);
+ * the welcome card then skips the 【安全检查】 section entirely instead of
+ * printing an error.
+ *
+ * Failures degrade to `state: 'fail'` with the guard's own reason codes
+ * translated to plain language — never to an exception that would skip the
+ * welcome card.
+ * @param cwd - workspace root.
+ * @param adapters - already-resolved drive adapters (may have no `guard`).
+ * @returns summary, or undefined when the service is absent.
+ */
+async function runGuardSummary(cwd: string, adapters: { guard?: GuardPolicy }): Promise<GuardReportSummary | undefined> {
+  if (adapters.guard === undefined) return undefined
+  try {
+    const baseline = await loadWorkspaceBaseline(cwd)
+    if (baseline === undefined) {
+      return {
+        state: 'ok',
+        detail: '工作区还未初始化，本次只检查密钥风险',
+        hint: '完整检查要在 /baf-scaffold 完成初始化后再跑',
+      }
+    }
+    const signal = new AbortController().signal
+    const [verifyReport, secretReport] = await Promise.all([
+      adapters.guard.check({ workspace: { root: cwd }, baseline, paths: [], action: 'verify' }, signal),
+      adapters.guard.check({ workspace: { root: cwd }, baseline, paths: [], action: 'secret-scan' }, signal),
+    ])
+    const ok = verifyReport.allowed && secretReport.allowed
+    const reasons = [...verifyReport.reasonCodes, ...secretReport.reasonCodes]
+    if (ok) {
+      return {
+        state: 'ok',
+        detail: '未发现越界改动，也没有扫描到密钥',
+      }
+    }
+    const reason = reasons.length === 0
+      ? '检查服务拒绝了当前工作区'
+      : translateGuardReasons(reasons)
+    return {
+      state: 'fail',
+      detail: reason,
+      hint: '查看详情：/baf-check-guard；解锁方式看上一行说明',
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      state: 'fail',
+      detail: `安全检查执行失败：${message}`,
+      hint: '稍后再试；或输入 /baf-check-guard 复跑一次',
+    }
+  }
+}
+
+/** Translate a list of `baf-guard` reason codes into a single plain sentence. */
+function translateGuardReasons(reasons: readonly string[]): string {
+  const first = reasons[0]
+  if (first === undefined) return '检查服务拒绝了当前工作区'
+  if (first.toLowerCase().includes('secret')) return '扫描到了疑似密钥的字符串'
+  if (first.toLowerCase().includes('path') || first.toLowerCase().includes('allowlist')) {
+    return '改动了工作区白名单之外的文件'
+  }
+  if (first.toLowerCase().includes('baseline')) return '工作区基线配置有问题'
+  return `检查未通过：${first}`
 }
 
 /**

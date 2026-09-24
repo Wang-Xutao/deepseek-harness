@@ -26,7 +26,7 @@ import {
   changeDir,
   changesDir,
 } from './layout.ts'
-import { clarifyTemplate, designTemplate, proposalTemplate, tasksTemplate } from './templates.ts'
+import { proposalTemplate } from './templates.ts'
 
 /** Options for {@link createLocalOpenSpecAdapter}. */
 export interface LocalOpenSpecAdapterOptions {
@@ -108,11 +108,13 @@ export function createLocalOpenSpecAdapter(options: LocalOpenSpecAdapterOptions)
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
       await mkdir(dir, { recursive: true })
+      // 【变更】2026-09-22 (user report #2): open() installs ONLY proposal.md —
+      // the open stage's own artifact. clarify/design/tasks templates belong to
+      // their own stages and are installed lazily by `beginDocStage` on stage
+      // entry (see baf-workflow stages/pipeline.ts), so every later artifact
+      // reads 「尚未生成」 until its stage begins, exactly like plan.md.
       const bodies: Readonly<Record<string, string>> = {
         [ARTIFACT_FILES.proposal]: proposalTemplate(input.changeId, input.title),
-        [ARTIFACT_FILES.clarify]: clarifyTemplate(input.changeId),
-        [ARTIFACT_FILES.design]: designTemplate(input.changeId),
-        [ARTIFACT_FILES.tasks]: tasksTemplate(input.changeId),
       }
       for (const [file, body] of Object.entries(bodies)) {
         const path = join(dir, file)
@@ -195,7 +197,26 @@ export function createLocalOpenSpecAdapter(options: LocalOpenSpecAdapterOptions)
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
       await mkdir(archiveDir(workspaceRoot), { recursive: true })
-      await rename(source, destination)
+      // 【变更】2026-09-23 (user issue #5): on Windows a single `rename` of
+      // the change directory fails with EPERM/EBUSY while any process holds
+      // an open handle inside it (an editor, a file watcher, the artifact
+      // viewer). That used to leave the change parked at `archive` with the
+      // move undone. Retry the same atomic rename a few times with a short
+      // backoff — transient watchers usually let go within a second or two.
+      let lastError: unknown
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          await rename(source, destination)
+          lastError = undefined
+          break
+        } catch (error) {
+          lastError = error
+          const code = (error as NodeJS.ErrnoException).code
+          if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') throw error
+          await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)))
+        }
+      }
+      if (lastError !== undefined) throw lastError
       return domainOk(
         { changeId: change.changeId, archivePath: destination },
         { artifacts: [destination] },

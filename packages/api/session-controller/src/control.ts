@@ -176,9 +176,15 @@ function queueItems(agent: Agent): SessionQueuedItem[] {
 
 function queueItemsFromInbox(inbox: InboxState): SessionQueuedItem[] {
   return [
+    // Only a customer-authored message may enter the editable queue window:
+    // `placement: 'queued'` is what the QueueDock offers edit / remove / steer
+    // on. A plugin-queued message (a BAF `/baf-go` work order) is not the
+    // customer's text — showing it there would put a real edit affordance on
+    // words they never wrote — so it projects as context, exactly like the
+    // plugin-sourced next-step messages beside it.
     ...inbox['next-turn'].map(message => ({
       id: message.id,
-      placement: 'queued' as const,
+      placement: message.source.kind === 'user' ? 'queued' as const : 'context' as const,
       ...promptRpcId(message),
       message: { id: message.id, content: message.content as unknown as JsonValue[] },
     })),

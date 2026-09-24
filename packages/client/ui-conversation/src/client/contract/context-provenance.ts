@@ -28,4 +28,5 @@ export interface ContextProvenanceView {
  * projections map absent or unknown forms to their opaque presentation so
  * logs written by older, newer, or foreign producers remain visible.
  */
-export type KnownContextForm = 'instructions' | 'catalog' | 'snapshot' | 'notice' | 'relay' | 'recall'
+export type KnownContextForm =
+  | 'instructions' | 'catalog' | 'snapshot' | 'notice' | 'relay' | 'recall' | 'go-dispatch'

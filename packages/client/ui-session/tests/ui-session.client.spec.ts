@@ -446,8 +446,11 @@ describe('UiSession pending interactions', () => {
     const delegate = (): Promise<void> => Promise.resolve()
     const removeApproval = registerApproval(approval, delegate)
     expect(service.pendingInteractions.getSnapshot().get(id)).toBe(approval)
+    // 【变更】2026-09-22 (user report #3): same precedence no longer replaces
+    // the visible interaction — the first-seen one stays and ties queue
+    // behind it (questions must queue, not stack over each other).
     const removeDuplicate = registerApproval(duplicate, delegate)
-    expect(service.pendingInteractions.getSnapshot().get(id)).toBe(duplicate)
+    expect(service.pendingInteractions.getSnapshot().get(id)).toBe(approval)
     const removeQuestion = registerQuestion(question, delegate)
     expect(service.pendingInteractions.getSnapshot().get(id)).toBe(question)
     const removePlan = registerQuestion(plan, delegate)
@@ -459,13 +462,39 @@ describe('UiSession pending interactions', () => {
     removeQuestion()
     expect(service.pendingInteractions.getSnapshot().get(id)).toBe(plan)
     removePlan()
-    expect(service.pendingInteractions.getSnapshot().get(id)).toBe(duplicate)
+    expect(service.pendingInteractions.getSnapshot().get(id)).toBe(approval)
     removeDuplicate()
     expect(service.pendingInteractions.getSnapshot().get(id)).toBe(approval)
     removeApproval()
     removeApproval()
     expect(service.pendingInteractions.getSnapshot().has(id)).toBe(false)
     off()
+    await ctx.fiber.dispose()
+  })
+
+  // 2026-09-22 user report #3: question B popping OVER unanswered question A,
+  // then A resurfacing after B settled. The visible slot is the first-seen
+  // same-precedence interaction; a later one surfaces only when it settles.
+  it('keeps same-precedence questions in arrival order (FIFO, no stacking)', async () => {
+    const ctx = new Context()
+    const bench = createSessionsBench(ctx)
+    const service = createUiSession(ctx, bench)
+    const id = sessionId('s1')
+    const register = service.registerPendingInteraction<SessionPendingInteractionBase>(
+      interaction => interaction.kind === 'plan-review' ? 2 : 1,
+    )
+    const first = { key: 'question:1', kind: 'question', sessionId: id }
+    const second = { key: 'question:2', kind: 'question', sessionId: id }
+    const delegate = (): Promise<void> => Promise.resolve()
+    const removeFirst = register(first, delegate)
+    expect(service.pendingInteractions.getSnapshot().get(id)).toBe(first)
+    const removeSecond = register(second, delegate)
+    expect(service.pendingInteractions.getSnapshot().get(id)).toBe(first)
+    // The customer answers the visible one — the queued one surfaces next.
+    removeFirst()
+    expect(service.pendingInteractions.getSnapshot().get(id)).toBe(second)
+    removeSecond()
+    expect(service.pendingInteractions.getSnapshot().has(id)).toBe(false)
     await ctx.fiber.dispose()
   })
 

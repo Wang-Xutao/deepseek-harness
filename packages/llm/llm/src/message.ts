@@ -60,6 +60,13 @@ export type ContextForm =
   | 'relay'
   /** Material lifted out of another session's log, possibly reduced on the way in. */
   | 'recall'
+  /**
+   * A workflow work order the BAF `/baf-go` command handed the session: the
+   * artifact gaps the model must fill before the next gate can pass. Attributed
+   * to the plugin so it renders read-only — it is the *customer's* command
+   * speaking, never the customer's own words.
+   */
+  | 'go-dispatch'
 
 /** One named contribution to a `snapshot`-form context, in assembly order. */
 export interface ContextSnapshotSection {
@@ -94,6 +101,15 @@ export type ContextFormed =
   }
   | { readonly form: 'relay' }
   | { readonly form: 'recall' }
+  | {
+    readonly form: 'go-dispatch'
+    /** Change the work order is about. */
+    readonly changeId: string
+    /** Stage whose artifact the order asks for. */
+    readonly node: 'open' | 'clarify' | 'design' | 'plan' | 'implement'
+    /** The gate's missing-item lines, in gate order — the order's work list. */
+    readonly missing: readonly string[]
+  }
 
 /**
  * Where a message (or injected content) came from.

@@ -15,7 +15,7 @@ import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
 import { confirmIntake, createWorkflowService } from '@deepseek-ai/dsh-baf-workflow'
 import { ProjectionStore } from '@deepseek-ai/dsh-baf-workflow'
 import { StagePipeline } from '@deepseek-ai/dsh-baf-workflow'
-import { recordTouched, completeTask } from '@deepseek-ai/dsh-baf-workflow'
+import { recordTouched, completeTask, focusFor, resetFocusCache } from '@deepseek-ai/dsh-baf-workflow'
 import {
   adjudicateFsWrite,
   adjudicateShell,
@@ -103,6 +103,29 @@ describe('policy: filesystem writes', () => {
       root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'design.md'),
     })
     expect(inside.allowed).toBe(true)
+  })
+
+  // 【变更】2026-09-22 (user report #1, web walk change 170b): open's artifact
+  // is proposal.md — the guard used to block EVERY change-dir write at open,
+  // so the model could never author the proposal (it misread the block as
+  // "artifacts are workflow-managed" and idled). Allow exactly proposal.md;
+  // the other stage artifacts must stay unwritable until their stage begins.
+  it('open stage allows only proposal.md inside the change dir', () => {
+    const open = state({ stage: 'open' })
+    const proposal = adjudicateFsWrite(CONFIG, open, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'proposal.md'),
+    })
+    expect(proposal.allowed).toBe(true)
+    const clarify = adjudicateFsWrite(CONFIG, open, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'clarify.md'),
+    })
+    expect(clarify).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    const tasks = adjudicateFsWrite(CONFIG, open, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'tasks.md'),
+    })
+    expect(tasks).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    const source = adjudicateFsWrite(CONFIG, open, { root: ROOT, path: 'src/feature.c' })
+    expect(source).toMatchObject({ allowed: false, reasonCode: 'invalid_transition' })
   })
 
   it('fails closed without an active change or with unconfirmed intake', () => {
@@ -289,6 +312,58 @@ describe('§22.17 J hard line: generic question tool vs pending gate', () => {
     expect(guard(exec('ask_user_question', { questions: [] }))).toBeUndefined()
   })
 
+  it('2026-09-21 standing rule: an option-bearing ask is denied at every workflow state, pointing at baf_question_ask', () => {
+    // The rule holds outside the pending-gate window too — a selection
+    // question anywhere must ride the BAF popup channels (session 6.jsonl:
+    // prose A/B lists and generic option asks both bypassed the card rule).
+    for (const st of [
+      state({ stage: 'implement', gatePending: false }),
+      { active: false, intakeConfirmed: false, allowlist: [] },
+      state({ stage: 'design', gatePending: false }),
+    ]) {
+      const guard = createBafToolGuard({
+        workspaceRoot: ROOT,
+        sources: { readConfig: () => CONFIG, readState: () => st },
+      })
+      const denial = guard(exec('ask_user_question', {
+        questions: [{ id: 'q1', question: '选哪个？', options: [{ label: 'A' }, { label: 'B' }] }],
+      }))
+      expect(denial).toContain('ask_options_blocked')
+      expect(denial).toContain('baf_question_ask')
+    }
+  })
+
+  it('a pending gate still takes precedence over the option-bearing denial', () => {
+    const guard = createBafToolGuard({
+      workspaceRoot: ROOT,
+      sources: {
+        readConfig: () => CONFIG,
+        readState: () => state({ stage: 'intake', intakeConfirmed: false, gatePending: true }),
+      },
+    })
+    const denial = guard(exec('ask_user_question', {
+      questions: [{ id: 'q1', question: '选哪个？', options: [{ label: 'A' }, { label: 'B' }] }],
+    }))
+    expect(denial).toContain('gate_pending_ask_blocked')
+  })
+
+  it('free-text-only questions (no options anywhere) stay legal', () => {
+    const guard = createBafToolGuard({
+      workspaceRoot: ROOT,
+      sources: {
+        readConfig: () => CONFIG,
+        readState: () => state({ stage: 'implement', gatePending: false }),
+      },
+    })
+    expect(guard(exec('ask_user_question', {
+      questions: [{ id: 'q1', question: '环境变量叫什么？' }],
+    }))).toBeUndefined()
+    // An empty options array is not a selection question.
+    expect(guard(exec('ask_user_question', {
+      questions: [{ id: 'q1', question: '补充一下背景？', options: [] }],
+    }))).toBeUndefined()
+  })
+
   it('disk state: unconfirmed intake ⇒ gatePending; confirm ⇒ cleared', async () => {
     const root = await mkdtemp(join(tmpdir(), 'baf-guard-gate-'))
     try {
@@ -386,6 +461,73 @@ describe('sync disk state', () => {
     } finally {
       await clean()
     }
+  })
+
+  // §22.19 ranking — session 7.jsonl R3: a twin change minted beside a
+  // running one was "fresher" (updatedAt), so the guard demanded ITS
+  // confirmation while the model wrote the running change's artifacts.
+  // The unified ranking is write-path → session focus → highest seq.
+  describe('§22.19 unified change ranking', () => {
+    /** A change driven to implement + a fresher twin parked at intake. */
+    async function seededTwin() {
+      const { root, clean } = await workspace()
+      const changeId = await driveToImplement(root)
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const { intake } = await createWorkflowService({ store }).intake({
+        description: 'twin requirement stated later (fresher updatedAt, higher seq)',
+        workspace: { root },
+      })
+      resetFocusCache()
+      return { root, clean, changeId, twinId: intake.changeId }
+    }
+
+    it('a write inside a change dir adjudicates against THAT change, not the fresher twin', { timeout: 60_000 }, async () => {
+      const { root, clean, changeId } = await seededTwin()
+      try {
+        // Old ranking (updatedAt freshest) picked the twin → the doc write
+        // died on intake_confirmation_required. Rule 1 selects the change
+        // the write targets → legal doc write.
+        expect(readGuardWorkflowState(root).changeId).toBe(changeId)
+        const guard = createBafToolGuard({ workspaceRoot: root })
+        expect(guard(exec('write', {
+          file_path: join(root, 'openspec', 'changes', changeId, 'design.md'), content: 'notes',
+        }))).toBeUndefined()
+      } finally {
+        await clean()
+      }
+    })
+
+    it('the session focus wins for writes outside every change dir', { timeout: 60_000 }, async () => {
+      const { root, clean, changeId } = await seededTwin()
+      try {
+        focusFor(root).set(changeId)
+        // src/other.c is outside A's allowlist → scope_exceeded against A;
+        // against the twin it would be intake_confirmation_required. The
+        // denial names which change was adjudicated.
+        const guard = createBafToolGuard({ workspaceRoot: root })
+        expect(guard(exec('edit', {
+          file_path: join(root, 'src', 'other.c'), old_string: 'a', new_string: 'b',
+        }))).toContain('scope_exceeded')
+      } finally {
+        resetFocusCache()
+        await clean()
+      }
+    })
+
+    it('without path or focus the seq ranking wins over freshest updatedAt', { timeout: 60_000 }, async () => {
+      const { root, clean, changeId, twinId } = await seededTwin()
+      try {
+        // `seq` is per-change (the twin's log has seq 1; the driven change
+        // sits at seq ~15), so the §22.19 fallback picks the PROGRESSED
+        // change — the old updatedAt-freshest sort picked the twin and
+        // demanded its confirmation instead (session 7.jsonl R3).
+        const snapshot = readGuardWorkflowState(root)
+        expect(snapshot.changeId).toBe(changeId)
+        expect(twinId).not.toBe(changeId)
+      } finally {
+        await clean()
+      }
+    })
   })
 
   it('loads the guard section from .baf/baseline.yml when present', async () => {

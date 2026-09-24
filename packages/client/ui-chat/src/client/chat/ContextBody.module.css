@@ -134,6 +134,14 @@
   overflow-wrap: anywhere;
 }
 
+/* go-dispatch: the label over the collapsed order text — a caption-coloured
+   disclosure summary, carrying no list styling of its own. */
+.orderTextLabel {
+  cursor: pointer;
+  color: var(--dsw-alias-label-caption);
+  overflow-wrap: anywhere;
+}
+
 /* recall: one row per source session, with how much of it survived. */
 .recalls {
   display: flex;

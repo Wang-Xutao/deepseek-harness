@@ -12,6 +12,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 
 /** One planned skeleton file. */
@@ -36,7 +37,61 @@ export interface ScaffoldChanges {
 /** Outcome: refusal (no confirmation) or the applied changes. */
 export type ScaffoldOutcome =
   | { readonly kind: 'refused'; readonly reason: 'human_confirmation_required' }
-  | { readonly kind: 'done'; readonly changes: ScaffoldChanges }
+  | { readonly kind: 'done'; readonly changes: ScaffoldChanges; readonly git?: GitAnchor }
+
+/** Git anchor outcome — best-effort, never fails the scaffold itself. */
+export interface GitAnchor {
+  /** Whether a repository was created by this run (an existing one is never touched). */
+  readonly initialized: boolean
+  /** The anchor commit revision, when the anchor landed. */
+  readonly revision?: string
+  /** Customer-facing one-liner for the scaffold card. */
+  readonly note: string
+}
+
+/** Run one git invocation synchronously in the workspace. */
+function git(root: string, args: readonly string[]): { ok: boolean; stdout: string; stderr: string } {
+  const run = spawnSync('git', args, { cwd: root, encoding: 'utf8' })
+  return { ok: run.status === 0, stdout: (run.stdout ?? '').trim(), stderr: (run.stderr ?? '').trim() }
+}
+
+/**
+ * Anchor a fresh workspace in Git (user decision 2026-09-22): full-go-path
+ * open hard-blocks without a commit anchor, and the old story — the customer
+ * hand-running `git init && git commit` in a terminal — contradicted the
+ * "workflow operations are agent-owned" principle while the model was
+ * simultaneously forbidden from narrating manual steps.
+ *
+ * Runs only when NO `.git` exists; an existing repository is never touched.
+ * Best-effort by design: a missing git binary or a failed commit leaves the
+ * scaffold successful and reports the reason — the open gate still names the
+ * exact fix on its error card. The anchor commit captures the whole starting
+ * state (`git add -A`), which is what drift detection wants to diff against.
+ * A machine without a configured git identity falls back to a BAF identity
+ * via `-c` (the anchor's purpose is the revision, not authorship).
+ * @param workspaceRoot - absolute workspace root.
+ * @returns anchor outcome for the scaffold card.
+ */
+export function anchorGitWorkspace(workspaceRoot: string): GitAnchor {
+  if (existsSync(join(workspaceRoot, '.git'))) {
+    return { initialized: false, note: '已存在 Git 仓库，未改动' }
+  }
+  const init = git(workspaceRoot, ['init'])
+  if (!init.ok) {
+    return { initialized: false, note: `git init 未成功（${init.stderr === '' ? 'git 不可用' : init.stderr.slice(0, 120)}），完整流程建立变更前需先初始化仓库` }
+  }
+  git(workspaceRoot, ['add', '-A'])
+  const message = 'chore(baf): workspace anchor — scaffold init'
+  let commit = git(workspaceRoot, ['commit', '-m', message])
+  if (!commit.ok) {
+    commit = git(workspaceRoot, ['-c', 'user.name=BAF', '-c', 'user.email=baf@localhost', 'commit', '--allow-empty', '-m', message])
+  }
+  const head = git(workspaceRoot, ['rev-parse', 'HEAD'])
+  if (!commit.ok || !head.ok) {
+    return { initialized: true, note: `仓库已创建，但锚点提交未成功（${commit.stderr.slice(0, 120)}）；完整流程建立变更前需完成一次提交` }
+  }
+  return { initialized: true, revision: head.stdout, note: `已建仓并提交锚点（${head.stdout.slice(0, 12)}）` }
+}
 
 /**
  * Baseline template. Structurally valid against the manifest schema with
@@ -186,5 +241,9 @@ export function scaffoldWorkspace(options: ScaffoldOptions): ScaffoldOutcome {
   if (!options.humanConfirmed) {
     return { kind: 'refused', reason: 'human_confirmation_required' }
   }
-  return { kind: 'done', changes: applyScaffold(options.workspaceRoot, planScaffold(options), options.at) }
+  return {
+    kind: 'done',
+    changes: applyScaffold(options.workspaceRoot, planScaffold(options), options.at),
+    git: anchorGitWorkspace(options.workspaceRoot),
+  }
 }

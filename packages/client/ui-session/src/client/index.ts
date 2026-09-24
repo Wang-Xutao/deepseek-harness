@@ -372,7 +372,16 @@ export class UiSession extends Service {
       for (const interaction of domain.valuesSnapshot()) {
         const precedence = domain.precedence(interaction)
         const previous = next.get(interaction.sessionId)
-        if (previous === undefined || precedence >= previous.precedence) {
+        // 【变更】2026-09-22 (user report #3): STRICTLY-greater preemption.
+        // The old `>=` let a later same-precedence interaction REPLACE the
+        // visible one — the customer saw question B pop over unanswered
+        // question A, and A resurfaced only after B settled (questions must
+        // queue, not stack). With `>`, the first-seen same-precedence
+        // interaction stays visible until it settles; only a genuinely
+        // higher-precedence interaction (e.g. plan-review over a plain
+        // question) may preempt. Map insertion order + settle-triggered
+        // re-publish gives FIFO for ties.
+        if (previous === undefined || precedence > previous.precedence) {
           next.set(interaction.sessionId, { interaction, precedence })
         }
       }

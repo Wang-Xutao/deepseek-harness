@@ -720,6 +720,9 @@ describe('MessageItem arms', () => {
     const cases = [
       { form: 'snapshot', source: { kind: 'plugin', form: 'snapshot', sections: 'not-a-list' }, label: 'plugin' },
       { form: 'relay', source: { kind: 'agent-message', form: 'relay' }, label: 'agent-message' },
+      // A work order whose list cannot be read must not render a confident
+      // header over an empty "待补 0 项" — the same rule `recall` applies.
+      { form: 'go-dispatch', source: { kind: 'plugin', form: 'go-dispatch', changeId: 'c-1', node: 'clarify', missing: 'not-a-list' }, label: 'plugin' },
       { form: 'recall', source: { kind: 'session-reference', form: 'recall', references: [{ label: 'x' }] }, label: 'session-reference' },
     ] as const
     for (const { form, source, label } of cases) {
@@ -768,6 +771,47 @@ describe('MessageItem arms', () => {
     fireEvent.click(view.getByRole('button', { name: /^上下文注入\s*agent-message$/ }))
     expect(view.container.querySelector('[data-context-relay-sender]')?.textContent).toBe('来自会话 child-7')
     expect(view.container.querySelector('[data-context-text]')?.textContent).toBe('child report body')
+  })
+
+  it('a go-dispatch order names the stage and every gap the gate reported', () => {
+    const view = render(
+      <MessageItem t={t} node={{
+        kind: 'context',
+        seq: 3,
+        content: [{ type: 'text', text: 'work order body' }],
+        source: {
+          kind: 'plugin',
+          plugin: 'baf-commands',
+          form: 'go-dispatch',
+          changeId: 'change-20260922-ecum-7897',
+          node: 'clarify',
+          missing: ['## Acceptance criteria 节缺失', 'clarify.md 仍是模板'],
+        },
+        provenance: { role: 'inject', label: 'baf-commands' },
+        form: 'go-dispatch',
+      } as never}
+      />,
+    )
+    // The collapsed row states the gap count, so a reader does not have to
+    // expand to learn what the order is about.
+    expect(view.getByText('/baf-go 派单 · clarify · 待补 2 项')).toBeTruthy()
+    fireEvent.click(view.getByRole('button', { name: /^上下文注入\s*baf-commands/ }))
+    expect(view.container.querySelector('[data-context-injection-body]')?.getAttribute('data-context-form'))
+      .toBe('go-dispatch')
+    expect(view.container.querySelector('[data-context-go-dispatch-head]')?.textContent)
+      .toBe('clarify · 待补 2 项 · change-20260922-ecum-7897')
+    const gaps = [...view.container.querySelectorAll('[data-context-go-dispatch-missing] li')]
+      .map(node => node.textContent)
+    expect(gaps).toEqual(['## Acceptance criteria 节缺失', 'clarify.md 仍是模板'])
+    // The order's own text repeats the list above it, so it stays behind a
+    // collapsed disclosure: the row shows what to fill, not the whole order.
+    expect(view.container.querySelector('[data-context-go-dispatch-text-label]')?.textContent)
+      .toBe('工单全文（发给模型的内容）')
+    const disclosure = view.container.querySelector('details')
+    expect(disclosure?.hasAttribute('open')).toBe(false)
+    expect(view.container.querySelector('[data-context-text]')?.textContent).toBe('work order body')
+    fireEvent.click(view.getByText('工单全文（发给模型的内容）'))
+    expect(disclosure?.hasAttribute('open')).toBe(true)
   })
 
   it('a recall reports how much of each source session survived the read', () => {

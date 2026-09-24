@@ -17,6 +17,8 @@
  * @module @deepseek-ai/dsh-baf-workflow/session-focus
  */
 
+import { sharedHostMap } from './host-memory.ts'
+
 /** A session's focused change, as consumed by the `baf-go` coordinator. */
 export interface FocusStore {
   /**
@@ -35,8 +37,15 @@ export interface FocusStore {
   clear(): void
 }
 
-/** One entry per workspace root; cleared with the focus or on terminal states. */
-const focusByCwd = new Map<string, string>()
+/** One entry per workspace root; cleared with the focus or on terminal states.
+ *
+ * 【变更】2026-09-23 (demo2 re-test): anchored on globalThis (host-memory) —
+ * the write side (beginIntake inside the auto-pop / gate-ask / Tab bundles)
+ * and the read side (the commands bundle's coordinator) live in different
+ * tsdown bundle copies of this module; a module-local Map split per copy and
+ * the fallbacks masked it until the parked-requirement round made the split
+ * visible (see host-memory.ts). */
+const focusByCwd = sharedHostMap<string>('session-focus/by-cwd')
 
 /**
  * The focus cache for one workspace.

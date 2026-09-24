@@ -14,6 +14,7 @@ import type { StageContext } from './context.ts'
 import { implementGate, type PlanDocument } from './gates.ts'
 import { stageArtifactPaths } from './artifacts.ts'
 import { assertRegressionFirst } from './bug-fix-path.ts'
+import { parsePlanLedger } from './plan-ledger.ts'
 
 /** Mutable task ledger persisted as plan.json during implement. */
 export interface ImplementLedger {
@@ -65,16 +66,26 @@ export async function readLedger(workspaceRoot: string, changeId: string): Promi
   } catch {
     throw new BafError('invalid_transition', 'plan.json missing for implement', { changeId })
   }
-  let parsed: ImplementLedger
-  try {
-    parsed = JSON.parse(body) as ImplementLedger
-  } catch {
-    throw new BafError('invalid_transition', 'plan.json is not valid JSON', { changeId })
+  // 【变更】2026-09-23 (demo1 五问题 1–3): the tolerant normalizer accepts the
+  // model-natural aliases (`affected_files` / `verify_cmd` / `rollback_point`)
+  // exactly like the plan gate now does — one reader contract for every
+  // plan.json consumer.
+  const normalized = parsePlanLedger(body)
+  if (normalized === undefined) {
+    try {
+      JSON.parse(body)
+      throw new BafError('invalid_transition', 'plan.json lacks tasks/allowlist arrays', { changeId })
+    } catch (error) {
+      if (error instanceof BafError) throw error
+      throw new BafError('invalid_transition', 'plan.json is not valid JSON', { changeId })
+    }
   }
-  if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.allowlist)) {
-    throw new BafError('invalid_transition', 'plan.json lacks tasks/allowlist arrays', { changeId })
+  return {
+    ...(normalized.bugFixPath === true ? { bugFixPath: true } : {}),
+    tasks: normalized.tasks.map(task => ({ ...task, done: task.done === true })),
+    allowlist: normalized.allowlist,
+    touched: normalized.touched,
   }
-  return { ...parsed, touched: Array.isArray(parsed.touched) ? parsed.touched : [] }
 }
 
 /**
