@@ -17,7 +17,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir, platform as osPlatform } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import {
-  canOpenNativePath, openNativePath, runNativeCommand, type NativeCommandRunner,
+  canOpenNativePath, openNativePath, runNativeCommand, desktopEntryFields, desktopDataDirectories, type NativeCommandRunner,
 } from '@deepseek-ai/dsh-native-command'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import {
@@ -379,24 +379,12 @@ export interface DesktopEntry {
  * @returns the recognized fields; keys outside the entry section are ignored.
  */
 export function parseDesktopEntry(text: string): DesktopEntry {
-  let inEntry = false
-  const fields: { exec?: string; tryExec?: string; icon?: string } = {}
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (trimmed.startsWith('[')) {
-      inEntry = trimmed === '[Desktop Entry]'
-      continue
-    }
-    if (!inEntry) continue
-    const separator = trimmed.indexOf('=')
-    if (separator < 0) continue
-    const key = trimmed.slice(0, separator).trim()
-    const value = trimmed.slice(separator + 1).trim()
-    if (key === 'Exec') fields.exec = value
-    else if (key === 'TryExec') fields.tryExec = value
-    else if (key === 'Icon') fields.icon = value
+  const fields = desktopEntryFields(text)
+  return {
+    ...(fields.Exec === undefined ? {} : { exec: fields.Exec }),
+    ...(fields.TryExec === undefined ? {} : { tryExec: fields.TryExec }),
+    ...(fields.Icon === undefined ? {} : { icon: fields.Icon }),
   }
-  return fields
 }
 
 /**
@@ -405,9 +393,7 @@ export function parseDesktopEntry(text: string): DesktopEntry {
  * @returns the data directories, freedesktop defaults applied.
  */
 export function xdgDataDirectories(internals: ResolvedInternals): readonly string[] {
-  const dataHome = internals.env['XDG_DATA_HOME'] ?? join(internals.home, '.local', 'share')
-  const dataDirs = internals.env['XDG_DATA_DIRS'] ?? '/usr/local/share:/usr/share'
-  return [dataHome, ...dataDirs.split(':').filter(dir => dir !== '')]
+  return desktopDataDirectories(internals.home, internals.env)
 }
 
 /**
@@ -483,20 +469,13 @@ async function locate(
     case 'fixed': {
       // A fixed entry ships with its OS, so the icon path is trusted rather
       // than probed (a somehow-missing file surfaces as a 404 at extraction);
-      // only an unset variable (`${SystemRoot}`) drops the icon claim. The
-      // argv command template expands the same way, and an unset variable
-      // there means the launcher cannot even be named, so the locator proves
-      // nothing and the entry resolves as unavailable.
+      // only an unset variable (`${SystemRoot}`) drops the icon claim.
       const iconPath = expandCandidate(locator.iconPath, internals)
       const icon = iconPath === null
         ? undefined
         : internals.platform === 'win32'
           ? { kind: 'executable' as const, path: iconPath }
           : { kind: 'app-bundle' as const, path: iconPath }
-      if (locator.launch.kind === 'argv') {
-        const command = expandCandidate(locator.launch.command, internals)
-        return command === null ? null : { launch: { ...locator.launch, command }, icon }
-      }
       return { launch: locator.launch, icon }
     }
     case 'app': {
@@ -701,8 +680,8 @@ function isMissingExecutable(error: unknown): boolean {
  * Open one directory through the OS shell's open verb under the launch watch
  * window: the opener command completing inside the window decides the
  * outcome, and an opener still running when it closes counts as launched and
- * keeps running (a cold `powershell.exe` start can outlive the window; its
- * late settlement is swallowed because the request already answered).
+ * keeps running (a cold shell opener can outlive the window; its late
+ * settlement is swallowed because the request already answered).
  */
 function runShellOpen(
   path: string, watchMs: number, internals: ResolvedInternals,
@@ -772,14 +751,9 @@ export async function launchResolved(
   resolved: OpenInAppResolvedLaunch, path: string, watchMs: number, internals: OpenInAppInternals = {},
 ): Promise<OpenInAppLaunchOutcome> {
   const completed = resolveInternals(internals)
-  // The route's absolute-directory validation accepts either separator, but
-  // a win32 launcher re-parses its raw command line and reads a `/` in the
-  // directory as a switch (`start /d d:/x` → "无效开关 - /x"), so every
-  // launch on Windows carries Windows separators.
-  const directory = completed.platform === 'win32' ? path.replaceAll('/', '\\') : path
-  const primary = await runLaunch(resolved.launch, directory, watchMs, completed)
+  const primary = await runLaunch(resolved.launch, path, watchMs, completed)
   if (primary === 'launched' || resolved.fallbackLaunch === undefined) return primary
-  const fallback = await runLaunch(resolved.fallbackLaunch, directory, watchMs, completed)
+  const fallback = await runLaunch(resolved.fallbackLaunch, path, watchMs, completed)
   if (fallback === 'launched') return 'launched'
   // Either tried launcher having vanished is grounds to refresh the resolution.
   return primary === 'missing' || fallback === 'missing' ? 'missing' : 'failed'

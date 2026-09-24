@@ -5,24 +5,13 @@ import {
   OPEN_IN_APP_APPS_ROUTE, OPEN_IN_APP_OPEN_ROUTE,
   type OpenInAppAppsPayload, type OpenInAppOpenPayload,
 } from '@deepseek-ai/dsh-host-open-in-app/shared'
-import {
-  DEFAULT_OPEN_IN_APP_DISABLED, OPEN_IN_APP_DISABLED_KEY,
-} from './open-in-app-settings.ts'
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
 
-/** Resolve the browser's Host base with the connection carrier's null-origin fallback. */
-function hostBase(): string {
-  const origin = (globalThis as { location?: { origin?: string } }).location?.origin
-  return origin !== undefined && origin !== 'null' ? origin : 'http://dsh.internal'
-}
-
 /**
- * Owns the once-per-page availability read, the persisted last choice, the
- * persisted per-app visibility, and the launch POST. Availability, choice,
- * and visibility publish through uSES-safe sources so every Session header
- * shares one truth and the General-settings row reads the same store the
- * header subscribes to.
+ * Owns the once-per-page availability read, the persisted last choice, and
+ * the launch POST. Availability and choice publish through uSES-safe sources
+ * so every Session header shares one truth.
  */
 export class OpenInAppController {
   /** Installed app ids in host menu order; null until the host answered. */
@@ -31,11 +20,6 @@ export class OpenInAppController {
   readonly choice: SnapshotStore<string> = createSnapshotStore<string>('', {
     persist: { name: 'dsh.open-in-app.choice' },
   })
-  /** App ids the user hid from the session-header dropdown. */
-  readonly disabled: SnapshotStore<readonly string[]> = createSnapshotStore<readonly string[]>(
-    [...DEFAULT_OPEN_IN_APP_DISABLED],
-    { persist: { name: OPEN_IN_APP_DISABLED_KEY } },
-  )
 
   private loading: Promise<void> | undefined
 
@@ -63,29 +47,6 @@ export class OpenInAppController {
   }
 
   /**
-   * Replace the hidden-app list; an empty list shows every installed app.
-   * @param appIds - the full set of app ids the user wants hidden.
-   */
-  setDisabled(appIds: readonly string[]): void {
-    this.disabled.set([...appIds])
-  }
-
-  /**
-   * Toggle one app id in the hidden set; the latest list is persisted as a
-   * single replace so writes do not race.
-   * @param appId - the app id to show or hide.
-   * @param enabled - true to show, false to hide.
-   */
-  setEnabled(appId: string, enabled: boolean): void {
-    const current = this.disabled.getSnapshot()
-    const next = enabled
-      ? current.filter(id => id !== appId)
-      : current.includes(appId) ? current : [...current, appId]
-    if (next.length === current.length && next.every((id, i) => id === current[i])) return
-    this.disabled.set(next)
-  }
-
-  /**
    * Launch one installed app on a workspace directory.
    * @param appId - catalog id from the availability list.
    * @param path - the session's absolute workspace directory.
@@ -93,7 +54,7 @@ export class OpenInAppController {
    */
   async launch(appId: string, path: string): Promise<void> {
     const body: OpenInAppOpenPayload = { app: appId, path }
-    const response = await this.fetcher(new URL(OPEN_IN_APP_OPEN_ROUTE, hostBase()), {
+    const response = await this.fetcher(OPEN_IN_APP_OPEN_ROUTE, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -104,7 +65,7 @@ export class OpenInAppController {
   private async run(): Promise<void> {
     let apps: readonly string[] = []
     try {
-      const response = await this.fetcher(new URL(OPEN_IN_APP_APPS_ROUTE, hostBase()), {
+      const response = await this.fetcher(OPEN_IN_APP_APPS_ROUTE, {
         headers: { accept: 'application/json' },
       })
       if (response.ok) {

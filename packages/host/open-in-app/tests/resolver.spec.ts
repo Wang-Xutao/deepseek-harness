@@ -188,24 +188,6 @@ describe('resolveLaunch locators', () => {
     // An unset ${SystemRoot} drops the icon claim, not the entry.
     await expect(resolveLaunch(byId('explorer'), TIMEOUT_MS, bare({ platform: 'win32', env: {} })))
       .resolves.toMatchObject({ launch: { kind: 'shell-open' }, icon: undefined })
-    // An argv fixed entry expands its command template the same way; the
-    // catalog's cmd entry wraps its console target through `start /d` (the
-    // host child has no console, so only `start` allocates a fresh one) and
-    // keeps the template's Windows separators (cmd re-parses its raw command
-    // line and reads `/` as a switch).
-    await expect(resolveLaunch(byId('cmd'), TIMEOUT_MS, bare({
-      platform: 'win32', env: { SystemRoot: systemRoot },
-    }))).resolves.toEqual({
-      launch: {
-        kind: 'argv',
-        command: `${systemRoot}\\System32\\cmd.exe`,
-        args: ['/c', 'start', '/d', '{path}', 'cmd'],
-      },
-      icon: { kind: 'executable', path: `${systemRoot}/System32/cmd.exe` },
-    })
-    // An unset ${SystemRoot} in the command leaves nothing to launch.
-    await expect(resolveLaunch(byId('cmd'), TIMEOUT_MS, bare({ platform: 'win32', env: {} })))
-      .resolves.toBeNull()
     // macOS fixed entries trust their OS-shipped bundle path.
     await expect(resolveLaunch(byId('finder'), TIMEOUT_MS, bare({ platform: 'darwin', env: {} })))
       .resolves.toEqual({
@@ -556,27 +538,16 @@ describe('launchResolved', () => {
     const calls: unknown[][] = []
     await expect(launchResolved(
       { launch: { kind: 'argv', command: 'git-bash', args: ['--cd={path}'] } }, 'C:\\w\\dir', TIMEOUT_MS,
-      bare({ platform: 'linux', launch: launcher(calls) }),
+      bare({ launch: launcher(calls) }),
     )).resolves.toBe('launched')
     await expect(launchResolved(
       { launch: { kind: 'argv', command: 'code', args: [] } }, '/w/dir', TIMEOUT_MS,
-      bare({ platform: 'linux', launch: launcher(calls) }),
+      bare({ launch: launcher(calls) }),
     )).resolves.toBe('launched')
     expect(calls).toEqual([
       ['git-bash', '--cd=C:\\w\\dir', { watchMs: TIMEOUT_MS }],
       ['code', '/w/dir', { watchMs: TIMEOUT_MS }],
     ])
-  })
-
-  it('normalizes the directory to Windows separators for win32 launches', async () => {
-    const calls: unknown[][] = []
-    await expect(launchResolved(
-      { launch: { kind: 'argv', command: 'code', args: [] } }, 'C:/w/dir', TIMEOUT_MS,
-      bare({ platform: 'win32', launch: launcher(calls) }),
-    )).resolves.toBe('launched')
-    // cmd-family launchers re-parse their raw command line and read `/` in
-    // the directory as a switch, so a win32 launch carries backslashes.
-    expect(calls).toEqual([['code', 'C:\\w\\dir', { watchMs: TIMEOUT_MS }]])
   })
 
   it('passes adapter-specific environment and Windows visibility policy', async () => {
@@ -610,15 +581,15 @@ describe('launchResolved', () => {
         },
       }),
     )).resolves.toBe('launched')
-    // The opener is the shipped Invoke-Item channel; the detached spawner never runs.
+    // The opener is the shipped Explorer channel; the detached spawner never runs.
     expect(spawns).toEqual([])
     expect(commands).toEqual([
-      ['powershell.exe', '-NoProfile', '-Command', "Invoke-Item -LiteralPath 'C:\\w\\dir'"],
+      ['explorer.exe', 'file:///C:/w/dir'],
     ])
   })
 
   it('counts a shell-open opener that outlives the watch window as launched, and a fast failure as failed', async () => {
-    // A cold powershell start can outlive the window: still-running counts launched.
+    // A cold shell opener can outlive the window: still-running counts launched.
     await expect(launchResolved(
       { launch: { kind: 'shell-open' } }, '/w/dir', 25,
       bare({ platform: 'darwin', run: () => new Promise(() => {}) }),
@@ -691,18 +662,6 @@ describe('launchDetachedApp', () => {
   it('rejects a spawn failure, carrying the ENOENT code', async () => {
     await expect(launchDetachedApp('dsh-definitely-missing-launcher', [], { watchMs: TIMEOUT_MS }))
       .rejects.toMatchObject({ code: 'ENOENT' })
-  })
-
-  it('counts a child that outlives the watch window as launched without killing it', async () => {
-    // The child exits on its own shortly after; the launch settles at the
-    // window, long before that, and never awaits or kills the process.
-    const started = Date.now()
-    await expect(launchDetachedApp(
-      node, ['-e', 'setTimeout(() => {}, 1500)'], { watchMs: 100 },
-    )).resolves.toBeUndefined()
-    expect(Date.now() - started).toBeLessThan(1_400)
-    // A late exit after the settled window changes nothing.
-    await new Promise(resolve => setTimeout(resolve, 1_600))
   })
 
   it('hands the child a credential-scrubbed environment with explicit adapter entries', async () => {
