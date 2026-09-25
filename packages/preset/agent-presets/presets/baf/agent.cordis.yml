@@ -302,7 +302,7 @@
 # At every rest where the next move is the model authoring an artifact, typing
 # the command queues a work order into this session's next-turn inbox
 # (`agent.followup`) so the flow continues instead of resting silently. The
-# order is `source.kind: 'plugin'` + `form: 'go-dispatch'` — the chat client
+# order is `source.kind: 'baf-workflow'` + `form: 'go-dispatch'` — the chat client
 # renders it as a read-only context row, never a customer bubble, and it is
 # sent ONLY from the customer's own typed command (never from the orchestrator,
 # the Tab, or a model tool). That is the distinction the baf-session-gate note

@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type {} from '@deepseek-ai/dsh-agent-presets'
+import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import type {} from './remote-types.ts'
 import { WorkflowView, type WorkflowViewInjected } from './WorkflowView.tsx'
 import { buildClientEmptyTabView, type WorkflowTabView } from './tab-types.ts'
@@ -26,7 +26,7 @@ export type { WorkflowTabKey } from './locales.ts'
 
 /** Required services. */
 export const inject = [
-  'slots', 'locale', 'remote', 'remote.bafWorkflowView', 'sessions', 'sidebarRight',
+  'slots', 'locale', 'remote', 'remote.bafWorkflowView', 'sessions', 'uiSession', 'sidebarRight',
 ] as const
 
 /**
@@ -134,7 +134,11 @@ export function apply(ctx: ClientContext): void {
     const sync = (): void => {
       disposePreset?.()
       disposePreset = undefined
-      const sessionId = ctx.sessions.list.getSnapshot().current
+      // Master session controller: the active session is the uiSession
+      // adapter's current binding (key = session id; '' = absence), not a
+      // `current` field on the session list snapshot.
+      const currentKey = ctx.uiSession.adapter.current.getSnapshot().key
+      const sessionId = currentKey === '' ? undefined : (currentKey as SessionId | undefined)
       const binding = sessionId === undefined ? undefined : ctx.sessions.binding(sessionId)
       const face = binding?.session.projections.faceOf('agentPreset')
       if (face === undefined) {
@@ -148,9 +152,11 @@ export function apply(ctx: ClientContext): void {
       disposePreset = face.subscribe(read)
     }
 
+    const offCurrent = ctx.uiSession.adapter.current.subscribe(sync)
     const offList = ctx.sessions.list.subscribe(sync)
     sync()
     return () => {
+      offCurrent()
       offList()
       disposePreset?.()
       disposeView?.()

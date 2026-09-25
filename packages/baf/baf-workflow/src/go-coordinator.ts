@@ -1461,7 +1461,7 @@ function dispatchParts(
 function successCard(runtime: string, sections: readonly Section[], marker?: string): CommandResult {
   const title = marker === undefined
     ? cardTitle('/baf-go', runtime)
-    : `${runtime} · ${marker} · 点本行展开/折叠详情`
+    : `${runtime} · ${marker}`
   return { kind: 'success', text: formatCommandReport(true, title, sections) }
 }
 
@@ -1479,6 +1479,6 @@ function successCard(runtime: string, sections: readonly Section[], marker?: str
 function errorCard(runtime: string, sections: readonly Section[], marker?: string): CommandResult {
   const title = marker === undefined
     ? cardTitle('/baf-go', runtime)
-    : `${runtime} · ${marker} · 点本行展开/折叠详情`
+    : `${runtime} · ${marker}`
   return { kind: 'error', text: formatCommandReport(false, title, sections) }
 }

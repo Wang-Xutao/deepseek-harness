@@ -35,7 +35,8 @@
     "presets/ptc.patch.yml",
     "presets/minimal.patch.yml",
     "presets/cordis.patch.yml",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "presets/baf.patch.yml"
   ],
   "license": "MIT",
   "dsh": {
@@ -45,7 +46,8 @@
         "./presets/standard.patch.yml",
         "./presets/ptc.patch.yml",
         "./presets/minimal.patch.yml",
-        "./presets/cordis.patch.yml"
+        "./presets/cordis.patch.yml",
+        "./presets/baf.patch.yml"
       ]
     }
   },
@@ -54,6 +56,7 @@
     "@deepseek-ai/dsh-agent-preset": "workspace:*",
     "@deepseek-ai/dsh-agent-preset-registry": "workspace:*",
     "@deepseek-ai/dsh-agent-tool-presentation": "workspace:*",
+    "@deepseek-ai/dsh-api-account-controller": "workspace:*",
     "@deepseek-ai/dsh-api-job-controller": "workspace:*",
     "@deepseek-ai/dsh-api-remotes": "workspace:*",
     "@deepseek-ai/dsh-api-session-controller": "workspace:*",
@@ -62,6 +65,8 @@
     "@deepseek-ai/dsh-api-workspace-controller": "workspace:*",
     "@deepseek-ai/dsh-api-workspace-files": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-baf-core": "workspace:*",
+    "@deepseek-ai/dsh-baf-workflow": "workspace:*",
     "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-client-file-upload": "workspace:*",
     "@deepseek-ai/dsh-client-hmr": "workspace:*",
@@ -71,6 +76,9 @@
     "@deepseek-ai/dsh-client-ui-agent-preset": "workspace:*",
     "@deepseek-ai/dsh-client-ui-approval": "workspace:*",
     "@deepseek-ai/dsh-client-ui-attachment": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-baf-desktop": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-baf-tracegraph": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-baf-workflow": "workspace:*",
     "@deepseek-ai/dsh-client-ui-brand-official": "workspace:*",
     "@deepseek-ai/dsh-client-ui-chat": "workspace:*",
     "@deepseek-ai/dsh-client-ui-commands": "workspace:*",
@@ -94,13 +102,15 @@
     "@deepseek-ai/dsh-client-ui-schedule": "workspace:*",
     "@deepseek-ai/dsh-client-ui-session": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-settings-account": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-settings-agent-loop": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-general": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-models": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-plugin-inventory": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-plugins": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-shell": "workspace:*",
-    "@deepseek-ai/dsh-client-ui-settings-agent-loop": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-subagent": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-settings-updates": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-web-search": "workspace:*",
     "@deepseek-ai/dsh-client-ui-sidebar": "workspace:*",
     "@deepseek-ai/dsh-client-ui-sidebar-browser": "workspace:*",
@@ -170,9 +180,7 @@
     "@deepseek-ai/dsh-workspace-changes": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "commander": "^15.0.0",
-    "open": "^11.0.0",
-    "@deepseek-ai/dsh-api-account-controller": "workspace:*",
-    "@deepseek-ai/dsh-client-ui-settings-account": "workspace:*"
+    "open": "^11.0.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

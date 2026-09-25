@@ -123,12 +123,11 @@ describe('artifactPathFor', () => {
 })
 
 describe('workOrderMessage', () => {
-  it('is plugin-sourced with the go-dispatch form — never the customer\'s own words', () => {
+  it('is baf-workflow-sourced with the go-dispatch form — never the customer\'s own words', () => {
     const message = workOrderMessage(CLARIFY_GAP)
     expect(message.role).toBe('user')
     expect(message.source).toMatchObject({
-      kind: 'plugin',
-      plugin: 'baf-commands',
+      kind: 'baf-workflow',
       form: 'go-dispatch',
       changeId: 'change-20260922-ecum-7897',
       node: 'clarify',

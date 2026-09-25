@@ -267,7 +267,7 @@ export function apply(ctx: Context): void {
     execute: async (args, exec) => {
       const parsed = parseQuestions(args)
       if ('reason' in parsed) {
-        return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 参数不合法，未弹出 · 点本行展开/折叠详情', [
+        return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 参数不合法，未弹出', [
           { title: '原因', lines: [parsed.reason] },
           { title: '用法', lines: ['questions: 1-4 个问题，每个 2-4 个选项（label + 可选 description）'] },
         ]))] as unknown as JsonValue[]
@@ -277,7 +277,7 @@ export function apply(ctx: Context): void {
         // No answerer (CLI / test composition) — degrade to the verbatim card.
         // This is the ONLY sanctioned non-dialog shape, and it still does not
         // invite the model to re-ask as prose options.
-        return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 当前环境无法弹卡 · 点本行展开/折叠详情', [
+        return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 当前环境无法弹卡', [
           ...questionSections(parsed.questions),
           {
             title: '结果',
@@ -306,7 +306,7 @@ export function apply(ctx: Context): void {
           }),
         })
         if (queued.kind !== 'answered') {
-          return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 客户暂未选择 · 点本行展开/折叠详情', [
+          return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 客户暂未选择', [
             ...questionSections(parsed.questions),
             {
               title: '结果',
@@ -318,7 +318,7 @@ export function apply(ctx: Context): void {
           ]))] as unknown as JsonValue[]
         }
         const answer = queued.value
-        return [textBlock(formatCommandReport(true, 'BAF 选择卡 · 客户已点选 · 点本行展开/折叠详情', [
+        return [textBlock(formatCommandReport(true, 'BAF 选择卡 · 客户已点选', [
           ...answerSections(parsed.questions, answer),
           ...(cwd === undefined ? [] : [{ title: '工作区', lines: [`cwd: ${cwd}`] }]),
         ]))] as unknown as JsonValue[]
@@ -327,7 +327,7 @@ export function apply(ctx: Context): void {
         // customer walked away (paused); anything else = no dialog could show.
         const code = errorCode(error)
         if (code === 'ASK_CANCELLED' || code === 'ASK_ABORTED') {
-          return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 客户暂未选择 · 点本行展开/折叠详情', [
+          return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 客户暂未选择', [
             ...questionSections(parsed.questions),
             {
               title: '结果',
@@ -338,7 +338,7 @@ export function apply(ctx: Context): void {
             },
           ]))] as unknown as JsonValue[]
         }
-        return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 弹卡失败 · 点本行展开/折叠详情', [
+        return [textBlock(formatCommandReport(false, 'BAF 选择卡 · 弹卡失败', [
           ...questionSections(parsed.questions),
           {
             title: '结果',

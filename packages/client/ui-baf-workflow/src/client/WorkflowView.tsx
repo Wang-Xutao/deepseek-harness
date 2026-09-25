@@ -1082,7 +1082,10 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                   <span className={css.metaKey}>{t('intake.confirmation')}</span>
                   <span className={view.intake.confirmation === 'pending' ? css.metaValueWarn : undefined}>
                     {view.intake.confirmation === 'confirmed'
-                      ? `已确认 · ${view.intake.mode}`
+                      // 【变更】2026-09-25: the raw mode id (full-go-path) leaked
+                      // here; the customer reads the same localized name the 模式
+                      // row shows (modeLabel → 完整流程 / 缺陷修复路径 …).
+                      ? `已确认 · ${modeLabel(view.intake.mode, t)}`
                       : t(`intake.confirmation.${view.intake.confirmation}` as WorkflowTabKey)}
                   </span>
                   {/* 【变更】2026-09-24 (demo6 问题 3): the summary rides the same
@@ -2234,28 +2237,41 @@ function StageChecklist(props: {
 }
 
 /**
- * 【变更】2026-09-24 (demo6 问题 13): per-stage plain-language tips — what this
- * stage FEELS like from the outside (who acts, what the customer waits for),
- * one short paragraph under the catalog facts. Written for the customer, not
- * the engineer: no protocol talk, no section numbers.
+ * 【变更】2026-09-25 (demo8 问题 2.4): plain-zh renderings of the workflow
+ * edges' English conditions, keyed by the stable edge id (T1–T16, baf-core
+ * workflow.ts). The raw condition string stays the fallback for an edge this
+ * table has not covered.
  */
-const STAGE_TIPS: Readonly<Record<string, string>> = {
-  intake: '你在分类卡上点选路径，系统才会动源码。点「完整流程」走全阶段，点「缺陷修复路径」直接进修复。',
-  open: '系统为这次变更建档、锁定基线，然后模型撰写提案（为什么改、改什么、影响面）。你确认提案后才进入下一步。',
-  clarify: '把含糊的地方问清楚：模型把阻塞问题写成文档，需要你拍板的会弹卡提问，答案记录在案。',
-  design: '模型读真实仓库代码写技术设计——接口怎么定、错误怎么处理、有什么风险。设计里引用的文件都是仓库里真实存在的。',
-  plan: '把设计拆成一条条可验证的任务，并冻结允许修改的文件清单（白名单）。之后改任何白名单外的文件都会被拦下。',
-  implement: '模型按任务清单逐项写代码、跑验证命令，每完成一项就在 tasks.md 勾掉一项。全部完成后请你确认进入验证。',
-  verify: '系统自动跑检查：编译、测试、密钥扫描、规格校验，结果写入 verify.md。全部通过才弹归档确认；有失败项会带着原因回到实现阶段重改。',
-  archive: '你确认归档后，变更连同所有文档一起移入归档目录，流程结束，审计记录保留。',
-  drift: '系统发现仓库的实际状态和流程记录对不上（比如流程外的文件被改了）。需要你选择退回到哪个阶段，从那里重跑——不会静默自愈。',
+const CONDITION_ZH: Readonly<Record<string, string>> = {
+  T1: '任何 BAF 输入都从这里开始',
+  T2: '分类确认为新需求或高风险缺陷',
+  T3: '分类确认为低风险缺陷，且基线允许走快速路径',
+  T4: '变更档案已建立，澄清单独进行',
+  T4a: '澄清并入建立变更阶段（已记录理由）',
+  T5: '根因和影响范围已记录',
+  T6: '卡进度的问题已回答或明确延后；验收标准可检验',
+  T7: '设计已确认，计划单独进行',
+  T7a: '设计并入计划（任务和回退点已记录）',
+  T8: '计划已包含文件白名单、验证命令和回退点',
+  T9: '全部任务有结果，且没有越权改动',
+  T10: '必需检查全部通过，且无漂移',
+  T11: '有必需检查未通过',
+  T12: '进行中的变更，其依据的文件 / 基线 / 报告发生了变化',
+  T13: '最早受影响的阶段已恢复或重新确认',
+  T14: '你确认后，归档一次完成',
+  T15: '缺陷修复升级为完整流程，回头补澄清 / 设计 / 计划',
+  T16: '你确认放弃进行中的变更',
 }
 
 /**
- * 【变更】2026-09-24 (demo6 问题 13): per-stage common failures with the
- * stable BAF error code, plain meaning, and the customer-side fix — cribbed
- * from overlay/docs/baf/error-codes.md, trimmed to what a customer can act
- * on. Rendered as a compact code → meaning → fix table under 失败处理.
+ * 【变更】2026-09-25 (demo8 问题 2.4): the former standalone 通俗说明 section
+ * (per-stage tips) is gone — its plain-language content now lives inside the
+ * catalog copy itself (catalog-i18n.ts), so every section reads customer-
+ * facing and nothing repeats. What remains here are the per-stage common
+ * failures with the stable BAF error code, plain meaning, and the
+ * customer-side fix — cribbed from overlay/docs/baf/error-codes.md, trimmed
+ * to what a customer can act on. Rendered as a compact code → meaning → fix
+ * table under 失败处理.
  */
 const FAILURE_REFS: Readonly<Record<string, readonly { code: string; meaning: string; fix: string }[]>> = {
   intake: [
@@ -2347,9 +2363,12 @@ function BilingualDetail(props: {
         {nextEdge !== null && (
           <>
             <span className={css.metaKey}>{t('card.next')}</span>
-            <span>{nextEdge.id} → {nextEdge.to}</span>
+            {/* 【变更】2026-09-25 (demo8 问题 2.4): the raw edge id / target id /
+                English condition are internal vocabulary — show the stage's
+                display name and a plain-zh condition instead. */}
+            <span>{t(`node.${nextEdge.to}` as WorkflowTabKey)}</span>
             <span className={css.metaKey}>{t('card.condition')}</span>
-            <span>{nextEdge.condition}</span>
+            <span>{CONDITION_ZH[nextEdge.id] ?? nextEdge.condition}</span>
           </>
         )}
       </div>
@@ -2373,17 +2392,11 @@ function BilingualDetail(props: {
           </div>
         )
       })}
-      {/* 【变更】2026-09-24 (demo6 问题 13): two customer-facing additions on
-          the SAME card — a plain-language tip (who acts, what you wait for)
-          and, when this stage has known failure codes, the compact
-          code → meaning → fix table. Same section styling as above so the
-          whole detail panel reads as one format. */}
-      {STAGE_TIPS[node.id] !== undefined && (
-        <div className={css.biSection}>
-          <div className={css.metaKey}>{t('detail.tip')}</div>
-          <p className={css.biZh}>{STAGE_TIPS[node.id]}</p>
-        </div>
-      )}
+      {/* 【变更】2026-09-24 (demo6 问题 13): when this stage has known failure
+          codes, the compact code → meaning → fix table. Same section styling
+          as above so the whole detail panel reads as one format. 【变更】
+          2026-09-25 (demo8 问题 2.4): the standalone 通俗说明 tip section that
+          used to sit here is gone — its content moved into the catalog copy. */}
       {(FAILURE_REFS[node.id] ?? []).length > 0 && (
         <div className={css.biSection}>
           <div className={css.metaKey}>{t('detail.failureCodes')}</div>

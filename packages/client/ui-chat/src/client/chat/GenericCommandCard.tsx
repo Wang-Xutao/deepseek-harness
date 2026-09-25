@@ -27,7 +27,10 @@ export interface GenericCommandCardProps extends CommandRowOwnerProps {
  * @returns the command disclosure.
  */
 export const GenericCommandCard = memo(function GenericCommandCard({ node, t, runningSummary }: GenericCommandCardProps) {
-  const [expanded, setExpanded] = useState(false)
+  // Default expanded: slash-command output (BAF cards especially) carries the
+  // information the customer typed the command for — a collapsed-by-default
+  // row hid it behind an extra click and users missed it.
+  const [expanded, setExpanded] = useState(true)
   const text = node.outcome?.text
   const summary = node.outcome === null
     ? runningSummary ?? t('command.running')

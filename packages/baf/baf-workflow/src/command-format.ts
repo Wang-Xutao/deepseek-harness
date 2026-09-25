@@ -89,7 +89,5 @@ export const SLASH_DESC: Record<string, string> = {
  */
 export function cardTitle(slash: string, runtime?: string): string {
   const desc = SLASH_DESC[slash] ?? slash
-  return runtime === undefined
-    ? `${desc} · 点本行展开/折叠详情`
-    : `${desc} · ${runtime} · 点本行展开/折叠详情`
+  return runtime === undefined ? desc : `${desc} · ${runtime}`
 }

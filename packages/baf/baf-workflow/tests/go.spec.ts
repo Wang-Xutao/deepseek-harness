@@ -684,7 +684,7 @@ describe('confirmation gates (§18.5)', () => {
       await author(root, changeId, 'design.md', '# Design\n\n## Approach\n\nAdd src/export.ts.\n')
       const gateA = await driveGo({ cwd: root, focus })
       // §22.14-D: gate A now renders the registered §22 card verbatim. The
-      // headline is `等待你的确认 · <title> · 点本行展开/折叠详情` and the
+      // headline is `等待你的确认 · <title>` and the
       // body lists the registered options in plain language. The customer-facing card no
       // longer carries an internal status token as a separate
       // token — it is the registered `设计确认门` card itself.

@@ -568,9 +568,9 @@ function goDispatchOrder(source: unknown): GoDispatchOrder | null {
  * duplicates the list right above it, so opening it by default would print the
  * same work twice and push everything after it off screen.
  *
- * This row is read-only by construction — it is a plugin-sourced message, so no
- * composer and no customer bubble render around it; what it must NOT be mistaken
- * for is something the customer said.
+ * This row is read-only by construction — it is a baf-workflow-sourced
+ * message, so no composer and no customer bubble render around it; what it
+ * must NOT be mistaken for is something the customer said.
  * @param props - Durable content, its source, and the locale seat.
  * @returns The go-dispatch context body, or the opaque body when unreadable.
  */

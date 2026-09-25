@@ -19,6 +19,8 @@
     { "path": "../../core/tools" },
     { "path": "../../interaction/commands" },
     { "path": "../../interaction/user-approval" },
-    { "path": "../../interaction/user-questions" }
+    { "path": "../../interaction/user-questions" },
+    { "path": "../../preset/agent-preset-registry" },
+    { "path": "../../settings/settings" }
   ]
 }

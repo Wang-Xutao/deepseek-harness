@@ -396,6 +396,25 @@
     - id: ui-settings-web-search
       name: '@deepseek-ai/dsh-client-ui-settings-web-search'
 
+    # Desktop version display and update controls (baf-dsh「版本与更新」).
+    - id: ui-settings-updates
+      name: '@deepseek-ai/dsh-client-ui-settings-updates'
+
+    # baf-dsh desktop chrome: hero trailing mark, IDE open, help placeholder.
+    - id: ui-baf-desktop
+      name: '@deepseek-ai/dsh-client-ui-baf-desktop'
+
+    # baf-dsh 轨迹图: turn navigator + REQUEST/RESPONSE/TOOL pipeline + inline
+    # child traces. Tab visibility follows the device-local trace-graph pref
+    # (baf.trace-graph.pref, see ui-baf-tracegraph workflow-settings.ts).
+    # Settings section title is「轨迹图」(not go-workflow).
+    - id: ui-baf-tracegraph
+      name: '@deepseek-ai/dsh-client-ui-baf-tracegraph'
+
+    # BAF go-workflow Tab「工作流」+ Host Typert Remote (projection/intake).
+    - id: ui-baf-workflow
+      name: '@deepseek-ai/dsh-client-ui-baf-workflow'
+
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
       name: '@deepseek-ai/dsh-client-ui-plan'
@@ -541,4 +560,7 @@
     - id: agent-preset-registry
       name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
-        default: standard
+        # 【变更】2026-09-25: BAF 是本产品的核心工作流（客户以 BAF 模式为
+        # 默认工作方式），新会话默认进入 baf 预设，baf-welcome / 首道门控
+        # 随 agent/created 触发；标准模式仍可在 Agent 预设中手动选择。
+        default: baf

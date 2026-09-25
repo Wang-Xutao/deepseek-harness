@@ -119,7 +119,7 @@ export function renderDomainError(command: string, error: unknown): CommandResul
     const plainTitle = translateErrorCode(error.code)
     return {
       kind: 'error',
-      text: formatCommandReport(false, `${command} · ${plainTitle} · 点本行展开/折叠详情`, [
+      text: formatCommandReport(false, `${command} · ${plainTitle}`, [
         {
           title: '原因',
           lines: [
@@ -135,7 +135,7 @@ export function renderDomainError(command: string, error: unknown): CommandResul
   }
   return {
     kind: 'error',
-    text: formatCommandReport(false, `${command} · 执行失败 · 点本行展开/折叠详情`, [
+    text: formatCommandReport(false, `${command} · 执行失败`, [
       { title: '原因', lines: [error instanceof Error ? error.message : String(error)] },
       { title: '处理', lines: ['稍后重试，或输入 /baf-status 查看当前状态'] },
     ]),

@@ -48,6 +48,10 @@
       "types": "./lib/types/orchestrator.d.ts",
       "default": "./lib/orchestrator.js"
     },
+    "./projection-events": {
+      "types": "./lib/types/projection-events.d.ts",
+      "default": "./lib/projection-events.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -60,7 +64,9 @@
     "lib/question-ask.js",
     "lib/auto-pop.js",
     "lib/orchestrator.js",
-    "lib/types/**/*.d.ts"
+    "lib/projection-events.js",
+    "lib/types/**/*.d.ts",
+    "skills"
   ],
   "scripts": {
     "bundle": "tsdown",
@@ -73,6 +79,7 @@
     "@deepseek-ai/dsh-cmdline": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
     "commander": "^15.0.0"
@@ -88,6 +95,7 @@
     "@deepseek-ai/cordis-plugin-include": "workspace:^",
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
     "@deepseek-ai/dsh-agent": "workspace:^",
+    "@deepseek-ai/dsh-agent-preset-registry": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",
     "@deepseek-ai/dsh-commands": "workspace:^",
     "@deepseek-ai/dsh-user-questions": "workspace:^"

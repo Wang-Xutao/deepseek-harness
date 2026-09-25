@@ -1,35 +1,17 @@
 /**
- * Host half for the baf 轨迹图 view: registers the durable `baf-workflow`
- * settings namespace so the trace-graph visibility switch survives reloads.
+ * Host half for the baf 轨迹图 view. This entry stays mounted for desktop
+ * compositions but registers nothing itself: the 轨迹图 toggle is a
+ * device-local browser preference persisted in localStorage by the client
+ * half (see ./workflow-settings.ts), so no host settings namespace is
+ * involved.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
-import type {} from '@deepseek-ai/dsh-settings'
-import {
-  BAF_WORKFLOW_SETTINGS_NAMESPACE, DEFAULT_SHOW_TRACE_GRAPH, SHOW_TRACE_GRAPH_FIELD,
-  type BafWorkflowSettings,
-} from './workflow-settings.ts'
 
-export {
-  BAF_WORKFLOW_SETTINGS_NAMESPACE, DEFAULT_SHOW_TRACE_GRAPH,
-  SHOW_TRACE_GRAPH_FIELD, type BafWorkflowSettings,
-} from './workflow-settings.ts'
-
-/** Wire schema for the baf-workflow namespace. */
-const BafWorkflowSettingsSchema: z<BafWorkflowSettings> = z.object({
-  [SHOW_TRACE_GRAPH_FIELD]: z.boolean().default(DEFAULT_SHOW_TRACE_GRAPH),
-})
+export { DEFAULT_SHOW_TRACE_GRAPH, type BafWorkflowSettings } from './workflow-settings.ts'
 
 /**
- * Register the durable baf-workflow section when a settings provider exists.
- * @param ctx - Host context whose optional settings service owns the section.
+ * No-op Host apply.
+ * @param _ctx - Host context (unused).
  */
-export function apply(ctx: Context): void {
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.register(
-      BAF_WORKFLOW_SETTINGS_NAMESPACE,
-      BafWorkflowSettingsSchema,
-    )
-  })
-}
+export function apply(_ctx: Context): void {}

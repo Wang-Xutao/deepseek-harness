@@ -372,7 +372,7 @@ export function renderGateCard(spec: GateSpec, ctx?: GateContext): CommandResult
   if (sections === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, `${spec.title} · 信息不全，暂时无法展示 · 点本行展开/折叠详情`, [
+      text: formatCommandReport(false, `${spec.title} · 信息不全，暂时无法展示`, [
         { title: '原因', lines: ['这张卡需要额外的上下文（可选的回退阶段 / 变更编号），当前没有拿到'] },
         { title: '处理', lines: ['到工作流页签看一下当前状态；或重新输入 /baf-go 让系统重新计算'] },
       ]),
@@ -381,7 +381,7 @@ export function renderGateCard(spec: GateSpec, ctx?: GateContext): CommandResult
 
   return {
     kind: 'success',
-    text: formatCommandReport(true, `${HEADLINE} · ${spec.title} · 点本行展开/折叠详情`, sections),
+    text: formatCommandReport(true, `${HEADLINE} · ${spec.title}`, sections),
   }
 }
 
@@ -402,7 +402,7 @@ export function renderGate(gateId: string, ctx?: GateContext): CommandResult {
   if (spec === undefined) {
     return {
       kind: 'error',
-      text: formatCommandReport(false, `无法识别的确认项 ${JSON.stringify(gateId)} · 点本行展开/折叠详情`, [
+      text: formatCommandReport(false, `无法识别的确认项 ${JSON.stringify(gateId)}`, [
         { title: '原因', lines: [`系统里没有这个确认项（现有：${Object.keys(GATE_REGISTRY).join(' | ')}）`] },
         { title: '处理', lines: ['重新输入 /baf-go 让系统重新计算当前需要确认的事项；或输入 /baf-help 查看命令表'] },
       ]),

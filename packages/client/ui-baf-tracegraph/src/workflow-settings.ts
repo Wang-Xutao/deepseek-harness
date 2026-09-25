@@ -1,10 +1,17 @@
-/** Durable baf-workflow preference: visibility of the 轨迹图 conversation tab. */
+/**
+ * Device-local baf-workflow presentation preferences.
+ *
+ * 【变更】2026-09-25 (post-master-merge): the 轨迹图 toggle used to ride the
+ * host `baf-workflow` settings namespace via configForms, but this preset's
+ * scoped mount is unreachable from the host settings controller — the form
+ * silently fell back to memory persistence and every `set()` was a no-op
+ * (switch would not move). The preference is browser-local state (per-device
+ * tab visibility), so it now persists in localStorage through the client
+ * snapshot store and never crosses the wire.
+ */
 
-/** Settings namespace owned by the baf workflow plugin. */
-export const BAF_WORKFLOW_SETTINGS_NAMESPACE = 'baf-workflow'
-
-/** Field carrying the trace-graph tab visibility switch. */
-export const SHOW_TRACE_GRAPH_FIELD = 'showTraceGraph'
+/** localStorage key for the persisted preference snapshot. */
+export const TRACE_GRAPH_PREF_KEY = 'baf.trace-graph.pref'
 
 /**
  * Default keeps the trace-graph tab visible — pre-release stance prefers the
@@ -12,8 +19,13 @@ export const SHOW_TRACE_GRAPH_FIELD = 'showTraceGraph'
  */
 export const DEFAULT_SHOW_TRACE_GRAPH = true
 
-/** Durable baf-workflow section shared by the Host schema and the browser scope. */
+/** Device-local baf-workflow presentation preferences. */
 export interface BafWorkflowSettings {
   /** Whether the conversation tab "轨迹图" is mounted. */
   showTraceGraph: boolean
+}
+
+/** Opening snapshot before any persisted value is read. */
+export const INITIAL_TRACE_GRAPH_PREFS: BafWorkflowSettings = {
+  showTraceGraph: DEFAULT_SHOW_TRACE_GRAPH,
 }

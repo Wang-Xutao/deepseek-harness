@@ -20,10 +20,8 @@
  *     `guard`).
  *
  * Descriptions drop the leading "BAF" prefix and end with a usage-frequency
- * mark (★★★ 常用 / ★★ 偶尔 / ★ 极少). Card titles mirror the description
- * and append the standardized expand/collapse hint
- * `点本行展开/折叠详情`, so the slash card and the picker line read as
- * one.
+ * mark (★★★ 常用 / ★★ 偶尔 / ★ 极少). Card titles mirror the description,
+ * so the slash card and the picker line read as one.
  *
  * Mounted as a non-isolated preset row (like `@deepseek-ai/dsh-command-goal`)
  * so registration reaches the host `commands` service. Handlers use the
@@ -78,11 +76,9 @@ import {
 export const name = 'baf-commands'
 export const inject = ['commands']
 
-/** Append the standard expand/collapse hint to a card title. */
+/** Join a card title's description and optional runtime qualifier. */
 function withHint(description: string, runtime?: string): string {
-  return runtime === undefined
-    ? `${description} · 点本行展开/折叠详情`
-    : `${description} · ${runtime} · 点本行展开/折叠详情`
+  return runtime === undefined ? description : `${description} · ${runtime}`
 }
 
 /** Shape of the args Cordis passes to a slash handler. The runtime agent also
@@ -655,7 +651,7 @@ export function apply(ctx: Context): void {
 function missingCwd(command: string): CommandResult {
   return {
     kind: 'error',
-    text: formatCommandReport(false, `${command} · 缺少工作区 · 点本行展开/折叠详情`, [
+    text: formatCommandReport(false, `${command} · 缺少工作区`, [
       { title: '原因', lines: ['当前会话没有 cwd，无法读取 .baf/projection'] },
       { title: '处理', lines: ['为会话绑定工作区目录后重试'] },
     ]),

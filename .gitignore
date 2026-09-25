@@ -65,3 +65,7 @@ apps/**/src/**/*.d.ts
 apps/**/src/**/*.js
 apps/**/src/**/*.d.ts.map
 apps/**/src/**/*.js.map
+
+# Chunked host build scratch list (regenerated per machine)
+rebuild-list.tmp.json
+vitest-client.tmp.json

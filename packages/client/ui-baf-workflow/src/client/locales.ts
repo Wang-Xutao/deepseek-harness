@@ -80,7 +80,6 @@ export type WorkflowTabKey =
   | 'detail.artifacts'
   | 'detail.completion'
   | 'detail.failure'
-  | 'detail.tip'
   | 'detail.failureCodes'
   | 'detail.codeLabel'
   | 'detail.fixLabel'
@@ -242,7 +241,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'card.done': 'Done',
   'card.todo': 'Todo',
   'card.current': 'Current',
-  'metrics.pending': 'Model tokens attributed by stage working window',
+  'metrics.pending': 'Model tokens used during this stage',
   'intake.title': 'Change classification',
   'intake.help': 'Intake decides kind/mode/scope before writes. Trigger: chat or New change. Confirm → projection; reject → abandon; supplement → keep chatting.',
   'intake.heuristicNote': 'Kind / scope / confidence are the system\'s keyword pre-judgment (unmatched shows To be determined; confirming does not rewrite them). Mode is the path YOU picked on the classification card; the bug-fix pick settles kind = Bug.',
@@ -300,7 +299,6 @@ export const en: Record<WorkflowTabKey, string> = {
   'detail.artifacts': 'Expected artifacts',
   'detail.completion': 'Completion',
   'detail.failure': 'Failure handling',
-  'detail.tip': 'Plain-language tip',
   'detail.failureCodes': 'Common failures & fixes',
   'detail.codeLabel': 'code',
   'detail.fixLabel': 'fix',
@@ -324,7 +322,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'status.awaiting': 'Awaiting customer',
   'status.abandoned': 'Abandoned',
   'terminal.completed.artifacts': 'Archived under openspec/changes/archive/<changeId>/ — every stage document plus the verify report',
-  'terminal.completed.completion': 'The change passed verification and was archived; the audit trail (projection log) is preserved',
+  'terminal.completed.completion': 'The change passed verification and was archived; the audit trail is preserved',
   'terminal.abandoned.artifacts': 'Kept in place for audit (no archive move); the projection log records the abandon decision',
   'terminal.abandoned.completion': 'The change was abandoned before completion; nothing further runs on it',
   // §22 — pendingGate card.
@@ -447,7 +445,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'card.done': '已作',
   'card.todo': '未作',
   'card.current': '当前',
-  'metrics.pending': '模型 tokens，按各阶段工作时段归属',
+  'metrics.pending': '本阶段消耗的模型用量',
   'intake.title': '变更分类',
   'intake.help': '写源码前判定类型/模式/范围。触发：对话或「新建变更」。确认→投影；拒绝→放弃；补充→继续对话。',
   'intake.heuristicNote': '类型 / 影响范围 / 置信度是系统关键词初判（没匹配上就显示「待定」，确认分类不会改写它们）；模式是你在分类卡上点的路径；选「缺陷修复路径」会把类型定为「缺陷」。',
@@ -509,7 +507,6 @@ export const zh: Record<WorkflowTabKey, string> = {
   'detail.artifacts': '期望产物',
   'detail.completion': '完成条件',
   'detail.failure': '失败处理',
-  'detail.tip': '通俗说明',
   'detail.failureCodes': '常见失败与处理',
   'detail.codeLabel': '错误码',
   'detail.fixLabel': '怎么处理',
@@ -534,9 +531,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'status.template': '空闲',
   'status.awaiting': '待客户确认',
   'status.abandoned': '已放弃',
-  'terminal.completed.artifacts': '归档在 openspec/changes/archive/<变更ID>/——各阶段文档与验收报告',
-  'terminal.completed.completion': '变更通过验证并已归档；投影日志（审计轨迹）保留',
-  'terminal.abandoned.artifacts': '原地保留供审计（不移动归档）；投影日志记录放弃决策',
+  'terminal.completed.artifacts': '归档在 openspec/changes/archive/<变更ID>/——保留各阶段文档与验收报告',
+  'terminal.completed.completion': '变更通过验证并已归档；完整审计记录保留，随时可回查',
+  'terminal.abandoned.artifacts': '文件原地保留供审计（不移动归档）；放弃决定已记录在案',
   'terminal.abandoned.completion': '变更在完成前被放弃；不再有任何流程动作',
   // §22 — pendingGate card.
   'pendingGate.title': '工作区需要先初始化',

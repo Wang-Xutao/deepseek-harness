@@ -5,9 +5,9 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
-  IconCloseOutline16,
-  IconLinkOutline16,
-  IconQuestionOutline14,
+  IconCloseOutlineMedium as IconCloseOutline16,
+  IconLinkOutlineMedium as IconLinkOutline16,
+  IconQuestionOutlineMedium as IconQuestionOutline14,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'

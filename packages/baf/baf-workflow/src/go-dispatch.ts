@@ -27,8 +27,9 @@
  * stamps `source` as slash/gate-card/tab AND passes the `dispatchOrigin:
  * 'customer'` marker; the coordinator requires the marker, so host-internal
  * drives (the orchestrator's verify auto-drive), CLI scripts, and model tools
- * still cannot dispatch. The order itself is stamped `source.kind: 'plugin'`
- * with `form: 'go-dispatch'`, so the chat client renders it as a **read-only
+ * still cannot dispatch. The order itself is stamped `source.kind:
+ * 'baf-workflow'` (producer-owned, v4 rule) with `form: 'go-dispatch'`, so the
+ * chat client renders it as a **read-only
  * context row** (no composer, no customer bubble, never editable, never
  * mistakable for the customer's own words). Dispatch is ask-side: it writes no
  * projection event, moves no state, and is not a gate resolution (§22.1
@@ -50,9 +51,6 @@ import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { DOC_REQUIREMENTS_ZH } from './stages/gates.ts'
 import { sharedHostSet } from './host-memory.ts'
-
-/** The plugin id every work order is attributed to (`commands.ts` `name`). */
-export const DISPATCH_PLUGIN = 'baf-commands'
 
 /** Artifact-authoring stages a work order can address (`implement` edits the allowlist). */
 export type DispatchNode = 'open' | 'clarify' | 'design' | 'plan' | 'implement'
@@ -218,8 +216,8 @@ export function workOrderText(signal: DispatchSignal): string {
 
 /**
  * Wrap one work order as the durable message a session receives. Never
- * `kind: 'user'`: the plugin source is what makes the client render a
- * read-only context row instead of a customer bubble.
+ * `kind: 'user'`: the `baf-workflow` producer source is what makes the client
+ * render a read-only context row instead of a customer bubble.
  * @param signal - the observed gap.
  * @returns the identified, frozen user-role message.
  */
@@ -227,8 +225,7 @@ export function workOrderMessage(signal: DispatchSignal): UserMessage {
   return createUserMessage({
     content: [{ type: 'text', text: workOrderText(signal) }],
     source: {
-      kind: 'plugin',
-      plugin: DISPATCH_PLUGIN,
+      kind: 'baf-workflow',
       form: 'go-dispatch',
       changeId: signal.changeId,
       node: signal.node,

@@ -39,6 +39,9 @@
       "path": "../../goal/goal"
     },
     {
+      "path": "../../baf/baf-workflow"
+    },
+    {
       "path": "../../feedback/message-feedback"
     },
     {

@@ -68,6 +68,10 @@ export function contextProducer(source: unknown): ContextProducerView {
       return { role: 'inject', label: joined(collect(record, 'changes', 'path')) ?? kind }
     case 'skill-invocation':
       return { role: 'inject', label: readString(record, 'name') ?? kind }
+    case 'baf-workflow':
+      // The BAF workflow producer's command-generated context (work orders);
+      // a durable kind the customer should read as a product name, not an id.
+      return { role: 'inject', label: 'BAF 工作流' }
     default:
       // MessageSourceMap is merge-extensible; keep an unknown producer
       // visible by its durable kind.

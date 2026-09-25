@@ -547,13 +547,9 @@ export function deriveTraceGraphPipeline(
       request: {
         model: node.requestConfig?.model
           ?? request?.prompt?.config.model
-          ?? node.provenance?.model
-          ?? request?.provenance?.model
           ?? '-',
         provider: node.requestConfig?.provider
           ?? request?.prompt?.config.provider
-          ?? node.provenance?.provider
-          ?? request?.provenance?.provider
           ?? '-',
         systemCount: request?.prompt?.system ? (request.prompt.system.trim() === '' ? 0 : 1) : 0,
         userCount: 0,
@@ -580,8 +576,8 @@ export function deriveTraceGraphPipeline(
         : Math.max(0, request.completedAt - request.startedAt),
       usage: usageOf(request.usage),
       request: {
-        model: request.prompt?.config.model ?? request.provenance?.model ?? '-',
-        provider: request.prompt?.config.provider ?? request.provenance?.provider ?? '-',
+        model: request.prompt?.config.model ?? '-',
+        provider: request.prompt?.config.provider ?? '-',
         systemCount: request.prompt?.system ? (request.prompt.system.trim() === '' ? 0 : 1) : 0,
         userCount: 0,
         toolCount: request.prompt?.tools.length ?? 0,

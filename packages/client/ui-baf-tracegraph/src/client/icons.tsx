@@ -5,7 +5,7 @@
  * ui-primitives, but this module is the only client boundary that needs them).
  */
 import {
-  IconChevronRightOutline14, IconCloseOutline16, IconThinkOutline14,
+  IconChevronRightOutlineMedium, IconCloseOutlineMedium, IconThinkOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CSSProperties } from 'react'
 
@@ -245,6 +245,10 @@ export function IconReturnOutline14({ size = 14, className, style }: IconProps) 
   )
 }
 
+// Re-exported under the module's historical 14/16 names so the view module's
+// imports stay stable; the primitives tier they alias is Medium.
 export {
-  IconChevronRightOutline14, IconCloseOutline16, IconThinkOutline14,
+  IconChevronRightOutlineMedium as IconChevronRightOutline14,
+  IconCloseOutlineMedium as IconCloseOutline16,
+  IconThinkOutlineMedium as IconThinkOutline14,
 }

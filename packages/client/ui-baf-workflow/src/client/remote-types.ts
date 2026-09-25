@@ -1,40 +1,12 @@
 /**
  * Client-side module merge for the bafWorkflowView Remote namespace.
- * Mirrors lib/typert.remote-client.d.ts so the Client face typechecks without
- * depending on Host build artifacts beyond the committed remote contribution.
+ *
+ * Master pattern: the namespace interfaces come from the generator-owned
+ * `./remote` contribution (lib/typert.remote-client.d.ts), pulled in with a
+ * type-only self-reference — the same wiring job-controller's client uses.
+ * Keeping no hand-written copy means the Client face can never drift from the
+ * Host artifacts typert-loader actually mounts.
  */
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import type { WorkflowDashboardView, WorkflowTabView } from '@deepseek-ai/dsh-baf-core/types'
-import type {
-  BafWorkflowChangeRequest,
-  BafWorkflowResumeRequest,
-  BafWorkflowSessionRequest,
-  BafWorkflowStartIntakeRequest,
-  BafWorkflowTransitionRequest,
-} from '../types.ts'
-
-declare module '@deepseek-ai/dsh-typert-protocol' {
-  interface TypertRemoteNamespace$626166576f726b666c6f7756696577 {
-    confirmIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
-    dashboard: (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowDashboardView>>
-    getTabView: (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabView>>
-    rejectIntake: (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
-    resume: (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabView>>
-    startIntake: (request: BafWorkflowStartIntakeRequest) => Promise<RemoteResult<WorkflowTabView>>
-    transition: (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabView>>
-  }
-  interface TypertRemoteMap {
-    'bafWorkflowView/dashboard': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowDashboardView>>
-    'bafWorkflowView/confirmIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
-    'bafWorkflowView/getTabView': (request: BafWorkflowSessionRequest) => Promise<RemoteResult<WorkflowTabView>>
-    'bafWorkflowView/rejectIntake': (request: BafWorkflowChangeRequest) => Promise<RemoteResult<WorkflowTabView>>
-    'bafWorkflowView/resume': (request: BafWorkflowResumeRequest) => Promise<RemoteResult<WorkflowTabView>>
-    'bafWorkflowView/startIntake': (request: BafWorkflowStartIntakeRequest) => Promise<RemoteResult<WorkflowTabView>>
-    'bafWorkflowView/transition': (request: BafWorkflowTransitionRequest) => Promise<RemoteResult<WorkflowTabView>>
-  }
-  interface TypertRemoteNamespaceMap {
-    'bafWorkflowView': TypertRemoteNamespace$626166576f726b666c6f7756696577
-  }
-}
+import type {} from '@deepseek-ai/dsh-client-ui-baf-workflow/remote'
 
 export {}

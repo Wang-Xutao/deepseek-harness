@@ -185,14 +185,11 @@
     // Baf-only rename of master/ui-sidebar-documentpreview. See
     // tsconfig.client.json for the rationale.
     "packages/client/ui-sidebar-textpreview",
-    // Baf-only packages: orphaned from build graph (no refs from root
-    // tsconfig), no usable tsconfig entrypoint. Their test files use
-    // APIs from packages refactored in master, so the typecheck fails
-    // at the file-not-in-project gate. Excluded so build:lib still
-    // passes — runtime wiring comes via overlay/ and the baf-mode
-    // loader, not through these tests.
-    "packages/baf/**",
-    "packages/client/ui-baf-*/**",
+    // Baf-only packages: src compiles through the restored project
+    // references; the test files still reference APIs master removed and
+    // stay excluded from this aggregate until ported.
+    "packages/baf/*/tests/**",
+    "packages/client/ui-baf-*/tests/**",
     "packages/e2b/**",
     "packages/preset/agent-presets/**",
     // Baf-only orphan files in apps/desktop: src/preload.ts and
@@ -224,6 +221,7 @@
     { "path": "./packages/client/ui-theme/tsconfig.host.json" },
     { "path": "./packages/client/ui-chat/tsconfig.host.json" },
     { "path": "./packages/client/ui-conversation/tsconfig.host.json" },
+    { "path": "./packages/client/ui-baf-workflow/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings-general/tsconfig.host.json" },
 
@@ -484,6 +482,13 @@
     { "path": "./packages/lsp/tool-lsp" },
     { "path": "./apps/cli" },
     { "path": "./apps/desktop-host" },
-    { "path": "./apps/desktop/tsconfig.host.json" }
+    { "path": "./apps/desktop/tsconfig.host.json" },
+    { "path": "./packages/baf/baf-core" },
+    { "path": "./packages/baf/baf-guard" },
+    { "path": "./packages/baf/baf-openspec" },
+    { "path": "./packages/baf/baf-quality" },
+    { "path": "./packages/baf/baf-scaffold" },
+    { "path": "./packages/baf/baf-standard" },
+    { "path": "./packages/baf/baf-workflow" }
   ]
 }

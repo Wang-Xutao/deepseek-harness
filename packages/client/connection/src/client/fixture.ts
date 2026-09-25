@@ -391,6 +391,16 @@ interface FixtureWorkspace {
   updatedAt: string
 }
 
+// 【变更】2026-09-25: the shared `plugin` source kind is retired in format v4
+// (every source must be producer-owned); the fixture's synthesized context
+// rows now carry their own producer kind.
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /** Fixture-synthesized injected context row (dev history only). */
+    fixture: { kind: 'fixture' }
+  }
+}
+
 function text(t: string): ContentBlock[] {
   return [{ type: 'text', text: t }]
 }
@@ -741,7 +751,7 @@ function buildAlphaLog(): SessionEvent[] {
       })
     }
     if (turn % 9 === 4) {
-      push({ type: 'user/message', surfaceOp: 'append', data: userMessage(text(`[fixture] 上下文注入（turn ${turn}）`), { kind: 'plugin', plugin: 'fixture' }) })
+      push({ type: 'user/message', surfaceOp: 'append', data: userMessage(text(`[fixture] 上下文注入（turn ${turn}）`), { kind: 'fixture' }) })
     }
     push({ type: 'step/start', data: { turn, step: 0 } })
     const withTool = turn % 5 === 2

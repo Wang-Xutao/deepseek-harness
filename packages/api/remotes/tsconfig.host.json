@@ -36,6 +36,9 @@
       "path": "../../goal/goal"
     },
     {
+      "path": "../../baf/baf-workflow"
+    },
+    {
       "path": "../../preset/agent-preset-registry"
     },
     {

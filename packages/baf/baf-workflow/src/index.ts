@@ -13,6 +13,9 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+// Type-only: the ctx.settings Context merge (SettingsForms) this plugin's
+// Config participates in.
+import type {} from '@deepseek-ai/dsh-settings'
 import {
   BafError,
   buildRouteStatusView,
@@ -46,6 +49,7 @@ export * from './route.ts'
 export * from './route-audit.ts'
 export * from './phase-route.ts'
 export * from './projection.ts'
+export type { BafWorkflowProjectionAppended } from './projection-events.ts'
 export * from './transition.ts'
 export * from './intake.ts'
 export * from './workflow-service.ts'
@@ -177,9 +181,6 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Composition config for {@link BafWorkflow}. */
-export interface Config {}
-
 /**
  * Owns frozen enterprise/profile route state, resolve+audit helpers, and a
  * file-backed {@link WorkflowService} when a workspace root is known.
@@ -189,7 +190,11 @@ export interface Config {}
  * - .agents/notes/implemented/feature/2026-09-07-baf-workflow-phase4-projection-tab.md
  */
 export class BafWorkflow extends Service {
-  static Config: z<Config> = z.object({})
+  // 【变更】2026-09-25: the 轨迹图 toggle is a device-local browser preference
+  // (localStorage, ui-baf-tracegraph) — this preset-scoped mount's settings
+  // namespace is unreachable from the host settings controller, so a config
+  // field here silently never persisted (memory-form set() no-op).
+  static Config = z.object({})
 
   private enterprisePolicy: EnterpriseRoutePolicy | undefined
   private routeProfile: RouteProfile | undefined
@@ -198,7 +203,7 @@ export class BafWorkflow extends Service {
   private store: ProjectionStore | undefined
   private workflow: WorkflowService | undefined
 
-  constructor(ctx: Context, _config: Config) {
+  constructor(ctx: Context, _config: Record<string, never>) {
     super(ctx, 'bafWorkflow')
   }
 

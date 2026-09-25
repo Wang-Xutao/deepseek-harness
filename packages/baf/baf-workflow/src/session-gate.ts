@@ -50,6 +50,9 @@ import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+// Type-only: brings the `'agent-preset/selected'` Events declaration into this
+// compilation face (the registry emits it app-wide; no runtime import).
+import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import { isBafError } from '@deepseek-ai/dsh-baf-core'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
@@ -319,7 +322,7 @@ export function renderWelcomeCard(input: {
 }): CommandResult {
   const { cwd, probe, binding, guardSummary } = input
   const actives = binding.actives
-  const headline = `BAF 已就绪 · ${basename(cwd) || cwd} · ${bindingConclusion(binding)} · 点本行展开/折叠详情`
+  const headline = `BAF 已就绪 · ${basename(cwd) || cwd} · ${bindingConclusion(binding)}`
 
   const sections: { title: string; lines: readonly string[] }[] = [
     { title: '当前状态', lines: bindingLines(actives) },
@@ -554,6 +557,22 @@ export function apply(ctx: Context): void {
   for (const agent of ctx.agents.list()) install(agent)
   ctx.on('agent/created', ({ agent }) => { install(agent) })
   ctx.on('agent/disposed', ({ agent }) => { dispose(agent) })
+  // 【变更】2026-09-25 (post-master-merge regression): a blank session created
+  // under one preset and then switched to BAF re-links its agent scope via the
+  // registry's `recompose` WITHOUT re-firing `agent/created`, so the two paths
+  // above never install it — the welcome card and the 启动门 prompt section
+  // silently miss the session (demo8: header `standard`, then
+  // `agent-preset/selected baf`, no gate at all). The registry re-emits
+  // `'agent-preset/selected'` for every committed selection — string-name
+  // events broadcast app-wide, so this standing mount hears it. Entering BAF
+  // installs; leaving BAF unwinds (section fiber + gate dedupe) so the prompt
+  // section never outlives the composition switch.
+  ctx.on('agent-preset/selected', (sessionId, agentPreset) => {
+    const agent = ctx.agents.get(sessionId)
+    if (agent === undefined) return
+    if (agentPreset === 'baf') install(agent)
+    else dispose(agent)
+  })
   ctx.effect(() => async () => {
     for (const controller of inflight.values()) controller.abort()
     inflight.clear()

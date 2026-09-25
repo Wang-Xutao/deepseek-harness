@@ -52,9 +52,9 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetStandardName: 'Standard mode',
   presetStandardDescription:
     'Work with code, files, and information. Suitable for most tasks, with search, editing, terminal commands, and other tools available as needed.',
-  presetBafName: 'BAF workflow mode',
+  presetBafName: 'BAF mode',
   presetBafDescription:
-    'A structured workflow tailored to product engineering tasks with quality gates.',
+    'The core of enterprise-grade AI coding: a staged workflow (requirement, design, plan, implement, verify, archive) with quality gates for product engineering tasks.',
   presetPtcName: 'PTC mode',
   presetPtcDescription:
     'Includes all Standard mode capabilities. Better suited to tasks that call tools in batches and then filter, organize, deduplicate, count, or summarize the results.',
@@ -100,8 +100,8 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
 
   presetStandardName: '标准模式',
   presetStandardDescription: '处理代码、文件和资料，适合大多数任务。Agent 会按需使用检索、编辑和终端等工具。',
-  presetBafName: 'BAF 流程模式',
-  presetBafDescription: '为产品工程任务定制的工作流，内置质量门控。',
+  presetBafName: 'BAF 模式',
+  presetBafDescription: '企业级 AI 编程工作流的核心：按需求、设计、计划、实现、验证、归档分段推进，每段内置质量门控，专为产品工程任务定制。',
   presetPtcName: 'PTC 模式',
   presetPtcDescription: '包含标准模式的所有能力，更适合批量调用工具，并对结果进行筛选、整理、去重、统计或汇总的任务。',
   presetMinimalName: '极简模式',

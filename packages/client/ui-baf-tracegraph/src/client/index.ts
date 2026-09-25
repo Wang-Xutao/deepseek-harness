@@ -1,16 +1,19 @@
 /**
  * Browser 轨迹图 plugin: conversation view tab + settings contributions.
  *
- * - The conversation view tab is gated on the durable
- *   `BafWorkflowSettings.showTraceGraph` switch — when it is `false` the
- *   plugin never registers a `conversation.view` entry.
+ * - The conversation view tab is gated on the device-local
+ *   trace-graph preference switch — when it is `false` the plugin never
+ *   registers a `conversation.view` entry.
+ * - The preference persists in localStorage via the client snapshot store
+ *   (【变更】2026-09-25: the host settings namespace round-trip was a silent
+ *   no-op after the master merge; see ../workflow-settings.ts).
  * - The toggle lives under General settings; the dedicated 工作流 section
  *   keeps placeholders for future BAF workflow preferences.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -18,10 +21,12 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-trajectory/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workflow-run/client'
 import type {} from '@deepseek-ai/dsh-session-stats/client'
-import type { BafWorkflowSettings } from '../workflow-settings.ts'
-import { SHOW_TRACE_GRAPH_FIELD } from '../workflow-settings.ts'
+import {
+  INITIAL_TRACE_GRAPH_PREFS, TRACE_GRAPH_PREF_KEY, type BafWorkflowSettings,
+} from '../workflow-settings.ts'
 import {
   en, enWorkflow, NS, WORKFLOW_NS, zh, zhWorkflow,
   type TraceGraphKey, type WorkflowKey,
@@ -43,20 +48,20 @@ export type { TraceGraphKey, WorkflowKey } from './locales.ts'
 
 /** Required services. */
 export const inject = [
-  'slots', 'sessions', 'uiConversation', 'locale', 'settingsScope',
+  'slots', 'sessions', 'uiConversation', 'uiWorkspace', 'locale',
 ] as const
 
 /**
- * Project one settings namespace scope into a HostObservable view.
- * @param scope - the baf-workflow namespace scope.
- * @returns an observable returning the current decoded section.
+ * Project the device-local preference store into a HostObservable view.
+ * @param store - the persisted preference store.
+ * @returns an observable returning the current preference snapshot.
  */
-function observeBafWorkflowSettings(
-  scope: SettingsScope<BafWorkflowSettings>,
+function observeTraceGraphPrefs(
+  store: SnapshotStore<BafWorkflowSettings>,
 ): HostObservable<BafWorkflowSettings | undefined> {
   return {
-    getSnapshot: () => scope.getSnapshot().value as BafWorkflowSettings | undefined,
-    subscribe: listener => scope.subscribe(listener),
+    getSnapshot: () => store.getSnapshot(),
+    subscribe: listener => store.subscribe(listener),
   }
 }
 
@@ -74,11 +79,15 @@ export function apply(ctx: ClientContext): void {
   const tView = ctx.locale.bind(NS)
   const tSection = ctx.locale.bind(WORKFLOW_NS)
 
-  const settings = ctx.settingsScope.bind<BafWorkflowSettings>({ namespace: 'baf-workflow' })
+  const prefs = createSnapshotStore(INITIAL_TRACE_GRAPH_PREFS, {
+    persist: { name: TRACE_GRAPH_PREF_KEY },
+  })
 
   const settingsInject = (): TraceGraphRowInjected => ({
-    hooks: { settings: observeBafWorkflowSettings(settings) },
-    setShowTraceGraph: value => settings.set(SHOW_TRACE_GRAPH_FIELD, value),
+    hooks: { settings: observeTraceGraphPrefs(prefs) },
+    setShowTraceGraph: async (value) => {
+      prefs.set({ showTraceGraph: value })
+    },
   })
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
@@ -99,7 +108,9 @@ export function apply(ctx: ClientContext): void {
   }, WorkflowSection))
 
   const viewInject = (): TraceGraphViewInjected => ({
-    ensureOpen: id => ctx.sessions.ensureOpen(id),
+    ensureOpen: async (id) => {
+      ctx.uiWorkspace.openSession(id)
+    },
     childSource: (id: SessionId) => {
       const binding = ctx.sessions.binding(id)
       if (binding === undefined) return undefined
@@ -134,16 +145,16 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => {
     let current: (() => void) | undefined
     const adopt = (): void => {
-      const enabled = settings.getSnapshot().value?.showTraceGraph ?? true
+      const enabled = prefs.getSnapshot().showTraceGraph
       if (current !== undefined) current()
       current = enabled ? installView() : undefined
     }
-    const off = settings.subscribe(adopt)
+    const off = prefs.subscribe(adopt)
     adopt()
     return () => {
       off()
       if (current !== undefined) current()
       current = undefined
     }
-  }, 'ui-baf-tracegraph: trace-graph tab gated by baf-workflow.showTraceGraph')
+  }, 'ui-baf-tracegraph: trace-graph tab gated by the device-local preference')
 }

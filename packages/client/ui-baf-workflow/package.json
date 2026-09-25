@@ -48,8 +48,7 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-session",
-        "@deepseek-ai/dsh-client-ui-sidebar-right",
-        "@deepseek-ai/dsh-agent-presets"
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
       ],
       "platform": "web"
     },
@@ -64,14 +63,13 @@
     }
   },
   "scripts": {
-    "bundle": "tsdown && node ./copy-typert-artifacts.mjs",
+    "bundle": "tsdown",
     "watch": "tsdown --watch"
   },
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-api-remotes": "workspace:^",
-    "@deepseek-ai/dsh-agent-presets": "workspace:^",
     "@deepseek-ai/dsh-baf-core": "workspace:^",
     "@deepseek-ai/dsh-baf-workflow": "workspace:^",
     "@deepseek-ai/dsh-client-locale": "workspace:^",
@@ -87,7 +85,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-agent-presets": "workspace:^",
+    "@deepseek-ai/dsh-agent-preset-registry": "workspace:*",
     "@deepseek-ai/dsh-api-remotes": "workspace:^",
     "@deepseek-ai/dsh-baf-core": "workspace:^",
     "@deepseek-ai/dsh-baf-workflow": "workspace:^",

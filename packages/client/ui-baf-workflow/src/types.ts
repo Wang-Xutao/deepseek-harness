@@ -100,25 +100,10 @@ export interface BafWorkflowGateResolveRequest {
 }
 
 /**
- * §22.19 R5 — payload of `baf-workflow/projection-appended`: the host's
- * per-workspace projection bus (§13 R8, now process-global per workspace)
- * forwards one notification per appended event so the web Tab can refresh
- * in real time instead of waiting for a focus/mount pull.
+ * §22.19 R5 — payload of `baf-workflow/projection-appended`. The interface
+ * and the cordis Events declaration live with the projection domain in
+ * dsh-baf-workflow (packages/baf/baf-workflow/src/projection-events.ts — a
+ * leaf module) so the api-remotes forwarding allowlist and this client read
+ * one type; re-exported here for the package's historical import site.
  */
-export interface BafWorkflowProjectionAppended {
-  /** Workspace root whose projection grew (compare against the session cwd). */
-  readonly cwd: string
-  /** The change that received the event. */
-  readonly changeId: string
-}
-
-declare module '@deepseek-ai/cordis' {
-  interface Events {
-    /**
-     * One projection event was appended in this workspace (host process bus).
-     * @mode emit
-     * @param payload - workspace cwd + the change that grew.
-     */
-    'baf-workflow/projection-appended'(payload: BafWorkflowProjectionAppended): void
-  }
-}
+export type { BafWorkflowProjectionAppended } from '@deepseek-ai/dsh-baf-workflow/projection-events'

@@ -52,6 +52,11 @@ const env = {
 const steps = [
   ['--filter', '@deepseek-ai/dsh-client-ui-sidebar', 'run', 'bundle'],
   ['--filter', '@deepseek-ai/dsh-client-ui-renderer', 'run', 'bundle'],
+  // 【Change】2026-09-24 (master merge): master moved the runtime product
+  // title into ui-layout's AppFrame (process.env.DSH_CLIENT_TITLE ?? locale
+  // 'DSH 本地构建'), served from lib/client.js — bundle it too or the shell
+  // title reverts to the local-build default after any client rebuild.
+  ['--filter', '@deepseek-ai/dsh-client-ui-layout', 'run', 'bundle'],
   ['--filter', '@deepseek-ai/dsh-web-frontend', 'run', 'build'],
 ]
 

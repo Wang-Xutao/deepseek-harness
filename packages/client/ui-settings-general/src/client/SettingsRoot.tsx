@@ -14,8 +14,9 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import clsx from 'clsx'
 import {
   ConnectionIndicator,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
-  IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconBranchOutlineMedium, IconCloseOutlineRegular,
+  IconDataOutlineMedium, IconDownloadOutlineMedium, IconPersonalizationOutlineMedium, IconSettingsOutlineMedium,
+  IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
@@ -34,6 +35,10 @@ function navIcon(id: string) {
   if (id === 'agent-presets') return <IconAgentPresetOutlineMedium className={css.navIcon} size={16} />
   if (id === 'plugins') return <IconPersonalizationOutlineMedium className={css.navIcon} size={16} />
   if (id === 'archived-sessions') return <IconArchiveOutlineMedium className={css.navIcon} size={16} />
+  // 【变更】2026-09-25: 工作流/版本与更新 get their own glyphs — a shared gear
+  // made three sections read as one generic "settings" bucket.
+  if (id === 'workflow') return <IconBranchOutlineMedium className={css.navIcon} size={16} />
+  if (id === 'version-updates') return <IconDownloadOutlineMedium className={css.navIcon} size={16} />
   return <IconSettingsOutlineMedium className={css.navIcon} size={16} />
 }
 

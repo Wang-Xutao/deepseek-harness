@@ -41,10 +41,12 @@
   // in turn. `exclude` wins over `include`, so the test glob above stays broad.
   "exclude": [
     "packages/client/*/tests/**/*.host.spec.ts",
-    // Baf-only packages: orphaned from build graph, see tsconfig.host.json
-    // for the rationale.
-    "packages/baf/**",
-    "packages/client/ui-baf-*/**",
+    // Baf-only packages: their src builds through the restored project
+    // references below; the test files still reference APIs master removed
+    // (husk-era agent-presets, queue store, subagent lineage) and stay
+    // out of this aggregate until ported.
+    "packages/baf/*/tests/**",
+    "packages/client/ui-baf-*/tests/**",
     "packages/e2b/**",
     "packages/preset/agent-presets/**",
     // Baf-only rename of master/ui-sidebar-documentpreview. The merged
@@ -124,6 +126,9 @@
     { "path": "./packages/client/ui-layout" },
     { "path": "./packages/client/ui-sidebar" },
     { "path": "./packages/client/ui-brand-official" },
+    { "path": "./packages/client/ui-baf-desktop" },
+    { "path": "./packages/client/ui-baf-tracegraph" },
+    { "path": "./packages/client/ui-baf-workflow/tsconfig.client.json" },
     { "path": "./packages/client/ui-approval" },
     { "path": "./packages/client/ui-chat/tsconfig.client.json" },
     { "path": "./packages/client/ui-conversation/tsconfig.client.json" },
