@@ -1,6 +1,6 @@
 {
   "name": "baf-dsh",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "baf-dsh desktop shell over DeepSeek Harness web",
   "author": "BAF",
   "private": true,

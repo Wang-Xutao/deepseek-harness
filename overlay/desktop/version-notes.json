@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "merge master 后八问题批次：设置页（轨迹图开关改本地持久化并生效 / BAF 模式重命名·第二位·新会话默认进 BAF / 工作流与版本更新图标区分）+ 工作流（新会话自动触发 baf-welcome / baf 指令卡默认展开 / /baf-go v4 producer-owned source 修复·clarify 卡死链路全通 / 右侧栏阶段详情通俗化·去裸枚举）",
-    "notesEn": "Post-master-merge eight-issue round: settings (trace-graph switch persists locally, BAF mode renamed/reordered/default, distinct nav icons) + workflow (baf-welcome auto-fires, command cards expanded by default, /baf-go v4 producer-owned source fix unblocking clarify->design->plan, plain-language stage details)"
+    "notesZh": "demo22 四问题批次：会话弹窗七点改版（分段列表/变更号固定右上角/产物可点链接/横排主次按钮/修改意见回路/会话面板内模态）+ 输出骨架去粗体（** 【】** 反复复发根修：直接去 **，括号即标题）+ 语言跟随（persona 中英双份语言跟随段）+ 确认等待停表（intake 窗口不计 duration，running 标志冻结走表）。详见 enterprise-workflow.md §22.23。",
+    "notesEn": "Demo22 four-issue round: session dialog redesign (segmented lists, change chip top-right, clickable artifacts, horizontal primary/secondary buttons, revision loop, in-pane modal) + persona skeleton de-bolded (final fix: drop ** entirely, brackets are the heading) + language-follow paragraphs (CN+EN) + waiting-not-counted metric (intake window excluded, running flag freezes interpolation). See enterprise-workflow.md §22.23 for the panorama."
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
