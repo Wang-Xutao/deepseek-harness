@@ -1,0 +1,5 @@
+# 【变更】2026-09-28: hidden (dotfile-prefixed) verify scripts are
+# session-local probe tools, not part of the acceptance suite. The
+# conventional verify-batch*.mjs / verify-timer.mjs files keep being committed
+# (they ARE the acceptance harness). Dotfile names signal local-only.
+.verify-*.mjs

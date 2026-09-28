@@ -2277,6 +2277,13 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 | `implement` in-progress（full-go-path） | 检查 `plan.json`：有未完成 → 等模型（手敲 `/baf-go` 派单）；全 done → `driveImplementStage` | `verify` | — |
 | `implement` in-progress（fast-path） | 检查 `fastpath-ledger.json`：有未完成 → 等模型；全 done → `driveImplementStage` | 触发 T15 则升级（见下）；否则 `verify` | — |
 | `verify`（`enterStage` 成功） | `pipeline.driveVerifyStage` | 通过 → **门 B**；失败 → 回 `implement`（T11 退回卡同样派单） | 通过时 **■** |
+
+**【变更】2026-09-28（用户问题 8）：验证检查单 checklist.md（双前置硬门）**
+
+- **产物**：`openspec/changes/<id>/checklist.md` —— 实现阶段完成后、验证开始前由模型生成（工单 `IMPLEMENT_REQUIREMENTS_ZH` 教学项），每行一个 `- [ ] 检查项`，来源 = plan.json 各任务 verify 命令 + 验收标准。rail 四态与 tasks.md 同构（尚未生成 → 仍是未填的模板 → 已计划（有未勾项）→ 已填写（全 `[x]`）），两条路径（full-go / bug-fix）都显示。
+- **入口前置（verify-advance 前）**：`checklistGate`（stages/gates.ts）—— checkist 缺失 / 仍是模板 / 无检查项 → `/baf-go` 拒绝卡「验证检查单未就绪 · 不能开始验证」+ 派 `checklist-missing` 工单（implement 节点，产物指 checklist.md）。确认卡（verify-advance）只在通过后才弹，弹的即客户对检查单的确认。
+- **归档前置（门 B 前）**：`checklistTickedGate` —— verify 通过后若仍有 `- [ ]` 未勾项 → 拒绝卡「检查单未全部确认 · 不能归档」逐项列出未确认项 + 派 `checklist-open` 工单（verify 节点）；全 `[x]` 才 park 门 B。baf-guard 同步放行 **verify 阶段仅 checklist.md** 可写（勾选动作），其余产物仍保护。
+- **后续版本**：checklist 的分节模板与用户自定义裁剪（哪些检查项类别默认包含）—— 本版先落地硬门 + 全量清单。
 | `archive`（已通过 verify） | `pipeline.driveArchiveStage(..., humanConfirmed: true)`（**只在客户确认后**） | `archived` | **■** |
 | `drift` | **转 `/baf-workflow-resume` 候选卡**（§19.4） | 客户选点后回到该节点 | **■** |
 | `completed` / `abandoned` | 错误卡「当前工作流已终态；请新开一个会话」 | — | — |
@@ -2335,7 +2342,7 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 **门 A：N3 design 完成 → N4 plan 之前**
 
 - 触发：`pipeline.completeDocStage('design')` 返回成功、`status.current === 'design'` 且 `status.nodes.design === 'completed'` 时，coordinator **不**自动调用 `beginDocStage('plan')`。
-- 卡片标题：`自动驱动 · 设计文档已实现 · awaiting_customer_confirm · 点本行展开/折叠详情`。
+- 卡片标题：`自动驱动 · 设计文档已实现 · awaiting_customer_confirm`。
 - **解锁（§22.17 通道在场，desktop 主路径）**：coordinator 停靠时即弹 §22.17 交互确认框（复用 `userQuestions` 瀑布）；之后 `/baf-go` 每次都**重弹**确认框，弹窗里点「确认设计，进入计划」→ `beginDocStage('plan')`；`/baf-go-confirm` 不弹框直接进 plan。
 - **解锁（无 §22.17 通道，CLI / 测试 / 降级）**：客户再敲一次 `/baf-go`。coordinator 收到后从 projection 重读状态、确认当前为 `design completed`，再 `beginDocStage('plan')`（既有语义原样保留）。
 - 客户回复别的内容：卡片重放、状态不动；模型可以在同 session 自然语言里继续讨论设计修改，但 `completeDocStage('design')` 不会被 coordinator 重跑，直到客户确认。
@@ -2344,7 +2351,8 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 **门 B：N6 verify 通过 → N7 archive 之前**
 
 - 触发：`pipeline.driveVerifyStage` 返回 `result.backToImplement === undefined` 且 `status.current === 'verify'` 且 `status.nodes.verify === 'completed'` 时，coordinator **不**自动调用 `pipeline.driveArchiveStage`。
-- 卡片标题：`自动驱动 · verify 已通过 · awaiting_customer_confirm · 点本行展开/折叠详情`。
+- 【变更】2026-09-28（用户问题 8）：门 B 之前先过 `checklistTickedGate` —— checklist.md 全部 `[x]` 才 park/渲染归档卡（见 §18.4.2 checklist 块）。
+- 卡片标题：`自动驱动 · verify 已通过 · awaiting_customer_confirm`。
 - **解锁（§22.17 通道在场）**：停靠时即弹确认框；`/baf-go` 重弹、弹窗点「确认归档」→ coordinator 校验 verify 报告未过期、依赖未漂移（与 §5.3 N7 既有 `verify-report.json` 新鲜度判定一致）→ `driveArchiveStage(changeId, humanConfirmed: true)`；`/baf-go-confirm` 不弹框直接归档。
 - **解锁（无 §22.17 通道）**：客户敲 `/baf-go` → 同上校验后归档（既有语义原样保留）。
 - 客户回复别的内容：卡片重放、状态不动。
@@ -2559,7 +2567,7 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 3. 有信号 → 卡片列出候选节点 + 每个候选的「为什么」（触发信号）+ 回退后需要重跑的阶段：
 
 ```
-✗ drift detected · chg-0007 · 当前节点失效 · 请选择复位目标 · 点本行展开/折叠详情
+✗ drift detected · chg-0007 · 当前节点失效 · 请选择复位目标
 ────────────────────────────────
 类型：系统斜杠指令（不是大模型回复）
 
@@ -2648,10 +2656,10 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 ```
 
 - section **顺序固定**、按需裁剪；**不许**自创 section 名。
-- **标题（headline）约定**（沿用 2026-09-14 commit 的 tier-prefix 约定；2026-09-20 §22.17 H 起全部 BAF 卡片首行统一以 `· 点本行展开/折叠详情` 结尾——含错误卡 / 门卡 / 缺参卡，不再是「指令全文」措辞或无后缀）：
-  - 成功：`自动驱动 · <阶段> 已完成 · 下一步 <节点> · 点本行展开/折叠详情`
-  - 待确认：`自动驱动 · <阶段> 已完成 · awaiting_customer_confirm · 点本行展开/折叠详情`
-  - 错误：`<错误码> · <一句话结论> · 下一步 <客户动作> · 点本行展开/折叠详情`
+- **标题（headline）约定**（沿用 2026-09-14 commit 的 tier-prefix 约定；2026-09-20 §22.17 H 起全部 BAF 卡片首行统一以 `· 点本行展开/折叠详情` 结尾；【变更】2026-09-28（用户问题 6）该后缀**取消**——web 端 GenericCommandCard 已默认展开，标题不再携带展开提示，CLI 镜像同步收口）：
+  - 成功：`自动驱动 · <阶段> 已完成 · 下一步 <节点>`
+  - 待确认：`自动驱动 · <阶段> 已完成 · awaiting_customer_confirm`
+  - 错误：`<错误码> · <一句话结论> · 下一步 <客户动作>`
 - `【状态】`恒含五项：change id、mode、当前节点、节点状态、「距离完成还差 N 步」。
 - `【下一步】`必须写成**客户能照做的动作**（「回复 `/baf-go`」「回复 `/baf-workflow-resume verify`」），不写「继续工作」这类空话。
 
@@ -2660,7 +2668,7 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 §18.3 的启动门输出，固定用这个骨架：
 
 ```
-✓ BAF 模式已就绪 · <workspace 名> · 无未完成工作流 · 点本行展开/折叠详情
+✓ BAF 模式已就绪 · <workspace 名> · 无未完成工作流
 ────────────────────────────────
 类型：系统斜杠指令（不是大模型回复）
 
@@ -3260,7 +3268,7 @@ GATE_REGISTRY 选项（如门 A「确认设计」）的 `command: '/baf-go'` 在
 > **第二起事故**（`tmp/session/2.jsonl`，0.0.15 便携版实测）：模型行为全部正确——先问需求、再调 `baf_gate_ask {"gateId":"scaffold"}`、客户在弹窗里点了「初始化工作区」——但工具返回 `✗ 初始化服务没有加载`。弹窗、点击路由、`driveGateResolve` 全部正常，**坏在最后一步取服务**：`bafScaffold / bafQuality / bafGuard` 都发布在 `baf-domain` **isolate** 里，而 isolate realm 对「声明它的组之外」的一切 `ctx.get` 都不可见——包括宿主行 ctx，**也包括 agent 自己的 realm ctx**。此前 `agent.ctx.get('bafScaffold')` 两域写法在桌面真机上**从未生效过**；测试没抓到是因为测试直接往 ctx 注入服务（没有 isolate）。组件缺失的真空随后被模型用通用提问工具 `ask_user_question` 自创三个选项填补（已违规，见 D 节规则），把客户引去「手动改预设配置」——工作流死锁在初始化前。
 
 - **修法（唯一跨 isolate 读通道）**：agent-presets 发布的 `ctx.get('agentPresets').serviceFor(agent, name)`（session-controller / skill-catalog 同款）。新增 [`resolveIsolateService(ctx, agent, name)`](packages/baf/baf-workflow/src/session-gate.ts)：通道 1 = `serviceFor`（agent 带 realm 时）；通道 2 = 既有两域 `get` 兜底（CLI / 测试 / 无 isolate composition）。`probeMountFlags`（欢迎卡「检查组件」行）、`resolveScaffoldService`、`toolDriveAdapters`（弹窗派发）、`/baf-scaffold` 等斜杠行的 stack/guard 解析、Tab Remote（`ui-baf-workflow` 的 `resolveAdapters` / `tryGetScaffoldAdapter`）**全部改走它**——弹窗点「初始化工作区」后派发真的能拿到服务。
-- **首行统一**：所有 BAF 卡片首行统一以 `· 点本行展开/折叠详情` 结尾（原「点本行展开/折叠指令全文」及无后缀的错误卡 / 门卡 / 缺参卡全部收口，§20.2 标题约定同步）。
+- **首行统一**：所有 BAF 卡片首行统一以 `· 点本行展开/折叠详情` 结尾（原「点本行展开/折叠指令全文」及无后缀的错误卡 / 门卡 / 缺参卡全部收口，§20.2 标题约定同步）。【变更】2026-09-28（用户问题 6）：该后缀已全线取消——web 端 GenericCommandCard 默认展开后提示语失去意义，cmdline.ts 镜像与 §20.2 约定同步收口。
 - **提示语去术语**：scaffold 组件缺失卡的处理行从「请检查工作流预设是否加载了 baf-scaffold（isolate 组内）后重试」改为「请在设置里启用 BAF 工作流预设（含全部 BAF 组件）后，重新打开本会话再试」——isolate 是实现细节，不该漏给客户。
 - **规则加严（防真空自创）**：session-gate 规则新增「不得用通用提问工具（如 ask_user_question）替代确认门、预演分类或为工作流决策自创选项」；`baf_gate_ask` 工具描述与 baf-go SKILL Hard rule 6 同步——工作流决策（初始化 / 分类 / 确认门 / 放弃 / 复位）只能经 `baf_gate_ask` 弹出的注册表选项或对应斜杠指令，通用提问工具只用于与工作流走向无关的澄清。
 - **测试**：`session-gate.spec` +4（serviceFor 命中 / 生产事故回归：双 get 皆盲唯 serviceFor 可见 / get 兜底与双盲 → undefined）、`gate-dialog.spec` +2（`toolDriveAdapters` 经 serviceFor 解析三 adapter / 双盲全缺省）。全量 31 文件 / 280 项绿。
@@ -3415,6 +3423,32 @@ GATE_REGISTRY 新成员 **`bind-workflow`**（dynamicOptions `change-targets`，
 **D. 右栏三卡紧凑**：变更分类删解释段（语义说明移入置信度 title、待确认 warn 高亮、模式前置）；阶段产物文件名即打开控件、缺口折叠「缺 N 项（悬停查看）」；会话统计两行紧凑 grid、token 明细移入合计 title。
 
 **测试（as-built）**：plan 门别名 + readLedger 同形 + 渲染别名行 + 缺口派单（含重臂）新 4 例，改「stays silent」1 例；全量绿 + build:lib 零错。真机（demo1v5 离线种子停 plan）：/baf-go → 工单 → 模型回合 → 回合末自动弹「进入实现」→ 确认 → implement + plan.md 账本渲染；节点卡 计划 398869/实现 570099。全景 §7（同文件）。
+
+### §22.23 会话弹窗七点改版 + 输出骨架去粗体 + 语言跟随 + 确认等待停表（2026-09-28，demo22 四问题）
+
+> 触发：用户复测 demo22（change-20260928-ecum-6a8c，停 implement 工单歇工）提四问题：① 确认弹窗一大段解释、变更号混正文、/baf-go 提示位置、全局模态框、无产物链接、按钮无主次、无修改回路（1.1–1.7 七点）；② 会话输出 `**【阶段】**intake（…）` 字面星号渲染异常；③ 模型回复中英混杂；④ 等客户确认的时间计入耗时、表不停。
+
+**A. 弹窗 wire 协议 + 分段（1.1/1.2/1.5）**：gate-cards.ts 的 question 分段为【状态变化】X（已完成，通过完成门）→ Y（待开始）/【完成情况】/【确认后】；detail 首行 `{{change:<id>}}`（变更号固定弹窗右上角，不进正文）；尾追【产物】节 `- {{art:openspec/changes/<id>/<file>}} <标签>` 行。客户端 gate-ask.ts 投影：`SECTION_HEADING` 兼容整行标题与「标题领行同段」（【状态变化】提案（已完成）→ 澄清（待开始）一行拆成标题+正文——demo22 复测暴露的解析坑，首节曾静默退化为无标题）；`{{art:}}` 行成可点 chip，与 Tab ArtifactRail 同一 sidebarRight.openResource 通道。optionHint 只滤「将执行」前缀行（/baf-go 续跑提示是客户文案，保留并归入「暂不推进」option 的 hint——1.3）。
+
+**B. 会话面板锚定模态（1.4）**：BafGateComposer 于 composer 位放零高 sentinel，`closest('[data-conversation-content]')` 取矩形，fixed overlay 内联 left/top/width/height 精确覆盖会话窗（ResizeObserver + 捕获期 scroll + resize 跟随）；面板找不到才退全屏。工作流弹窗不再用全局模态框。
+
+**C. 主次横排（1.6）**：选项水平布局；`isSecondaryOptionLabel`（暂不/只是 前缀）判次选，第一个非次选为主按钮（实底强调）。会话卡与 Tab 实时门卡共享同一判据。
+
+**D. 修改回路（1.7）**：平台 `AskUserQuestionAnswerItem.custom` 自由文本 → 客户端 `answerGateRevision`（selected 空 + custom）→ 宿主 askGateDialog 判 `gateRevisionTarget`（GATE_ARTIFACTS 首个可修订行，scaffold/classify/conflict 等不可修订门保持 paused/skipped）→ `{kind:'revise'}` → coordinator/orchestrator `dispatchGateRevisionFromTab` 派 cause='gate-revise' 工单（artifactPath 覆盖；verify-archive 修订目标 verify.md，指纹重臂已含之）→ 模型修订产物 → 回合结束指纹变化重弹确认卡，循环到客户点确认推进。三表面齐备：会话卡修订框、Tab 停靠门横幅修订框、Tab 推进弹窗修订框（advanceGateIdForNode 把 Tab 推进对话映射回 gate id）。baf_gate_ask 工具路径 revise 只回文案提示模型自修（红线：模型工具无派单通道）。
+
+**E. 输出骨架去粗体（问题 2 终修）**：agent.cordis.yml 与 bundle baf.patch.yml 状态汇报骨架【阶段】【本回合做了什么】【产物】【下一步】全部去 `**`。前两轮教训链：`>-` 折叠成一大段（改 `|-`）→ `**…**` 后空格方案被 demo22 证伪（模型填 <阶段名> 时丢空格，`**【阶段】**plan` 仍字面星号）→ 终修：`【】` 括号即标题，bold 只添脆弱性。
+
+**F. 语言跟随（问题 3）**：persona 中英双份「语言跟随 / Language follow」段——全部输出（思考、状态汇报、提问卡文案、产物文档）跟随客户最近一条消息语言；代码/命令/文件名/既有标识符保持原文。
+
+**G. 确认等待停表（问题 4）**：metrics.ts intake 窗口 [intake-classified → intake-confirmed] 保留窗口（token 归属不变）但不计 duration（纯客户等待）；`running` 标志 = 存在非 intake/drift 开窗；客户端 running=false 冻结插值。门间等待（stage-completed → 下一 stage-entered）天然落在窗口之间不计入。
+
+**H. 剩余问题（按影响排序）**：
+1. **implement 停靠仍走表**——工单歇工等下一次 /baf-go 属 mid-stage，projection 无 dispatch/turn-end 事件无法切分工作突发；若客户要求剔除歇工时段，需 go-dispatch 先落 projection 事件（建议 `work-order-dispatched` + 回合末 `turn-ended`），再按突发并集计 implement 时长。
+2. **门卡渲染分支未真机验证**——demo22 停 implement 无 pending 门；分段/横排/修改框经 11/11 解析断言 + 415 单测覆盖，真机确认待客户在 web 端触发（推进弹窗/确认卡均可安全点选：前置缺失会出拒绝卡，不派单）。
+3. **会话历史旧消息保留字面星号**——修复只管新输出；不建议清洗历史（transcript 不可变性）。
+4. **baf_gate_ask 工具路径修订不派单**——按红线模型工具无派单通道；客户经弹窗/Tab 输入的修改意见才走工单。若该路径高频，可评估「工具回 cause=revise 时由 orchestrator 代派」。
+
+**测试（as-built）**：gate-dialog.spec（{{change:}} 断言 ×3 + revise 结局 + 产物节）、gate-cards.spec（bugfix-open-advance 状态变化行）、go.spec 新 describe「用户问题 1.7: gate revision dispatch」4 例（工单头/verify.md 覆盖/不可修订 undefined/无派单卡）、metrics.spec（intake 排除 + running + 0 省略）；415/415 绿；build 273 产物锚点；客户端解析层 11/11（含标题领行拆分）；apps/web/verify-batch2-0928.mjs demo22 冒烟全绿（门卡分支 SKIP：无 pending 门）+ 0 pageerror + 变更耗时 90m 段位 2s 递增无回退。
 
 ---
 
