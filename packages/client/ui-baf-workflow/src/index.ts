@@ -18,10 +18,15 @@ import {
   type BuildWorkflowTabViewOptions,
   type UsagePoint,
   beginIntake,
+  bindSessionChange,
+  deriveSessionChangeFromEvents,
+  sessionChangeFor,
   clearParkedRequirementFor,
   confirmIntake,
   continueParkedRequirement,
   DISPATCH_SENT_MARKER,
+  advanceGateIdForNode,
+  dispatchGateRevisionFromTab,
   driveAbandon,
   driveArchive,
   driveClarify,
@@ -53,6 +58,7 @@ import type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
   BafWorkflowGateResolveRequest,
+  BafWorkflowGateReviseRequest,
   BafWorkflowResumeRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
@@ -82,6 +88,7 @@ export type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
   BafWorkflowGateResolveRequest,
+  BafWorkflowGateReviseRequest,
   BafWorkflowProjectionAppended,
   BafWorkflowResumeRequest,
   BafWorkflowSessionRequest,
@@ -268,10 +275,52 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     changeId: string | null | undefined,
     options: BuildWorkflowTabViewOptions = {},
   ): Promise<WorkflowTabView> {
-    return buildWorkflowTabView(store, changeId ?? undefined, {
+    // 【变更】2026-09-28 (用户问题 7): a session that drove a change sees ITS
+    // change's graph — before the workspace-ranked fallback. Two sessions on
+    // one workspace each get their own flow (demo-21: 重构ecum vs 增加ECUM
+    // 用法Demo), instead of both showing whichever change the ranking picks.
+    // The live binding is process-local; when it is missing (restart, old
+    // session), the session's own cold log names the change it drove — derive
+    // once, then rebind so later reads skip the scan.
+    const bound = changeId
+      ?? sessionChangeFor(store.workspaceRoot(), sessionId)
+      ?? await this.deriveSessionChange(sessionId, store.workspaceRoot())
+    return buildWorkflowTabView(store, bound ?? undefined, {
       ...options,
       usagePoints: await this.usagePointsFor(sessionId),
     })
+  }
+
+  /** Sessions whose cold log was already scanned (negative cache — no signal). */
+  private readonly deriveScanned = new Set<SessionId>()
+
+  /**
+   * 【变更】2026-09-28 (用户问题 7): recover the session→change binding for
+   * sessions created before this process started — their driving events
+   * (go-dispatch orders, route audits, gate dialogs) sit in the durable log.
+   * One cold scan per session per process; a hit rebinds through the shared
+   * host map, a miss is cached so chat sessions don't rescan on every paint.
+   * @param sessionId - the session whose log to scan.
+   * @param cwd - absolute workspace root for the binding key.
+   * @returns the derived change id, or undefined when the log mentions none.
+   */
+  private async deriveSessionChange(sessionId: SessionId, cwd: string): Promise<string | undefined> {
+    if (this.deriveScanned.has(sessionId)) return undefined
+    this.deriveScanned.add(sessionId)
+    type ColdObservation = { events: Iterable<{ type: string; data?: unknown }>; [Symbol.dispose]?: () => void }
+    type ColdQuery = { observeSession: (id: SessionId, options?: { projectionMode?: string }) => Promise<ColdObservation> }
+    const query = (this.ctx as { sessionQuery?: ColdQuery }).sessionQuery
+    if (query === undefined) return undefined
+    const observation = await query.observeSession(sessionId, { projectionMode: 'none' })
+    try {
+      const derived = deriveSessionChangeFromEvents(observation.events)
+      if (derived !== undefined) bindSessionChange(cwd, sessionId, derived)
+      return derived
+    } catch {
+      return undefined
+    } finally {
+      observation[Symbol.dispose]?.()
+    }
   }
 
   /** Cached `(sessionId → points)` with the revision the fold was made at. */
@@ -323,6 +372,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     // session's parked statement too — otherwise the next /baf-go offers it as
     // an active-conflict against the change it just spawned.
     if (changeId !== undefined) clearParkedRequirementFor(this.liveAgentFor(request.sessionId))
+    if (changeId !== undefined) bindSessionChange(cwd, request.sessionId, changeId)
     return await this.viewFor(request.sessionId, store, changeId)
   }
 
@@ -333,8 +383,9 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('confirmIntake')
   async confirmIntake(request: BafWorkflowChangeRequest): Promise<WorkflowTabView> {
-    const { store } = await this.contextFor(request.sessionId)
+    const { cwd, store } = await this.contextFor(request.sessionId)
     await this.guardDomain(() => confirmIntake(store, request.changeId, 'user'))
+    bindSessionChange(cwd, request.sessionId, request.changeId)
     return await this.viewFor(request.sessionId, store, request.changeId)
   }
 
@@ -351,7 +402,8 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   }
 
   /**
-   * User-facing advancement button (§22 user-request 2026-09-20).
+   * User-facing advancement (§22 user-request 2026-09-20; 2026-09-25 the
+   * always-on strip button became the Tab's TOP advance dialog).
    *
    * 【变更】2026-09-23 (demo1 issue #4): the click is now the exact
    * counterpart of typing `/baf-go` in chat — it routes through `driveGo`
@@ -364,7 +416,13 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    * participation. It survives only as the fallback when no dialog channel
    * can exist (no live agent / no `userQuestions` service).
    *
-   * @param request - session + change.
+   * 【变更】2026-09-25 (用户需求 工作流 1): `skipAsk` — the Tab's own top
+   * dialog already IS the customer's confirmation (推进 / 暂不推进), so the
+   * click passes `skipAsk` and the drive takes the `confirm:true` positive
+   * path directly (no second popup); the dispatch channel still rides along,
+   * so the landed stage keeps receiving the work order.
+   *
+   * @param request - session + change (+ `skipAsk` from the Tab dialog).
    * @returns updated tab view.
    */
   @Remote('advance')
@@ -377,12 +435,13 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     // the dispatcher carries the customer-origin marker.
     const ask = makeGateAsk(this.ctx, agent)
     const dispatch = makeGoDispatcher(cwd, agent as DispatchAgent | undefined)
+    const skipAsk = request.skipAsk === true
     const result = await this.guardDomain(() => driveGo({
       cwd,
       rawInput: `change=${request.changeId}`,
       source: 'tab',
       adapters,
-      ...(ask === undefined ? { confirm: true } : { ask }),
+      ...(skipAsk || ask === undefined ? { confirm: true } : { ask }),
       ...(dispatch === undefined ? {} : { dispatch, dispatchOrigin: 'customer' as const }),
     }))
     if (result.kind === 'error') {
@@ -659,8 +718,23 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('dashboard')
   async dashboard(request: BafWorkflowSessionRequest): Promise<WorkflowDashboardView> {
-    const { store } = await this.contextFor(request.sessionId)
-    return await buildWorkflowDashboard(store)
+    const { cwd, store } = await this.contextFor(request.sessionId)
+    // 【变更】2026-09-28 (用户问题 4): rows used to fold without any usage
+    // samples, so every 变更总览 row rendered token '-'. Attribution is
+    // time-window based (metrics.ts), so the samples of EVERY session ever
+    // run in this workspace fold correctly — enumerate the stored sessions
+    // filtered by header cwd, reuse the per-session revision cache the Tab
+    // path already maintains, and hand the concatenation to the builder.
+    const points: UsagePoint[] = []
+    try {
+      for (const snap of await this.ctx.sessionPersistence.list()) {
+        if (snap.header.cwd !== cwd) continue
+        points.push(...await this.usagePointsFor(snap.header.id))
+      }
+    } catch {
+      // listing is best-effort — a dashboard without tokens still renders
+    }
+    return await buildWorkflowDashboard(store, points)
   }
 
   @Remote('gateResolve')
@@ -672,6 +746,9 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       const picked = await resolveActiveChange(store)
       resolvedChangeId = picked.kind === 'one' ? picked.changeId : undefined
     }
+    // 【变更】2026-09-28 (用户问题 7): this session's Tab just resolved a gate
+    // on that change — it is the change this conversation is driving.
+    if (resolvedChangeId !== undefined) bindSessionChange(cwd, request.sessionId, resolvedChangeId)
     if (request.gateId === 'resume') {
       // The Tab's `gate.options` for a resume gate are already pinned from
       // the projection, but the host re-derives them so a stale tab cannot
@@ -748,6 +825,43 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
             `bafWorkflowView: parked-requirement continuation failed: ${error instanceof Error ? error.message : String(error)}`,
           )
         }
+      }
+    }
+    return await this.viewFor(request.sessionId, store, resolvedChangeId)
+  }
+
+  /**
+   * 【变更】2026-09-28 (用户问题 1.7 Tab parity): submit a revision request from
+   * the Tab's own decision surfaces (the advance dialog, the parked-gate
+   * banner) — no ask carrier answers for those, so the host maps the click
+   * onto the SAME `gate-revise` work-order dispatch the session dialog's
+   * `custom` answer takes. `gateId` wins when present (banner); otherwise the
+   * advance dialog's `node`+`mode` derive the stage's advance gate. The
+   * outcome card is logged here (the remote's contract is the refreshed
+   * view); the Tab swaps its revision form to a 已派单 note locally.
+   * @param request - session + gate id or stage + the modification text.
+   * @returns updated tab view.
+   */
+  @Remote('gateRevise')
+  async gateRevise(request: BafWorkflowGateReviseRequest): Promise<WorkflowTabView> {
+    const { cwd, store } = await this.contextFor(request.sessionId)
+    let resolvedChangeId = request.changeId
+    if (resolvedChangeId === undefined) {
+      const picked = await resolveActiveChange(store)
+      resolvedChangeId = picked.kind === 'one' ? picked.changeId : undefined
+    }
+    // 【变更】2026-09-28 (用户问题 7): the Tab just acted on that change.
+    if (resolvedChangeId !== undefined) bindSessionChange(cwd, request.sessionId, resolvedChangeId)
+    const gateId = request.gateId !== undefined && request.gateId !== ''
+      ? request.gateId
+      : advanceGateIdForNode(request.node ?? '', request.mode)
+    if (gateId !== undefined) {
+      const dispatch = makeGoDispatcher(cwd, this.liveAgentFor(request.sessionId) as DispatchAgent | undefined)
+      const card = dispatchGateRevisionFromTab(cwd, dispatch, gateId as Parameters<typeof dispatchGateRevisionFromTab>[2], resolvedChangeId, request.text)
+      if (card !== undefined) {
+        this.ctx.logger.info(
+          `[baf] ${new Date().toISOString()} - session baf:gateRevise gateId=${gateId} change=${resolvedChangeId ?? '-'} source=gate-card textLen=${request.text.length}`,
+        )
       }
     }
     return await this.viewFor(request.sessionId, store, resolvedChangeId)

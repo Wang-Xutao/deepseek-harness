@@ -172,13 +172,16 @@ describe('§22.17 J state-driven auto-pop', () => {
     }
   })
 
-  it('「只是聊天」 mints nothing', async () => {
+  it('「只是聊天」 mints nothing', { timeout: 120_000 }, async () => {
     const root = await setup()
     try {
       const service = serviceWith([selected('只是聊天，不开始')])
       const { emit } = install(service)
       emit({ header: { id: 'sess-1', cwd: root } }, userMessage('今天天气怎么样，聊两句'))
-      await settle()
+      // Poll for the pre-question like the happy-path test above — the fixed
+      // 150ms settle loses the race on a loaded parallel full-suite run.
+      const deadline = Date.now() + 60_000
+      while (service.calls.length < 1 && Date.now() < deadline) await settle()
       expect(service.calls).toHaveLength(1)
       expect(await activeCount(root)).toBe(0)
     } finally {

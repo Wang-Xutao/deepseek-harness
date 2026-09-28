@@ -41,6 +41,7 @@ import {
 import { driveGateResolve, loadWorkspaceBaseline } from './command-drives.ts'
 import { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
 import { beginIntake } from './begin-intake.ts'
+import { bindSessionChange } from './session-change.ts'
 import { clearParkedRequirementFor } from './requirement-park.ts'
 import { ProjectionStore, isActiveChange, pickActiveChange } from './projection.ts'
 
@@ -137,6 +138,13 @@ function agentCwd(agent: unknown): string | undefined {
   const cwd = (agent as { session?: { header?: { cwd?: string } } } | undefined)
     ?.session?.header?.cwd
   return typeof cwd === 'string' && cwd !== '' ? cwd : undefined
+}
+
+/** Structural read of the runtime agent's session id (用户问题 7 binding). */
+function agentSessionId(agent: unknown): string | undefined {
+  const id = (agent as { session?: { header?: { id?: string } } } | undefined)
+    ?.session?.header?.id
+  return typeof id === 'string' && id !== '' ? id : undefined
 }
 
 /** A single text content block. */
@@ -246,7 +254,7 @@ export function apply(ctx: Context): void {
       },
       requirement: {
         type: 'string',
-        description: 'The customer\'s own words describing new work, quoted verbatim. Only used by gateId=intake-classify WITHOUT changeId: the tool opens the change from this requirement and pops the classification dialog for it. Requires an initialized workspace; otherwise the scaffold gate pops instead.',
+        description: 'The customer\'s own words describing new work, quoted verbatim. Used by gateId=intake-classify/new-workflow when no changeId is given (or the given one does not exist in the workspace — the system mints ids, the model never authors one): the tool opens the change from this requirement and pops the classification dialog for it. Requires an initialized workspace; otherwise the scaffold gate pops instead.',
       },
       problem: {
         type: 'string',
@@ -292,11 +300,32 @@ export function apply(ctx: Context): void {
       }
       const draft = hasBugField(bugPlan) ? bugPlan : undefined
       const cwd = agentCwd(exec.agent)
+      // 【变更】2026-09-27 (demo-bugfix4 真机): the model sometimes INVENTS a
+      // changeId (e.g. fix-ecum-export-empty-crash) instead of using a minted
+      // one. The dialog then pops for a change that does not exist and the
+      // customer's confirm lands on「无此变更」(the whole intake bootstrap —
+      // scaffold diversion, pending check, conflict check, mint — only ran
+      // for the no-id form). A carried id that is not in the projection
+      // index is treated as absent, so the same bootstrap runs; without a
+      // requirement to mint from, the refusal names the rule (ids are
+      // minted by the system, never authored by the model).
+      let effectiveChangeId = changeId
+      if ((gateId === 'intake-classify' || gateId === 'new-workflow') && changeId !== undefined && cwd !== undefined) {
+        const known = await new ProjectionStore({ workspaceRoot: cwd }).readIndex()
+          .then(ix => ix.changes.some(c => c.changeId === changeId))
+          .catch(() => false)
+        if (!known) {
+          if (requirement === '') {
+            return [textBlock(`【结果】\n  changeId=${changeId} 在本工作区不存在——changeId 由系统铸造，不要自造。请改用 requirement=<客户原话> 重新调用。`)] as unknown as JsonValue[]
+          }
+          effectiveChangeId = undefined
+        }
+      }
       let card = renderGate(
         gateId,
-        cwd === undefined && changeId === undefined
+        cwd === undefined && effectiveChangeId === undefined
           ? undefined
-          : { cwd: cwd ?? '', ...(changeId === undefined ? {} : { changeId }) },
+          : { cwd: cwd ?? '', ...(effectiveChangeId === undefined ? {} : { changeId: effectiveChangeId }) },
       )
       // Unknown gate → the refusal card above is the whole answer.
       if (!(gateId in GATE_REGISTRY)) return [textBlock(card.text ?? '')] as unknown as JsonValue[]
@@ -315,13 +344,16 @@ export function apply(ctx: Context): void {
       // no tool that reaches the classification decision at all, and a
       // stated requirement dead-ends in prose instructions (2026-09-20
       // incident: the model wrote a manual-steps message instead of a popup).
-      let input: GateDialogInput = { gateId: gateId as keyof typeof GATE_REGISTRY, ...(changeId === undefined ? {} : { changeId }) }
+      let input: GateDialogInput = {
+        gateId: gateId as keyof typeof GATE_REGISTRY,
+        ...(effectiveChangeId === undefined ? {} : { changeId: effectiveChangeId }),
+      }
       // 【变更】2026-09-22 (session 1.jsonl): when the bootstrap below diverts
       // to the scaffold gate, remember the requirement that caused it — the
       // answered scaffold leg continues the bootstrap in the same call
       // instead of dead-ending the model with the scaffold slash-card.
       let scaffoldDiversion: string | undefined
-      if ((gateId === 'intake-classify' || gateId === 'new-workflow') && changeId === undefined) {
+      if ((gateId === 'intake-classify' || gateId === 'new-workflow') && effectiveChangeId === undefined) {
         if (requirement === '') {
           return [textBlock(`${card.text ?? ''}\n\n【结果】\n  分类确认需要传 changeId（已有变更），或用 requirement 传客户原话开始一条新工作。`)] as unknown as JsonValue[]
         }
@@ -374,6 +406,8 @@ export function apply(ctx: Context): void {
                 // 2026-09-23 issue #1: the conflict option click is a customer
                 // action — a 「继续推进现有变更」 pick may dispatch at the
                 // change's authoring rest.
+                const conflictSessionId = agentSessionId(agent)
+                if (conflictSessionId !== undefined) bindSessionChange(cwd, conflictSessionId, focus.changeId)
                 const conflictDispatch = makeGoDispatcher(cwd, agent as unknown as DispatchAgent)
                 const result = await driveGateResolve(
                   cwd,
@@ -396,7 +430,10 @@ export function apply(ctx: Context): void {
                   : ''
                 return [textBlock(`${choiceHeader('active-conflict', outcome)}\n${modelFacingCardText(result.text ?? '')}${after}`)] as unknown as JsonValue[]
               }
-              const note = outcome.kind === 'paused'
+              // 【变更】2026-09-28 (用户问题 1.7): 'revise' cannot occur on this
+              // gate (active-conflict has no revisable artifact) — the branch
+              // only satisfies narrowing, treating it as no-choice-made.
+              const note = outcome.kind === 'paused' || outcome.kind === 'revise'
                 ? '【结果】\n  客户暂未选择（关闭了确认框）。\n  不要替客户决定；可再次调用 baf_gate_ask（gateId=intake-classify，requirement=客户原话）重弹这张卡，或等客户明确说出想推进还是放弃后再操作。'
                 : `【结果】\n  确认框不可用（${outcome.reason}）；上面是选项卡原文。\n  不要指导客户手动操作；系统会在下一个回合结束时自动重弹到期确认卡，如实说明当前状态即可。`
               return [textBlock(`${conflictCard.text ?? ''}\n\n${note}`)] as unknown as JsonValue[]
@@ -451,6 +488,13 @@ export function apply(ctx: Context): void {
       // decision with no prose round-trip.
       const parts: string[] = []
       for (let leg = 1; ; leg += 1) {
+        // 【变更】2026-09-28 (用户问题 7): this session is driving the change
+        // the dialog is about — record it so its workflow Tab shows THIS
+        // change's graph instead of the workspace-ranked one.
+        const sessionId = agentSessionId(agent)
+        if (input.changeId !== undefined && sessionId !== undefined) {
+          bindSessionChange(cwd, sessionId, input.changeId)
+        }
         if (leg > 1 && input.gateId === 'intake-classify') {
           // The paused-note fallback below quotes the registry card for the
           // gate being asked; after a scaffold diversion `card` still holds
@@ -588,9 +632,15 @@ export function apply(ctx: Context): void {
         // after the next completed turn, so the model must NOT hand the
         // customer manual steps (session 7.jsonl complaint #4 — the「请在工作流
         // 页签点选…」sentence came from exactly this note).
+        // 【变更】2026-09-28 (用户问题 1.7): a revisable gate can come back with
+        // the customer's modification text — this is a MODEL-tool pop (no
+        // dispatch channel by the red line), so the note hands the text back
+        // as an instruction: revise the artifact yourself, the system re-pops.
         const note = outcome.kind === 'paused'
           ? '【结果】\n  客户暂未选择（关闭了确认框）。\n  不要替客户决定，也不要指导客户点页签或输入命令——系统会在你下一个回合结束时自动重新弹出这张卡；如实说明当前状态即可。'
-          : `【结果】\n  确认框不可用（${outcome.reason}）；上面是选项卡原文。\n  不要指导客户手动操作；系统会在下一个回合结束时自动重弹到期确认卡，如实说明当前状态即可。`
+          : outcome.kind === 'revise'
+            ? `【结果】\n  客户提交了修改意见：「${outcome.text}」。\n  请按意见直接修订本阶段产物（不要另建文件）；修订完成后系统会在回合结束自动重弹确认卡。`
+            : `【结果】\n  确认框不可用（${outcome.reason}）；上面是选项卡原文。\n  不要指导客户手动操作；系统会在下一个回合结束时自动重弹到期确认卡，如实说明当前状态即可。`
         parts.push(card.text ?? '', note)
         return [textBlock(parts.join('\n\n'))] as unknown as JsonValue[]
       }

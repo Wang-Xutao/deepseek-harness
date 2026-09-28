@@ -110,8 +110,8 @@ export type ContextFormed =
     readonly form: 'go-dispatch'
     /** Change the work order is about. */
     readonly changeId: string
-    /** Stage whose artifact the order asks for. */
-    readonly node: 'open' | 'clarify' | 'design' | 'plan' | 'implement'
+    /** Stage whose artifact the order asks for (verify = the checklist ticks). */
+    readonly node: 'open' | 'clarify' | 'design' | 'plan' | 'implement' | 'verify'
     /** The gate's missing-item lines, in gate order — the order's work list. */
     readonly missing: readonly string[]
   }

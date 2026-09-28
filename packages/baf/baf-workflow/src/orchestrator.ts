@@ -44,12 +44,12 @@ import {
   type GateDialogInput,
 } from './gate-dialog.ts'
 import { driveGateResolve, loadWorkspaceBaseline, pipelineFor } from './command-drives.ts'
-import { dueGateFor } from './go-coordinator.ts'
+import { dispatchGateRevisionFromTab, dueGateFor } from './go-coordinator.ts'
 import { expireDispatchLedger, makeGoDispatcher, artifactPathFor } from './go-dispatch.ts'
 import { continueParkedRequirement } from './requirement-park.ts'
 import { resetScaffoldOffer, scaffoldDialogOffered } from './scaffold-offer.ts'
 import type { GateId } from './gate-cards.ts'
-import { clarifyGate, designGate, planGate, implementGate, proposalGate, type GateInput } from './stages/gates.ts'
+import { bugRecordGate, checklistGate, clarifyGate, designGate, planGate, implementGate, proposalGate, type GateInput } from './stages/gates.ts'
 import { readLedger } from './stages/implement.ts'
 import { focusFor } from './session-focus.ts'
 import { isActiveChange, pickActiveChange, ProjectionStore } from './projection.ts'
@@ -205,6 +205,19 @@ async function popGate(
     isMoot,
   })
   OFFERED.set(ledgerKey, fingerprint)
+  // 【变更】2026-09-28 (用户问题 1.7): the auto-pop's revision input — the
+  // custom answer is a customer action on this session, so the SAME
+  // gate-revise dispatch the coordinator's gate surface takes applies here;
+  // the artifact edit re-arms this pop's fingerprint and the gate re-pops
+  // after the model reworks the document.
+  if (outcome.kind === 'revise') {
+    const revisionDispatch = makeGoDispatcher(cwd, agent)
+    const revisionCard = dispatchGateRevisionFromTab(cwd, revisionDispatch, gate.gateId, gate.changeId, outcome.text)
+    ctx.logger.info(
+      `${stamp()} - session baf:orchestrate gate=${gate.gateId} change=${gate.changeId ?? '-'} outcome=revise dispatched=${revisionCard !== undefined} textLen=${outcome.text.length}`,
+    )
+    return
+  }
   const outcomeNote = outcome.kind === 'answered'
     ? ` option=${outcome.optionId}`
     : ` reason=${outcome.reason}`
@@ -245,18 +258,28 @@ async function docAdvanceDue(cwd: string, changeId: string, status: WorkflowStat
     // 【变更】2026-09-22 (user report #1): open-advance is file-aware now —
     // the card pops only when proposal.md passes its gate, mirroring
     // clarify/design/plan (dueGateFor's open case returned undefined above).
-    case 'open': return (await proposalGate(input)).ok ? 'open-advance' : undefined
+    // 【变更】2026-09-26 (用户需求 工作流 3): bug-fix-path pops its clipped
+    // counterpart once bug-record.md passes bugRecordGate — the draft-open
+    // record is the model's authoring domain until then.
+    case 'open': return input.mode === 'bug-fix-path'
+      ? (await bugRecordGate(input)).ok ? 'bugfix-open-advance' : undefined
+      : (await proposalGate(input)).ok ? 'open-advance' : undefined
     case 'clarify': return (await clarifyGate(input)).ok ? 'clarify-advance' : undefined
     case 'design': return (await designGate(input)).ok ? 'design-advance' : undefined
     case 'plan': return (await planGate(input)).ok ? 'plan-advance' : undefined
     // 【变更】2026-09-23 (demo1 十问题 8): implement completed → verify entry
     // is the due decision (the gate /baf-go pops; the moot re-check reads the
     // same derivation).
+    // 【变更】2026-09-28 (用户问题 8): the checklist must exist with real items
+    // before the card pops — its question asserts checklist.md 已生成, so a
+    // missing checklist keeps the rest in the model's authoring domain (the
+    // customer's /baf-go refuses with the authoring order instead).
     case 'implement': {
       const ledger = await readLedger(cwd, changeId).catch(() => undefined)
       if (ledger === undefined) return undefined
       const gate = await implementGate(input, ledger.touched).catch(() => undefined)
-      return gate !== undefined && gate.ok ? 'verify-advance' : undefined
+      if (gate === undefined || !gate.ok) return undefined
+      return (await checklistGate(input).catch(() => undefined))?.ok === true ? 'verify-advance' : undefined
     }
     default: return undefined
   }
@@ -411,7 +434,8 @@ async function popDueGate(
   // re-offered (the customer had to keep typing /baf-go). The doc-aware
   // stages' fingerprint now carries the artifact file's size+mtime: any edit
   // to the file the gate judges re-arms the pop.
-  const artifactSuffix = await artifactFingerprintOf(cwd, changeId, live.current)
+  const artifactSuffix = await artifactFingerprintOf(cwd, changeId, live.current,
+    live.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path')
   await popGate(ctx, cwd, sessionId, gate, `v${live.projectionVersion}${artifactSuffix}`, `${cwd} | ${changeId} | ${due.gateId}`,
     // Stale the moment the resting point moved on (a click elsewhere, a
     // model write) — the queue re-reads at head-of-line time. MUST use the
@@ -453,8 +477,14 @@ async function dispatchRestingGap(
   let missing: readonly string[] | undefined
   switch (node) {
     case 'open': {
-      const gate = await proposalGate(input).catch(() => undefined)
-      missing = gate !== undefined && !gate.ok ? gate.missing ?? [gate.detail ?? 'proposal 未达完成门'] : undefined
+      // 【变更】2026-09-26 (用户需求 工作流 3): mode-aware — a bug-fix open
+      // rest's gap is the bug-record/ledger draft (proposalGate unconditionally
+      // passes on that mode, which used to silence the dispatch).
+      const gate = mode === 'bug-fix-path'
+        ? await bugRecordGate(input).catch(() => undefined)
+        : await proposalGate(input).catch(() => undefined)
+      const label = mode === 'bug-fix-path' ? 'bug-record' : 'proposal'
+      missing = gate !== undefined && !gate.ok ? gate.missing ?? [gate.detail ?? `${label} 未达完成门`] : undefined
       break
     }
     case 'clarify': {
@@ -495,8 +525,9 @@ async function dispatchRestingGap(
   const outcome = dispatch({
     changeId,
     node,
-    artifactPath: artifactPathFor(changeId, node),
+    artifactPath: artifactPathFor(changeId, node, mode),
     missing,
+    ...(mode === 'bug-fix-path' ? { mode: 'bug-fix-path' as const } : {}),
   })
   ctx.logger.info(`${stamp()} - session baf:orchestrate change=${changeId} gapDispatch node=${node} outcome=${outcome} missing=${missing.length}`)
 }
@@ -505,14 +536,36 @@ async function dispatchRestingGap(
  * The size+mtime stamp of the artifact the current node's file gate judges
  * ('' when the node has no single judging artifact). Part of the popGate
  * fingerprint so an artifact edit re-arms a paused advance gate (issue #1).
+ *
+ * 【变更】2026-09-28 (用户问题 1.7): `verify` joins the doc-aware stages — gate
+ * B (verify-archive) parks the change with NO projection event flowing, so
+ * before this a verify.md revision (the gate dialog's 修改意见 loop) left the
+ * fingerprint frozen at the pre-park version and the confirm card never
+ * re-offered. verify.md (what the gate judges and what a revision edits) is
+ * the fingerprinted file — checklist.md stays out: it is ticked during the
+ * verify drive itself, which would re-pop the card mid-drive.
  * @param cwd - workspace root.
  * @param changeId - change id.
  * @param current - the change's current node.
+ * @param mode - the change's mode (bug-fix open judges bug-record.md).
  * @returns `:<size>-<mtime>` or ''.
  */
-async function artifactFingerprintOf(cwd: string, changeId: string, current: string): Promise<string> {
+async function artifactFingerprintOf(
+  cwd: string,
+  changeId: string,
+  current: string,
+  mode?: 'full-go-path' | 'bug-fix-path',
+): Promise<string> {
+  if (current === 'verify') {
+    try {
+      const s = await stat(join(cwd, 'openspec', 'changes', changeId, 'verify.md'))
+      return `:${s.size}-${Math.floor(s.mtimeMs)}`
+    } catch {
+      return ''
+    }
+  }
   if (current !== 'open' && current !== 'clarify' && current !== 'design' && current !== 'plan' && current !== 'implement') return ''
-  const relative = artifactPathFor(changeId, current)
+  const relative = artifactPathFor(changeId, current, mode)
   try {
     const s = await stat(join(cwd, relative))
     return `:${s.size}-${Math.floor(s.mtimeMs)}`

@@ -102,10 +102,11 @@ function slashDesc(slash: string): string {
 
 /** Build a slash-command card title from its description + optional runtime info. */
 function cardTitle(slash: string, runtime?: string): string {
+  // 【变更】2026-09-28 (用户问题 6): the 「点本行展开/折叠详情」 suffix is gone —
+  // the web GUI's GenericCommandCard now defaults to expanded, and the CLI
+  // mirror keeps byte-parity with what the customer sees there.
   const desc = slashDesc(slash)
-  return runtime === undefined
-    ? `${desc} · 点本行展开/折叠详情`
-    : `${desc} · ${runtime} · 点本行展开/折叠详情`
+  return runtime === undefined ? desc : `${desc} · ${runtime}`
 }
 
 const HELP_CORE = [
@@ -167,7 +168,7 @@ function readCwd(opts: { cwd?: string }): string | undefined {
 function missingCwd(command: string): CliResult {
   return {
     ok: false,
-    text: formatCommandReport(false, `${command} · 缺少工作区 · 点本行展开/折叠详情`, [
+    text: formatCommandReport(false, `${command} · 缺少工作区`, [
       { title: '原因', lines: ['CLI 没有 --cwd，当前工作目录也为空'] },
       { title: '处理', lines: ['指定 --cwd <path> 或 cd 到工作区目录'] },
     ]),

@@ -49,11 +49,12 @@
 
 import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
-import { DOC_REQUIREMENTS_ZH } from './stages/gates.ts'
+import { BUG_RECORD_FILE } from './stages/bug-fix-path.ts'
+import { BUG_RECORD_REQUIREMENTS_ZH, CHECKLIST_FILE, CHECKLIST_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH } from './stages/gates.ts'
 import { sharedHostSet } from './host-memory.ts'
 
 /** Artifact-authoring stages a work order can address (`implement` edits the allowlist). */
-export type DispatchNode = 'open' | 'clarify' | 'design' | 'plan' | 'implement'
+export type DispatchNode = 'open' | 'clarify' | 'design' | 'plan' | 'implement' | 'verify'
 
 /** One "the model must author this" rest, as the coordinator observes it. */
 export interface DispatchSignal {
@@ -65,8 +66,15 @@ export interface DispatchSignal {
   readonly artifactPath: string
   /** The gate's missing-item lines — the order's per-item work list. */
   readonly missing: readonly string[]
-  /** Optional verification reason (the T11 fix loop). */
-  readonly cause?: 'verify-failed'
+  /** Optional verification reason (the T11 fix loop / the checklist gates / the 2026-09-28 gate revision loop). */
+  readonly cause?: 'verify-failed' | 'checklist-missing' | 'checklist-open' | 'gate-revise'
+  /**
+   * 【变更】2026-09-26 (用户需求 工作流 3): the change's mode — on
+   * bug-fix-path the open rest's artifact is bug-record.md (not proposal.md)
+   * and its completion conditions are the bug-record requirements. Absent =
+   * full-go-path (every pre-existing caller/serialization).
+   */
+  readonly mode?: 'full-go-path' | 'bug-fix-path'
 }
 
 /** What a dispatch attempt did. */
@@ -142,18 +150,31 @@ export function expireDispatchLedger(cwd: string): void {
  * gate reads the ledger inside `plan.json` (task `done` flags + allowlist),
  * not `tasks.md`, so the order points the model at the file it will be
  * judged by.
+ *
+ * 【变更】2026-09-26 (用户需求 工作流 3): `mode='bug-fix-path'` reroutes the
+ * open rest's order at bug-record.md — the artifact that mode's open gate
+ * actually judges.
  * @param changeId - change id.
  * @param node - dispatch stage.
+ * @param mode - workflow mode (default full-go-path).
  * @returns the workspace-relative path.
  */
-export function artifactPathFor(changeId: string, node: DispatchNode): string {
+export function artifactPathFor(
+  changeId: string,
+  node: DispatchNode,
+  mode?: 'full-go-path' | 'bug-fix-path',
+): string {
   const file = node === 'open'
-    ? ARTIFACT_FILES.proposal
+    ? mode === 'bug-fix-path' ? BUG_RECORD_FILE : ARTIFACT_FILES.proposal
     : node === 'clarify'
       ? ARTIFACT_FILES.clarify
       : node === 'design'
         ? ARTIFACT_FILES.design
-        : ARTIFACT_FILES.planJson
+        : node === 'verify'
+          // 【变更】2026-09-28 (用户问题 8): the verify-stage order's only
+          // artifact is the checklist — the model ticks it, nothing else.
+          ? CHECKLIST_FILE
+          : ARTIFACT_FILES.planJson
   return `openspec/changes/${changeId}/${file}`
 }
 
@@ -165,16 +186,29 @@ export function artifactPathFor(changeId: string, node: DispatchNode): string {
 const IMPLEMENT_REQUIREMENTS_ZH = [
   'plan.json 里每个任务的 done 标为 true（剩余任务做完并标记）',
   '改动文件全部在 plan.json 的 allowlist 内',
+  // 【变更】2026-09-28 (用户问题 8): the checklist is implement's exit
+  // artifact — teach it here so the model authors it in the same turn the
+  // last task completes, instead of waiting for the verify-entry refusal.
+  '全部任务完成后生成 checklist.md（每行一个 `- [ ] 检查项`，来源：各任务 verify 命令 + 验收标准）',
 ] as const
 
 /**
  * The completion conditions the order restates. Implement quotes its own
- * ledger gate; every doc stage quotes {@link DOC_REQUIREMENTS_ZH}.
- * @param node - dispatch stage.
+ * ledger gate; a bug-fix open quotes {@link BUG_RECORD_REQUIREMENTS_ZH}; every
+ * other doc stage quotes {@link DOC_REQUIREMENTS_ZH}.
+ * @param signal - the observed gap.
  * @returns the pass-condition lines.
  */
-function requirementsFor(node: DispatchNode): readonly string[] {
-  return node === 'implement' ? IMPLEMENT_REQUIREMENTS_ZH : DOC_REQUIREMENTS_ZH[node]
+function requirementsFor(signal: DispatchSignal): readonly string[] {
+  // 【变更】2026-09-28 (用户问题 8): checklist orders quote the checklist's
+  // own pass conditions, whichever node they ride on.
+  if (signal.cause === 'checklist-missing' || signal.cause === 'checklist-open') {
+    return CHECKLIST_REQUIREMENTS_ZH
+  }
+  if (signal.node === 'implement') return IMPLEMENT_REQUIREMENTS_ZH
+  if (signal.node === 'open' && signal.mode === 'bug-fix-path') return BUG_RECORD_REQUIREMENTS_ZH
+  if (signal.node === 'verify') return CHECKLIST_REQUIREMENTS_ZH
+  return DOC_REQUIREMENTS_ZH[signal.node]
 }
 
 /**
@@ -190,27 +224,36 @@ function requirementsFor(node: DispatchNode): readonly string[] {
  */
 export function workOrderText(signal: DispatchSignal): string {
   const { changeId, node, artifactPath, missing, cause } = signal
-  const conditions = requirementsFor(node).filter(line => !missing.includes(line))
+  const conditions = requirementsFor(signal).filter(line => !missing.includes(line))
   const head = cause === 'verify-failed'
     ? '【BAF 工单 · /baf-go 派单 · 验证未通过】'
-    : '【BAF 工单 · /baf-go 派单】'
+    : cause === 'checklist-missing'
+      ? '【BAF 工单 · /baf-go 派单 · 生成验证检查单】'
+      : cause === 'checklist-open'
+        ? '【BAF 工单 · /baf-go 派单 · 勾选验证检查单】'
+        // 【变更】2026-09-28 (用户问题 1.7): the gate dialog's revision input
+        // dispatches here — same channel, the missing list carries the
+        // customer's modification request verbatim.
+        : cause === 'gate-revise'
+          ? '【BAF 工单 · /baf-go 派单 · 客户修改意见】'
+          : '【BAF 工单 · /baf-go 派单】'
   return [
     head,
     `变更：${changeId}`,
     `阶段：${node}`,
     `产物：${artifactPath}`,
     '',
-    missing.length === 0 ? '缺什么：产物未达该阶段裁决门' : '缺什么（逐项补齐）：',
+    cause === 'gate-revise' ? '按客户修改意见修订（意见逐条如下）：' : missing.length === 0 ? '缺什么：产物未达该阶段裁决门' : '缺什么（逐项补齐）：',
     ...missing.map(line => `- ${line}`),
     ...(conditions.length === 0
       ? []
-      : ['', '完成条件（裁决门）：', ...conditions.map(line => `- ${line}`)]),
+      : ['', cause === 'gate-revise' ? '修订时仍须满足的完成条件（裁决门）：' : '完成条件（裁决门）：', ...conditions.map(line => `- ${line}`)]),
     '',
     '执行要求：',
     '1. 直接编辑上方产物补齐，不要另建文件；',
     '2. 补齐后立即结束本回合——系统会在回合结束时自动弹出下一阶段裁决卡，无需你调用任何命令；',
     '3. 需要客户决策时调用 baf_question_ask，不要用文字向客户提问；',
-    '4. 本工单由客户敲 /baf-go 生成（客户已授权），照单执行即可。',
+    `4. 本工单由客户${cause === 'gate-revise' ? '在确认卡输入修改意见' : '敲 /baf-go'} 生成（客户已授权），照单执行即可。`,
   ].join('\n')
 }
 
@@ -230,6 +273,7 @@ export function workOrderMessage(signal: DispatchSignal): UserMessage {
       changeId: signal.changeId,
       node: signal.node,
       missing: [...signal.missing],
+      ...(signal.mode === undefined ? {} : { mode: signal.mode }),
     },
   })
 }

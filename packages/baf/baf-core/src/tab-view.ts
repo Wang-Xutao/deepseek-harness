@@ -48,6 +48,23 @@ export interface WorkflowTabMetrics {
   readonly totalDurationMs?: number
   readonly totalInputTokens?: number
   readonly totalOutputTokens?: number
+  /**
+   * 【变更】2026-09-25 (用户需求 工作流 3): epoch-ms HOST clock stamp of this
+   * derivation. The totals are computed before serialization and transport, so
+   * the Tab anchors its per-second 变更耗时 interpolation HERE rather than at
+   * local apply time — otherwise every 2 s poll re-anchors ~a second behind
+   * the already-interpolated display and the timer visibly runs backwards.
+   */
+  readonly computedAt?: number
+  /**
+   * 【变更】2026-09-28 (用户问题 4 停表): whether any work stage's window is
+   * open at derivation time (a stage entered but not completed). While false
+   * the change rests on a customer decision — the Tab freezes its per-second
+   * 变更耗时 interpolation instead of accruing wall-clock wait time. Intake
+   * and drift windows never count: intake-classified → intake-confirmed is
+   * pure customer wait, and a drift park waits on the customer's resume call.
+   */
+  readonly running?: boolean
 }
 
 /** A parked mandatory confirmation gate (§18.5) — Tab highlight + single action. */
@@ -133,8 +150,11 @@ export interface WorkflowTabArtifact {
    * Customer-facing classification: file absent / template unfilled / filled.
    * 【变更】2026-09-23 (demo5 issue #4): `planned` is tasks.md's 中间态 —
    * 计划完成（todo list 已渲染）但实现未完成.
+   * 【变更】2026-09-28 (用户问题 3): `clipped` marks the full-go artifacts the
+   * bug-fix path never produces (clarify/design docs) — rail parity with
+   * full-go-path, the skipped rows read 已裁剪.
    */
-  readonly state: 'missing' | 'template' | 'planned' | 'filled'
+  readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
   /** Missing items when state is not `filled` (Chinese, one line each). */
   readonly missing: readonly string[]
 }

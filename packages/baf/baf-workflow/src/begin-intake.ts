@@ -107,7 +107,9 @@ function mintedCard(intake: {
         {
           title: '下一步',
           lines: [
-            `确认：/baf-workflow-classify confirm mode=${intake.mode === 'bug-fix-path' ? 'bug-fix-path problem=… root-cause=… file=… test=… test-cmd=…' : 'full-go-path title=…'}`,
+            // 【变更】2026-09-26 (用户需求 工作流 3): bug-fix 字段可省略——
+            // 省略则确认建立 TODO 草稿，模型在 open 停靠按工单补齐。
+            `确认：/baf-workflow-classify confirm mode=${intake.mode === 'bug-fix-path' ? 'bug-fix-path [problem=… root-cause=… file=… test=… test-cmd=…]（字段可省略，省略建草稿）' : 'full-go-path title=…'}`,
             '拒绝：/baf-workflow-classify reject',
           ],
         },

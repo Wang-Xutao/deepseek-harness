@@ -260,12 +260,14 @@ describe('artifact exposure (2026-09-21 session 5.jsonl)', () => {
       await pipeline.beginDocStage(intake.changeId, 'clarify', 'slash')
 
       const view = await buildWorkflowTabView(store, intake.changeId)
-      // Seven rows in stage order — the rail's open buttons key off these paths.
+      // Eight rows in stage order — the rail's open buttons key off these paths.
       // 【变更】2026-09-23 (demo5 issue #3): verify.md replaces verify-report.json
       // as the verify stage's rail row (the JSON stays on disk for machine
       // consumers; the rail shows the human document).
+      // 【变更】2026-09-28 (用户问题 8): checklist.md joins between tasks.md and
+      // verify.md — implement-exit authors it, verify ticks it.
       expect(view.artifacts?.map(r => r.file)).toEqual([
-        'proposal.md', 'clarify.md', 'design.md', 'plan.md', 'plan.json', 'tasks.md', 'verify.md',
+        'proposal.md', 'clarify.md', 'design.md', 'plan.md', 'plan.json', 'tasks.md', 'checklist.md', 'verify.md',
       ])
       const byFile = new Map((view.artifacts ?? []).map(r => [r.file, r]))
       // 【变更】2026-09-22 (user report #2): every artifact now reads
@@ -279,6 +281,9 @@ describe('artifact exposure (2026-09-21 session 5.jsonl)', () => {
       expect(byFile.get('design.md')?.missing).toEqual([])
       expect(byFile.get('tasks.md')?.state).toBe('missing')
       expect(byFile.get('plan.json')?.state).toBe('missing')
+      // 【变更】2026-09-28 (用户问题 8): the checklist rides missing until the
+      // implement exit authors it.
+      expect(byFile.get('checklist.md')?.state).toBe('missing')
       expect(byFile.get('verify.md')?.state).toBe('missing')
 
       // Authoring the real content flips the row to filled — the rail reads

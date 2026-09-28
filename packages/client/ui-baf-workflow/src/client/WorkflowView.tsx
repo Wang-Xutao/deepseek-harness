@@ -30,6 +30,8 @@ import { CATALOG_ZH } from './catalog-i18n.ts'
 import { buildClientTemplateTabView, withRenderableGraph } from './graph-template.ts'
 import { NodeIcon } from './icons.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
+import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel } from './gate-ask.ts'
+import { setWorkflowTabActive } from './tab-activity.ts'
 import css from './WorkflowView.module.css'
 
 /** intake.mode wire value → locale key (the rail's 变更分类 card). */
@@ -52,14 +54,14 @@ export interface WorkflowViewInjected {
   rejectIntake: (changeId: string) => Promise<WorkflowTabView>
   startIntake: (description: string) => Promise<WorkflowTabView>
   /**
-   * §22 user-request 2026-09-20 — Tab 「推进」 button. 【变更】2026-09-23
-   * (demo1 issue #4): now the exact counterpart of typing `/baf-go` in chat —
-   * the host routes `driveGo` with the §22 dialog channel, so the click pops
-   * the same confirmation popup and the landed authoring rest gets the work
-   * order (model participation). Compositions without a popup channel fall
-   * back to the old positive-path (`confirm:true`) shape.
+   * §22 user-request 2026-09-20 — Tab advancement. 【变更】2026-09-25 (用户需求
+   * 工作流 1): the always-on strip button is gone; the Tab pops a TOP advance
+   * dialog when the change rests at a point that can advance, and its 推进
+   * click passes `skipAsk` — the dialog itself IS the confirmation, so the
+   * host takes the positive `confirm` path (no second session-form popup)
+   * while the dispatch channel still wakes the model at the landed rest.
    */
-  advance: (changeId: string) => Promise<WorkflowTabView>
+  advance: (changeId: string, skipAsk?: boolean) => Promise<WorkflowTabView>
   /**
    * §13 R3 — fast-path Tab dispatch. The `evidence` payload is flattened on
    * the host into `key=value` pairs the same way the slash parser reads
@@ -81,6 +83,21 @@ export interface WorkflowViewInjected {
    * `WorkflowTabGate.options` / `WorkflowTabPendingGate.options` row.
    */
   gateResolve: (request: { changeId?: string; gateId: string; optionId: string; extraArgs?: readonly string[] }) => Promise<WorkflowTabView>
+  /**
+   * 【变更】2026-09-28 (用户问题 1.7 Tab parity): submit a revision request from
+   * the Tab's own decision surfaces (advance dialog, parked-gate banner) —
+   * `gateId` for the banner, `node`+`mode` for the advance dialog (the host
+   * derives the stage's advance gate). The host dispatches the same
+   * `gate-revise` work order the session dialog's `custom` answer takes; the
+   * gate re-pops after the model reworks the artifact.
+   */
+  gateRevise: (request: {
+    changeId?: string
+    gateId?: string
+    node?: WorkflowNodeId
+    mode?: 'full-go-path' | 'bug-fix-path' | 'clarify-required'
+    text: string
+  }) => Promise<WorkflowTabView>
   /**
    * 【变更】2026-09-23 (user issue #6): the 变更总览 dashboard payload — every
    * change in the workspace as one rollup row (phase, task progress,
@@ -117,6 +134,9 @@ const RAIL_MAX = 560
 const RAIL_DEFAULT = 360
 const ZOOM_MIN = 0.55
 const ZOOM_MAX = 1.8
+
+/** Clamp a number into [min, max] — wheel-pan bounds. */
+const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v))
 
 function formatDuration(ms: number | undefined): string {
   // 【变更】2026-09-23 (demo5 issue #2): 0 is a REAL value (a finished stage
@@ -197,8 +217,12 @@ function statusClass(status: WorkflowTabNodeView['status']): string {
     case 'in-progress': return css.statusInProgress ?? ''
     case 'failed':
     case 'blocked': return css.statusFailed ?? ''
-    case 'drifted':
-    case 'skipped': return css.statusDrifted ?? ''
+    case 'drifted': return css.statusDrifted ?? ''
+    // 【变更】2026-09-25 (用户需求 工作流 5): 已忽略 is gray EVERYWHERE —
+    // 'skipped' used to share the drifted amber here, so a drift-affected
+    // stage's 已忽略 badge read amber while 已放弃's 已忽略 read gray.
+    // Only 漂移 itself keeps the amber (its label is 漂移中, never 已忽略).
+    case 'skipped': return css.statusIdle ?? ''
     default: return css.statusIdle ?? ''
   }
 }
@@ -441,7 +465,8 @@ function RailSplitter(props: {
 export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   const {
     t, refresh, startIntake, advance, transition, resume,
-    gateResolve, openArtifact, useProjection, subscribe, dashboard,
+    gateResolve, gateRevise, openArtifact, useProjection, subscribe, dashboard,
+    sessionId, useSessionStatus,
   } = props
   const preset = useProjection('agentPreset')
   // 【变更】2026-09-22 (user report #4) — session statistics. Both figures ride
@@ -501,11 +526,51 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // 【变更】2026-09-23 (demo1 十问题 2): the current the view last
   // auto-selected — see applyView.
   const lastAutoCurrent = useRef<WorkflowNodeId | TerminalStateId | null>(null)
+  // 【变更】2026-09-25 (用户需求 工作流 3): per-second 变更耗时 interpolation
+  // anchor. `totalDurationMs` grows in real time host-side (open stage windows
+  // accumulate `nowMs - start` in the metrics fold), so between the 2 s
+  // refreshes the client can add the wall-clock elapsed to the LAST served
+  // value and stay consistent with the next refresh. Re-anchored on every
+  // applyView; frozen automatically once the change turns terminal
+  // (changeActive false → the frozen metrics value renders).
+  const timerAnchor = useRef<{ at: number; value: number | undefined }>({ at: Date.now(), value: undefined })
+  // 【变更】2026-09-25 (用户需求 工作流 3): the last value the 变更耗时
+  // interpolation painted for THIS change — the monotonic floor (see
+  // liveTotalMs) so poll pipeline lag / clock skew can never step the timer
+  // backwards mid-change.
+  const lastShownTotal = useRef<{ key: string; ms: number } | null>(null)
+  // The 1 s tick driving the interpolated display (only runs while the
+  // change is active — terminal changes never re-tick their frozen total).
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  // 【变更】2026-09-25 (用户需求 工作流 1): the TOP advance dialog's dismissal —
+  // keyed `${changeId}:${current}` so 暂不推进 dismisses for THIS rest point
+  // only; a real stage advance (or change switch) re-arms the dialog.
+  const [advanceDismissed, setAdvanceDismissed] = useState<string | null>(null)
+  // 【变更】2026-09-25 (用户需求 工作流 1): one-click state of the TOP live-gate
+  // dialog — after a click every option disables until the carrier resolves
+  // (the pending interaction clears and the card unmounts).
+  const [gateAnswered, setGateAnswered] = useState<string | null>(null)
+  // 【变更】2026-09-28 (用户问题 1.7 Tab parity): the revision draft of the
+  // Tab-native decision surfaces (advance dialog, parked-gate banner) — keyed
+  // per surface so switching surfaces resets the draft; `sent` swaps the form
+  // for the 已派单 note until the surface's own state moves on. The LIVE gate
+  // card needs none of this: its carrier resolves on submit and the card
+  // unmounts.
+  const [tabRevise, setTabRevise] = useState<{ key: string; text: string; sent: boolean } | null>(null)
+  // 【变更】2026-09-28 (用户问题 1.7): the LIVE gate card's revision draft —
+  // cleared with gateAnswered whenever a new carrier arrives.
+  const [liveReviseText, setLiveReviseText] = useState('')
 
   const applyView = useCallback((next: WorkflowTabView) => {
     const safe = withRenderableGraph(next)
     setView(safe)
     setError(safe.blockedReason ?? null)
+    // 【变更】2026-09-25 (用户需求 工作流 3): anchor at the HOST's derivation
+    // stamp (the totals are computed before serialization/transport), not the
+    // local apply time — applying ~a second after computation re-anchored the
+    // interpolation behind the already-painted value and every 2 s poll made
+    // the timer visibly jump backwards (4m0s → 3m59s).
+    timerAnchor.current = { at: safe.metrics?.computedAt ?? Date.now(), value: safe.metrics?.totalDurationMs }
     // 2026-09-23 issue #5: terminal currents (completed/abandoned) have no
     // catalog node to select — keep whatever the customer last clicked; the
     // rail carries the archived docs (the archive-path read fix).
@@ -549,6 +614,87 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
       // through `run`.
     }
   }, [applyView])
+
+  // 【变更】2026-09-25 (用户需求 工作流 1): this component mounts exactly while
+  // the 工作流 Tab is the active conversation view for this session — mirror
+  // that into the tab-activity store so BafGateComposer (the session-form
+  // unified card, a separate slot registration with no shared React tree)
+  // hides the session dialog while the Tab owns the decision surface.
+  useEffect(() => {
+    setWorkflowTabActive(sessionId, true)
+    return () => { setWorkflowTabActive(sessionId, false) }
+  }, [sessionId])
+
+  // 【变更】2026-09-25 (用户需求 工作流 1): the session's LIVE BAF gate dialog
+  // (askGateDialog / auto-pop carriers, `header: 'BAF 工作流'`) — rendered as
+  // the Tab's TOP dialog so the whole workflow runs from the Tab alone; the
+  // session-form card is simultaneously hidden by the tab-activity store.
+  // Business 选择卡 (`header: 'BAF 选择卡'`) never match — they stay in the
+  // session's bottom popup.
+  const pendingInteraction = useSessionStatus(snapshot =>
+    snapshot.get(sessionId)?.pendingInteraction)
+  const liveGate = useMemo(
+    () => (isBafGatePending(pendingInteraction) ? pendingInteraction : null),
+    [pendingInteraction],
+  )
+  const liveGateView = useMemo(() => (liveGate === null ? null : gateAskViewOf(liveGate)), [liveGate])
+  // 【变更】2026-09-28 (用户问题 1.6): the emphasized confirm option of the
+  // live gate card — the FIRST non-secondary option, the same heuristic the
+  // session card renders by.
+  const livePrimaryLabel = liveGateView === null
+    ? undefined
+    : liveGateView.options.find(o => !isSecondaryOptionLabel(o.label))?.label
+  // A new gate → re-arm the one-click lock.
+  useEffect(() => {
+    setGateAnswered(null)
+    // 用户问题 1.7: each new carrier starts a fresh revision draft.
+    setLiveReviseText('')
+  }, [liveGate])
+
+  // The change-focused rest the advance dialog keys its dismissal on.
+  const changeActive = view.changeId !== null
+    && view.current !== null
+    && view.current !== 'completed'
+    && view.current !== 'abandoned'
+  const advanceKey = view.changeId === null || view.current === null
+    ? null
+    : `${view.changeId}:${view.current}`
+  useEffect(() => { setAdvanceDismissed(null) }, [advanceKey])
+
+  // 【变更】2026-09-25 (用户需求 工作流 3): the 1 s ticker — runs only while a
+  // change is active; the interpolated value below stays frozen otherwise.
+  useEffect(() => {
+    if (!changeActive) return
+    const timer = window.setInterval(() => { setNowTick(Date.now()) }, 1000)
+    return () => { window.clearInterval(timer) }
+  }, [changeActive])
+  // Interpolated 变更耗时: anchor value + wall-clock elapsed since the anchor
+  // stamp. Never runs backwards within one change — a poll trailing the painted
+  // interpolation by clock skew would read as a stuck timer every 2 s, so the
+  // last shown value is a floor while this change stays active (terminal
+  // switches to the frozen host value, which is authoritative).
+  // 【变更】2026-09-28 (用户问题 4 停表): while the host reports
+  // `metrics.running === false` the change rests on a customer decision — the
+  // wall-clock wait is NOT workflow time, so the interpolation freezes and the
+  // display holds the host's last computed total.
+  const liveTotalMs = useMemo(() => {
+    const waitingOnCustomer = view.metrics?.running === false
+    const base = changeActive && !waitingOnCustomer && timerAnchor.current.value !== undefined
+      ? timerAnchor.current.value + Math.max(0, nowTick - timerAnchor.current.at)
+      : view.metrics?.totalDurationMs
+    if (changeActive && base !== undefined) {
+      // `changeActive`'s aliased predicate already narrowed changeId to string.
+      const key = view.changeId
+      const last = lastShownTotal.current
+      if (last !== null && last.key === key) {
+        const ms = Math.max(base, last.ms)
+        lastShownTotal.current = { key, ms }
+        return ms
+      }
+      lastShownTotal.current = { key, ms: base }
+    }
+    return base
+  }, [changeActive, nowTick, view.metrics?.totalDurationMs, view.metrics?.running, view.changeId])
 
   useEffect(() => {
     if (preset !== 'baf') return
@@ -778,7 +924,10 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         </span>
         <span className={css.stripItem}>
           <span className={css.stripLabel}>{t('strip.totalTime')}</span>
-          <span className={css.stripValue}>{formatDuration(view.metrics?.totalDurationMs)}</span>
+          {/* 【变更】2026-09-25 (用户需求 工作流 3): per-second interpolated
+              total — the 2 s poll keeps the underlying view fresh, the display
+              ticks every second between refreshes (anchor + wall-clock). */}
+          <span className={css.stripValue}>{formatDuration(liveTotalMs)}</span>
         </span>
         <span className={css.stripItem} title={tokenTooltip}>
           <span className={css.stripLabel}>{t('strip.totalTokens')}</span>
@@ -848,41 +997,12 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               {t('action.abandon')}
             </button>
           ) : null}
-        {/* §22 user-request 2026-09-20 — Tab 「推进」 button.
-            【变更】2026-09-23 (demo1 issue #4): the click now has exact
-            /baf-go parity — the host routes driveGo with the §22 dialog
-            channel, so the resting-point decision pops the same popup the
-            session command pops, and the authoring rest the confirm lands on
-            receives the work order (the model wakes; the session shows the
-            派单 row and the turn). The no-popup confirm:true shape survives
-            only as the fallback when no dialog channel exists.
-            (2026-09-22 user report #4 keeps holding: the button renders only
-            when the host-derived `advance` says the CURRENT node's file gate
-            passes — 产物是推进的前提，按钮只做确认；not ready → disabled with
-            the gate's missing list in the tooltip; absent → hide.) */}
-        {view.changeId !== null
-          && view.current !== null
-          && view.current !== 'completed'
-          && view.current !== 'abandoned'
-          && view.current !== 'drift'
-          && view.gate === undefined
-          && view.advance !== undefined ? (
-            <button
-              type="button"
-              className={clsx(css.btn, view.advance.ready ? css.btnPrimary : css.btnGhost)}
-              disabled={busy || !view.advance.ready}
-              title={view.advance.ready
-                ? t('action.advanceHelp')
-                : `${t('action.advanceBlocked')}\n${view.advance.missing.join('\n')}`}
-              onClick={() => {
-                const changeId = view.changeId
-                if (changeId === null || view.advance?.ready !== true) return
-                void run(() => advance(changeId))
-              }}
-            >
-              {t('action.advance')}
-            </button>
-          ) : null}
+        {/* §22 user-request 2026-09-20 — the strip 「推进」 button is GONE
+            (【变更】2026-09-25 用户需求 工作流 1): the always-on button became
+            the TOP advance dialog below — it pops only when the host-derived
+            `advance` says the change rests at a point that can advance, so
+            the strip no longer carries a permanent decision the customer
+            would otherwise see on every paint. */}
       </div>
 
       {view.openspecSkipped?.skipped === true && (
@@ -910,6 +1030,99 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           </div>
         ) : null}
 
+      {/* 【变更】2026-09-25 (用户需求 工作流 1): the LIVE session gate dialog as
+          the Tab's TOP card. When the session pops a BAF workflow decision
+          (初始化工作区、推进工作流、§22 gate asks … — every
+          `header: 'BAF 工作流'` carrier), the same decision renders here and
+          is answered HERE while the 工作流 Tab is on screen: one click posts
+          through the carrier's `answer` verb — the identical channel the
+          session dialog click resolves through, so the host-side gate
+          dispatch is byte-for-byte the same. Business 选择卡 never match the
+          discriminator and keep the session's bottom popup.
+          【变更】2026-09-28 (用户问题 1.1/1.2/1.5/1.6/1.7): the card renders the
+          dialog wire protocol — 【…】 sections with `- ` lists, the 变更 chip
+          top-right, openable 【产物】 chips (the Tab rail's openArtifact
+          channel), the emphasized confirm button, and the revision input
+          (answers the carrier's `custom` field; the gate re-pops after the
+          model reworks the artifact). */}
+      {liveGateView !== null && liveGate !== null && (
+        <section className={clsx(css.card, css.cardGate)} aria-label={liveGateView.title} data-live-gate="">
+          <div className={css.gateHeadRow}>
+            <div className={css.cardTitle}>{liveGateView.title}</div>
+            {liveGateView.changeId !== undefined && (
+              <span className={css.gateChangeChip}>变更 {liveGateView.changeId}</span>
+            )}
+          </div>
+          {liveGateView.sections.map((section, si) => (
+            <div key={`live-sec-${si}`} className={css.gateSection}>
+              {section.title !== undefined && <div className={css.gateSectionTitle}>{section.title}</div>}
+              {section.blocks.map((block, bi) => block.kind === 'text'
+                ? <p key={`live-t-${si}-${bi}`} className={css.hint}>{block.text}</p>
+                : (
+                  <ul key={`live-l-${si}-${bi}`} className={css.gateList}>
+                    {block.items.map((item, ii) => (
+                      <li key={`live-i-${si}-${bi}-${ii}`}>
+                        {item.artifact === undefined
+                          ? item.text
+                          : (
+                            <button
+                              type="button"
+                              className={css.gateArtifactChip}
+                              onClick={() => { openArtifact(item.artifact?.path ?? '') }}
+                            >
+                              📄 {item.artifact.label} ↗
+                            </button>
+                          )}
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+            </div>
+          ))}
+          <div className={css.actions}>
+            {liveGateView.options.map(opt => (
+              <button
+                key={`live-gate-${opt.label}`}
+                type="button"
+                className={clsx(css.btn, opt.label === livePrimaryLabel ? css.btnPrimary : css.btnGhost)}
+                disabled={busy || gateAnswered !== null}
+                onClick={() => {
+                  setGateAnswered(opt.label)
+                  answerGateOption(liveGate, liveGateView, opt.label)
+                }}
+              >
+                {opt.label}
+                {opt.hint !== undefined && <span className={css.optionHintInline}> · {opt.hint}</span>}
+              </button>
+            ))}
+          </div>
+          {liveGateView.allowsRevise && (
+            <div className={css.reviseBox}>
+              <label className={css.reviseLabel}>有修改意见？写下后提交，系统派单修订产物，改好后再次弹出确认</label>
+              <textarea
+                className={css.reviseInput}
+                rows={2}
+                value={liveReviseText}
+                placeholder="例如：Scope 里补充不改哪些；Why 一句话讲清目标"
+                disabled={gateAnswered !== null}
+                onChange={(event) => { setLiveReviseText(event.target.value) }}
+              />
+              <button
+                type="button"
+                className={css.reviseSubmit}
+                disabled={gateAnswered !== null || liveReviseText.trim() === ''}
+                onClick={() => {
+                  setGateAnswered('revise')
+                  answerGateRevision(liveGate, liveGateView, liveReviseText)
+                }}
+              >
+                提交修改意见
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* §22.14 P3 — pending decision gate card. The host computes this when
           `.baf/baseline.yml` is missing (workspace scaffold gate) or — 2026-09-23
           demo2 issue #2 — when the focused change rests at a pending
@@ -919,8 +1132,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           moment (projection push + poll keep the two surfaces in sync).
           `cancel` is the `__noop__` sentinel — `gateResolve` returns a calm
           dismissal card and the host re-derives the gate (its condition still
-          holds). */}
-      {view.pendingGate !== undefined && (
+          holds).
+          【变更】2026-09-25 (用户需求 工作流 1): suppressed while the LIVE gate
+          dialog above is showing — the live carrier is the same decision at
+          a strictly fresher instant, and both cards would race the answer. */}
+      {view.pendingGate !== undefined && liveGateView === null && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('pendingGate.title')}>
           <div className={css.cardTitle}>
             {view.pendingGate.gateId === 'intake-classify'
@@ -970,11 +1186,14 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           `gateResolve` channel; the verify-archive confirm option goes through
           the §13 R1 destructive modal, exactly like the rail's primary
           button. The rail keeps its buttons — this banner is the
-          at-the-top parity surface, not a replacement. */}
+          at-the-top parity surface, not a replacement.
+          【变更】2026-09-25 (用户需求 工作流 1): suppressed while the LIVE gate
+          dialog above is showing (same decision, fresher instant). */}
       {view.gate !== undefined
         && view.gate.gateId !== undefined
         && view.gate.question !== undefined
-        && view.changeId !== null && (
+        && view.changeId !== null
+        && liveGateView === null && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('gate.bannerTitle')}>
           <div className={css.cardTitle}>{t('gate.bannerTitle')}</div>
           <p className={css.hint}>{view.gate.question}</p>
@@ -1001,6 +1220,158 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               </button>
             ))}
           </div>
+          {/* 【变更】2026-09-28 (用户问题 1.7 Tab parity): the banner's revision
+              input — posts the host's `gateRevise` remote (this surface has no
+              ask carrier); a `gate-revise` work order goes out against the
+              gate's revisable document and the gate re-derives after the
+              model reworks it. */}
+          {(() => {
+            const bannerChangeId = view.changeId
+            const bannerGateId = view.gate?.gateId
+            if (bannerChangeId === null || bannerGateId === undefined) return null
+            const key = `gate:${bannerGateId}:${bannerChangeId}`
+            const draft = tabRevise?.key === key ? tabRevise : null
+            if (draft?.sent === true) {
+              return <p className={css.reviseSent}>修改意见已提交派单，模型修订完成后此处更新</p>
+            }
+            return (
+              <div className={css.reviseBox}>
+                <label className={css.reviseLabel}>有修改意见？写下后提交，系统派单修订产物，改好后再次确认</label>
+                <textarea
+                  className={css.reviseInput}
+                  rows={2}
+                  value={draft?.text ?? ''}
+                  placeholder="例如：设计文档补充回退方案；验收标准改为……"
+                  disabled={busy}
+                  onChange={(event) => { setTabRevise({ key, text: event.target.value, sent: false }) }}
+                />
+                <button
+                  type="button"
+                  className={css.reviseSubmit}
+                  disabled={busy || (draft?.text ?? '').trim() === ''}
+                  onClick={() => {
+                    const text = (draft?.text ?? '').trim()
+                    if (text === '') return
+                    // run() never rejects (it owns its error surface), so the
+                    // sent-note swap rides its completion.
+                    void run(() => gateRevise({ changeId: bannerChangeId, gateId: bannerGateId, text }))
+                      .then(() => { setTabRevise({ key, text: '', sent: true }) })
+                  }}
+                >
+                  提交修改意见
+                </button>
+              </div>
+            )
+          })()}
+        </section>
+      )}
+
+      {/* 【变更】2026-09-25 (用户需求 工作流 1): the TOP advance dialog — the
+          former strip 推进 button, now a dialog that pops only when a
+          decision is actually needed. Visibility: the host-derived `advance`
+          exists AND is ready (the change rests at an advancing point with its
+          file gate passed) AND no decision card outranks it (live gate,
+          pending gate, parked confirm gate) AND the customer has not clicked
+          暂不推进 for THIS rest point (`${changeId}:${current}` — a stage
+          advance re-arms it). 确认推进 posts `advance(changeId, true)` — the
+          dialog IS the confirmation, so the host takes the positive confirm
+          path directly and the landed stage still receives the work order. */}
+      {changeActive
+        && view.current !== 'drift'
+        && view.advance?.ready === true
+        && view.gate === undefined
+        && view.pendingGate === undefined
+        && liveGateView === null
+        && advanceKey !== null
+        && advanceDismissed !== advanceKey && (
+        <section className={clsx(css.card, css.cardGate)} aria-label={t('action.advance')} data-advance-dialog="">
+          <div className={css.cardTitle}>{t('advanceDialog.title')}</div>
+          <p className={css.hint}>
+            {nextEdge !== null
+              ? fillTemplate(t('advanceDialog.body'), {
+                from: t(`node.${view.current}`),
+                to: t(`node.${nextEdge.to}`),
+              })
+              : fillTemplate(t('advanceDialog.body'), {
+                from: t(`node.${view.current}`),
+                to: '',
+              })}
+          </p>
+          <div className={css.actions}>
+            <button
+              type="button"
+              className={clsx(css.btn, css.btnPrimary)}
+              disabled={busy}
+              onClick={() => {
+                const changeId = view.changeId
+                if (changeId === null) return
+                void run(() => advance(changeId, true))
+              }}
+            >
+              {t('action.advance')}
+            </button>
+            <button
+              type="button"
+              className={clsx(css.btn, css.btnGhost)}
+              disabled={busy}
+              onClick={() => { setAdvanceDismissed(advanceKey) }}
+            >
+              {t('advanceDialog.dismiss')}
+            </button>
+          </div>
+          {/* 【变更】2026-09-28 (用户问题 1.7 Tab parity): the advance dialog's
+              revision input — the dialog rests on a COMPLETED stage (no gate
+              id of its own), so the submit posts `node`+`mode` and the host
+              derives the stage's advance gate (open → open-advance …). The
+              revision dispatches against that stage's document; the model
+              reworks it and the same rest point re-derives. */}
+          {(() => {
+            const advanceChangeId = view.changeId
+            const advanceNode = view.current
+            // The enclosing card condition already excluded drift and the
+            // terminal states — only the non-revisable resting nodes bow out.
+            if (advanceChangeId === null
+              || advanceNode === 'intake'
+              || advanceNode === 'archive') return null
+            const key = `advance:${advanceChangeId}:${advanceNode}`
+            const draft = tabRevise?.key === key ? tabRevise : null
+            if (draft?.sent === true) {
+              return <p className={css.reviseSent}>修改意见已提交派单，模型修订完成后此处更新</p>
+            }
+            return (
+              <div className={css.reviseBox}>
+                <label className={css.reviseLabel}>有修改意见？写下后提交，系统派单修订本阶段产物，改好后再次确认</label>
+                <textarea
+                  className={css.reviseInput}
+                  rows={2}
+                  value={draft?.text ?? ''}
+                  placeholder="例如：补充验收标准；Scope 里写清不改哪些"
+                  disabled={busy}
+                  onChange={(event) => { setTabRevise({ key, text: event.target.value, sent: false }) }}
+                />
+                <button
+                  type="button"
+                  className={css.reviseSubmit}
+                  disabled={busy || (draft?.text ?? '').trim() === ''}
+                  onClick={() => {
+                    const text = (draft?.text ?? '').trim()
+                    if (text === '') return
+                    void run(() => gateRevise({
+                      changeId: advanceChangeId,
+                      node: advanceNode,
+                      // The wire `mode` is loose string; the host only tests
+                      // 'bug-fix-path' — narrow once at the boundary.
+                      ...(view.mode === '' ? {} : { mode: view.mode as 'full-go-path' | 'bug-fix-path' | 'clarify-required' }),
+                      text,
+                    }))
+                      .then(() => { setTabRevise({ key, text: '', sent: true }) })
+                  }}
+                >
+                  提交修改意见
+                </button>
+              </div>
+            )
+          })()}
         </section>
       )}
 
@@ -1457,6 +1828,8 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           onClose={() => setHistoryPick(null)}
           onReload={openHistory}
           onOpenArtifact={openArtifact}
+          stats={sessionStats}
+          usage={tokenUsage}
           t={t}
         />
       )}
@@ -1648,10 +2021,21 @@ function FlowCanvas(props: {
   }
 
   const onCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey) return
+    if (event.ctrlKey) {
+      event.preventDefault()
+      const delta = event.deltaY > 0 ? -0.08 : 0.08
+      setZoom(z => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number((z + delta).toFixed(2)))))
+      return
+    }
+    // 【变更】2026-09-28 (用户问题 5): the plain wheel pans the graph
+    // vertically (shift+wheel pans horizontally) — the flow outgrew the
+    // viewport and drag-pan needed a right-click, which nobody discovers.
+    // Clamped so the canvas can never pan fully out of sight.
     event.preventDefault()
-    const delta = event.deltaY > 0 ? -0.08 : 0.08
-    setZoom(z => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number((z + delta).toFixed(2)))))
+    setPan(p => ({
+      x: event.shiftKey ? clamp(p.x - event.deltaY, -(canvasW + 80), 80) : p.x,
+      y: clamp(p.y - event.deltaY, -(canvasH * zoom + 80), 80),
+    }))
   }
 
   return (
@@ -1756,13 +2140,20 @@ function FlowCanvas(props: {
               return null
             }
             const badge = terminalBadge()
+            // 【变更】2026-09-28 (用户问题 3): bug-fix parity — the off-path
+            // clarify/design nodes are the stages this mode CLIPPED; they read
+            // 「已裁剪」 instead of 空闲, mirroring the full-go graph shape.
+            const isClipped = view.mode === 'bug-fix-path' && !placement.onPath
+              && placement.id !== 'completed' && placement.id !== 'abandoned'
             const statusLabel = isGate
               ? t('status.awaiting')
               : badge !== null
                 ? badge.label
-                : node === undefined
-                  ? t('status.template')
-                  : t(`status.${node.status}` as WorkflowTabKey)
+                : isClipped
+                  ? t('status.clipped')
+                  : node === undefined
+                    ? t('status.template')
+                    : t(`status.${node.status}` as WorkflowTabKey)
 
             return (
               <div
@@ -1863,9 +2254,12 @@ function HistoryFlowModal(props: {
   onClose: () => void
   onReload: (changeId: string, endedAt?: string) => void
   onOpenArtifact: (path: string) => void
+  /** 【变更】2026-09-25 (用户需求 工作流 6): the driving session's statistics. */
+  stats?: SessionStatsProjection | undefined
+  usage?: TokenUsageProjection | undefined
   t: (key: WorkflowTabKey) => string
 }): React.ReactElement {
-  const { pick, onClose, onReload, onOpenArtifact, t } = props
+  const { pick, onClose, onReload, onOpenArtifact, stats, usage, t } = props
   const [selected, setSelected] = useState<WorkflowNodeId | null>(null)
   const history = pick.view
   return (
@@ -1957,6 +2351,12 @@ function HistoryFlowModal(props: {
               )}
               {history.artifacts !== undefined && history.artifacts.length > 0 && (
                 <ArtifactRail rows={history.artifacts} disabled={false} onOpen={onOpenArtifact} t={t} />
+              )}
+              {/* 【变更】2026-09-25 (用户需求 工作流 6): 会话统计 joins 变更分类
+                  and 阶段产物 as the third record section — the same card the
+                  main rail renders, fed by the driving session's projections. */}
+              {(stats !== undefined || usage !== undefined) && (
+                <SessionStatsCard stats={stats} usage={usage} t={t} />
               )}
             </div>
           </div>
@@ -2119,7 +2519,7 @@ function ArtifactRail(props: {
   rows: readonly {
     readonly file: string
     readonly path: string
-    readonly state: 'missing' | 'template' | 'planned' | 'filled'
+    readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
     readonly missing: readonly string[]
   }[]
   disabled: boolean
@@ -2127,29 +2527,32 @@ function ArtifactRail(props: {
   t: (key: WorkflowTabKey) => string
 }): React.ReactElement {
   const { rows, disabled, onOpen, t } = props
-  const stateLabel = (state: 'missing' | 'template' | 'planned' | 'filled'): string =>
+  const stateLabel = (state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'): string =>
     t(`artifact.state.${state}` as WorkflowTabKey)
-  const stateClass = (state: 'missing' | 'template' | 'planned' | 'filled'): string =>
+  const stateClass = (state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'): string =>
     state === 'filled' ? css.artifactStateFilled ?? ''
       : state === 'planned' ? css.artifactStatePlanned ?? css.artifactStateTemplate ?? ''
-        : state === 'template' ? css.artifactStateTemplate ?? ''
+        : state === 'template' || state === 'clipped' ? css.artifactStateTemplate ?? ''
           : css.artifactStateMissing ?? ''
   // 【变更】2026-09-23 (demo1 十问题 4): each row names the stage that
   // produces it — 「设计 design.md」「验证 verify.md」— so the rail
   // reads as the stage→document map it is.
   const stageOf = (file: string): string => {
-    if (file === 'proposal.md') return t('node.open')
+    if (file === 'proposal.md' || file === 'bug-record.md') return t('node.open')
     if (file === 'clarify.md') return t('node.clarify')
     if (file === 'design.md') return t('node.design')
     if (file === 'plan.md' || file === 'plan.json' || file === 'tasks.md') return t('node.plan')
-    if (file === 'verify.md' || file === 'verify-report.json') return t('node.verify')
+    if (file === 'verify.md' || file === 'verify-report.json' || file === 'checklist.md') return t('node.verify')
     return ''
   }
   return (
     <section className={clsx(css.card, css.cardAccent)} aria-label={t('artifact.title')}>
       <h3 className={css.cardTitle}>{t('artifact.title')}</h3>
       {rows.map((row) => {
-        const blocked = row.state === 'missing'
+        // 【变更】2026-09-28 (用户问题 3): clipped rows (bug-fix 裁剪的
+        // full-go 产物) render dimmed with no open button — the file is never
+        // produced on this mode, so there is nothing to open.
+        const blocked = row.state === 'missing' || row.state === 'clipped'
         const stage = stageOf(row.file)
         return (
           <div key={row.path}>
@@ -2267,49 +2670,13 @@ const CONDITION_ZH: Readonly<Record<string, string>> = {
  * 【变更】2026-09-25 (demo8 问题 2.4): the former standalone 通俗说明 section
  * (per-stage tips) is gone — its plain-language content now lives inside the
  * catalog copy itself (catalog-i18n.ts), so every section reads customer-
- * facing and nothing repeats. What remains here are the per-stage common
- * failures with the stable BAF error code, plain meaning, and the
- * customer-side fix — cribbed from overlay/docs/baf/error-codes.md, trimmed
- * to what a customer can act on. Rendered as a compact code → meaning → fix
- * table under 失败处理.
+ * facing and nothing repeats.
+ * 【变更】2026-09-25 (用户需求 工作流 4): the per-stage 常见失败与处理 reference
+ * table (FAILURE_REFS) is gone too — the detail panel shows the anomaly's
+ * reason and fix ONLY when the stage actually sits in a failed/blocked
+ * state, driven by the live node evidence (detail + reasonCodes) plus the
+ * catalog's failure copy.
  */
-const FAILURE_REFS: Readonly<Record<string, readonly { code: string; meaning: string; fix: string }[]>> = {
-  intake: [
-    { code: 'policy_missing', meaning: '企业策略/基线缺少必需字段', fix: '先初始化工作区或补齐基线，再重新分类' },
-  ],
-  open: [
-    { code: 'git_unavailable', meaning: '本地 Git 不可用（没有仓库或提交）', fix: '在仓库里 git init 并至少提交一次，再点「进入建立变更」重试' },
-    { code: 'openspec_unavailable', meaning: 'OpenSpec 工具缺失或版本不满足', fix: '安装/初始化 OpenSpec 后重试' },
-    { code: 'baseline_unavailable', meaning: '基线文件缺失或无法解析', fix: '重新初始化工作区生成 .baf/baseline.yml' },
-  ],
-  clarify: [],
-  design: [
-    { code: 'invalid_transition', meaning: '前置阶段未完成就试图进入设计', fix: '先确认澄清文档已完成（完成门检查通过）' },
-  ],
-  plan: [
-    { code: 'invalid_transition', meaning: '计划账本缺任务结构或验证命令', fix: '按完成门缺什么清单补齐 plan.json 后再推进' },
-  ],
-  implement: [
-    { code: 'scope_exceeded', meaning: '试图修改白名单之外的文件', fix: '只改白名单内文件；范围确实要扩大时走升级/重计划' },
-    { code: 'intake_confirmation_required', meaning: '分类未确认就尝试写源码', fix: '先在分类卡上点选路径确认' },
-    { code: 'protected_path', meaning: '写入命中受保护路径', fix: '换到白名单内的目标文件；受保护资源不可改' },
-    { code: 'secret_detected', meaning: '写入内容命中密钥扫描', fix: '移除硬编码密钥，改用环境变量/配置' },
-  ],
-  verify: [
-    { code: 'tool_unavailable', meaning: '验证所需的外部工具不可用', fix: '安装对应工具后重跑验证（verify 会带着缺失清单回实现）' },
-    { code: 'openspec_unavailable', meaning: 'OpenSpec 校验不可用', fix: '安装/初始化 OpenSpec 后重跑' },
-    { code: 'model_route_unavailable', meaning: '验证阶段的模型路由不可用', fix: '在设置里检查模型配置后重跑' },
-  ],
-  archive: [
-    { code: 'verify_required', meaning: '验证未通过或报告过期，不允许归档', fix: '回到实现修复失败项，验证全绿后再归档' },
-    { code: 'gate_confirmation_required', meaning: '归档需要你本人确认', fix: '在确认卡上点「确认归档」' },
-  ],
-  drift: [
-    { code: 'projection_corrupted', meaning: '流程记录文件损坏', fix: '按提示修复记录文件后刷新；不要手改 .baf/projection' },
-    { code: 'writer_conflict', meaning: '另一个进程在写同一条变更', fix: '关闭其它占用该工作区的会话/进程后重试' },
-  ],
-}
-
 function BilingualDetail(props: {
   node: WorkflowTabNodeView
   t: (key: WorkflowTabKey) => string
@@ -2317,6 +2684,10 @@ function BilingualDetail(props: {
 }): React.ReactElement {
   const { node, t, nextEdge } = props
   const zh = CATALOG_ZH[node.id]
+  // 【变更】2026-09-25 (用户需求 工作流 4): the anomaly block renders ONLY when
+  // this stage actually sits failed/blocked — reason from the live node
+  // evidence (detail + reasonCodes), fix from the catalog failure copy.
+  const failed = node.status === 'failed' || node.status === 'blocked'
   // 【变更】2026-09-23 (demo5 issue #7): the detail panel renders Chinese only —
   // the bilingual 英/中 pairs are gone. The zh dictionary entry is the display
   // source; the English catalog text stays the fallback for a node the zh
@@ -2342,10 +2713,6 @@ function BilingualDetail(props: {
     {
       title: 'detail.completion',
       items: zh?.completion ?? node.catalog.completion,
-    },
-    {
-      title: 'detail.failure',
-      items: zh?.failure ?? node.catalog.failure,
     },
   ]
 
@@ -2392,23 +2759,29 @@ function BilingualDetail(props: {
           </div>
         )
       })}
-      {/* 【变更】2026-09-24 (demo6 问题 13): when this stage has known failure
-          codes, the compact code → meaning → fix table. Same section styling
-          as above so the whole detail panel reads as one format. 【变更】
-          2026-09-25 (demo8 问题 2.4): the standalone 通俗说明 tip section that
-          used to sit here is gone — its content moved into the catalog copy. */}
-      {(FAILURE_REFS[node.id] ?? []).length > 0 && (
+      {/* 【变更】2026-09-25 (用户需求 工作流 4): the ONLY failure surface —
+          reason (the node's live detail + reasonCodes) then 解决方法 (the
+          catalog's customer-side fix copy), rendered exclusively while the
+          stage sits failed/blocked. A healthy or not-yet-reached stage shows
+          nothing here (the old always-on 常见失败与处理 table is deleted). */}
+      {failed && (
         <div className={css.biSection}>
-          <div className={css.metaKey}>{t('detail.failureCodes')}</div>
-          <div className={css.failTable}>
-            {FAILURE_REFS[node.id]?.map(ref => (
-              <div key={ref.code} className={css.failRow}>
-                <span className={css.failCode}>{ref.code}</span>
-                <span className={css.failMeaning}>{ref.meaning}</span>
-                <span className={css.failFix}>{ref.fix}</span>
-              </div>
-            ))}
-          </div>
+          <div className={css.metaKey}>{t('detail.failure')}</div>
+          {node.detail !== undefined && node.detail !== '' && (
+            <p className={css.biZh}>{node.detail}</p>
+          )}
+          {node.reasonCodes !== undefined && node.reasonCodes.length > 0 && (
+            <p className={css.hint}>{node.reasonCodes.join(' · ')}</p>
+          )}
+          {(zh?.failure ?? node.catalog.failure).length > 0 && (
+            <ul className={css.list}>
+              {(zh?.failure ?? node.catalog.failure).map(item => (
+                <li key={item}>
+                  <div className={css.biZh}>{item}</div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </>

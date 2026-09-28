@@ -320,10 +320,118 @@ function dialogOptions(gate: GateDialogInput): readonly GateOptionSpec[] {
   return spec.options
 }
 
+/**
+ * 【变更】2026-09-28 (用户问题 1.5): the artifact rows a gate's 【产物】
+ * section links — workspace-relative file names inside
+ * `openspec/changes/<changeId>/`. Static per gate (the change id arrives per
+ * pop); a gate absent from this table gets no artifact section.
+ */
+export interface GateArtifactSpec {
+  /** File name inside the change directory. */
+  readonly file: string
+  /** Chinese row label. */
+  readonly label: string
+  /**
+   * The dispatch node a REVISION work order targets (用户问题 1.7: the
+   * revision input under the options). Absent = the gate's artifacts are not
+   * model-revisable (none today).
+   */
+  readonly reviseNode?: 'open' | 'clarify' | 'design' | 'plan' | 'verify'
+  /** `reviseNode`'s mode override (bug-fix open rest targets bug-record.md). */
+  readonly reviseMode?: 'full-go-path' | 'bug-fix-path'
+}
+
+/**
+ * 【变更】2026-09-28 (用户问题 1.5/1.7): per-gate artifact table. The list of
+ * a gate's rows is also its revision capability: a gate present here shows
+ * the artifact links AND the revision input; a gate absent here shows neither.
+ * `verify-archive`'s revision overrides the artifact path (the dispatch
+ * helper maps node `verify` → checklist.md, but this gate revises verify.md —
+ * `reviseFile` wins when set).
+ */
+export const GATE_ARTIFACTS: Readonly<Partial<Record<GateId, readonly GateArtifactSpec[]>>> = {
+  'open-advance': [{ file: 'proposal.md', label: '提案', reviseNode: 'open' }],
+  'bugfix-open-advance': [{ file: 'bug-record.md', label: 'Bug 记录', reviseNode: 'open', reviseMode: 'bug-fix-path' }],
+  'clarify-advance': [{ file: 'clarify.md', label: '澄清文档', reviseNode: 'clarify' }],
+  'design-advance': [{ file: 'design.md', label: '设计文档', reviseNode: 'design' }],
+  'design-confirm': [{ file: 'design.md', label: '设计文档', reviseNode: 'design' }],
+  'plan-advance': [
+    { file: 'plan.json', label: '计划（任务账本）', reviseNode: 'plan' },
+    { file: 'tasks.md', label: '任务清单（随计划生成）' },
+  ],
+  'verify-advance': [{ file: 'checklist.md', label: '验证检查单', reviseNode: 'verify' }],
+  'verify-archive': [
+    { file: 'verify.md', label: '验收文档', reviseNode: 'verify' },
+    { file: 'checklist.md', label: '验证检查单' },
+  ],
+}
+
+/**
+ * 【变更】2026-09-28 (用户问题 1.7): the revision work-order target for one
+ * gate — the node the order dispatches to plus the artifact path it names.
+ * `verify` normally maps to checklist.md (the dispatch table's rule); the
+ * `file` of the FIRST revise-capable row wins instead, so verify-archive's
+ * revision points at verify.md.
+ * @param gateId - the gate the revision came from.
+ * @returns the dispatch target, or undefined for non-revisable gates.
+ */
+export function gateRevisionTarget(
+  gateId: GateId,
+  changeId: string,
+): { node: 'open' | 'clarify' | 'design' | 'plan' | 'verify'; artifactPath: string; mode?: 'full-go-path' | 'bug-fix-path' } | undefined {
+  const rows = GATE_ARTIFACTS[gateId]
+  const revisable = rows?.find(row => row.reviseNode !== undefined)
+  if (revisable === undefined || revisable.reviseNode === undefined) return undefined
+  return {
+    node: revisable.reviseNode,
+    artifactPath: `openspec/changes/${changeId}/${revisable.file}`,
+    ...(revisable.reviseMode === undefined ? {} : { mode: revisable.reviseMode }),
+  }
+}
+
+/**
+ * 【变更】2026-09-28 (用户问题 1.7 Tab parity): the advance gate id for a
+ * completed stage — the workflow Tab's advance dialog has no gate id of its
+ * own, so its revision input maps the resting stage back to the gate whose
+ * artifact table names the revisable document (implement → verify-advance:
+ * the artifact that stage just produced is the checklist).
+ * @param node - the completed stage the Tab rests on.
+ * @param mode - the change's mode (bug-fix open revises bug-record.md).
+ * @returns the gate id, or undefined for stages with no revisable artifact.
+ */
+export function advanceGateIdForNode(
+  node: string,
+  mode?: string,
+): GateId | undefined {
+  if (node === 'open') return mode === 'bug-fix-path' ? 'bugfix-open-advance' : 'open-advance'
+  if (node === 'clarify') return 'clarify-advance'
+  if (node === 'design') return 'design-advance'
+  if (node === 'plan') return 'plan-advance'
+  if (node === 'implement') return 'verify-advance'
+  return undefined
+}
+
+/**
+ * 【变更】2026-09-28 (用户问题 1.5): the 【产物】 section appended to a gate's
+ * detail — one `- {{art:<path>}} <label>` line per artifact row. The client
+ * parses the `{{art:…}}` token into a clickable chip (opens the file in the
+ * right sidebar / artifact rail); surfaces without a parser (CLI, the plain
+ * text card) see the path verbatim, which still names the file honestly.
+ */
+function artifactSection(gateId: GateId, changeId: string): string | undefined {
+  const rows = GATE_ARTIFACTS[gateId]
+  if (rows === undefined || rows.length === 0) return undefined
+  return ['【产物】', ...rows.map(row => `- {{art:openspec/changes/${changeId}/${row.file}}} ${row.label}`)]
+    .join('\n')
+}
+
 /** One sentence under an option button: what clicking it will run. */
 function optionDescription(opt: GateOptionSpec, changeId: string | undefined): string {
   if (opt.hint !== undefined) return opt.hint
-  if (opt.command === '__noop__') return '本次不操作（工作流暂停，可用 /baf-go 重新弹出）'
+  // 【变更】2026-09-28 (用户问题 1.3): the dismiss hint names the revive
+  // command as CUSTOMER copy — it rides the wire on purpose (the client's
+  // hint filter no longer drops /baf- mentions).
+  if (opt.command === '__noop__') return '工作流暂停；需要继续时再敲一次 /baf-go'
   const invocation = [opt.command, ...(opt.args ?? [])].join(' ')
   return changeId === undefined || opt.id === 'init'
     ? `将执行 ${invocation}`
@@ -369,14 +477,21 @@ export async function askGateDialog(
   // 缺陷修复路径), not a blind 「确认分类」. Paragraph breaks, not single
   // newlines: the composer renders the detail as markdown, where a lone \n
   // folds into one running line.
+  // 【变更】2026-09-28 (用户问题 1.2/1.5): the change id rides the wire as a
+  // `{{change:…}}` FIRST line the client parses into the top-right chip (no
+  // longer embedded in the question prose), and revisable gates append a
+  // 【产物】 section whose `{{art:…}}` tokens render as openable links.
+  const artifact = gate.changeId === undefined ? undefined : artifactSection(gate.gateId, gate.changeId)
   const detail = [
-    spec.question + (gate.changeId === undefined ? '' : `（变更 ${gate.changeId}）`),
+    ...(gate.changeId === undefined ? [] : [`{{change:${gate.changeId}}}`]),
+    spec.question,
     ...(gate.note ?? []),
     ...(gate.judgment === undefined ? [] : [
       `系统初步判断：${modeZh(gate.judgment.mode)} · ${kindZh(gate.judgment.kind)} · 置信 ${gate.judgment.confidence.toFixed(2)}`,
       `需求摘要：${gate.judgment.summary}`,
     ]),
     ...(gate.bugPlan !== undefined && hasBugField(gate.bugPlan) ? [bugPlanParagraph(gate.bugPlan)] : []),
+    ...(artifact === undefined ? [] : [artifact]),
   ].join('\n\n')
   let answer: AskUserQuestionAnswer
   try {
@@ -401,6 +516,18 @@ export async function askGateDialog(
   }
   const item = answer.answers[0]
   const label = item?.selected[0]
+  // 【变更】2026-09-28 (用户问题 1.7 修改意见): free text submitted through the
+  // revision input answers with the platform's `custom` field (selected is
+  // empty). That is a REVISION request, not an option click — return it as
+  // such and let the coordinator dispatch the revision work order; the gate
+  // re-pops (fingerprint re-armed by the artifact edit) after the model
+  // revises, closing the iterate-until-confirmed loop. Gates with no
+  // revisable artifact (scaffold, classify, conflict — their cards render no
+  // revision input) keep the closed-set semantics: free text is a non-answer.
+  const custom = typeof item?.custom === 'string' ? item.custom.trim() : ''
+  if (custom !== '' && gateRevisionTarget(gate.gateId, gate.changeId ?? '') !== undefined) {
+    return { kind: 'revise', text: custom }
+  }
   if (label === undefined) {
     // Skip button, or custom text the fixed registry cannot accept — a §22
     // gate offers a closed option set, so free text is a non-answer.

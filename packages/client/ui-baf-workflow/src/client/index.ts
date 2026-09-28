@@ -5,7 +5,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
@@ -15,6 +15,8 @@ import type {} from './remote-types.ts'
 import { WorkflowView, type WorkflowViewInjected } from './WorkflowView.tsx'
 import { buildClientEmptyTabView, type WorkflowTabView } from './tab-types.ts'
 import { en, zh, NS, type WorkflowTabKey } from './locales.ts'
+import { isBafGatePending } from './gate-ask.ts'
+import { bindGateOpenArtifact } from './BafGateComposer.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -46,6 +48,34 @@ function unwrap<T>(result: { ok: true; value: T } | { ok: false; error: { messag
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-baf-workflow: dictionaries')
 
+  // 【变更】2026-09-25 (用户需求 工作流 1/2): the unified BAF gate card as a
+  // composer-chain entry. Priority -10 runs the selector BEFORE
+  // ui-user-questions' default-0 entry, so every `header: 'BAF 工作流'`
+  // pending question elects the BAF card (unified style, no technical
+  // detail) instead of the generic question form; business 选择卡
+  // (`header: 'BAF 选择卡'`) and all other carriers fall through untouched.
+  // The selector is pure (structural read of the owner's currency — the same
+  // contract ui-user-questions' selector follows); tab-flip hiding happens
+  // INSIDE the component (render-time store read), never in the selector.
+  // Registered unconditionally: the header discriminator only ever matches
+  // BAF sessions' gate dialogs, so non-BAF sessions keep the generic flow.
+  // 【变更】2026-09-28 (用户问题 1.5): the card binds the same artifact-opening
+  // channel the Tab rail uses, so the dialog's 【产物】 chips open the
+  // produced documents in the right sidebar.
+  ctx.slots.inject('conversation.composer', () => ctx.slots.register(
+    {
+      name: 'conversation.composer',
+      priority: -10,
+      select: ({ pendingInteraction }: ComposerChainProps) =>
+        isBafGatePending(pendingInteraction) ? pendingInteraction : null,
+      locale: NS,
+    },
+    bindGateOpenArtifact((sessionId, path) => {
+      const cwd = ctx.sessions.list.getSnapshot().byId[sessionId as SessionId]?.cwd
+      ctx.sidebarRight.openResource(fileAddressFor(sessionId as SessionId, cwd, path))
+    }),
+  ))
+
   const t = ctx.locale.bind(NS)
 
   const installView = (): (() => void) => ctx.slots.register({
@@ -73,7 +103,14 @@ export function apply(ctx: ClientContext): void {
         confirmIntake: async changeId => unwrap(await remote.confirmIntake({ sessionId, changeId })) as WorkflowTabView,
         rejectIntake: async changeId => unwrap(await remote.rejectIntake({ sessionId, changeId })) as WorkflowTabView,
         startIntake: async description => unwrap(await remote.startIntake({ sessionId, description })) as WorkflowTabView,
-        advance: async changeId => unwrap(await remote.advance({ sessionId, changeId })) as WorkflowTabView,
+        // 【变更】2026-09-25 (用户需求 工作流 1): the Tab's TOP advance dialog is
+        // itself the confirmation — `skipAsk` makes the host take the confirm
+        // positive path instead of popping a second session-form dialog.
+        advance: async (changeId, skipAsk) => unwrap(await remote.advance({
+          sessionId,
+          changeId,
+          ...(skipAsk === true ? { skipAsk: true } : {}),
+        })) as WorkflowTabView,
         transition: async (changeId, to, evidence) => unwrap(await remote.transition({
           sessionId,
           changeId,
@@ -88,6 +125,17 @@ export function apply(ctx: ClientContext): void {
         gateResolve: async request => unwrap(await remote.gateResolve({
           sessionId,
           ...request,
+        })) as WorkflowTabView,
+        // 【变更】2026-09-28 (用户问题 1.7 Tab parity): the advance-dialog /
+        // parked-gate-banner revision input — same `gate-revise` work-order
+        // dispatch the session dialog's custom answer takes.
+        gateRevise: async request => unwrap(await remote.gateRevise({
+          sessionId,
+          ...(request.changeId === undefined ? {} : { changeId: request.changeId }),
+          ...(request.gateId === undefined ? {} : { gateId: request.gateId }),
+          ...(request.node === undefined ? {} : { node: request.node }),
+          ...(request.mode === undefined ? {} : { mode: request.mode }),
+          text: request.text,
         })) as WorkflowTabView,
         // 【变更】2026-09-23 (user issue #6): the 变更总览 dashboard payload.
         dashboard: async () => unwrap(await remote.dashboard({ sessionId })),

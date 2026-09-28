@@ -17,6 +17,9 @@
     "src/client/catalog-i18n.ts",
     "src/client/icons.tsx",
     "src/client/refresh-scheduler.ts",
+    "src/client/gate-ask.ts",
+    "src/client/tab-activity.ts",
+    "src/client/BafGateComposer.tsx",
     "src/client/WorkflowView.tsx",
     "src/css-modules.d.ts"
   ],

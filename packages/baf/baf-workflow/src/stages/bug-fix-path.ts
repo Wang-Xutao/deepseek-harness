@@ -17,6 +17,17 @@ import { stageArtifactPaths } from './artifacts.ts'
 /** Minimal bug record file name (fast-path replacement for the OpenSpec skeleton). */
 export const BUG_RECORD_FILE = 'bug-record.md'
 
+/**
+ * 【变更】2026-09-26 (用户需求 工作流 3): the placeholder a fieldless
+ * bug-fix classify confirm writes for the bug fields the customer did not
+ * supply — the confirm opens a DRAFT record (problem = the requirement
+ * summary, everything else TODO) that the model completes from the open-rest
+ * work order, exactly the way full-go-path's proposal template works. The
+ * string is chosen so `rootCauseRecorded` (T5 evidence) and the gates'
+ * placeholder filters both reject it.
+ */
+export const BUG_FIX_DRAFT = 'TODO'
+
 /** Preserved fast-path ledger name after a T15 upgrade (audit trail). */
 export const BUG_FIX_PATH_LEDGER_FILE = 'bug-fix-path-ledger.json'
 

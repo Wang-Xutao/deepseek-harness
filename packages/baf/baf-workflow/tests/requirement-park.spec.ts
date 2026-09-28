@@ -411,11 +411,9 @@ describe('parked-requirement continuation (demo2 issue #1)', () => {
     }
   })
 
-  it('a bug-fix classify confirm with extraArgs enters implement and dispatches the order', { timeout: 120_000 }, async () => {
+  it('a bug-fix classify confirm with extraArgs parks on the advance card; the confirm click dispatches the order', { timeout: 120_000 }, async () => {
     // The same follow-up through the raw resolve channel — this is the path
-    // the Tab's bug-fix form (extraArgs) and the dialogs take. The confirm
-    // must land the change at the implement authoring rest AND wake the
-    // model, not stop at a freshly-entered stage.
+    // the Tab's bug-fix form (extraArgs) and the dialogs take.
     resetParkedRequirements()
     const root = await mkdtemp(join(tmpdir(), 'baf-req-park-'))
     try {
@@ -452,11 +450,33 @@ describe('parked-requirement continuation (demo2 issue #1)', () => {
           ...(dispatch === undefined ? {} : { dispatch }),
         },
       )
+      // 【变更】2026-09-27 (web 验收·瞬时推进 round 2): the click itself never
+      // crosses open→implement anymore — the model can prefill
+      // plausible-looking fields the customer has not reviewed, so the
+      // follow-up parks on the clipped advance card instead.
+      expect(await currentOf(root)).toBe('open')
+      expect(agent.orders).toHaveLength(0)
+      expect(card.text).toContain('已确认并进入 open')
+      expect(card.text).toContain('Bug 记录已完成 · 请确认推进')
+      // The advance card's 确认 option is the customer review — it enters
+      // implement and dispatches the regression-first work order.
+      const advance = await driveGateResolve(
+        root,
+        'bugfix-open-advance',
+        'advance',
+        {},
+        undefined,
+        undefined,
+        'gate-card',
+        {
+          changeId: intake.changeId,
+          ...(dispatch === undefined ? {} : { dispatch }),
+        },
+      )
       expect(await currentOf(root)).toBe('implement')
       expect(agent.orders).toHaveLength(1)
       expect(JSON.stringify(agent.orders[0])).toContain('【BAF 工单')
-      expect(card.text).toContain('已确认并进入 open')
-      expect(card.text).toContain('已进入 implement')
+      expect(advance.text).toContain('已进入 implement')
     } finally {
       await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
     }

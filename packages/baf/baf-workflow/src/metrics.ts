@@ -71,7 +71,15 @@ export function deriveWorkflowMetrics(
     const start = enteredAt.get(node)
     const end = Date.parse(at)
     if (start === undefined || Number.isNaN(end) || end < start) return
-    durationMs.set(node, (durationMs.get(node) ?? 0) + (end - start))
+    // 【变更】2026-09-28 (用户问题 4 停表): the intake window
+    // [intake-classified → intake-confirmed] is pure customer wait — the
+    // classifier ran BEFORE the classified marker, so nothing in the window
+    // is machine work. It keeps its window (token attribution stays intact)
+    // but accrues no duration: waiting for the confirmation click does not
+    // count toward the change's 耗时.
+    if (node !== 'intake') {
+      durationMs.set(node, (durationMs.get(node) ?? 0) + (end - start))
+    }
     enteredAt.delete(node)
     // Close every later window opened before this leave (the chain walk on
     // re-entries); the simple common case closes exactly this node's window.
@@ -112,8 +120,17 @@ export function deriveWorkflowMetrics(
     }
   }
 
+  // 【变更】2026-09-28 (用户问题 4 停表): `running` — a WORK stage's window is
+  // still open (entered, not completed): the model is actively working this
+  // change, so the Tab's live timer may tick. Intake (customer confirm wait)
+  // and drift (customer resume decision) never count as running.
+  const running
+    = [...enteredAt.keys()].some(node => node !== 'intake' && node !== 'drift')
+
   for (const [node, start] of enteredAt) {
-    if (nowMs >= start) durationMs.set(node, (durationMs.get(node) ?? 0) + (nowMs - start))
+    if (nowMs >= start && node !== 'intake') {
+      durationMs.set(node, (durationMs.get(node) ?? 0) + (nowMs - start))
+    }
   }
 
   // Attribute usage: earliest window whose [start, end) contains the point.
@@ -155,6 +172,12 @@ export function deriveWorkflowMetrics(
     ...(totalDurationMs > 0 ? { totalDurationMs } : {}),
     ...(totalInputTokens > 0 ? { totalInputTokens } : {}),
     ...(totalOutputTokens > 0 ? { totalOutputTokens } : {}),
+    // 【变更】2026-09-25 (用户需求 工作流 3): stamp the derivation clock so the
+    // Tab's per-second interpolation anchors at true computation time.
+    computedAt: nowMs,
+    // 【变更】2026-09-28 (用户问题 4 停表): see the derivation above — false
+    // parks the change on a customer decision; the Tab freezes its timer.
+    running,
   }
 
   return {

@@ -146,6 +146,10 @@ export interface WorkflowTabView {
     readonly totalDurationMs?: number
     readonly totalInputTokens?: number
     readonly totalOutputTokens?: number
+    /** 【变更】2026-09-25 (用户需求 工作流 3): host epoch-ms stamp of the derivation — the per-second timer anchors here. */
+    readonly computedAt?: number
+    /** 【变更】2026-09-28 (用户问题 4 停表): false = the change rests on a customer decision; the live timer freezes (wait time is not workflow time). */
+    readonly running?: boolean
   }
   /** Set while the change is parked on gate A/B (§18.5). */
   readonly gate?: {
@@ -202,8 +206,9 @@ export interface WorkflowTabView {
   readonly artifacts?: readonly {
     readonly file: string
     readonly path: string
-    /** 【变更】2026-09-23 (demo5 issue #4): `planned` — tasks.md 计划完成、实现未完成的中间态. */
-    readonly state: 'missing' | 'template' | 'planned' | 'filled'
+    /** 【变更】2026-09-23 (demo5 issue #4): `planned` — tasks.md 计划完成、实现未完成的中间态.
+     * 【变更】2026-09-28 (用户问题 3): `clipped` — bug-fix 路径裁剪的 full-go 产物行（已裁剪，无打开按钮）. */
+    readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
     readonly missing: readonly string[]
   }[]
   /**

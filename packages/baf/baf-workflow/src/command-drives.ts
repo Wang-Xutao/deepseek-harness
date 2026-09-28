@@ -27,6 +27,7 @@ import { confirmIntake, rejectIntake, setIntakeMode } from './workflow-service.t
 import { DISPATCH_SENT_MARKER, driveGo } from './go-coordinator.ts'
 import type { GoDispatch } from './go-dispatch.ts'
 import { readLedger } from './stages/implement.ts'
+import { BUG_FIX_DRAFT } from './stages/bug-fix-path.ts'
 import { formatCommandReport, modeZh, cardTitle } from './command-format.ts'
 import { parseArgs, valueOf, valuesOf } from './cli-args.ts'
 import { beginIntake } from './begin-intake.ts'
@@ -310,7 +311,8 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
           title: '用法',
           lines: [
             `/baf-workflow-classify confirm mode=full-go-path change=${changeId}`,
-            `/baf-workflow-classify confirm mode=bug-fix-path change=${changeId} problem=… root-cause=… file=… test=… test-cmd=…`,
+            '/baf-workflow-classify confirm mode=bug-fix-path change=<id> [problem=… root-cause=… file=… test=… test-cmd=…]',
+            '（bug-fix 字段可省略：省略则建 TODO 草稿，由模型按工单补齐）',
             `/baf-workflow-classify reject change=${changeId}`,
           ],
         },
@@ -335,6 +337,17 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
     const files = valuesOf(args, 'file')
     const test = valueOf(args, 'test')
     const testCmd = valueOf(args, 'test-cmd')
+    // 【变更】2026-09-26 (用户需求 工作流 3): a fieldless confirm no longer
+    // refuses AFTER confirming the intake (that half-confirm was the dead
+    // state — no gate ever popped again and neither the popup flow nor the
+    // Tab could move the change). It now opens a DRAFT record: problem = the
+    // requirement summary, the missing fields TODO placeholders, exactly the
+    // shape of full-go-path's template proposal. The change rests at open as
+    // a model-authoring stop; the work order names the TODO gaps, the
+    // bugRecordGate (/baf-go, the Tab, the turn-end pop all run it) refuses
+    // the advance until the model fills them. Fields on the confirm still
+    // build the complete record in one shot (the baf_gate_ask bugPlan and the
+    // Tab form take that path).
     const missing = [
       ...(problem === undefined ? ['problem'] : []),
       ...(rootCause === undefined ? ['root-cause'] : []),
@@ -342,49 +355,60 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
       ...(test === undefined ? ['test'] : []),
       ...(testCmd === undefined ? ['test-cmd'] : []),
     ]
-    if (missing.length > 0) {
-      return {
-        kind: 'error',
-        text: formatCommandReport(false, cardTitle('/baf-workflow-classify', 'fast-path 缺少 Bug 字段'), [
-          { title: '缺少', lines: missing.map(m => `- ${m}`) },
-          {
-            title: '用法',
-            lines: [
-              '/baf-workflow-classify confirm problem="现象" root-cause="根因" \\',
-              '  file=src/a.c file=tests/x.c test=tests/x.c test-cmd="ctest -R x"',
-            ],
-          },
-        ]),
-      }
-    }
+    const draft = missing.length > 0
     await pipeline.driveBugFixPathOpenStage({
       changeId,
       title: valueOf(args, 'title') ?? status.intake?.summary ?? changeId,
-      problem: problem as string,
-      rootCause: rootCause as string,
-      affectedFiles: files,
-      regressionTest: { file: test as string, command: testCmd as string },
+      problem: problem ?? status.intake?.summary ?? changeId,
+      rootCause: rootCause ?? BUG_FIX_DRAFT,
+      affectedFiles: files.length > 0 ? files : [BUG_FIX_DRAFT],
+      regressionTest: {
+        file: test ?? BUG_FIX_DRAFT,
+        command: testCmd ?? BUG_FIX_DRAFT,
+      },
     }, source)
-  } else {
-    if (pipeline.context().baseline === undefined) {
+    const afterDraft = await store.readStatus(changeId)
+    if (afterDraft.current !== 'open') {
       return {
-        kind: 'error',
-        text: formatCommandReport(false, cardTitle('/baf-workflow-classify', 'baseline_unavailable'), [
-          { title: '原因', lines: [`工作区缺少可解析的 ${WORKSPACE_BASELINE_PATH}`] },
-          { title: '处理', lines: ['先初始化工作区基线（baf-scaffold / 企业基线包）再确认 full-go-path'] },
+        kind: 'success',
+        text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `已确认并进入 ${String(afterDraft.current)}`), [
+          { title: '状态', lines: statusLines(afterDraft) },
         ]),
       }
     }
-    await pipeline.driveOpenStage(changeId, valueOf(args, 'title') ?? status.intake?.summary ?? changeId, source)
+    const fastPathLines = draft
+      ? [
+        ...(missing.length > 0 ? [`未提供字段：${missing.join(' / ')}——已用 TODO 占位`] : []),
+        'bug-record.md 与 plan.json 已按草稿建立，模型按工单补齐根因 / 影响文件 / 回归测试',
+        '补齐后敲 /baf-go（或工作流页签推进）弹「确认推进」卡',
+      ]
+      : ['bug-record.md 与回归测试台账已建立', '下一步：/baf-workflow-implement（先写回归测试）']
+    return {
+      kind: 'success',
+      text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `已确认并进入 open · ${modeZh(afterDraft.mode)}`), [
+        { title: '状态', lines: statusLines(afterDraft) },
+        { title: draft ? 'fast-path 草稿' : 'fast-path', lines: fastPathLines },
+      ]),
+    }
   }
+  // full-go-path: confirm + open in one action (the shared tail the bug-fix
+  // branch above already returned from).
+  if (pipeline.context().baseline === undefined) {
+    return {
+      kind: 'error',
+      text: formatCommandReport(false, cardTitle('/baf-workflow-classify', 'baseline_unavailable'), [
+        { title: '原因', lines: [`工作区缺少可解析的 ${WORKSPACE_BASELINE_PATH}`] },
+        { title: '处理', lines: ['先初始化工作区基线（baf-scaffold / 企业基线包）再确认 full-go-path'] },
+      ]),
+    }
+  }
+  await pipeline.driveOpenStage(changeId, valueOf(args, 'title') ?? status.intake?.summary ?? changeId, source)
   const after = await store.readStatus(changeId)
   return {
     kind: 'success',
     text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `已确认并进入 open · ${modeZh(after.mode)}`), [
       { title: '状态', lines: statusLines(after) },
-      ...(after.mode === 'bug-fix-path'
-        ? [{ title: 'fast-path', lines: ['bug-record.md 与回归测试台账已建立', '下一步：/baf-workflow-implement（先写回归测试）'] } as const]
-        : [{ title: '下一步', lines: ['clarify：/baf-workflow-clarify（或页签）', '分类卡与产物在 openspec/changes/ 下'] } as const]),
+      { title: '下一步', lines: ['clarify：/baf-workflow-clarify（或页签）', '分类卡与产物在 openspec/changes/ 下'] } as const,
     ]),
   }
 }

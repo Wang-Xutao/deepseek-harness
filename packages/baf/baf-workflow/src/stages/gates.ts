@@ -9,7 +9,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { OpenSpecAdapter } from '@deepseek-ai/dsh-baf-core'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
-import { REGRESSION_TASK_ID } from './bug-fix-path.ts'
+import { BUG_RECORD_FILE, REGRESSION_TASK_ID, sectionOf } from './bug-fix-path.ts'
 import { parsePlanLedger } from './plan-ledger.ts'
 
 /** Outcome of one completion gate. */
@@ -32,7 +32,7 @@ export interface GateOutcome {
  * 【变更】2026-09-23 (demo5 issue #4): `planned` is tasks.md's 中间态 — 计划
  * 完成（todo list 已从账本渲染）但实现未完成（done 标记未全勾）。
  */
-export type ArtifactState = 'missing' | 'template' | 'planned' | 'filled'
+export type ArtifactState = 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
 
 /** One artifact status row for the /baf-go and /baf-status cards. */
 export interface ArtifactStatusRow {
@@ -45,6 +45,58 @@ export interface ArtifactStatusRow {
   readonly missing: readonly string[]
 }
 
+/**
+ * 【变更】2026-09-28 (用户问题 8): the verify-stage customer checklist — the
+ * one artifact authored AFTER implement completes and BEFORE verify starts.
+ * The model derives it from the plan's per-task verify commands and the
+ * acceptance criteria; the customer confirms it on the verify-advance card;
+ * the model ticks `- [ ]` → `- [x]` as verification confirms each item; gate B
+ * releases only when every box is ticked. Same rail state machine as tasks.md
+ * (missing → template → planned → filled). Declared BEFORE the artifact
+ * orders that reference it (const TDZ).
+ */
+export const CHECKLIST_FILE = 'checklist.md'
+
+/** One parsed checklist row. */
+export interface ChecklistItem {
+  readonly text: string
+  readonly done: boolean
+}
+
+/** A parsed checklist's fold: rows plus the still-open item texts. */
+export interface ChecklistStatus {
+  readonly items: readonly ChecklistItem[]
+  readonly total: number
+  readonly open: readonly string[]
+}
+
+const CHECKBOX_LINE = /^\s*[-*]\s+\[([ xX])]\s*(.*)$/
+
+/**
+ * Parse the markdown checkbox rows out of a checklist body. Non-checkbox
+ * lines (headings, prose) are ignored — the rows ARE the checklist.
+ * @param body - checklist.md text.
+ * @returns the parsed fold.
+ */
+export function parseChecklist(body: string): ChecklistStatus {
+  const items: ChecklistItem[] = []
+  for (const line of body.split(/\r?\n/)) {
+    const match = CHECKBOX_LINE.exec(line)
+    if (match === null) continue
+    const flag = match[1] ?? ' '
+    const text = match[2] ?? ''
+    items.push({ done: flag.toLowerCase() === 'x', text: text.trim() })
+  }
+  return { items, total: items.length, open: items.filter(item => !item.done).map(item => item.text) }
+}
+
+/** The checklist's pass conditions, quoted by the /baf-go dispatch order. */
+export const CHECKLIST_REQUIREMENTS_ZH: readonly string[] = [
+  'checklist.md 每行一个 `- [ ] 检查项`（来自 plan.json 每个任务的 verify 命令 + 验收标准）',
+  '验证阶段逐项确认：通过一项勾一项（`- [ ]` 改 `- [x]`）',
+  '全部勾选后才允许归档（归档门硬校验）',
+]
+
 /** Every customer-editable change artifact, in stage order (paths join with `/`). */
 const DOC_ARTIFACT_ORDER = [
   ARTIFACT_FILES.proposal,
@@ -53,12 +105,42 @@ const DOC_ARTIFACT_ORDER = [
   ARTIFACT_FILES.plan,
   ARTIFACT_FILES.planJson,
   ARTIFACT_FILES.tasks,
+  // 【变更】2026-09-28 (用户问题 8): the verify checklist rides between the
+  // task ledger and the acceptance document — implement-exit authors it,
+  // verify ticks it, gate B hard-checks it.
+  CHECKLIST_FILE,
   // 【变更】2026-09-23 (demo5 issue #3): the verify stage's customer-facing
   // artifact is verify.md (rendered from the run) — verify-report.json stays
   // on disk as the machine ledger (drift freshness, quality consumers) but
   // leaves the rail.
   'verify.md',
 ] as const
+
+/**
+ * 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path rail is CLIPPED — the
+ * same artifact-rail shape full-go-path gets, minus the clarify/design/plan
+ * documents this mode never writes. bug-record.md takes proposal.md's place as
+ * the open stage's artifact; plan.json (the fast-path ledger) and verify.md
+ * keep their rows.
+ * 【变更】2026-09-28 (用户问题 3): rail PARITY with full-go-path — the user
+ * wants the bug-fix rail to look like the full-go one, with the stages this
+ * mode skips shown as 「已裁剪」 rows instead of dropped. bug-record.md fills
+ * proposal.md's slot (the open artifact), clarify/design render clipped,
+ * tasks.md joins for real (bug-fix implement writes it — proven on the
+ * demo-bugfix6 walk), and verify.md closes the rail as on full-go.
+ */
+const BUG_FIX_ARTIFACT_ORDER = [
+  BUG_RECORD_FILE,
+  ARTIFACT_FILES.clarify,
+  ARTIFACT_FILES.design,
+  ARTIFACT_FILES.planJson,
+  ARTIFACT_FILES.tasks,
+  CHECKLIST_FILE,
+  'verify.md',
+] as const
+
+/** Full-go artifacts the bug-fix path never produces (rendered 已裁剪). */
+const BUG_FIX_CLIPPED_FILES: ReadonlySet<string> = new Set([ARTIFACT_FILES.clarify, ARTIFACT_FILES.design])
 
 /** What each documentation stage's gate requires, in customer language. */
 export const DOC_REQUIREMENTS_ZH: Readonly<Record<'open' | 'clarify' | 'design' | 'plan', readonly string[]>> = {
@@ -79,6 +161,19 @@ export const DOC_REQUIREMENTS_ZH: Readonly<Record<'open' | 'clarify' | 'design' 
     'allowlist 非空（实施阶段只允许改这些文件）',
   ],
 }
+
+/**
+ * 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path open gate's pass
+ * conditions — the clipped counterpart of `DOC_REQUIREMENTS_ZH.open`. The open
+ * stage's artifact on this mode is bug-record.md (plus the fast-path ledger
+ * inside plan.json), not proposal.md.
+ */
+export const BUG_RECORD_REQUIREMENTS_ZH: readonly string[] = [
+  'bug-record.md 的 Root cause 节写清诊断出的根因（不是 TODO / 待定位 占位）',
+  'Impact scope 节列出预期要改的文件（每行一个 - 路径，不是文字描述）',
+  'Regression test 节写回归测试文件路径与可执行的运行命令',
+  'plan.json（fast-path 账本）：allowlist 覆盖回归测试文件与受影响文件',
+]
 
 /** Shared gate inputs for one stage completion check. */
 export interface GateInput {
@@ -174,6 +269,136 @@ export async function proposalGate(input: GateInput): Promise<GateOutcome> {
   if (!/^#{2,4}\s*(?:\d+[.)、]\s*)?Why\b[^\n]*$/im.test(body)) {
     return fail(['stage_incomplete'], 'proposal.md lacks Why section',
       ['补 ## Why 节：一句话说清用户目标与这个变更解决什么问题'])
+  }
+  return ok
+}
+
+/**
+ * A placeholder-only line — the draft markers a fieldless bug-fix confirm
+ * writes (`TODO` alone, or `- TODO` list items). Tolerant of the same
+ * n/a / none / dash family `rootCauseRecorded` filters.
+ */
+const PLACEHOLDER_LINE = /^(?:-\s*)?(?:TODO\b|n\/a\b|none\b|-)$/i
+
+/**
+ * 【变更】2026-09-26 (web walk, workspace demo-bugfix): models prefill the
+ * bug-fields form with vague Chinese placeholders (`待定位（疑似…）`) that are
+ * neither TODO markers nor real content — the record's Root cause said nothing
+ * while the gate passed it and the classify-confirm follow-up advanced into
+ * implement. Lines opening with a 待-marker count as placeholders everywhere
+ * the record is judged.
+ */
+const VAGUE_PLACEHOLDER = /^(?:-\s*)?(?:待定位|待新建|待补充|待确认|待填写|待提供|待分析|待排查|待定|TBD\b)/i
+
+/**
+ * A path-shaped value (file or directory): no whitespace, and either a file
+ * extension or a trailing separator. Prose descriptions of files — the other
+ * shape the demo-bugfix model used (`ecum 模块导出报表相关源文件（待定位）`) —
+ * are not paths; the guard's allowlist is only as real as the paths it lists.
+ */
+const pathLike = (value: string): boolean =>
+  value !== '' && !/\s/.test(value) && (/\.[A-Za-z0-9]{1,8}$/.test(value) || /[\\/]$/.test(value))
+
+/** A command-shaped value: at least one multi-letter ASCII token to execute. */
+const commandLike = (value: string): boolean => /[A-Za-z]{2,}/.test(value)
+
+/** A real regression-test file path: not a placeholder, not prose. */
+const realTestPath = (value: string | undefined): value is string =>
+  value !== undefined && value !== ''
+  && !PLACEHOLDER_LINE.test(value) && !VAGUE_PLACEHOLDER.test(value) && pathLike(value)
+
+/**
+ * The real (non-placeholder) content lines of one `## <heading>` section.
+ */
+function sectionRealLines(body: string, heading: string): readonly string[] {
+  const section = sectionOf(body, heading)
+  if (section === undefined) return []
+  return section
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line =>
+      line !== ''
+      && !line.startsWith('#')
+      && !PLACEHOLDER_LINE.test(line)
+      && !VAGUE_PLACEHOLDER.test(line)
+      && !/^TODO\b/.test(line))
+}
+
+/**
+ * The bug record's per-section missing items (customer copy), draft-aware —
+ * shared by the gate and the artifact rail row so the two can never disagree.
+ * @param body - the bug-record.md text.
+ * @returns one line per missing section item (empty when complete).
+ */
+export function bugRecordSectionMissing(body: string): readonly string[] {
+  const missing: string[] = []
+  if (sectionRealLines(body, 'Problem').length === 0) {
+    missing.push('Problem：一句话描述 Bug 现象')
+  }
+  if (sectionRealLines(body, 'Root cause').length === 0) {
+    missing.push('Root cause：诊断出的根因（为什么会出现这个 Bug）')
+  }
+  // 【变更】2026-09-26 (demo-bugfix walk): at least one Impact line must be a
+  // real path — prose like「相关源文件（待定位）」describes a file without being
+  // one, and the whole point of the section is feeding plan.json's allowlist.
+  const impactPaths = sectionRealLines(body, 'Impact scope')
+    .map(line => line.replace(/^-\s*/, ''))
+    .filter(pathLike)
+  if (impactPaths.length === 0) {
+    missing.push('Impact scope：预期要改的文件（每行一个 - 路径）')
+  }
+  const regression = sectionOf(body, 'Regression test')
+  const file = regression === undefined ? undefined : /^-\s*File:\s*(.+)$/m.exec(regression)?.[1]?.trim()
+  const command = regression === undefined ? undefined : /^-\s*Command:\s*(.+)$/m.exec(regression)?.[1]?.trim()
+  if (!realTestPath(file)) {
+    missing.push('Regression test · File：回归测试文件路径')
+  }
+  if (command === undefined || command === '' || PLACEHOLDER_LINE.test(command)
+    || VAGUE_PLACEHOLDER.test(command) || !commandLike(command)) {
+    missing.push('Regression test · Command：运行回归测试的命令')
+  }
+  return missing
+}
+
+/**
+ * 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path open gate — the
+ * counterpart of {@link proposalGate} on the clipped path. bug-fix-path used
+ * to never rest on an authoring open (the 5 bug fields arrived fully formed on
+ * the classify confirm); a fieldless confirm now opens a TODO draft record the
+ * model completes, so THIS gate adjudicates it exactly the way proposalGate
+ * adjudicates proposal.md — same shape as full-go-path, with clipping.
+ * @param input - gate input (mode must be bug-fix-path; others pass).
+ * @returns gate outcome with the per-item missing list.
+ */
+export async function bugRecordGate(input: GateInput): Promise<GateOutcome> {
+  if (input.mode !== 'bug-fix-path') return ok
+  const body = await readArtifact(input, BUG_RECORD_FILE)
+  if (body === undefined) {
+    return fail(['stage_incomplete'], 'bug-record.md missing', [
+      'bug-record.md 不存在——重新确认缺陷修复路径（/baf-workflow-classify confirm mode=bug-fix-path）生成',
+    ])
+  }
+  const missing = [...bugRecordSectionMissing(body)]
+  const plan = await readPlan(input)
+  if (plan === undefined) {
+    missing.push('plan.json：fast-path 账本（tasks + allowlist）缺失或不可读')
+  } else {
+    // 【变更】2026-09-26 (demo-bugfix walk): the ledger is judged by the same
+    // path contract as the record — prose allowlist entries describe files
+    // without naming them, which defeats the guard's hard gate.
+    const realAllow = plan.allowlist.filter(file => pathLike(file)
+      && !PLACEHOLDER_LINE.test(file) && !VAGUE_PLACEHOLDER.test(file))
+    if (realAllow.length === 0) {
+      missing.push('plan.json allowlist：列出回归测试文件与受影响文件（baf-guard 硬门禁依据）')
+    }
+    const regression = plan.tasks.find(task => task.id === REGRESSION_TASK_ID)
+    const regressionFile = regression?.files?.[0]
+    if (!realTestPath(regressionFile)) {
+      missing.push('plan.json：regression-test 任务指到真实的回归测试文件')
+    }
+  }
+  if (missing.length > 0) {
+    return fail(['stage_incomplete'], 'bug-record.md 未达完成门', missing)
   }
   return ok
 }
@@ -386,6 +611,65 @@ export function verifyGate(
 }
 
 /**
+ * 【变更】2026-09-28 (用户问题 8): the verify-ENTRY precondition — implement
+ * completed is not enough; the customer must see a real checklist before the
+ * verification run starts. The model authors checklist.md at the implement
+ * exit (derived from the plan's verify commands + acceptance criteria); this
+ * gate refuses the verify drive until it exists with at least one item, so
+ * the verify-advance card the customer clicks is backed by a concrete list.
+ * Applies to BOTH modes (bug-fix-path verifies too).
+ * @param input - gate input.
+ * @returns gate outcome with the authoring missing-list.
+ */
+export async function checklistGate(input: GateInput): Promise<GateOutcome> {
+  const body = await readArtifact(input, CHECKLIST_FILE)
+  if (body === undefined) {
+    return fail(['stage_incomplete'], 'checklist.md missing', [
+      'checklist.md 不存在——实现完成后、验证开始前，模型需生成检查验证项清单',
+    ])
+  }
+  if (templateOnly(body)) {
+    return fail(['stage_incomplete'], 'checklist.md is still the unfilled template', [
+      '把 TODO 占位替换为逐项检查清单：每行一个 `- [ ] 检查项`',
+      '检查项来源：plan.json 每个任务的 verify 命令 + 验收标准',
+    ])
+  }
+  const status = parseChecklist(body)
+  if (status.total === 0) {
+    return fail(['stage_incomplete'], 'checklist.md has no checkbox items', [
+      'checklist.md 至少一个 `- [ ] 检查项`（当前没有可勾选行）',
+    ])
+  }
+  return ok
+}
+
+/**
+ * 【变更】2026-09-28 (用户问题 8): gate B's hard precondition — every
+ * checklist box ticked before the archive confirmation is even offered. The
+ * model ticks items as verification confirms them (`- [ ]` → `- [x]`); any
+ * open box holds the change at verify with the unticked items named.
+ * @param input - gate input.
+ * @returns gate outcome; ok only when zero open items.
+ */
+export async function checklistTickedGate(input: GateInput): Promise<GateOutcome> {
+  const body = await readArtifact(input, CHECKLIST_FILE)
+  if (body === undefined) {
+    return fail(['checklist_open'], 'checklist.md missing', [
+      'checklist.md 不存在——归档前必须生成并逐项勾选检查清单',
+    ])
+  }
+  const status = parseChecklist(body)
+  if (status.open.length > 0) {
+    return fail(
+      ['checklist_open'],
+      `${status.open.length}/${status.total} checklist items unticked`,
+      status.open.map(text => `未确认：${text}`),
+    )
+  }
+  return ok
+}
+
+/**
  * N1 open structural validation via the OpenSpec adapter.
  * @param adapter - openspec adapter.
  * @param changeId - change id.
@@ -408,6 +692,7 @@ function stateZh(state: ArtifactState): string {
     case 'template': return '仍是未填的模板'
     case 'planned': return '已计划'
     case 'filled': return '已填写'
+    case 'clipped': return '已裁剪（缺陷修复路径不经过该阶段）'
   }
 }
 
@@ -438,7 +723,20 @@ function markdownState(body: string | undefined): { state: ArtifactState; missin
  */
 export async function changeArtifactStatus(input: GateInput): Promise<readonly ArtifactStatusRow[]> {
   const rows: ArtifactStatusRow[] = []
-  for (const file of DOC_ARTIFACT_ORDER) {
+  // 【变更】2026-09-26 (用户需求 工作流 3): the rail order follows the mode —
+  // bug-fix-path shows its own three artifacts, not seven rows of which five
+  // can never exist on this mode.
+  const order: readonly string[] = input.mode === 'bug-fix-path'
+    ? BUG_FIX_ARTIFACT_ORDER
+    : DOC_ARTIFACT_ORDER
+  for (const file of order) {
+    // 【变更】2026-09-28 (用户问题 3): bug-fix parity — the full-go documents
+    // this mode skips render as 「已裁剪」 rows (no disk read; no open button
+    // client-side), so the rail mirrors full-go-path's shape.
+    if (input.mode === 'bug-fix-path' && BUG_FIX_CLIPPED_FILES.has(file)) {
+      rows.push({ file, path: `openspec/changes/${input.changeId}/${file}`, state: 'clipped', missing: [] })
+      continue
+    }
     // 2026-09-23 issue #5: the row's path follows the file — archived changes
     // report the archive location, so the rail's open button keeps working
     // after the move instead of pointing at a path that no longer exists.
@@ -449,7 +747,24 @@ export async function changeArtifactStatus(input: GateInput): Promise<readonly A
       ? livePath
       : archivedPath
     let row: ArtifactStatusRow
-    if (file === 'verify.md') {
+    if (file === BUG_RECORD_FILE) {
+      // 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix open artifact's row
+      // judges by the same section rules `bugRecordGate` applies — a draft
+      // record (TODO placeholders) reads 仍是未填的模板 with the per-item
+      // missing list, a complete one reads 已填写. The two can never disagree
+      // because they share `bugRecordSectionMissing`.
+      if (body === undefined) {
+        row = { file, path, state: 'missing', missing: [] }
+      } else {
+        const sectionMissing = bugRecordSectionMissing(body)
+        row = {
+          file,
+          path,
+          state: sectionMissing.length === 0 ? 'filled' : 'template',
+          missing: sectionMissing.length === 0 ? [] : sectionMissing,
+        }
+      }
+    } else if (file === 'verify.md') {
       // 【变更】2026-09-23 (demo5 issue #3): the acceptance document is
       // machine-written (rendered from the run) — present means filled (its
       // `passed` verdict rides the verify card, not this row), absent means
@@ -486,13 +801,50 @@ export async function changeArtifactStatus(input: GateInput): Promise<readonly A
           missing: boxesAllDone ? [] : ['实现阶段完成任务并标 done 后刷新为已填写'],
         }
       }
+    } else if (file === CHECKLIST_FILE) {
+      // 【变更】2026-09-28 (用户问题 8): checklist.md 的四态状态机（与 tasks.md
+      // 同构）—— 尚未生成 → 仍是未填的模板 → 已计划（清单已生成、验证未全部
+      // 确认）→ 已填写（全部 `- [x]` 勾选，归档门放行）。
+      if (body === undefined) {
+        row = { file, path, state: 'missing', missing: [] }
+      } else if (templateOnly(body)) {
+        const todos = body
+          .split(/\r?\n/)
+          .map(l => l.trim())
+          .filter(l => l.startsWith('TODO'))
+          .map(l => l.replace(/^-\s*/, ''))
+        row = { file, path, state: 'template', missing: todos.length > 0 ? todos : ['TODO 占位尚未替换为实际内容'] }
+      } else {
+        const parsed = parseChecklist(body)
+        if (parsed.total === 0) {
+          row = { file, path, state: 'template', missing: ['没有 `- [ ] 检查项`——每行一个检查项'] }
+        } else {
+          const allTicked = parsed.open.length === 0
+          row = {
+            file,
+            path,
+            state: allTicked ? 'filled' : 'planned',
+            missing: allTicked
+              ? []
+              : [`验证阶段逐项确认打勾（剩 ${parsed.open.length}/${parsed.total} 项）`],
+          }
+        }
+      }
     } else if (file === ARTIFACT_FILES.planJson) {
       const plan = body === undefined ? undefined : await readPlan(input)
+      // 【变更】2026-09-26 (用户需求 工作流 3): a fast-path draft ledger (every
+      // file entry still the TODO placeholder) reads as the template it is —
+      // the rail must not call a draft 已填写.
+      const draftLedger = plan !== undefined
+        && (plan.allowlist.length === 0 || plan.allowlist.every(file => PLACEHOLDER_LINE.test(file)))
+        && plan.tasks.every(task => (task.files ?? []).every(file => PLACEHOLDER_LINE.test(file)))
       row = plan === undefined
         ? { file, path, state: 'missing', missing: [] }
-        : plan.allowlist.length === 0 && plan.tasks.length === 0
-          ? { file, path, state: 'template', missing: ['tasks / allowlist 还是空数组'] }
-          : { file, path, state: 'filled', missing: [] }
+        : draftLedger
+          ? { file, path, state: 'template', missing: ['fast-path 账本仍是 TODO 草稿——根因/影响文件/回归测试补齐后变为已填写'] }
+          : plan.allowlist.length === 0 && plan.tasks.length === 0
+            ? { file, path, state: 'template', missing: ['tasks / allowlist 还是空数组'] }
+            : { file, path, state: 'filled', missing: [] }
     } else {
       const md = markdownState(body)
       row = { file, path, state: md.state, missing: md.state === 'filled' ? [] : md.missing }

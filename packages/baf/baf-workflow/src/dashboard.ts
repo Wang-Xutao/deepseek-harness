@@ -15,7 +15,7 @@ import type {
   WorkflowDashboardRow,
   WorkflowDashboardView,
 } from '@deepseek-ai/dsh-baf-core'
-import { deriveWorkflowMetrics } from './metrics.ts'
+import { deriveWorkflowMetrics, type UsagePoint } from './metrics.ts'
 import type { ProjectionIndexEntry, ProjectionStore } from './projection.ts'
 
 /**
@@ -47,14 +47,23 @@ async function taskCounts(workspaceRoot: string, changeId: string): Promise<{ do
 /**
  * Build the dashboard view for a workspace.
  * @param store - the workspace projection store.
+ * @param usagePoints - the workspace sessions' per-step usage samples, any
+ * order. 【变更】2026-09-28 (用户问题 4): attribution is time-window based — a
+ * point lands in whichever change's stage window contains it, so the samples
+ * of every session that ever drove this workspace fold correctly without a
+ * per-change session map; points outside every window (preamble turns) are
+ * unattributed by design. Absent (the old call shape) keeps rows token-less.
  * @returns every change row (newest first) plus the header rollups.
  */
-export async function buildWorkflowDashboard(store: ProjectionStore): Promise<WorkflowDashboardView> {
+export async function buildWorkflowDashboard(
+  store: ProjectionStore,
+  usagePoints: readonly UsagePoint[] = [],
+): Promise<WorkflowDashboardView> {
   const workspaceRoot = store.workspaceRoot()
   const index = await store.readIndex()
   const rows: WorkflowDashboardRow[] = []
   for (const entry of index.changes) {
-    const row = await dashboardRowFor(store, workspaceRoot, entry)
+    const row = await dashboardRowFor(store, workspaceRoot, entry, usagePoints)
     rows.push(row)
   }
   // Newest activity first — the same ranking pickActiveChange applies.
@@ -80,6 +89,7 @@ async function dashboardRowFor(
   store: ProjectionStore,
   workspaceRoot: string,
   entry: ProjectionIndexEntry,
+  usagePoints: readonly UsagePoint[],
 ): Promise<WorkflowDashboardRow> {
   const base: WorkflowDashboardRow = {
     changeId: entry.changeId,
@@ -89,7 +99,9 @@ async function dashboardRowFor(
   }
   try {
     const { events } = await store.readEvents(entry.changeId)
-    const { byNode } = deriveWorkflowMetrics(events)
+    // 【变更】2026-09-28 (用户问题 4): usage samples ride along so per-node
+    // tokens attribute by stage windows — same fold the Tab view runs.
+    const { byNode } = deriveWorkflowMetrics(events, Date.now(), usagePoints)
     // Every present node's duration/tokens sum to the row's rollup.
     let durationMs = 0
     let inputTokens = 0

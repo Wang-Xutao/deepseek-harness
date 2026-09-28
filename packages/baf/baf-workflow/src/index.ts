@@ -101,6 +101,14 @@ export { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
  */
 export { makeGateAsk } from './gate-dialog.ts'
 /**
+ * 【变更】2026-09-28 (用户问题 1.7 Tab parity): the revision dispatch the Tab
+ * remote's `gateRevise` takes (the same work order the session dialog's
+ * `custom` answer routes through), plus the advance-dialog's node → gate
+ * mapping (the Tab's advance dialog has no gate id of its own).
+ */
+export { advanceGateIdForNode } from './gate-dialog.ts'
+export { dispatchGateRevisionFromTab } from './go-coordinator.ts'
+/**
  * 【变更】2026-09-23 (demo1 issue #1): the title marker a dispatched resting
  * card carries — combining surfaces use it to keep「stopped because the model
  * is now working」out of the error kind.
@@ -173,6 +181,13 @@ export {
 export { beginIntake, type BeginIntakeOutcome } from './begin-intake.ts'
 /** §18.6 focus cache — host-plane readers (baf-guard ranking, §22.19 Phase 3). */
 export { focusFor, resetFocusCache } from './session-focus.ts'
+export {
+  bindSessionChange,
+  deriveSessionChangeFromEvents,
+  sessionChangeFor,
+  resetSessionChangeCache,
+  type SessionChangeEventLike,
+} from './session-change.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

@@ -22,6 +22,12 @@ export interface BafWorkflowSessionRequest {
 export interface BafWorkflowChangeRequest {
   readonly sessionId: SessionId
   readonly changeId: string
+  /**
+   * 【变更】2026-09-25 (用户需求 工作流 1): advance 的 Tab 顶部对话框已经是
+   * 客户确认，置 true 时 host 走 confirm 正向路径、不再弹第二次会话式
+   * 确认框（派单通道保留，工单照发）。confirmIntake / rejectIntake 忽略它。
+   */
+  readonly skipAsk?: boolean
 }
 
 /** Start intake from a free-form description. */
@@ -97,6 +103,30 @@ export interface BafWorkflowGateResolveRequest {
    * path + fields, exactly like the dialog's confirm dispatch.
    */
   readonly extraArgs?: readonly string[]
+}
+
+/**
+ * 【变更】2026-09-28 (用户问题 1.7 Tab parity): submit a revision request from
+ * the workflow Tab's own decision surfaces (the advance dialog, the parked
+ * gate banner) — the ones with no ask carrier to answer. The host maps the
+ * request onto the SAME revision dispatch the session dialog's `custom`
+ * answer takes: a `gate-revise` work order against the gate's revisable
+ * artifact; the gate re-pops after the model reworks the document.
+ *
+ * `gateId` (banner) and `node`+`mode` (advance dialog — the host derives the
+ * stage's advance gate from them) are alternatives; at least one must be set.
+ */
+export interface BafWorkflowGateReviseRequest {
+  readonly sessionId: SessionId
+  /** Parked gate id (design-confirm / verify-archive). */
+  readonly gateId?: string
+  /** Completed stage the advance dialog rests on (open / clarify / … / implement). */
+  readonly node?: WorkflowNode
+  /** The change's mode (bug-fix open revises bug-record.md). */
+  readonly mode?: BafWorkflowMode
+  readonly changeId?: string
+  /** The customer's modification request (non-empty). */
+  readonly text: string
 }
 
 /**

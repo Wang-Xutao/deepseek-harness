@@ -24,7 +24,7 @@ import { deriveLanes } from './lanes.ts'
 import { deriveWorkflowMetrics, type UsagePoint } from './metrics.ts'
 import type { ProjectionStore } from './projection.ts'
 import { pickActiveChange } from './projection.ts'
-import { changeArtifactStatus, clarifyGate, designGate, implementGate, planGate, proposalGate, type GateInput, type GateOutcome } from './stages/gates.ts'
+import { bugRecordGate, changeArtifactStatus, clarifyGate, designGate, implementGate, planGate, proposalGate, type GateInput, type GateOutcome } from './stages/gates.ts'
 import { readLedger } from './stages/implement.ts'
 import { parsePlanLedger } from './stages/plan-ledger.ts'
 import type { WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
@@ -298,7 +298,12 @@ async function deriveAdvanceReadiness(
     missing: outcome.ok ? [] : outcome.missing !== undefined && outcome.missing.length > 0 ? outcome.missing : [outcome.detail ?? '阶段产物未达完成门'],
   })
   switch (status.current) {
-    case 'open': return of(await proposalGate(input))
+    // 【变更】2026-09-26 (用户需求 工作流 3): mode-aware — a bug-fix open rests
+    // on the bug record, so the Tab advance dialog gates on bugRecordGate
+    // (the same judgment /baf-go and the turn-end pop run).
+    case 'open': return of(status.mode === 'bug-fix-path'
+      ? await bugRecordGate(input)
+      : await proposalGate(input))
     case 'clarify': return of(await clarifyGate(input))
     case 'design': return of(await designGate(input))
     case 'plan': return of(await planGate(input))

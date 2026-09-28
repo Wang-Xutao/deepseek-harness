@@ -128,6 +128,59 @@ describe('policy: filesystem writes', () => {
     expect(source).toMatchObject({ allowed: false, reasonCode: 'invalid_transition' })
   })
 
+  // 【变更】2026-09-28 (用户问题 3 · demo-21 死锁回归): bug-fix-path's open
+  // artifacts are bug-record.md + plan.json — the open work order tells the
+  // model to fill them, so they must be writable in bug-fix mode. demo-21's
+  // model bounced six turns on protected_path and cornered itself into the
+  // abandon gate (forced abandon of change-20260927-ecum-demo-1e45).
+  it('bug-fix open allows exactly bug-record.md and plan.json; full-go open does not', () => {
+    const bugfixOpen = state({ stage: 'open', mode: 'bug-fix-path' })
+    const record = adjudicateFsWrite(CONFIG, bugfixOpen, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'bug-record.md'),
+    })
+    expect(record.allowed).toBe(true)
+    const plan = adjudicateFsWrite(CONFIG, bugfixOpen, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'plan.json'),
+    })
+    expect(plan.allowed).toBe(true)
+    // proposal.md is NOT a bug-fix artifact — stays locked there, and the
+    // bug-fix pair stays locked in full-go mode / later stages.
+    const wrongArtifact = adjudicateFsWrite(CONFIG, bugfixOpen, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'proposal.md'),
+    })
+    expect(wrongArtifact).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    const fullGoRecord = adjudicateFsWrite(CONFIG, state({ stage: 'open', mode: 'full-go-path' }), {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'bug-record.md'),
+    })
+    expect(fullGoRecord).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+  })
+
+  // 【变更】2026-09-28 (用户问题 8): verify's one writable artifact is
+  // checklist.md — the model ticks `- [ ]` → `- [x]` as verification confirms
+  // items (gate B hard-checks every box). Everything else in the change dir
+  // stays protected at verify.
+  it('verify stage allows only checklist.md inside the change dir', () => {
+    const verify = state({ stage: 'verify' })
+    const checklist = adjudicateFsWrite(CONFIG, verify, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'checklist.md'),
+    })
+    expect(checklist.allowed).toBe(true)
+    const verifyDoc = adjudicateFsWrite(CONFIG, verify, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'verify.md'),
+    })
+    expect(verifyDoc).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    const planJson = adjudicateFsWrite(CONFIG, verify, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'plan.json'),
+    })
+    expect(planJson).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    // the checklist allowance is verify-only — plan stage keeps the whole dir
+    // open but open does not get a free checklist write.
+    const openChecklist = adjudicateFsWrite(CONFIG, state({ stage: 'open' }), {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'checklist.md'),
+    })
+    expect(openChecklist).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+  })
+
   it('fails closed without an active change or with unconfirmed intake', () => {
     const noChange = adjudicateFsWrite(CONFIG, state({ active: false }), {
       root: ROOT, path: 'src/x.c',

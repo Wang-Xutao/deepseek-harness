@@ -18,8 +18,8 @@ import { describe, expect, it } from 'vitest'
 import { ProjectionStore } from '../src/projection.ts'
 import { driveAbandon, driveClassify } from '../src/command-drives.ts'
 import { beginIntake } from '../src/begin-intake.ts'
-import { driveGo, type GateAsk } from '../src/go-coordinator.ts'
-import type { DispatchSignal, GoDispatch } from '../src/go-dispatch.ts'
+import { driveGo, dispatchGateRevisionFromTab, type GateAsk } from '../src/go-coordinator.ts'
+import { workOrderText, type DispatchSignal, type GoDispatch } from '../src/go-dispatch.ts'
 import { DOC_REQUIREMENTS_ZH } from '../src/stages/gates.ts'
 import { focusFor, type FocusStore } from '../src/session-focus.ts'
 import { completeTask, recordTouched } from '../src/stages/implement.ts'
@@ -196,6 +196,20 @@ async function reachGateB(root: string, focus: FocusStore): Promise<string> {
   const changeId = await reachImplement(root, focus)
   await recordTouched(root, { changeId, file: 'src/export.ts' })
   await completeTask(root, changeId, 't1')
+  // 【变更】2026-09-28 (用户问题 8): the verify entry now requires a real
+  // checklist.md (authored at implement exit) and gate B requires every box
+  // ticked — seed an all-ticked checklist so the drive reaches gate B.
+  await writeFile(
+    join(root, 'openspec', 'changes', changeId, 'checklist.md'),
+    [
+      '# Checklist',
+      '',
+      '- [x] npm test exports CSV with a header row',
+      '- [x] no console.error during the export run',
+      '',
+    ].join('\n'),
+    'utf8',
+  )
   const card = await driveGo({ cwd: root, focus })
   expect(card.text).toContain('等待你的确认')
   return changeId
@@ -596,6 +610,68 @@ describe('routing table (§18.4.2)', () => {
       expect(status.current).toBe('verify')
       expect(status.nodes.verify).toBe('completed')
       expect(await eventTypes(root, changeId)).toContain('awaiting-confirm')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // 【变更】2026-09-28 (用户问题 8): the checklist gates — verify cannot start
+  // without a real checklist.md, and gate B cannot park while a box is open.
+  it('refuses to enter verify without a checklist, naming the authoring work', async () => {
+    const { root, focus } = await setup()
+    try {
+      const changeId = await reachImplement(root, focus)
+      await recordTouched(root, { changeId, file: 'src/export.ts' })
+      await completeTask(root, changeId, 't1')
+      const card = await driveGo({ cwd: root, focus })
+      expect(card.kind).toBe('error')
+      expect(card.text).toContain('验证检查单未就绪')
+      expect(card.text).toContain('checklist.md')
+      // The change stays at implement — verify never started.
+      expect((await statusOf(root, changeId)).current).toBe('implement')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('holds at verify when checklist boxes are still open, then archives once all ticked', async () => {
+    const { root, focus } = await setup()
+    try {
+      const changeId = await reachImplement(root, focus)
+      await recordTouched(root, { changeId, file: 'src/export.ts' })
+      await completeTask(root, changeId, 't1')
+      const checklistPath = join(root, 'openspec', 'changes', changeId, 'checklist.md')
+      await writeFile(checklistPath, [
+        '# Checklist',
+        '',
+        '- [x] npm test exports CSV with a header row',
+        '- [ ] no console.error during the export run',
+        '',
+      ].join('\n'), 'utf8')
+      // First drive: verify runs, but gate B refuses — one box open.
+      const held = await driveGo({ cwd: root, focus })
+      expect(held.kind).toBe('error')
+      expect(held.text).toContain('检查单未全部确认')
+      expect(held.text).toContain('no console.error during the export run')
+      const status = await statusOf(root, changeId)
+      expect(status.current).toBe('verify')
+      expect(status.nodes.verify).toBe('completed')
+      // Tick the last box (the model's verify-stage write) → gate B parks and
+      // renders its card; the next drive confirms the archive.
+      await writeFile(checklistPath, [
+        '# Checklist',
+        '',
+        '- [x] npm test exports CSV with a header row',
+        '- [x] no console.error during the export run',
+        '',
+      ].join('\n'), 'utf8')
+      const parked = await driveGo({ cwd: root, focus })
+      expect(parked.kind).toBe('success')
+      expect(parked.text).toContain('检查已通过，请确认归档')
+      const card = await driveGo({ cwd: root, focus })
+      expect(card.kind).toBe('success')
+      expect(card.text).toContain('检查已确认 · 已归档')
+      expect((await statusOf(root, changeId)).terminal).toBe('completed')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -1297,6 +1373,72 @@ describe('/baf-go work-order dispatch (§18.4.2, 2026-09-22 客户决策)', () =
     }
   })
 
+  // 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path chain end to end —
+  // fieldless confirm → draft open → refusal + work order at bug-record.md →
+  // model completes → bugfix-open-advance dialog → click lands in implement.
+  // This is the exact chain that used to dead-end at 「fast-path 缺少 Bug 字段」.
+  it('bug-fix-path: draft open gates on the bug record and advances through bugfix-open-advance', { timeout: 60_000 }, async () => {
+    const { root, focus } = await setup()
+    try {
+      await driveGo({ cwd: root, rawInput: 'fix: export API crashes when the input file is empty', focus })
+      const changeId = await activeId(root)
+      // Fieldless confirm (the classify dialog's 确认·缺陷修复路径 click shape):
+      // opens the change with a TODO draft instead of the old half-confirm.
+      const confirmed = await driveClassify(root, `confirm mode=bug-fix-path change=${changeId}`)
+      expect(confirmed.kind).toBe('success')
+      expect(confirmed.text).toContain('fast-path 草稿')
+      expect((await statusOf(root, changeId)).current).toBe('open')
+
+      // /baf-go at the draft: refusal names the bug record and dispatches the
+      // order at bug-record.md (not proposal.md).
+      const { signals, dispatch } = recorder()
+      const refused = await driveGo({ cwd: root, focus, dispatch, dispatchOrigin: 'customer', rawInput: `change=${changeId}` })
+      expect(refused.text).toContain('Bug 记录未完成')
+      expect(signals.at(-1)?.node).toBe('open')
+      expect(signals.at(-1)?.artifactPath).toBe(`openspec/changes/${changeId}/bug-record.md`)
+      expect(signals.at(-1)?.mode).toBe('bug-fix-path')
+
+      // The model's guarded writes complete the record + ledger.
+      await author(root, changeId, 'bug-record.md', [
+        `# Bug record — ${changeId}`, '',
+        '## Problem', '',
+        'Export dereferences a null token when the input file is empty.', '',
+        '## Root cause', '',
+        'Missing length guard before the token loop in parse().', '',
+        '## Impact scope', '',
+        '- src/parser.c', '',
+        '## Regression test', '',
+        '- File: tests/test_parser_empty.c',
+        '- Command: ctest -R parser_empty', '',
+      ].join('\n'))
+      await author(root, changeId, 'plan.json', `${JSON.stringify({
+        bugFixPath: true,
+        tasks: [
+          { id: 'regression-test', files: ['tests/test_parser_empty.c'], done: false },
+          { id: 'fix-root-cause', files: ['src/parser.c'], done: false },
+        ],
+        allowlist: ['tests/test_parser_empty.c', 'src/parser.c'],
+        touched: [],
+      }, null, 2)}\n`)
+
+      // The next /baf-go pops the clipped advance dialog; the click enters
+      // implement with the regression-first work order.
+      const ask: GateAsk = async (gate) => {
+        expect(gate.gateId).toBe('bugfix-open-advance')
+        return { kind: 'answered', optionId: 'advance', label: '确认 Bug 记录 · 进入实施' }
+      }
+      const intoImplement = await driveGo({ cwd: root, focus, ask, dispatch, dispatchOrigin: 'customer', rawInput: `change=${changeId}` })
+      expect(intoImplement.text).toContain('已进入 implement')
+      // The click dispatched the implement order (regression-first) — the
+      // static 纪律 lines are replaced by the 已派单 next-step copy.
+      expect(intoImplement.text).toContain('已派单')
+      expect((await statusOf(root, changeId)).current).toBe('implement')
+      expect(signals.at(-1)?.node).toBe('implement')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('2026-09-23 issue #1: confirm mode dispatches when the customer typed the command', async () => {
     const { root, focus } = await setup()
     try {
@@ -1345,5 +1487,49 @@ describe('/baf-go work-order dispatch (§18.4.2, 2026-09-22 客户决策)', () =
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+})
+
+// 【变更】2026-09-28 (用户问题 1.7): the gate-dialog revision input's dispatch —
+// pure-function coverage (the end-to-end pop/re-pop loop rides the
+// orchestrator's artifact-fingerprint re-arm, exercised by the walks).
+describe('2026-09-28 用户问题 1.7: gate revision dispatch', () => {
+  it('dispatchGateRevisionFromTab sends a gate-revise work order at the gate artifact', () => {
+    const sent: DispatchSignal[] = []
+    const dispatch: GoDispatch = (signal) => {
+      sent.push(signal)
+      return 'sent'
+    }
+    const card = dispatchGateRevisionFromTab('C:/ws', dispatch, 'open-advance', 'CHG-1', 'Why 一句话讲清')
+    expect(card?.kind).toBe('success')
+    expect(card?.text).toContain('修改意见已派单')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.cause).toBe('gate-revise')
+    expect(sent[0]?.node).toBe('open')
+    expect(sent[0]?.artifactPath).toBe('openspec/changes/CHG-1/proposal.md')
+    expect(sent[0]?.missing).toContain('按客户修改意见修订产物：Why 一句话讲清')
+    expect(workOrderText(sent[0] as DispatchSignal)).toContain('【BAF 工单 · /baf-go 派单 · 客户修改意见】')
+  })
+
+  it('verify-archive revises verify.md (the dispatch table would say checklist.md)', () => {
+    const sent: DispatchSignal[] = []
+    const dispatch: GoDispatch = (signal) => {
+      sent.push(signal)
+      return 'sent'
+    }
+    const card = dispatchGateRevisionFromTab('C:/ws', dispatch, 'verify-archive', 'CHG-1', '补充验收证据')
+    expect(card?.text).toContain('verify.md')
+    expect(sent[0]?.node).toBe('verify')
+    expect(sent[0]?.artifactPath).toBe('openspec/changes/CHG-1/verify.md')
+  })
+
+  it('a non-revisable gate returns undefined (no silent dispatch)', () => {
+    expect(dispatchGateRevisionFromTab('C:/ws', () => 'sent', 'scaffold', 'CHG-1', 'x')).toBeUndefined()
+  })
+
+  it('no dispatch channel degrades to the guidance card', () => {
+    const card = dispatchGateRevisionFromTab('C:/ws', undefined, 'open-advance', 'CHG-1', '改 Why')
+    expect(card?.kind).toBe('success')
+    expect(card?.text).toContain('修改意见未能派单')
   })
 })

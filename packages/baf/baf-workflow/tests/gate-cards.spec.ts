@@ -26,6 +26,9 @@ const EXPECTED_GATE_IDS: readonly GateId[] = [
   'active-conflict',
   'bind-workflow',
   'open-advance',
+  // 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path open-advance
+  // counterpart (same resting point, clipped Bug-record wording).
+  'bugfix-open-advance',
   'clarify-advance',
   'design-advance',
   'plan-advance',
@@ -142,6 +145,26 @@ describe('renderGateCard (§22)', () => {
     expect(result.text).toContain('重新描述需求')
     expect(result.text).toContain('/baf-workflow-classify reject')
     expect(result.text).toContain('change=CHG-001')
+  })
+
+  // 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path open advance card.
+  // 【变更】2026-09-28 (用户问题 1.1/1.3): the question is segmented
+  // (【状态变化】/【完成情况】/【确认后】) and the 暂不推进 option carries the
+  // /baf-go resume hint as customer copy.
+  it('renders the bugfix-open-advance card with clipped Bug-record wording', () => {
+    const result = renderGate('bugfix-open-advance', { cwd: '/tmp/ws', changeId: 'CHG-BUG' })
+    expect(result.kind).toBe('success')
+    expect(result.text).toContain('Bug 记录已完成 · 请确认推进')
+    expect(result.text).toContain('【状态变化】Bug 记录（已完成，通过完成门）→ 实施（待开始）')
+    expect(result.text).toContain('先写回归测试')
+    expect(result.text).toContain('确认 Bug 记录 · 进入实施')
+    // The confirm takes the same positive path open-advance takes.
+    expect(result.text).toContain('/baf-go-confirm')
+    expect(result.text).toContain('暂不推进')
+    expect(result.text).toContain('再敲一次 /baf-go')
+    // Full-go wording must not leak onto the clipped card.
+    expect(result.text).not.toContain('提案')
+    expect(result.text).not.toContain('进入澄清')
   })
 
   it('renders the resume gate dynamically from candidate list', () => {

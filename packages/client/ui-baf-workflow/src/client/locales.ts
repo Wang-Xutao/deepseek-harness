@@ -80,9 +80,6 @@ export type WorkflowTabKey =
   | 'detail.artifacts'
   | 'detail.completion'
   | 'detail.failure'
-  | 'detail.failureCodes'
-  | 'detail.codeLabel'
-  | 'detail.fixLabel'
   | 'detail.entries'
   | 'detail.transitionsIn'
   | 'detail.transitionsOut'
@@ -100,6 +97,7 @@ export type WorkflowTabKey =
   | 'status.drifted'
   | 'status.skipped'
   | 'status.template'
+  | 'status.clipped'
   | 'status.awaiting'
   | 'status.abandoned'
   | 'terminal.completed.artifacts'
@@ -151,8 +149,12 @@ export type WorkflowTabKey =
   | 'action.startStage'
   | 'action.confirmArchive'
   | 'action.advance'
-  | 'action.advanceHelp'
-  | 'action.advanceBlocked'
+  // 【变更】2026-09-25 (用户需求 工作流 1): the strip 推进 button became the
+  // TOP advance dialog — its own copy (advanceHelp/advanceBlocked died with
+  // the always-on button; not-ready simply does not pop the dialog).
+  | 'advanceDialog.title'
+  | 'advanceDialog.body'
+  | 'advanceDialog.dismiss'
   // §22.19 R5 — terminal dead-end escape (回到进行中的变更).
   | 'action.backToActive'
   | 'action.resume'
@@ -188,6 +190,7 @@ export type WorkflowTabKey =
   | 'artifact.state.template'
   | 'artifact.state.planned'
   | 'artifact.state.filled'
+  | 'artifact.state.clipped'
   // 【变更】2026-09-22 (user report #4) — session token statistics card.
   | 'stats.title'
   | 'stats.help'
@@ -266,7 +269,9 @@ export const en: Record<WorkflowTabKey, string> = {
   'scope.small-local': 'Small local change',
   'scope.cross-module': 'Cross-module',
   'scope.public-api': 'Public API',
-  'scope.unknown': 'To be determined',
+  // 【变更】2026-09-25 (用户需求 工作流 7): the unsettled scope reads as the
+  // plan-stage promise, not archive vocabulary — the plan freeze settles it.
+  'scope.unknown': 'To be confirmed at plan stage',
   'intake.confirm': 'Confirm classification',
   'intake.confirmFull': 'Confirm · Full path',
   'intake.confirmFullHelp': 'Confirm the classification and enter the full go path (one click: confirm + open)',
@@ -278,7 +283,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'intake.required': 'Required',
   'intake.notRequired': 'Not required',
   'intake.bugFixPath.title': 'Fast-path Bug fields',
-  'intake.bugFixPath.help': 'Five required fields gate the fast-path ledger. They map 1:1 to the slash form.',
+  'intake.bugFixPath.help': 'Optional accelerator: confirming without fields creates a TODO draft the model completes from the work order; filling all five fields establishes the complete record in one step.',
   'intake.bugFixPath.problem': 'Problem',
   'intake.bugFixPath.rootCause': 'Root cause',
   'intake.bugFixPath.file': 'Affected files (one per line)',
@@ -298,10 +303,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'detail.actions': 'Actions',
   'detail.artifacts': 'Expected artifacts',
   'detail.completion': 'Completion',
-  'detail.failure': 'Failure handling',
-  'detail.failureCodes': 'Common failures & fixes',
-  'detail.codeLabel': 'code',
-  'detail.fixLabel': 'fix',
+  'detail.failure': 'Anomaly — reason & fix',
   'detail.entries': 'Entries',
   'detail.transitionsIn': 'Inbound transitions',
   'detail.transitionsOut': 'Outbound transitions',
@@ -319,6 +321,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'status.drifted': 'Drifted',
   'status.skipped': 'Ignored',
   'status.template': 'Idle',
+  'status.clipped': 'Clipped',
   'status.awaiting': 'Awaiting customer',
   'status.abandoned': 'Abandoned',
   'terminal.completed.artifacts': 'Archived under openspec/changes/archive/<changeId>/ — every stage document plus the verify report',
@@ -329,7 +332,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'pendingGate.title': 'Workspace bootstrap required',
   'pendingGate.action': 'Resolve in Tab',
   'pendingGate.classifyTitle': 'Requirement classification awaiting your choice',
-  'pendingGate.bugFixFieldsHelp': 'Bug-fix path needs five fields — fill the bug-fix form in the rail first, or the confirm returns the missing list',
+  'pendingGate.bugFixFieldsHelp': 'Bug-fix path can be confirmed with no fields — a TODO draft (bug-record.md) is created and the model completes it from the work order; fill the rail form first to establish the complete record in one step',
   'gate.bannerTitle': 'Workflow decision',
   // §22.14 — abandon change-level gate button label.
   'action.abandon': 'Abandon this change',
@@ -362,8 +365,9 @@ export const en: Record<WorkflowTabKey, string> = {
   'action.startStage': 'Start stage',
   'action.confirmArchive': 'Confirm archive',
   'action.advance': 'Advance',
-  'action.advanceHelp': 'Push the workflow to the next customer confirmation point — same as typing /baf-go in chat: pops the dialog, and the stage the model lands on gets a work order.',
-  'action.advanceBlocked': 'Advance is locked until the current stage artifact passes its gate. What is missing:',
+  'advanceDialog.title': 'Ready to advance the workflow',
+  'advanceDialog.body': 'The current stage {from} has finished and can advance. Advance now to continue toward {to}?',
+  'advanceDialog.dismiss': 'Not now',
   'action.backToActive': 'Back to the active change',
   'action.resume': 'Roll back to…',
   'action.resumeHelp': 'Drift never clears itself. Pick the stage to re-enter — everything after it is re-run.',
@@ -396,6 +400,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'artifact.state.template': 'template unfilled',
   'artifact.state.planned': 'planned',
   'artifact.state.filled': 'filled',
+  'artifact.state.clipped': 'clipped',
   'stats.title': 'Session stats',
   'stats.help': 'Whole-session figures from the durable log: turn/step counts, model and tool wall time, and cumulative provider token usage.',
   'stats.breakdownTitle': 'Input {input} · cache read {cacheRead} · cache write {cacheWrite} · output {output}',
@@ -474,7 +479,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'scope.small-local': '局部小改',
   'scope.cross-module': '跨模块',
   'scope.public-api': '公共 API',
-  'scope.unknown': '待归档确定',
+  // 【变更】2026-09-25 (用户需求 工作流 7): 未落定的影响范围读「待计划阶段确认」——
+  // 计划阶段冻结文件白名单时确定（pipeline settled-at-plan），不是归档时确定。
+  'scope.unknown': '待计划阶段确认',
   'intake.confirm': '确认分类',
   'intake.confirmFull': '确认 · 完整流程',
   'intake.confirmFullHelp': '确认分类并进入完整流程（一次点击 = 确认 + 进入建立变更）',
@@ -486,7 +493,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'intake.required': '需要',
   'intake.notRequired': '不需要',
   'intake.bugFixPath.title': 'fast-path Bug 字段',
-  'intake.bugFixPath.help': '5 字段是 fast-path 账本的硬性前置；与 slash 的 key=value 一一对应。',
+  'intake.bugFixPath.help': '可选加速：不填直接点「确认 · 缺陷修复路径」会建 TODO 草稿（模型按工单补齐）；填齐 5 字段再提交则一次建立完整记录。',
   'intake.bugFixPath.problem': '现象',
   'intake.bugFixPath.rootCause': '根因',
   'intake.bugFixPath.file': '受影响文件（每行一个）',
@@ -506,10 +513,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'detail.actions': '操作步骤',
   'detail.artifacts': '期望产物',
   'detail.completion': '完成条件',
-  'detail.failure': '失败处理',
-  'detail.failureCodes': '常见失败与处理',
-  'detail.codeLabel': '错误码',
-  'detail.fixLabel': '怎么处理',
+  // 【变更】2026-09-25 (用户需求 工作流 4): 失败信息只在阶段真正异常时渲染——
+  // 标题改为「异常原因与解决方法」，常见失败参考表已删除。
+  'detail.failure': '异常原因与解决方法',
   'detail.entries': '入口',
   'detail.transitionsIn': '入边条件',
   'detail.transitionsOut': '出边条件',
@@ -529,6 +535,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   // 不再显示 锁定/空闲（终态之后没有待解锁的东西）。
   'status.skipped': '已忽略',
   'status.template': '空闲',
+  'status.clipped': '已裁剪',
   'status.awaiting': '待客户确认',
   'status.abandoned': '已放弃',
   'terminal.completed.artifacts': '归档在 openspec/changes/archive/<变更ID>/——保留各阶段文档与验收报告',
@@ -539,7 +546,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'pendingGate.title': '工作区需要先初始化',
   'pendingGate.action': '在 Tab 解决',
   'pendingGate.classifyTitle': '需求分类待确认',
-  'pendingGate.bugFixFieldsHelp': '缺陷修复路径需要五个字段——先在右侧栏填写缺陷修复表单，否则确认会返回缺项清单',
+  'pendingGate.bugFixFieldsHelp': '缺陷修复路径可不填字段直接确认——系统建立 TODO 草稿（bug-record.md + plan.json），模型按工单补齐；右侧表单填齐后再提交则一次建立完整记录',
   'gate.bannerTitle': '工作流决策',
   // §22.14 — abandon change-level gate button label.
   'action.abandon': '放弃此变更',
@@ -573,8 +580,11 @@ export const zh: Record<WorkflowTabKey, string> = {
   'action.startStage': '开始阶段',
   'action.confirmArchive': '确认归档',
   'action.advance': '推进',
-  'action.advanceHelp': '把工作流推进到下一个需要你确认的点——与在对话里输入 /baf-go 完全一致：会弹出确认框，模型落定的阶段会收到工单派单',
-  'action.advanceBlocked': '当前阶段产物未过完成门，暂不能推进。缺什么：',
+  // 【变更】2026-09-25 (用户需求 工作流 1): 常驻推进按钮改为顶部推进对话框，
+  // 需要推进时才弹出；确认即推进（advanceDialog 即确认，不再二次弹窗）。
+  'advanceDialog.title': '可以推进工作流了',
+  'advanceDialog.body': '当前阶段「{from}」已完成，可以继续推进。现在推进吗？（下一站：{to}）',
+  'advanceDialog.dismiss': '暂不推进',
   'action.backToActive': '回到进行中的变更',
   'action.resume': '复位到…',
   'action.resumeHelp': '漂移不会自行消失。请选择要重新进入的阶段——它之后的阶段会重跑。',
@@ -608,6 +618,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'artifact.state.missing': '尚未生成',
   'artifact.state.template': '仍是未填的模板',
   'artifact.state.planned': '已计划',
+  'artifact.state.clipped': '已裁剪',
   'artifact.state.filled': '已填写',
   'stats.title': '会话统计',
   'stats.help': '来自完整会话日志的累计数字：回合/步骤数、模型与工具耗时、以及按 provider 上报累计的 token 用量。',

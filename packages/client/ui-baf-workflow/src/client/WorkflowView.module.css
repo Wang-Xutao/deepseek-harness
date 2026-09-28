@@ -753,46 +753,173 @@
   gap: 0.7rem;
 }
 
-/* 【变更】2026-09-24 (demo6 问题 13): the detail panel's failure reference —
-   code chip + meaning + fix on one row (wraps on narrow rails). */
-.failTable {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin-top: 0.2rem;
-}
-
-.failRow {
-  display: grid;
-  grid-template-columns: minmax(7rem, auto) 1fr;
-  gap: 0.1rem 0.5rem;
-  font-size: 0.7rem;
-  line-height: 1.4;
-  align-items: baseline;
-}
-
-.failCode {
-  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
-  font-size: 0.64rem;
-  font-weight: 700;
-  color: var(--wf-danger);
-  background: color-mix(in srgb, var(--wf-danger) 10%, transparent);
-  border-radius: 3px;
-  padding: 0.05rem 0.28rem;
-  justify-self: start;
-}
-
-.failMeaning { color: var(--wf-ink); }
-
-.failFix {
-  grid-column: 2;
+/* 【变更】2026-09-25 (用户需求 工作流 4): the .failTable/.failRow/.failCode/
+   .failMeaning/.failFix reference-table classes are deleted with the
+   always-on 常见失败与处理 card — anomaly copy now rides the plain section
+   styles (biZh / hint / list), gated on a failed/blocked stage.
+   【变更】2026-09-25 (用户需求 工作流 1): inline option hint for the TOP live
+   gate dialog's buttons (label · hint on one line, hint muted). */
+.optionHintInline {
+  font-weight: 400;
   color: var(--wf-muted);
 }
 
-.failFix::before {
-  content: '→ ';
-  color: var(--wf-ok);
+/* 【变更】2026-09-28 (用户问题 1.2/1.5/1.7): the live-gate card's structured
+ * body (title row + 变更 chip top-right), the artifact chips, and the
+ * revision inputs shared by every Tab decision card. */
+
+.gateHeadRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.gateChangeChip {
+  flex-shrink: 0;
+  max-width: 60%;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-accent) 8%, var(--wf-card));
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  color: var(--wf-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gateSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.gateSectionTitle {
+  font-size: 0.72rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--wf-accent) 72%, var(--wf-ink));
+}
+
+.gateList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--wf-muted);
+}
+
+.gateList li {
+  position: relative;
+  padding-left: 0.9rem;
+}
+
+.gateList li::before {
+  content: '';
+  position: absolute;
+  left: 0.1rem;
+  top: 0.55em;
+  width: 0.32rem;
+  height: 0.32rem;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--wf-accent) 65%, transparent);
+}
+
+.gateArtifactChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 40%, var(--wf-line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--wf-accent) 7%, var(--wf-card));
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--wf-accent) 70%, var(--wf-ink));
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.gateArtifactChip:hover {
+  border-color: var(--wf-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-accent) 18%, transparent);
+}
+
+.reviseBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed color-mix(in srgb, var(--wf-accent) 35%, var(--wf-line));
+}
+
+.reviseLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--wf-muted);
+}
+
+.reviseInput {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 25%, var(--wf-line));
+  border-radius: 8px;
+  background: var(--wf-card);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  font-family: inherit;
+  color: var(--wf-ink);
+  resize: vertical;
+  min-height: 2.4rem;
+}
+
+.reviseInput:focus-visible {
+  outline: none;
+  border-color: var(--wf-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-accent) 18%, transparent);
+}
+
+.reviseInput:disabled {
+  opacity: 0.55;
+}
+
+.reviseSubmit {
+  align-self: flex-end;
+  padding: 0.4rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--wf-accent) 14%, var(--wf-card));
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--wf-accent) 75%, var(--wf-ink));
+  cursor: pointer;
+  transition: box-shadow 120ms ease, transform 120ms ease;
+}
+
+.reviseSubmit:hover:not(:disabled) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-accent) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+.reviseSubmit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reviseSent {
+  margin: 0.35rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px dashed color-mix(in srgb, var(--wf-accent) 35%, var(--wf-line));
+  font-size: 0.74rem;
+  color: color-mix(in srgb, var(--wf-accent) 75%, var(--wf-ink));
 }
 
 .toolbar {

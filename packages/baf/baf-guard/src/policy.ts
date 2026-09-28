@@ -216,6 +216,12 @@ export function adjudicateFsWrite(
   const inChangeDir = state.changeDirRel !== undefined && matchesPathEntry(rel, state.changeDirRel)
   const stage = state.stage ?? 'intake'
   if (inChangeDir && (DOC_STAGES.has(stage) || stage === 'implement')) return allow
+  // 【变更】2026-09-28 (用户问题 8): the verify stage's one writable artifact is
+  // checklist.md — the model ticks `- [ ]` → `- [x]` as verification confirms
+  // each item (gate B hard-checks every box before archive). Everything else
+  // in the change dir stays protected at verify.
+  if (inChangeDir && stage === 'verify' && state.changeDirRel !== undefined
+    && rel === `${state.changeDirRel}/checklist.md`) return allow
   // 【变更】2026-09-22 (web walk, change 170b — user report #1): open's
   // artifact is proposal.md, but open was never a DOC_STAGE — every
   // change-dir write at open bounced as protected_path, so the model could
@@ -223,9 +229,20 @@ export function adjudicateFsWrite(
   // workflow-managed" and idled). Allow EXACTLY proposal.md at open, not the
   // whole change dir: clarify/design/plan must stay unwritable until their
   // stage begins, or the stage order the gates enforce becomes decorative.
-  if (inChangeDir && stage === 'open' && state.changeDirRel !== undefined
-    && rel === `${state.changeDirRel}/proposal.md`) {
-    return allow
+  if (inChangeDir && stage === 'open' && state.changeDirRel !== undefined) {
+    // 【变更】2026-09-28 (用户问题 3 · demo-21 死锁): open's artifact set is
+    // path-dependent. Full-go authors proposal.md; bug-fix authors
+    // bug-record.md + plan.json — the open work order explicitly tells the
+    // model to fill them. Allowing ONLY proposal.md left every bug-fix
+    // record write bouncing as protected_path, cornering the model into
+    // calling the abandon gate after six dead turns (demo-21
+    // change-20260927-ecum-demo-1e45, forced abandon).
+    if (state.mode !== 'bug-fix-path' && rel === `${state.changeDirRel}/proposal.md`) {
+      return allow
+    }
+    if (state.mode === 'bug-fix-path'
+      && (rel === `${state.changeDirRel}/bug-record.md`
+        || rel === `${state.changeDirRel}/plan.json`)) return allow
   }
   // §22.15 D: built-in protected paths apply even when the baseline omits
   // them. Once the change-dir allowance above has cleared the active change's

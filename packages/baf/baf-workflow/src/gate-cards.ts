@@ -26,6 +26,7 @@ export type GateId =
   | 'active-conflict'
   | 'bind-workflow'
   | 'open-advance'
+  | 'bugfix-open-advance'
   | 'clarify-advance'
   | 'design-advance'
   | 'plan-advance'
@@ -185,56 +186,101 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
     // 【变更】2026-09-22 (user report #1/#4): this card pops only after
     // proposal.md passes its gate — it is the customer confirming the open
     // stage's artifact, not a bare "next step" nod.
-    question: '提案（proposal.md）已完成并通过完成门：Why / Scope / Impact 均已填写。确认后进入澄清阶段，系统会装好模板，等模型把澄清文档填好后，再弹下一次确认卡。',
+    // 【变更】2026-09-28 (用户问题 1.1/1.3/1.5): segmented copy — 【状态变化】
+    // from→to, 【完成情况】 gate conditions, 【确认后】 what the click starts;
+    // the artifact links + change-id chip are appended by askGateDialog (they
+    // carry the change id, which the static registry cannot know), and the
+    // 「再敲一次 /baf-go 继续」 sentence moved into the 暂不推进 option's hint.
+    question: '【状态变化】提案（已完成，通过完成门）→ 澄清（待开始）\n\n【完成情况】\n- Why / Scope / Impact 均已填写\n\n【确认后】\n- 系统装好澄清文档模板，模型填写\n- 填好后自动弹下一次确认卡',
     options: [
       { id: 'advance', label: '确认提案 · 进入澄清', command: '/baf-go-confirm' },
-      { id: 'back', label: '暂不推进', command: '__noop__' },
+      { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
+    ],
+  },
+  // 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path counterpart of
+  // open-advance — same shape, clipped wording. Pops only after bug-record.md
+  // passes bugRecordGate (the same file-aware rule open-advance got in the
+  // 2026-09-22 report); the confirm advances into implement where the
+  // regression test is written first.
+  'bugfix-open-advance': {
+    id: 'bugfix-open-advance',
+    title: 'Bug 记录已完成 · 请确认推进',
+    // 【变更】2026-09-28 (用户问题 1.1/1.5): segmented copy (same shape as
+    // open-advance).
+    question: '【状态变化】Bug 记录（已完成，通过完成门）→ 实施（待开始）\n\n【完成情况】\n- 根因 / 影响文件 / 回归测试均已填写\n\n【确认后】\n- 先写回归测试，再修复根因（改动须在 plan.json 白名单内）',
+    options: [
+      { id: 'advance', label: '确认 Bug 记录 · 进入实施', command: '/baf-go-confirm' },
+      { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
   'clarify-advance': {
     id: 'clarify-advance',
     title: '进入设计 · 请确认',
-    question: '澄清文档已经齐了。系统会装好设计模板，等模型把设计文档填好后，再敲一次 /baf-go 继续。',
+    // 【变更】2026-09-28 (用户问题 1.1/1.3): segmented copy; the 再敲一次
+    // /baf-go sentence moved into the 暂不推进 hint.
+    question: '【状态变化】澄清（已完成）→ 设计（待开始）\n\n【完成情况】\n- 澄清文档已经齐了\n\n【确认后】\n- 系统装好设计文档模板，模型填写\n- 填好后自动弹下一次确认卡',
     options: [
       { id: 'advance', label: '确认进入设计', command: '/baf-go-confirm' },
-      { id: 'back', label: '暂不推进', command: '__noop__' },
+      { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
   'design-advance': {
     id: 'design-advance',
     title: '进入计划 · 请确认',
-    question: '设计文档已经齐了。系统会装好计划模板，等模型把计划文档填好后，再敲一次 /baf-go 继续。',
+    // 【变更】2026-09-28 (用户问题 1.1/1.3): segmented copy; the 再敲一次
+    // /baf-go sentence moved into the 暂不推进 hint.
+    question: '【状态变化】设计（已完成）→ 计划（待开始）\n\n【完成情况】\n- 设计文档已经齐了\n\n【确认后】\n- 系统装好计划文档模板，模型填写\n- 填好后自动弹下一次确认卡',
     options: [
       { id: 'advance', label: '确认进入计划', command: '/baf-go-confirm' },
-      { id: 'back', label: '暂不推进', command: '__noop__' },
+      { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
   'plan-advance': {
     id: 'plan-advance',
     title: '进入实现 · 请确认',
-    question: '计划已经齐了。系统会进入实现阶段，你只需要按计划改白名单内的文件。',
+    // 【变更】2026-09-28 (用户问题 1.1): segmented copy.
+    question: '【状态变化】计划（已完成）→ 实现（待开始）\n\n【完成情况】\n- 计划已经齐了\n\n【确认后】\n- 进入实现阶段，模型按计划修改白名单内的文件',
     options: [
       { id: 'advance', label: '确认进入实现', command: '/baf-go-confirm' },
-      { id: 'back', label: '暂不推进', command: '__noop__' },
+      { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
   // 【变更】2026-09-23 (demo1 十问题 8): verify entry is a customer-gated
   // transition — implement finishing used to auto-run verification. The
   // confirm names the checklist the run will execute and the acceptance
   // document it writes (verify.md, demo5 issue #3).
+  // 【变更】2026-09-28 (用户问题 8): the confirm now names the REAL checklist
+  // artifact — checklist.md is authored at implement-exit and this card is the
+  // customer's review of it (coordinator refuses to pop it until the file
+  // passes checklistGate); during verify the model ticks it item by item and
+  // gate B releases only when every box is `[x]`.
   'verify-advance': {
     id: 'verify-advance',
-    title: '实现完成 · 请确认验证',
-    question: '计划内的任务已全部完成（改动均在白名单内）。确认后进入验证阶段：系统按检查单运行验证，并生成验收文档 verify.md。验证未通过会带着失败项回到实现阶段。',
+    title: '实现完成 · 请确认验证检查单',
+    // 【变更】2026-09-23 (demo1 十问题 8): verify entry is a customer-gated
+    // transition — implement finishing used to auto-run verification. The
+    // confirm names the checklist the run will execute and the acceptance
+    // document it writes (verify.md, demo5 issue #3).
+    // 【变更】2026-09-28 (用户问题 8): the confirm now names the REAL checklist
+    // artifact — checklist.md is authored at implement-exit and this card is the
+    // customer's review of it (coordinator refuses to pop it until the file
+    // passes checklistGate); during verify the model ticks it item by item and
+    // gate B releases only when every box is `[x]`.
+    // 【变更】2026-09-28 (用户问题 1.1): segmented copy.
+    question: '【状态变化】实现（已完成）→ 验证（待开始）\n\n【完成情况】\n- 计划内任务全部完成，改动均在白名单内\n- 验证检查单 checklist.md 已生成\n\n【确认后】\n- 系统按检查单运行验证并生成验收文档 verify.md\n- 模型逐项确认打勾，全勾且通过后弹归档确认',
     options: [
-      { id: 'advance', label: '确认开始验证', command: '/baf-go-confirm' },
-      { id: 'back', label: '暂不验证', command: '__noop__' },
+      { id: 'advance', label: '确认检查单 · 开始验证', command: '/baf-go-confirm' },
+      { id: 'back', label: '暂不验证', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
   'design-confirm': {
     id: 'design-confirm',
     title: '设计已完成，请确认',
-    question: '设计文档已经写好。确认后将进入计划阶段。任选一种方式确认：确认弹窗点「确认设计」、工作流页签点确认按钮、聊天里输入 /baf-go-confirm、或终端跑 baf go-confirm；输入 /baf-go 会重新弹出确认框。',
+    // 【变更】2026-09-28 (用户问题 1.1): segmented copy — the multi-surface
+    // confirmation litany is gone (the card IS the dialog now; the 三表面等价
+    // principle means the litany was teaching the customer surfaces they
+    // already have).
+    question: '【状态变化】设计（已完成）→ 计划（待开始）\n\n【完成情况】\n- 设计文档已经写好\n\n【确认后】\n- 进入计划阶段，系统装好计划模板',
     options: [
       { id: 'confirm', label: '确认设计，进入计划', command: '/baf-go' },
       { id: 'back', label: '退回，继续澄清需求', command: '/baf-workflow-clarify' },
@@ -243,7 +289,8 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
   'verify-archive': {
     id: 'verify-archive',
     title: '检查已通过，请确认归档',
-    question: '所有检查都已通过。确认后将归档本次变更。任选一种方式确认：确认弹窗点「确认归档」、工作流页签点确认按钮、聊天里输入 /baf-go-confirm、或终端跑 baf go-confirm；输入 /baf-go 会重新弹出确认框。',
+    // 【变更】2026-09-28 (用户问题 1.1): segmented copy.
+    question: '【状态变化】验证（已完成，全部检查通过）→ 归档（待开始）\n\n【完成情况】\n- 检查全部通过，验证检查单已全部勾选\n\n【确认后】\n- 归档本次变更（产物移入归档目录，流程结束）',
     options: [
       { id: 'confirm', label: '确认归档', command: '/baf-go' },
       { id: 'back', label: '退回，继续修改实现', command: '/baf-workflow-implement' },

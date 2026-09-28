@@ -1,0 +1,330 @@
+/*
+ * 【变更】2026-09-25 (用户需求 工作流 2): the unified BAF gate card style.
+ *
+ * 【变更】2026-09-28 (用户问题 1): the card promotes from an inline composer
+ * bubble to a CENTERED MODAL — a dimmed blur scrim plus a fixed card
+ * (entrance pop, heavier shadow, accent top bar). A workflow decision parks
+ * the whole change, so the dialog reads as blocking: no close affordance,
+ * the answer buttons are the only exits. The gold accent frame + eyebrow
+ * chip still echo the workflow Tab's design tokens so the decision reads as
+ * BAF at a glance.
+ *
+ * 【变更】2026-09-28 (用户问题 1.4): the overlay defaults to fullscreen but the
+ * component pins it to the CONVERSATION PANE's rect via inline
+ * left/top/width/height — the scrim covers the conversation hosting the
+ * gate, not the whole app (sidebar/settings stay interactive).
+ *
+ * 【变更】2026-09-28 (用户问题 1.1/1.2/1.5/1.6/1.7): segmented body sections,
+ * the top-right 变更 chip, artifact chips, horizontal primary/secondary
+ * options, and the revision textarea.
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, #0b1220 46%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: gateScrimIn 140ms ease-out;
+}
+
+/* Zero-footprint anchor the component measures the pane from. */
+.sentinel {
+  display: block;
+  width: 100%;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.frame {
+  --gate-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  --gate-ink: var(--dsw-alias-text-primary, #1f2937);
+  --gate-muted: var(--dsw-alias-text-secondary, #64748b);
+  --gate-line: var(--dsw-alias-border-subtle, #d7dee8);
+  --gate-card: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas, #fff));
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  padding: 20px 22px 18px;
+  border: 1px solid color-mix(in srgb, var(--gate-accent) 45%, var(--gate-line));
+  border-top: 4px solid var(--gate-accent);
+  border-radius: 14px;
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--gate-accent) 10%, var(--gate-card)), var(--gate-card));
+  box-shadow:
+    0 32px 64px -28px color-mix(in srgb, #0b1220 72%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--gate-accent) 12%, transparent);
+  color: var(--gate-ink);
+  animation: gateCardIn 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes gateScrimIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes gateCardIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 用户问题 1.2: eyebrow left, 变更 id chip fixed top-right. */
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.eyebrow {
+  align-self: flex-start;
+  margin: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--dsw-alias-bg-elevated, #fff);
+  background: var(--gate-accent);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.changeChip {
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--gate-accent) 55%, var(--gate-line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gate-accent) 8%, var(--gate-card));
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  color: var(--gate-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+.title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--gate-ink);
+}
+
+/* 用户问题 1.1: each 【…】 section is its own block with a small heading. */
+.bodySection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sectionTitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--gate-accent) 72%, var(--gate-ink));
+}
+
+.body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--gate-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bodyList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--gate-muted);
+}
+
+.bodyList li {
+  position: relative;
+  padding-left: 16px;
+}
+
+.bodyList li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--gate-accent) 65%, transparent);
+}
+
+/* 用户问题 1.5: artifact rows render as openable document chips. */
+.artifactChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border: 1px solid color-mix(in srgb, var(--gate-accent) 40%, var(--gate-line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gate-accent) 7%, var(--gate-card));
+  font-size: 12px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--gate-accent) 70%, var(--gate-ink));
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+button.artifactChip:hover {
+  border-color: var(--gate-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gate-accent) 18%, transparent);
+}
+
+/* 用户问题 1.6: horizontal option row, confirm emphasized. */
+.options {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.primaryBtn,
+.secondaryBtn {
+  display: flex;
+  flex: 1 1 140px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.primaryBtn {
+  border: 1px solid color-mix(in srgb, var(--gate-accent) 80%, var(--gate-line));
+  background: var(--gate-accent);
+  color: var(--dsw-alias-bg-elevated, #fff);
+}
+
+.primaryBtn:hover:not(:disabled) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gate-accent) 32%, transparent);
+  transform: translateY(-1px);
+}
+
+.secondaryBtn {
+  border: 1px solid color-mix(in srgb, var(--gate-accent) 30%, var(--gate-line));
+  background: var(--gate-card);
+  color: var(--gate-ink);
+}
+
+.secondaryBtn:hover:not(:disabled) {
+  border-color: var(--gate-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gate-accent) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+.primaryBtn:disabled,
+.secondaryBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.optionLabel {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.primaryBtn .optionLabel {
+  font-weight: 700;
+}
+
+.optionHint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gate-muted);
+}
+
+.primaryBtn .optionHint {
+  color: color-mix(in srgb, var(--dsw-alias-bg-elevated, #fff) 82%, var(--gate-accent));
+}
+
+/* 用户问题 1.7: the revision input under the options. */
+.revise {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed color-mix(in srgb, var(--gate-accent) 35%, var(--gate-line));
+}
+
+.reviseLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gate-muted);
+}
+
+.reviseInput {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--gate-accent) 25%, var(--gate-line));
+  border-radius: 8px;
+  background: var(--gate-card);
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: inherit;
+  color: var(--gate-ink);
+  resize: vertical;
+  min-height: 44px;
+}
+
+.reviseInput:focus-visible {
+  outline: none;
+  border-color: var(--gate-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gate-accent) 18%, transparent);
+}
+
+.reviseInput:disabled {
+  opacity: 0.55;
+}
+
+.reviseSubmit {
+  align-self: flex-end;
+  padding: 7px 16px;
+  border: 1px solid color-mix(in srgb, var(--gate-accent) 60%, var(--gate-line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gate-accent) 14%, var(--gate-card));
+  font-size: 13px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--gate-accent) 75%, var(--gate-ink));
+  cursor: pointer;
+  transition: box-shadow 120ms ease, transform 120ms ease;
+}
+
+.reviseSubmit:hover:not(:disabled) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gate-accent) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+.reviseSubmit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -38,7 +38,8 @@ import {
 import { ProjectionStore } from './projection.ts'
 import { isActiveChange } from './projection.ts'
 import { StagePipeline } from './stages/pipeline.ts'
-import { DOC_REQUIREMENTS_ZH, implementGate, proposalGate } from './stages/gates.ts'
+import { BUG_RECORD_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH, bugRecordGate, checklistGate, checklistTickedGate, implementGate, proposalGate } from './stages/gates.ts'
+import { BUG_RECORD_FILE } from './stages/bug-fix-path.ts'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { readLedger } from './stages/implement.ts'
 import { formatCommandReport } from './command-format.ts'
@@ -57,7 +58,7 @@ import {
 } from './command-drives.ts'
 import { beginIntake } from './begin-intake.ts'
 import { GATE_REGISTRY, renderGate, type GateId, type GateSpec } from './gate-cards.ts'
-import { judgmentOf } from './gate-dialog.ts'
+import { gateRevisionTarget, judgmentOf } from './gate-dialog.ts'
 import type { GateJudgment } from './gate-dialog.ts'
 import { artifactPathFor } from './go-dispatch.ts'
 import type { DispatchNode, DispatchOrigin, DispatchSignal, GoDispatch, GoDispatchOutcome } from './go-dispatch.ts'
@@ -127,9 +128,14 @@ export interface GoInput {
  * the customer clicked; `paused` means they closed/skipped/dismissed the
  * dialog (the workflow stays parked); `unavailable` means no dialog could
  * ever show (no answerer), so the caller degrades to the plain card.
+ * 【变更】2026-09-28 (用户问题 1.7): `revise` — the customer typed a
+ * modification request into the dialog's revision input instead of clicking
+ * an option; the coordinator dispatches it as a work order at the gate's
+ * stage artifact and the gate re-pops after the model revises.
  */
 export type GateAskOutcome =
   | { readonly kind: 'answered'; readonly optionId: string; readonly label: string }
+  | { readonly kind: 'revise'; readonly text: string }
   | { readonly kind: 'paused'; readonly reason: 'dismissed' | 'cancelled' | 'skipped' }
   | { readonly kind: 'unavailable'; readonly reason: string }
 
@@ -536,15 +542,35 @@ async function route(context: RouteContext): Promise<CommandResult> {
       // which — because the customer is still on `open` — runs the same
       // direct-advance path the legacy CLI does.
       //
-      // 【变更】2026-09-22 (user report): open had
-      // no artifact gate, so the Tab button / confirm path advanced a change
-      // whose proposal.md was still the TODO template (and the next stages
-      // inherited the hole). The user's principle: 每阶段产物是推进前提. Now
-      // every forward path out of open — dialog, confirm, plain /baf-go —
-      // runs the same proposalGate first; a failure refuses with the missing
-      // list so the card names the work.
+      // 【变更】2026-09-26 (用户需求 工作流 3): bug-fix-path gets the SAME shape
+      // here — its open gate is `bugRecordGate` (bug-record.md + the fast-path
+      // ledger), its advance gate card is 'bugfix-open-advance' (clipped
+      // wording), and its advance lands in implement with the
+      // regression-test-first dispatch. Before this, open on bug-fix-path had
+      // no gate at all (`openRefusal` returned undefined unconditionally), so
+      // a draft record could be advanced past with nothing adjudicating it.
+      const bugFix = status.mode === 'bug-fix-path'
       const openRefusal = async (): Promise<CommandResult | undefined> => {
-        if (status.mode === 'bug-fix-path') return undefined
+        if (bugFix) {
+          const gate = await bugRecordGate({ workspaceRoot: cwd, changeId, mode: 'bug-fix-path' })
+          if (gate.ok) return undefined
+          // §18.4.2 dispatch: the gap is authored by the model, so the customer's
+          // `/baf-go` hands it the order instead of only describing the hole.
+          const parts = dispatchParts(
+            dispatchWorkOrder(context, 'open', gate.missing ?? [], undefined, 'bug-fix-path'),
+            [
+              '对模型说补齐「缺什么」列出的项（或直接编辑 bug-record.md / plan.json）',
+              '完成后敲 /baf-go 或点 Tab「推进」重新裁决',
+            ],
+          )
+          return errorCard('open 裁决门未通过 · Bug 记录未完成', [
+            { title: '原因', lines: [gate.detail ?? 'bug-record.md 未达完成门'] },
+            { title: '产物', lines: [`openspec/changes/${changeId}/${BUG_RECORD_FILE} · 本次裁决对象`] },
+            ...(gate.missing === undefined || gate.missing.length === 0 ? [] : [{ title: '缺什么', lines: [...gate.missing] }]),
+            { title: '满足条件', lines: [...BUG_RECORD_REQUIREMENTS_ZH] },
+            { title: '下一步', lines: [...parts.next] },
+          ], parts.marker)
+        }
         const gate = await proposalGate({ workspaceRoot: cwd, changeId, mode: 'full-go-path' })
         if (gate.ok) return undefined
         // §18.4.2 dispatch: the gap is authored by the model, so the customer's
@@ -567,7 +593,7 @@ async function route(context: RouteContext): Promise<CommandResult> {
       const advanceOpen = async (): Promise<CommandResult> => {
         const refusal = await openRefusal()
         if (refusal !== undefined) return refusal
-        if (status.mode === 'bug-fix-path') {
+        if (bugFix) {
           const next = await pipeline.enterImplementStage(changeId, source)
           // 【变更】2026-09-23 (demo2 user issue #1): the bug-fix open→implement
           // rest is a model-authoring stop (the regression test is written
@@ -612,9 +638,28 @@ async function route(context: RouteContext): Promise<CommandResult> {
         // artifacts, not hope for them).
         const refusal = await openRefusal()
         if (refusal !== undefined) return refusal
-        const resolved = await resolveViaDialog(context, { gateId: 'open-advance', changeId })
+        // 【变更】2026-09-26 (用户需求 工作流 3): the advance card's wording
+        // follows the mode — bug-fix-path confirms the Bug record, not the
+        // proposal.
+        const openGate: GateId = bugFix ? 'bugfix-open-advance' : 'open-advance'
+        const resolved = await resolveViaDialog(context, { gateId: openGate, changeId })
         if (resolved !== undefined) return resolved
-        return withContinueHint(renderGate('open-advance', { cwd, changeId }))
+        return withContinueHint(renderGate(openGate, { cwd, changeId }))
+      }
+      // 【变更】2026-09-27 (web 验收·瞬时推进 round 2): a bare /baf-go on a
+      // bug-fix open whose record ALREADY passes must not jump to implement.
+      // The classify-confirm follow-up (command-drives) re-enters here right
+      // after the customer's path click — dispatchOrigin 'customer', no ask
+      // channel — and the model can prefill the bug-fields form with
+      // plausible-looking (even fabricated) content, which is exactly the
+      // record the customer has not reviewed yet. Full-go-path is immune
+      // (proposal.md cannot exist at classify time); bug-fix parks on the
+      // clipped advance card instead — the card's 确认 click (/baf-go-confirm)
+      // or the turn-end pop (docAdvanceDue) is what actually advances.
+      if (bugFix) {
+        const refusal = await openRefusal()
+        if (refusal !== undefined) return refusal
+        return withContinueHint(renderGate('bugfix-open-advance', { cwd, changeId }))
       }
       return advanceOpen()
     }
@@ -813,6 +858,28 @@ async function route(context: RouteContext): Promise<CommandResult> {
 
     case 'verify': {
       if (at('verify') !== 'completed') return driveVerifyNow(context)
+      // 【变更】2026-09-28 (用户问题 8): gate B's hard precondition — the
+      // archive card is not even offered while a checklist box is open. The
+      // model ticks items as verification confirms them; the refusal names
+      // every unticked item and dispatches the verify-stage ticking order.
+      const ticked = await checklistTickedGate({
+        workspaceRoot: cwd,
+        changeId,
+        mode: status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+      })
+      if (!ticked.ok) {
+        const gap = ticked.missing ?? (ticked.detail === undefined ? [] : [ticked.detail])
+        const parts = dispatchParts(
+          dispatchWorkOrder(context, 'verify', gap, 'checklist-open',
+            status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path'),
+          ['模型逐项确认打勾后再敲 /baf-go'],
+        )
+        return errorCard('检查单未全部确认 · 不能归档', [
+          { title: '原因', lines: [ticked.detail ?? 'checklist.md 存在未勾选项'] },
+          { title: '未确认项', lines: gap.length === 0 ? ['（无明细）'] : gap },
+          { title: '下一步', lines: [...parts.next] },
+        ], parts.marker)
+      }
       // **Gate B** (§18.5 / §22.17) — archiving is the customer's call, not
       // the coordinator's. Same three unlock shapes as gate A.
       const parked = await gateUnlocked(store, changeId, 'verify-to-archive')
@@ -878,7 +945,10 @@ function explicitGatesFor(status: WorkflowStatus): readonly GateId[] {
         || status.intake.mode === 'clarify-required') gates.push('intake-classify')
       break
     case 'open':
-      gates.push('open-advance')
+      // 【变更】2026-09-26 (用户需求 工作流 3): mode-aware — bug-fix-path's
+      // advance gate is the Bug-record card (same resting point, clipped
+      // wording).
+      gates.push(status.mode === 'bug-fix-path' ? 'bugfix-open-advance' : 'open-advance')
       break
     case 'clarify':
       if (status.nodes.clarify === 'completed') gates.push('clarify-advance')
@@ -1175,7 +1245,31 @@ function missingOf(error: { readonly details: Readonly<Record<string, unknown>> 
  * @returns the gated (or directly driven) verify outcome card.
  */
 async function verifyEntry(context: RouteContext): Promise<CommandResult> {
-  const { cwd, changeId, ask, confirm } = context
+  const { cwd, store, changeId, ask, confirm } = context
+  // 【变更】2026-09-28 (用户问题 8): the checklist precondition — verification
+  // may not start (nor pop its confirm card) until checklist.md exists with
+  // real items. The refusal carries the authoring work list and, on a
+  // customer-action surface, dispatches the implement-stage order that wakes
+  // the model to write it. Applies before BOTH the confirm shortcut and the
+  // dialog, so no surface can skip the customer's checklist review.
+  const gateInput = {
+    workspaceRoot: cwd,
+    changeId,
+    mode: (await store.readStatus(changeId)).mode === 'bug-fix-path' ? 'bug-fix-path' as const : 'full-go-path' as const,
+  }
+  const checklist = await checklistGate(gateInput)
+  if (!checklist.ok) {
+    const gap = checklist.missing ?? (checklist.detail === undefined ? [] : [checklist.detail])
+    const parts = dispatchParts(
+      dispatchWorkOrder(context, 'implement', gap, 'checklist-missing', gateInput.mode),
+      ['模型生成 checklist.md 后再敲 /baf-go'],
+    )
+    return errorCard('验证检查单未就绪 · 不能开始验证', [
+      { title: '原因', lines: [checklist.detail ?? 'checklist.md 未达验证前置门'] },
+      { title: '缺什么', lines: gap.length === 0 ? ['（无明细）'] : gap },
+      { title: '下一步', lines: [...parts.next] },
+    ], parts.marker)
+  }
   if (confirm) return driveVerifyNow(context)
   if (ask !== undefined) {
     const resolved = await resolveViaDialog(context, { gateId: 'verify-advance', changeId })
@@ -1243,6 +1337,9 @@ async function resolveViaDialog(
     readonly cwd: string
     readonly adapters: DriveAdapters
     readonly dispatch?: GoDispatch
+    /** 2026-09-23 issue #1 / 2026-09-28 用户问题 1.7: callers that have one pass the full RouteContext; the revision dispatch is as customer-origin as an option click. */
+    readonly dispatchOrigin?: DispatchOrigin
+    readonly changeId?: string
   },
   gate: {
     readonly gateId: GateId
@@ -1254,12 +1351,133 @@ async function resolveViaDialog(
 ): Promise<CommandResult | undefined> {
   if (surface.ask === undefined) return undefined
   const outcome = await surface.ask(gate)
+  // 【变更】2026-09-28 (用户问题 1.7): free text from the dialog's revision
+  // input — dispatch the modification as a work order at the gate's stage
+  // artifact; the gate re-pops (artifact fingerprint re-arm) once the model
+  // revises, so the customer can iterate until the document is right.
+  if (outcome.kind === 'revise') return resolveRevisionViaDialog(surface, gate, outcome.text)
   if (outcome.kind !== 'answered') return undefined
   const opts = gate.changeId === undefined ? undefined : { changeId: gate.changeId }
   return driveGateResolve(surface.cwd, gate.gateId, outcome.optionId, surface.adapters, gate.resumeCandidates, gate.bindCandidates, 'gate-card', {
     ...opts,
     ...(surface.dispatch === undefined ? {} : { dispatch: surface.dispatch }),
   })
+}
+
+/**
+ * 【变更】2026-09-28 (用户问题 1.7): a revision request from a gate dialog's
+ * input — the customer's modification text becomes a work order at the
+ * gate's stage artifact. The gate itself stays parked (no option was
+ * clicked), so after the model revises the turn-end re-derivation pops the
+ * SAME gate with the updated artifact and the 【产物】 links re-render.
+ * @param surface - routing surface (dispatch channel + origin + change id).
+ * @param gate - the gate the revision came from.
+ * @param text - the customer's modification request.
+ * @returns the card reporting what the revision dispatch did.
+ */
+function resolveRevisionViaDialog(
+  surface: {
+    readonly cwd: string
+    readonly dispatch?: GoDispatch
+    readonly dispatchOrigin?: DispatchOrigin
+    readonly changeId?: string
+  },
+  gate: { readonly gateId: GateId; readonly changeId?: string },
+  text: string,
+): CommandResult | undefined {
+  const changeId = gate.changeId ?? surface.changeId
+  if (changeId === undefined) return undefined
+  const target = gateRevisionTarget(gate.gateId, changeId)
+  if (target === undefined) return undefined
+  const file = target.artifactPath.split('/').pop() ?? target.artifactPath
+  if (surface.dispatch === undefined || surface.dispatchOrigin !== 'customer') {
+    return {
+      kind: 'success',
+      text: formatCommandReport(true, cardTitle('gateRevise', '修改意见未能派单'), [
+        { title: '状态', lines: ['当前会话没有可用的派单通道（会话可能不在运行中）'] },
+        { title: '处理', lines: [`把修改意见直接粘贴到对话框发给模型，让它修订 ${file} 后再确认`] },
+      ]),
+    }
+  }
+  const outcome = dispatchWorkOrder(
+    { dispatch: surface.dispatch, dispatchOrigin: surface.dispatchOrigin, changeId } as Pick<RouteContext, 'dispatch' | 'dispatchOrigin' | 'changeId'>,
+    target.node,
+    [`按客户修改意见修订产物：${text}`],
+    'gate-revise',
+    target.mode,
+    target.artifactPath,
+  )
+  const parts = revisionDispatchParts(outcome, file)
+  return {
+    kind: 'success',
+    text: formatCommandReport(true, cardTitle('gateRevise', parts.marker ?? '修改意见'), [
+      { title: '状态', lines: parts.lines },
+      { title: '下一步', lines: parts.next },
+    ]),
+  }
+}
+
+/** Card copy for one revision-dispatch outcome (mirrors {@link dispatchParts}). */
+function revisionDispatchParts(
+  outcome: GoDispatchOutcome,
+  file: string,
+): { readonly marker?: string; readonly lines: readonly string[]; readonly next: readonly string[] } {
+  switch (outcome) {
+    case 'sent':
+      return {
+        marker: '修改意见已派单',
+        lines: [`工单已送达本会话，模型正在按修改意见修订 ${file}`],
+        next: ['修订完成后本确认卡会再次弹出，可继续提修改意见或确认推进'],
+      }
+    case 'deduped':
+      return {
+        lines: ['同一修改意见的工单已在队列中，等待模型处理'],
+        next: ['模型修订完成后本确认卡会再次弹出'],
+      }
+    case 'busy':
+      return {
+        lines: ['模型正在处理上一个工单，本轮修改意见在其完成后继续'],
+        next: ['稍候；修订完成后本确认卡会再次弹出'],
+      }
+    default:
+      return {
+        lines: ['派单通道未放行（非客户操作来源）'],
+        next: [`把修改意见直接粘贴到对话框发给模型，让它修订 ${file} 后再确认`],
+      }
+  }
+}
+
+/**
+ * 【变更】2026-09-28 (用户问题 1.7 Tab parity): the workflow Tab's revision
+ * inputs (the advance dialog's, the parked-gate banner's) answer through no
+ * ask carrier — this entry hands the Tab remote the same revision dispatch
+ * the session dialog's `custom` answer takes ({@link resolveRevisionViaDialog}
+ * verbatim; the Tab click is a customer action, so the origin marker passes
+ * the red-line check whenever the dispatcher exists).
+ * @param cwd - workspace root.
+ * @param dispatch - the Tab remote's dispatcher (`makeGoDispatcher`), or undefined.
+ * @param gateId - the §22 gate whose artifact table names the target document.
+ * @param changeId - the change id (undefined → refusal card).
+ * @param text - the customer's modification request.
+ * @returns the card reporting what the revision dispatch did.
+ */
+export function dispatchGateRevisionFromTab(
+  cwd: string,
+  dispatch: GoDispatch | undefined,
+  gateId: GateId,
+  changeId: string | undefined,
+  text: string,
+): CommandResult | undefined {
+  return resolveRevisionViaDialog(
+    {
+      cwd,
+      ...(dispatch === undefined ? {} : { dispatch }),
+      ...(dispatch === undefined ? {} : { dispatchOrigin: 'customer' as DispatchOrigin }),
+      ...(changeId === undefined ? {} : { changeId }),
+    },
+    { gateId, ...(changeId === undefined ? {} : { changeId }) },
+    text,
+  )
 }
 
 /**
@@ -1381,22 +1599,36 @@ function listActives(actives: readonly ActiveRow[]): string[] {
  * @param node - stage whose artifact is incomplete.
  * @param missing - the gate's missing-item lines (the order's work list).
  * @param cause - set for the T11 fix loop; plain authoring rests leave it off.
+ * @param mode - the change's mode; `bug-fix-path` reroutes the open order at
+ *   bug-record.md with the bug-record completion conditions
+ *   (【变更】2026-09-26 用户需求 工作流 3).
  * @returns the outcome, or 'unavailable' when this drive may not dispatch.
  */
 function dispatchWorkOrder(
-  context: RouteContext,
+  // 【变更】2026-09-28 (用户问题 1.7): the narrow surface shape (not the full
+  // RouteContext) — the revision paths hold only these three fields, and
+  // exactOptionalPropertyTypes rejects the missing-prop Pick cast.
+  context: Pick<RouteContext, 'dispatch' | 'dispatchOrigin' | 'changeId'>,
   node: DispatchNode,
   missing: readonly string[],
-  cause?: 'verify-failed',
+  cause?: 'verify-failed' | 'checklist-missing' | 'checklist-open' | 'gate-revise',
+  mode?: 'full-go-path' | 'bug-fix-path',
+  /**
+   * 【变更】2026-09-28 (用户问题 1.7): explicit artifact-path override for
+   * revision orders whose target file differs from the node's default in
+   * `artifactPathFor` (verify-archive revises verify.md, not checklist.md).
+   */
+  artifactPathOverride?: string,
 ): GoDispatchOutcome {
   const { dispatch, dispatchOrigin, changeId } = context
   if (dispatch === undefined || dispatchOrigin !== 'customer') return 'unavailable'
   const signal: DispatchSignal = {
     changeId,
     node,
-    artifactPath: artifactPathFor(changeId, node),
+    artifactPath: artifactPathOverride ?? artifactPathFor(changeId, node, mode),
     missing,
     ...(cause === undefined ? {} : { cause }),
+    ...(mode === undefined ? {} : { mode }),
   }
   return dispatch(signal)
 }

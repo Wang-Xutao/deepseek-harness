@@ -3,7 +3,7 @@ import type { ProjectionEvent } from '@deepseek-ai/dsh-baf-core'
 import { deriveWorkflowMetrics, type UsagePoint } from '../src/metrics.ts'
 
 describe('deriveWorkflowMetrics', () => {
-  it('sums intake and stage wall time', () => {
+  it('sums stage wall time — the intake customer-wait window is excluded (2026-09-28 用户问题 4 停表)', () => {
     const events = [
       { type: 'intake-classified', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', intake: {} },
       { type: 'intake-confirmed', seq: 2, eventId: 'b', at: '2026-01-01T00:00:05.000Z', by: 'user' },
@@ -12,9 +12,31 @@ describe('deriveWorkflowMetrics', () => {
     ] as unknown as ProjectionEvent[]
 
     const derived = deriveWorkflowMetrics(events, Date.parse('2026-01-01T00:00:15.000Z'))
-    expect(derived.byNode.intake?.durationMs).toBe(5000)
+    // [intake-classified → intake-confirmed] is pure customer wait — the row
+    // keeps no duration and the total counts stage time only.
+    expect(derived.byNode.intake?.durationMs).toBeUndefined()
     expect(derived.byNode.open?.durationMs).toBe(10_000)
-    expect(derived.totals.totalDurationMs).toBe(15_000)
+    expect(derived.totals.totalDurationMs).toBe(10_000)
+  })
+
+  it('2026-09-28 用户问题 4 停表: flags whether the timer is running at the fold', () => {
+    // An authoring window still open at fold end → the client keeps ticking.
+    const running = deriveWorkflowMetrics(
+      [{ type: 'stage-entered', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', node: 'open' }] as unknown as ProjectionEvent[],
+      Date.parse('2026-01-01T00:00:30.000Z'),
+    )
+    expect(running.totals.running).toBe(true)
+    expect(running.totals.totalDurationMs).toBe(30_000)
+
+    // Every window folded (or intake-only) → the change rests on the
+    // customer; the live timer freezes.
+    const stopped = deriveWorkflowMetrics([
+      { type: 'intake-classified', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', intake: {} },
+      { type: 'intake-confirmed', seq: 2, eventId: 'b', at: '2026-01-01T00:00:05.000Z', by: 'user' },
+    ] as unknown as ProjectionEvent[], Date.parse('2026-01-01T00:00:30.000Z'))
+    expect(stopped.totals.running).toBe(false)
+    // Zero duration is omitted from the wire shape entirely.
+    expect(stopped.totals.totalDurationMs).toBeUndefined()
   })
 
   it('2026-09-23 issue #3: attributes usage points to stages by their time windows', () => {

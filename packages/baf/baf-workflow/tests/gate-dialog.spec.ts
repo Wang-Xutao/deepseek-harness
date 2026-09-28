@@ -178,10 +178,29 @@ describe('§22.17 gate-dialog answer mapping', () => {
     expect(outcome).toEqual({ kind: 'paused', reason: 'skipped' })
   })
 
-  it('custom free text is a pause — the §22 option set is closed', async () => {
+  it('custom free text is a pause on non-revisable gates — the §22 option set is closed', async () => {
     const service = fakeService({ answers: [{ id: 'scaffold', selected: [], custom: '先看看再说' }] })
     const outcome = await askGateDialog(service, undefined, { gateId: 'scaffold' })
     expect(outcome).toEqual({ kind: 'paused', reason: 'skipped' })
+  })
+
+  it('2026-09-28 用户问题 1.7: custom free text on a revisable gate is a revise outcome', async () => {
+    const service = fakeService({ answers: [{ id: 'open-advance', selected: [], custom: 'Why 一句话讲清目标' }] })
+    const outcome = await askGateDialog(service, undefined, { gateId: 'open-advance', changeId: 'CHG-7' })
+    expect(outcome).toEqual({ kind: 'revise', text: 'Why 一句话讲清目标' })
+  })
+
+  it('2026-09-28 用户问题 1.2/1.5: revisable gates carry the change chip first line + the 【产物】 links', async () => {
+    const service = fakeService(answered('确认提案 · 进入澄清'))
+    await askGateDialog(service, undefined, { gateId: 'open-advance', changeId: 'CHG-7' })
+    const detail = service.calls[0]?.questions[0]?.detail ?? ''
+    expect(detail.startsWith('{{change:CHG-7}}')).toBe(true)
+    expect(detail).toContain('【产物】')
+    expect(detail).toContain('- {{art:openspec/changes/CHG-7/proposal.md}} 提案')
+    // The 暂不推进 hint rides the wire as customer copy (the /baf-go resume
+    // hint must survive the client's filter).
+    const back = service.calls[0]?.questions[0]?.options?.find(o => o.label === '暂不推进')
+    expect(back?.description).toBe('工作流暂停；需要继续时再敲一次 /baf-go')
   })
 
   it('a label the registry does not offer is a pause, not an error', async () => {
@@ -256,7 +275,9 @@ describe('§22.17 gate-dialog answer mapping', () => {
     })
     const question = service.calls[0]?.questions[0]
     expect(question?.question).toBe('需求分类待确认')
-    expect(question?.detail).toContain('（变更 CHG-1）')
+    // 【变更】2026-09-28 (用户问题 1.2): the change id rides as a `{{change:…}}`
+    // first line (the client's top-right chip), no longer prose.
+    expect(question?.detail).toContain('{{change:CHG-1}}')
     expect(question?.detail).toContain('系统初步判断：缺陷修复路径 · 缺陷 · 置信 0.82')
     expect(question?.detail).toContain('需求摘要：登录页在空输入时崩溃')
   })
@@ -275,7 +296,8 @@ describe('§22.17 gate-dialog answer mapping', () => {
       note: ['现有变更当前进行到：design', '客户提出的新需求：「重构ecum模块」'],
     })
     const detail = service.calls[0]?.questions[0]?.detail ?? ''
-    expect(detail).toContain('（变更 CHG-9）')
+    // 【变更】2026-09-28 (用户问题 1.2): `{{change:…}}` first-line chip protocol.
+    expect(detail).toContain('{{change:CHG-9}}')
     expect(detail).toContain('现有变更当前进行到：design')
     expect(detail).toContain('客户提出的新需求：「重构ecum模块」')
   })
@@ -452,6 +474,51 @@ describe('§22.17 I baf_gate_ask intake bootstrap (requirement param)', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it('【变更】2026-09-27 an INVENTED changeId with requirement mints from the requirement instead (demo-bugfix4)', async () => {
+    // The model authored fix-ecum-export-empty-crash out of thin air and the
+    // dialog popped for a change that does not exist — the customer's confirm
+    // landed on「无此变更」. The invented id is now treated as absent: the
+    // normal bootstrap runs (new-workflow card → classify) and the minted id
+    // is what the workflow carries forward.
+    const root = await setupToolWorkspace()
+    try {
+      const service = scriptedService([answered('新建工作流'), answered('确认 · 缺陷修复路径')])
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        changeId: 'fix-ecum-export-empty-crash',
+        requirement: '修复一个bug：ecum模块导出报表时如果数据行为空会崩溃',
+      })
+      expect(service.calls[0]?.questions[0]?.question).toBe('未发现进行中的工作流')
+      expect(text).toContain('已确认')
+      const index = await new ProjectionStore({ workspaceRoot: root }).readIndex()
+      expect(index.changes.some(c => c.changeId === 'fix-ecum-export-empty-crash')).toBe(false)
+      const minted = index.changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+      expect(minted).toHaveLength(1)
+      expect(minted[0]?.changeId).toMatch(/^change-/)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('【变更】2026-09-27 an INVENTED changeId without requirement is refused with the minting rule', async () => {
+    const root = await setupToolWorkspace()
+    try {
+      const service = fakeService(answered('确认 · 缺陷修复路径'))
+      const text = await runTool(registerTool(), service, root, {
+        gateId: 'intake-classify',
+        changeId: 'fix-ecum-export-empty-crash',
+      })
+      expect(service.calls).toHaveLength(0)
+      expect(text).toContain('不存在')
+      expect(text).toContain('由系统铸造')
+      const minted = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
+        .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')
+      expect(minted).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('scaffold diversion continues the bootstrap (2026-09-22, session 1.jsonl)', () => {
@@ -584,7 +651,8 @@ describe('active-conflict: the collision pops as a dialog (2026-09-21, session 6
       expect(service.calls).toHaveLength(1)
       const question = service.calls[0]?.questions[0]
       expect(question?.question).toBe('已有进行中的变更')
-      expect(question?.detail).toContain(`（变更 ${changeId}）`)
+      // 【变更】2026-09-28 (用户问题 1.2): `{{change:…}}` first-line chip protocol.
+      expect(question?.detail).toContain(`{{change:${changeId}}}`)
       expect(question?.detail).toContain('现有变更当前进行到：open')
       expect(question?.detail).toContain(`客户提出的新需求：「${NEW_REQUIREMENT}」`)
       const labels = question?.options?.map(o => o.label) ?? []
@@ -792,7 +860,7 @@ describe('§22.17 J path-choice options + bug-field draft (classify dialog v2)',
     }
   })
 
-  it('a bug-path click without draft fields parks with the override still recorded', async () => {
+  it('a bug-path click without draft fields opens a TODO draft the model completes (工作流 3)', async () => {
     const root = await setupToolWorkspace()
     try {
       const service = scriptedService([answered('新建工作流'), answered('确认 · 缺陷修复路径')])
@@ -800,15 +868,26 @@ describe('§22.17 J path-choice options + bug-field draft (classify dialog v2)',
         gateId: 'intake-classify',
         requirement: 'feat: add export public API for reports',
       })
-      // The dialog offers the path; the dispatch reports the missing fields
-      // instead of silently proceeding — same refusal the slash surface gives.
-      expect(text).toContain('fast-path 缺少 Bug 字段')
+      // 【变更】2026-09-26 (用户需求 工作流 3): the fieldless confirm used to
+      // refuse AFTER confirming the intake — the dead state nothing could
+      // advance (the reported「bug-fix-path 会卡住」). It now opens the change
+      // with a TODO draft record, the same authoring-rest shape full-go-path's
+      // template proposal gets.
+      expect(text).not.toContain('fast-path 缺少 Bug 字段')
+      expect(text).toContain('fast-path 草稿')
+      expect(text).toContain('TODO')
       const store = new ProjectionStore({ workspaceRoot: root })
       const changeId = (await store.readIndex()).changes
         .filter(c => c.current !== 'completed' && c.current !== 'abandoned')
         .map(c => c.changeId)[0] ?? ''
       const status = await store.readStatus(changeId)
       expect(status.mode).toBe('bug-fix-path')
+      expect(status.current).toBe('open')
+      const record = await readFile(join(root, 'openspec', 'changes', changeId, 'bug-record.md'), 'utf8')
+      expect(record).toContain('## Root cause')
+      expect(record).toContain('TODO')
+      // The problem section carries the requirement summary (real content).
+      expect(record).toContain('feat: add export public API for reports')
       const events = await store.readEvents(changeId)
       expect(events.events.map(e => e.type)).toContain('intake-mode-set')
     } finally {

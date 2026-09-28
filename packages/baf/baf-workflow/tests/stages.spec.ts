@@ -15,7 +15,8 @@ import { ProjectionStore } from '../src/projection.ts'
 import { StagePipeline } from '../src/stages/pipeline.ts'
 import { recordTouched, completeTask } from '../src/stages/implement.ts'
 import { detectAndRecord, type DriftObservation } from '../src/stages/drift.ts'
-import { artifactLine, changeArtifactStatus, proposalGate } from '../src/stages/gates.ts'
+import { CHECKLIST_FILE, artifactLine, bugRecordGate, changeArtifactStatus, proposalGate } from '../src/stages/gates.ts'
+import { BUG_RECORD_FILE } from '../src/stages/bug-fix-path.ts'
 
 const FIXTURE_BASELINE = fileURLToPath(
   new URL('../../baf-core/tests/fixtures/baseline/baseline.yml', import.meta.url),
@@ -59,6 +60,13 @@ async function touchReference(root: string, rel: string): Promise<string> {
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, 'export {}\n', 'utf8')
   return rel
+}
+
+/** Write (or replace) one artifact body inside the change directory. */
+async function putFile(root: string, changeId: string, file: string, body: string): Promise<void> {
+  const path = join(root, 'openspec', 'changes', changeId, file)
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, body, 'utf8')
 }
 
 describe('stage pipeline happy path', () => {
@@ -642,21 +650,14 @@ describe('abandon (Phase 5.8)', () => {
 })
 
 describe('changeArtifactStatus (customer-facing artifact rows)', () => {
-  /** Write one artifact into the change directory. */
-  async function put(root: string, changeId: string, file: string, body: string): Promise<void> {
-    const path = join(root, 'openspec', 'changes', changeId, file)
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(path, body, 'utf8')
-  }
-
   it('classifies template vs filled vs missing and names the paths', async () => {
     const { root, changeId } = await setup()
     try {
       // proposal.md filled, clarify.md still the template, rest absent.
-      await put(root, changeId, ARTIFACT_FILES.proposal, [
+      await putFile(root, changeId, ARTIFACT_FILES.proposal, [
         '# Proposal', '', '## Why', '', '- The customer needs CSV export for reports.', '',
       ].join('\n'))
-      await put(root, changeId, ARTIFACT_FILES.clarify, [
+      await putFile(root, changeId, ARTIFACT_FILES.clarify, [
         '# Clarify', '', '## Blocking questions', '', 'TODO: one entry per blocking question, each with:', '',
         '## Acceptance criteria', '', 'TODO: testable acceptance conditions.', '',
       ].join('\n'))
@@ -683,7 +684,7 @@ describe('changeArtifactStatus (customer-facing artifact rows)', () => {
     try {
       // r8 web-walk shape: the model wrote `## 7. Acceptance criteria` — the
       // gate's contract is "the section exists", not the literal heading.
-      await put(root, changeId, ARTIFACT_FILES.clarify, [
+      await putFile(root, changeId, ARTIFACT_FILES.clarify, [
         '# Clarify', '',
         '## 7. Acceptance criteria', '',
         '- AC-1: Select-String over the later artifacts returns no TODO: lines.', '',
@@ -699,11 +700,11 @@ describe('changeArtifactStatus (customer-facing artifact rows)', () => {
   it('treats an empty plan.json as the template and a tasked one as filled', async () => {
     const { root, changeId } = await setup()
     try {
-      await put(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({ tasks: [], allowlist: [] }, null, 2)}\n`)
+      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({ tasks: [], allowlist: [] }, null, 2)}\n`)
       const empty = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'full-go-path' })
       expect(empty.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('template')
 
-      await put(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
         tasks: [{ id: 'T1', files: ['src/a.ts'], verify: ['npm test'], rollback: 'git checkout' }],
         allowlist: ['src/a.ts'],
       }, null, 2)}\n`)
@@ -719,7 +720,7 @@ describe('changeArtifactStatus (customer-facing artifact rows)', () => {
     try {
       // The real tasks.md template: its TODO sentence wraps onto a second line,
       // which the old per-line placeholder rule misread as real content.
-      await put(root, changeId, ARTIFACT_FILES.tasks, [
+      await putFile(root, changeId, ARTIFACT_FILES.tasks, [
         `# Tasks — ${changeId}`, '',
         'TODO: ordered task list. Each task states input, output, affected files,',
         'the verification command, and the rollback point.', '',
@@ -786,6 +787,279 @@ describe('proposalGate (2026-09-22 user report #1 — open 阶段产物是推进
     const { root, changeId } = await setup()
     try {
       expect((await proposalGate({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })).ok).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+// 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix open gate — the clipped
+// counterpart of proposalGate. A fieldless confirm now opens a TODO draft;
+// this gate is what refuses the advance until the model completes it.
+describe('bugRecordGate (bug-fix-path open 裁决门)', () => {
+  /** The draft a fieldless confirm writes (driveClassify's placeholder shape). */
+  function draftBody(changeId: string, problem: string): string {
+    return [
+      `# Bug record — ${changeId}`, '',
+      `- Title: ${changeId}`, '',
+      '## Problem', '',
+      problem, '',
+      '## Root cause', '',
+      'TODO', '',
+      '## Impact scope', '',
+      '- TODO', '',
+      '## Regression test', '',
+      '- File: TODO',
+      '- Command: TODO', '',
+    ].join('\n')
+  }
+
+  /** A completed record (root cause / files / regression all real). */
+  function completeBody(changeId: string): string {
+    return [
+      `# Bug record — ${changeId}`, '',
+      '## Problem', '',
+      'Parser dereferences a null token when the input file is empty.', '',
+      '## Root cause', '',
+      'Missing length guard before the token loop in parse().', '',
+      '## Impact scope', '',
+      '- src/parser.c', '',
+      '## Regression test', '',
+      '- File: tests/test_parser_empty.c',
+      '- Command: ctest -R parser_empty', '',
+    ].join('\n')
+  }
+
+  it('fails on the TODO draft with the per-item missing list, passes the completed record', async () => {
+    const { root, changeId } = await setup()
+    const input = { workspaceRoot: root, changeId, mode: 'bug-fix-path' as const }
+    try {
+      const missing = await bugRecordGate(input)
+      expect(missing.ok).toBe(false)
+      expect(missing.reasonCodes).toEqual(['stage_incomplete'])
+      expect(missing.missing?.join('\n')).toContain('bug-record.md 不存在')
+
+      await putFile(root, changeId, BUG_RECORD_FILE, draftBody(changeId, 'feat: add export public API for reports'))
+      const draft = await bugRecordGate(input)
+      expect(draft.ok).toBe(false)
+      const lines = draft.missing?.join('\n') ?? ''
+      expect(lines).toContain('Root cause')
+      expect(lines).toContain('Impact scope')
+      expect(lines).toContain('Regression test · File')
+      expect(lines).toContain('Regression test · Command')
+      // The problem section is real (requirement summary) — not on the list.
+      expect(lines).not.toContain('Problem：')
+
+      // Draft ledger: TODO allowlist + TODO regression task keep the gate shut.
+      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+        bugFixPath: true,
+        tasks: [
+          { id: 'regression-test', files: ['TODO'], done: false },
+          { id: 'fix-root-cause', files: ['TODO'], done: false },
+        ],
+        allowlist: ['TODO'],
+        touched: [],
+      }, null, 2)}\n`)
+      const ledger = await bugRecordGate(input)
+      expect(ledger.ok).toBe(false)
+      expect(ledger.missing?.join('\n')).toContain('allowlist')
+
+      await putFile(root, changeId, BUG_RECORD_FILE, completeBody(changeId))
+      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+        bugFixPath: true,
+        tasks: [
+          { id: 'regression-test', files: ['tests/test_parser_empty.c'], done: false },
+          { id: 'fix-root-cause', files: ['src/parser.c'], done: false },
+        ],
+        allowlist: ['tests/test_parser_empty.c', 'src/parser.c'],
+        touched: [],
+      }, null, 2)}\n`)
+      expect((await bugRecordGate(input)).ok).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('full-go-path passes unconditionally (the mode never runs this gate)', async () => {
+    const { root, changeId } = await setup()
+    try {
+      expect((await bugRecordGate({ workspaceRoot: root, changeId, mode: 'full-go-path' })).ok).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // 【变更】2026-09-26 (web walk, demo-bugfix): the model prefilled the
+  // bug-fields form with vague Chinese placeholders; the gate passed them and
+  // the classify-confirm follow-up advanced into implement on an empty
+  // diagnosis. The vague family and prose-instead-of-path shapes must count
+  // as missing exactly like TODO.
+  it('refuses the model-prefilled vague record (待定位 / prose paths / prose allowlist)', async () => {
+    const { root, changeId } = await setup()
+    const input = { workspaceRoot: root, changeId, mode: 'bug-fix-path' as const }
+    try {
+      // Verbatim shape from the walk: every field "filled", none real.
+      await putFile(root, changeId, BUG_RECORD_FILE, [
+        `# Bug record — ${changeId}`, '',
+        '## Problem', '',
+        'ecum 模块导出报表时，如果数据行为空会崩溃', '',
+        '## Root cause', '',
+        '待定位（疑似导出流程未对空数据行做空值/边界检查）', '',
+        '## Impact scope', '',
+        '- ecum 模块导出报表相关源文件（待定位）', '',
+        '## Regression test', '',
+        '- File: ecum 导出报表的空数据行回归测试（待新建）',
+        '- Command: 待定位（基于项目现有测试命令）', '',
+      ].join('\n'))
+      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+        bugFixPath: true,
+        tasks: [
+          { id: 'regression-test', files: ['ecum 导出报表的空数据行回归测试（待新建）'], done: false },
+          { id: 'fix-root-cause', files: ['ecum 模块导出报表相关源文件（待定位）'], done: false },
+        ],
+        allowlist: ['ecum 模块导出报表相关源文件（待定位）', 'ecum 导出报表的空数据行回归测试（待新建）'],
+        touched: [],
+      }, null, 2)}\n`)
+      const gate = await bugRecordGate(input)
+      expect(gate.ok).toBe(false)
+      const lines = gate.missing?.join('\n') ?? ''
+      expect(lines).toContain('Root cause')
+      expect(lines).toContain('Impact scope')
+      expect(lines).toContain('Regression test · File')
+      expect(lines).toContain('Regression test · Command')
+      expect(lines).toContain('allowlist')
+      expect(lines).toContain('regression-test 任务')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts CJK paths and directory allowlist entries that are still real paths', async () => {
+    const { root, changeId } = await setup()
+    const input = { workspaceRoot: root, changeId, mode: 'bug-fix-path' as const }
+    try {
+      await putFile(root, changeId, BUG_RECORD_FILE, [
+        `# Bug record — ${changeId}`, '',
+        '## Problem', '',
+        '导出报表空数据行崩溃。', '',
+        '## Root cause', '',
+        '导出循环先解引用后判空。', '',
+        '## Impact scope', '',
+        '- ecum/导出.js', '',
+        '## Regression test', '',
+        '- File: ecum/导出空行.test.js',
+        '- Command: node --test ecum/导出空行.test.js', '',
+      ].join('\n'))
+      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+        bugFixPath: true,
+        tasks: [
+          { id: 'regression-test', files: ['ecum/导出空行.test.js'], done: false },
+          { id: 'fix-root-cause', files: ['ecum/导出.js'], done: false },
+        ],
+        allowlist: ['ecum/导出空行.test.js', 'ecum/导出.js', 'ecum/'],
+        touched: [],
+      }, null, 2)}\n`)
+      expect((await bugRecordGate(input)).ok).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+// 【变更】2026-09-26 (用户需求 工作流 3): the clipped artifact rail — same
+// shape as full-go-path, minus the artifacts this mode never writes.
+describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
+  it('shows exactly bug-record.md / plan.json / verify.md, draft-aware', async () => {
+    const { root, changeId } = await setup()
+    try {
+      // Draft record + draft ledger (the fieldless-confirm state).
+      await putFile(root, changeId, BUG_RECORD_FILE, [
+        `# Bug record — ${changeId}`, '',
+        '## Problem', '',
+        'Parser crashes on empty input.', '',
+        '## Root cause', '',
+        'TODO', '',
+        '## Impact scope', '',
+        '- TODO', '',
+        '## Regression test', '',
+        '- File: TODO',
+        '- Command: TODO', '',
+      ].join('\n'))
+      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+        bugFixPath: true,
+        tasks: [
+          { id: 'regression-test', files: ['TODO'], done: false },
+          { id: 'fix-root-cause', files: ['TODO'], done: false },
+        ],
+        allowlist: ['TODO'],
+        touched: [],
+      }, null, 2)}\n`)
+      const rows = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })
+      // 【变更】2026-09-28 (用户问题 3 + 8): parity rail — clipped full-go docs
+      // render as 已裁剪 rows, tasks.md/checklist.md ride for real.
+      expect(rows.map(r => r.file)).toEqual([
+        BUG_RECORD_FILE,
+        ARTIFACT_FILES.clarify,
+        ARTIFACT_FILES.design,
+        ARTIFACT_FILES.planJson,
+        ARTIFACT_FILES.tasks,
+        CHECKLIST_FILE,
+        'verify.md',
+      ])
+      const record = rows.find(r => r.file === BUG_RECORD_FILE)
+      expect(record?.state).toBe('template')
+      expect(record?.missing.join('\n')).toContain('Root cause')
+      expect(rows.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('template')
+      expect(rows.find(r => r.file === 'verify.md')?.state).toBe('missing')
+      // 【变更】2026-09-28 (用户问题 3): the clipped rows read 已裁剪.
+      expect(rows.find(r => r.file === ARTIFACT_FILES.clarify)?.state).toBe('clipped')
+      expect(rows.find(r => r.file === ARTIFACT_FILES.design)?.state).toBe('clipped')
+      expect(rows.find(r => r.file === ARTIFACT_FILES.tasks)?.state).toBe('missing')
+      // 【变更】2026-09-28 (用户问题 8): the checklist row is missing until the
+      // implement exit authors it.
+      expect(rows.find(r => r.file === CHECKLIST_FILE)?.state).toBe('missing')
+
+      // Completed record + real ledger → both rows filled.
+      await putFile(root, changeId, BUG_RECORD_FILE, [
+        `# Bug record — ${changeId}`, '',
+        '## Problem', '',
+        'Parser crashes on empty input.', '',
+        '## Root cause', '',
+        'Missing length guard in parse().', '',
+        '## Impact scope', '',
+        '- src/parser.c', '',
+        '## Regression test', '',
+        '- File: tests/test_parser_empty.c',
+        '- Command: ctest -R parser_empty', '',
+      ].join('\n'))
+      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+        bugFixPath: true,
+        tasks: [
+          { id: 'regression-test', files: ['tests/test_parser_empty.c'], done: true },
+          { id: 'fix-root-cause', files: ['src/parser.c'], done: true },
+        ],
+        allowlist: ['tests/test_parser_empty.c', 'src/parser.c'],
+        touched: ['tests/test_parser_empty.c', 'src/parser.c'],
+      }, null, 2)}\n`)
+      const filled = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })
+      expect(filled.find(r => r.file === BUG_RECORD_FILE)?.state).toBe('filled')
+      expect(filled.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('filled')
+      // 【变更】2026-09-28 (用户问题 8): an all-ticked checklist reads 已填写.
+      await putFile(root, changeId, CHECKLIST_FILE, [
+        '# Checklist', '',
+        '- [x] ctest -R parser_empty 通过',
+        '- [x] 空输入不再崩溃', '',
+      ].join('\n'))
+      const ticked = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })
+      expect(ticked.find(r => r.file === CHECKLIST_FILE)?.state).toBe('filled')
+      await putFile(root, changeId, CHECKLIST_FILE, [
+        '# Checklist', '',
+        '- [x] ctest -R parser_empty 通过',
+        '- [ ] 空输入不再崩溃', '',
+      ].join('\n'))
+      const partial = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })
+      expect(partial.find(r => r.file === CHECKLIST_FILE)?.state).toBe('planned')
+      expect(partial.find(r => r.file === CHECKLIST_FILE)?.missing.join('\n')).toContain('剩 1/2')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

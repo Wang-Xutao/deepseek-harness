@@ -70,8 +70,10 @@ export const zh = {
   'settings.enter.description': '智能体运行时 Enter 键和发送按钮的行为；Cmd/Ctrl+Enter 使用另一行为',
   'settings.enter.queue': '排队发送',
   'settings.enter.steer': '插话发送',
-  'hero.headline': '探索未至之境',
-  'hero.preview': '预览版',
+  // 【变更】2026-09-25 (用户需求 桌面 2): 主标题按 requirements.md 补全为完整句，
+  // 徽标按 version-map.md 0.0.5 由「预览版」改为「BAF」。
+  'hero.headline': '探索未至之境，拉启智能篇章',
+  'hero.preview': 'BAF',
   'hero.chooseWorkspace': '选择工作区',
   'session.hierarchy': '会话层级',
   'todo.title': '任务',
@@ -424,8 +426,8 @@ export const en = {
   'settings.enter.description': 'What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior',
   'settings.enter.queue': 'Queue',
   'settings.enter.steer': 'Steer',
-  'hero.headline': 'Into the Unknown',
-  'hero.preview': 'Preview',
+  'hero.headline': 'Into the Unknown, Begin the Intelligent Chapter',
+  'hero.preview': 'BAF',
   'hero.chooseWorkspace': 'Choose workspace',
   'session.hierarchy': 'Session hierarchy',
   'todo.title': 'To-dos',
