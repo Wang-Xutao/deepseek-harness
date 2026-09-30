@@ -9,12 +9,27 @@
  * when a **genuine user message** (source.kind === 'user') lands in an
  * initialized, idle workspace, it pops one small pre-question — 「把这句话
  * 作为新需求开始工作流吗？」. A message that arrives in a workspace not yet
- * initialized does NOT consume the offer — the scaffold is that workspace's
- * next decision, and the first post-init message gets the pre-question
- * (pristine first-run, 2026-09-22). Only the customer's click mints anything:
- * 开始 → `beginIntake` + the informed classification dialog (judgment + the
- * two §22.17 J path buttons); 不是 → nothing happens. Smalltalk never
- * creates audit junk, and the model is no longer in the trigger loop.
+ * initialized does NOT trigger the offer — the scaffold is that workspace's
+ * next decision, and the statement is parked so the scaffold's continuation
+ * can surface it (requirement-park.ts). Only the customer's click mints
+ * anything: 开始 → `beginIntake` + the informed classification dialog
+ * (judgment + the two §22.17 J path buttons); 不是 → nothing happens.
+ * Smalltalk never creates audit junk, and the model is no longer in the
+ * trigger loop.
+ *
+ * 【变更】2026-09-29 (demo23 问题 2): EVERY genuine user message gets the
+ * pre-question while the workspace is initialized and idle — the old
+ * one-offer-per-session semantics sent the session's second and later
+ * statements straight to the model-side bootstrap, so the customer could see
+ * a workflow start (new-workflow → classify cards) without ever being asked
+ * 「这句话是不是需求」. Nothing enters the workflow without the customer
+ * clicking 开始 now. Two guards keep this from being noise:
+ * - a message typed while ANY dialog is still pending on the session
+ *   (`hasPendingAsk`) is presumed context/answers for that dialog, not a
+ *   fresh requirement;
+ * - a workspace with an active change still gets no pre-question — input to
+ *   the running change is the model's lane, and a genuinely new requirement
+ *   surfaces through the model-side `active-conflict` gate.
  *
  * Layering: host-plane glue only (like `baf-gate-ask`), outside the
  * `baf-domain` isolate — it reaches the host `agents` registry (for the live
@@ -34,7 +49,7 @@ import { driveGateResolve, loadWorkspaceBaseline } from './command-drives.ts'
 import { beginIntake } from './begin-intake.ts'
 import { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
 import { parkRequirement, clearParkedRequirement } from './requirement-park.ts'
-import { enqueueAsk, type AskOutcome } from './ask-queue.ts'
+import { enqueueAsk, hasPendingAsk, type AskOutcome } from './ask-queue.ts'
 import { isActiveChange, ProjectionStore } from './projection.ts'
 
 /** Preset row identity — referenced from `agent.cordis.yml`. */
@@ -72,7 +87,6 @@ async function offerAutoPop(
   ctx: Context,
   session: { readonly header: { readonly id: string; readonly cwd?: string } },
   text: string,
-  releaseOffer: () => void,
 ): Promise<void> {
   const cwd = session.header.cwd
   if (cwd === undefined || cwd === '') return
@@ -80,20 +94,16 @@ async function offerAutoPop(
   // Workspace must be BAF-initialized and idle — an uninitialized or busy
   // workspace has a different next decision (scaffold / the running change).
   // 【变更】2026-09-22 (pristine first-run, web walk 04:39): a message that
-  // arrives BEFORE the scaffold must not burn the session's single offer —
-  // the scaffold card is that workspace's next decision, and the offer would
-  // be spent on a workspace where it can never pop (the promised 分类卡 then
-  // never appeared for the whole first session). Release it: the first
-  // genuine post-init message is the requirement worth offering.
-  // 【变更】2026-09-23 (demo2 user issue #1): the released statement is also
-  // PARKED — when the customer later resolves the scaffold gate (typed
-  // /baf-go, the turn-end pop, the Tab button), the continuation
-  // (requirement-park.ts) surfaces it as the 新建工作流 → 分类确认 chain
-  // instead of leaving the initialized workspace silent with the requirement
-  // stranded in conversation history.
+  // arrives BEFORE the scaffold must not pop the pre-question — the scaffold
+  // card is that workspace's next decision.
+  // 【变更】2026-09-23 (demo2 user issue #1): the statement is also PARKED —
+  // when the customer later resolves the scaffold gate (typed /baf-go, the
+  // turn-end pop, the Tab button), the continuation (requirement-park.ts)
+  // surfaces it as the 新建工作流 → 分类确认 chain instead of leaving the
+  // initialized workspace silent with the requirement stranded in
+  // conversation history.
   if (await loadWorkspaceBaseline(cwd) === undefined) {
     parkRequirement(sessionId, text)
-    releaseOffer()
     return
   }
   // Initialized: this statement supersedes any parked one — the pre-question /
@@ -190,33 +200,31 @@ async function offerAutoPop(
 }
 
 /**
- * Install the listener. One offer per session: the first genuine user message
- * in a ready+idle workspace pops the pre-question; every later message is
- * left to the model-side tool / Tab / slash surfaces (rules 6 / §22.9).
+ * Install the listener. 【变更】2026-09-29 (demo23 问题 2): one offer per
+ * genuine user message (not per session) — every statement in an
+ * initialized, idle workspace pops the pre-question, so the workflow can
+ * never start on text the customer never confirmed. A message typed while
+ * another dialog is pending is left to that dialog (and the model-side
+ * surfaces, rules 6 / §22.9).
  */
 export function apply(ctx: Context): void {
-  const offered = new Set<string>()
   ctx.on('session/event', (session, event) => {
     if (event.type !== 'user/message') return
     // Genuine typing only — plugin/tool-injected messages are not the
     // customer stating a requirement.
     if ((event.data as { source?: { kind?: string } }).source?.kind !== 'user') return
     const id = String(session.header.id)
-    if (offered.has(id)) return
     const text = textOf((event.data as { content?: unknown }).content)
     // Slash input is a command, not a requirement; one-word greetings are
     // not worth a dialog. Both stay untouched — the model handles them.
     if (text === '' || text.startsWith('/') || text.length < MIN_LENGTH) return
-    // Mark before the async work so a crash mid-chain never re-offers. The
-    // release callback un-marks the pristine-first-run case above (message
-    // arrived pre-scaffold) — every other path keeps the one-offer-per-session
-    // semantics (§22.17 J).
-    offered.add(id)
+    // A pending dialog owns this session's next decision — the message is
+    // most likely its answer or context, not a fresh requirement to confirm.
+    if (hasPendingAsk(id)) return
     void offerAutoPop(
       ctx,
       session as { readonly header: { readonly id: string; readonly cwd?: string } },
       text,
-      () => { offered.delete(id) },
     )
       .catch((error: unknown) => {
         ctx.logger.warn(`baf-auto-pop: offer failed: ${error instanceof Error ? error.message : String(error)}`)

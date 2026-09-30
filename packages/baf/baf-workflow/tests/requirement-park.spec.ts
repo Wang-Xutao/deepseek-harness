@@ -457,7 +457,7 @@ describe('parked-requirement continuation (demo2 issue #1)', () => {
       expect(await currentOf(root)).toBe('open')
       expect(agent.orders).toHaveLength(0)
       expect(card.text).toContain('已确认并进入 open')
-      expect(card.text).toContain('Bug 记录已完成 · 请确认推进')
+      expect(card.text).toContain('提案已完成 · 请确认推进')
       // The advance card's 确认 option is the customer review — it enters
       // implement and dispatches the regression-first work order.
       const advance = await driveGateResolve(

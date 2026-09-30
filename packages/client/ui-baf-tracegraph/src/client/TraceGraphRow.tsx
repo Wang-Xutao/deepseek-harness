@@ -1,7 +1,13 @@
 /**
  * General-settings row: durable toggle for the 轨迹图 conversation tab.
  * Visibility is driven by `BafWorkflowSettings.showTraceGraph`.
+ *
+ * 【变更】2026-09-30 (demo31 问题 3): the toggle is the shared `Switch`
+ * primitive — the exact control the 开发者工具 row uses in General settings —
+ * so the two checkbox styles on one settings page cannot drift apart again
+ * (the bespoke capsule + 开/关 text label is gone).
  */
+import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   HostObservable, InjectFace, PropsLocale, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
@@ -36,25 +42,15 @@ export function TraceGraphRow({ useSettings, setShowTraceGraph, t }: TraceGraphR
   const showTraceGraph = value?.showTraceGraph === true
   return (
     <div className={css.row} data-testid="trace-graph-row">
-      <div className={css.rowText}>
+      <div>
         <div className={css.title}>{t('traceGraph.title')}</div>
-        <div className={css.desc}>{t('traceGraph.description')}</div>
+        <div className={css.description}>{t('traceGraph.description')}</div>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={showTraceGraph}
-        data-state={showTraceGraph ? 'on' : 'off'}
-        className={css.toggle}
-        onClick={() => { void setShowTraceGraph(!showTraceGraph) }}
-      >
-        <span className={css.toggleTrack} aria-hidden="true">
-          <span className={css.toggleThumb} />
-        </span>
-        <span className={css.toggleLabel}>
-          {showTraceGraph ? t('traceGraph.on') : t('traceGraph.off')}
-        </span>
-      </button>
+      <Switch
+        checked={showTraceGraph}
+        label={t('traceGraph.title')}
+        onChange={(next) => { void setShowTraceGraph(next) }}
+      />
     </div>
   )
 }

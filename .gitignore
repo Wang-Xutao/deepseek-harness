@@ -38,11 +38,11 @@ python/**/.pytest_cache/
 packages/**/__pycache__/
 apps/web/dist/
 # Hidden local probe scripts used for live web-walk verification
-# (named .auto-*, .diag*, .demo* with a dot prefix and never committed).
-apps/web/.auto-*.mjs
-apps/web/.diag*.mjs
-apps/web/.demo*-*.mjs
-apps/web/.demo*-check.mjs
+# (dot-prefixed .mjs under apps/web are session-local tools, never committed:
+# .auto-*, .diag*, .demo*, .verify-*, .smoke*, .nudge-*, .continue-*, …).
+apps/web/.*.mjs
+# Local dev-server logs (web host, build output captures)
+logs/
 .artifacts/
 .dsh-build/
 .playwright-mcp/

@@ -9,7 +9,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { OpenSpecAdapter } from '@deepseek-ai/dsh-baf-core'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
-import { BUG_RECORD_FILE, REGRESSION_TASK_ID, sectionOf } from './bug-fix-path.ts'
+import { BUG_FIX_PROPOSAL_FILE, REGRESSION_TASK_ID, sectionOf } from './bug-fix-path.ts'
 import { parsePlanLedger } from './plan-ledger.ts'
 
 /** Outcome of one completion gate. */
@@ -119,28 +119,37 @@ const DOC_ARTIFACT_ORDER = [
 /**
  * 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path rail is CLIPPED — the
  * same artifact-rail shape full-go-path gets, minus the clarify/design/plan
- * documents this mode never writes. bug-record.md takes proposal.md's place as
- * the open stage's artifact; plan.json (the fast-path ledger) and verify.md
- * keep their rows.
+ * documents this mode never writes.
  * 【变更】2026-09-28 (用户问题 3): rail PARITY with full-go-path — the user
  * wants the bug-fix rail to look like the full-go one, with the stages this
- * mode skips shown as 「已裁剪」 rows instead of dropped. bug-record.md fills
- * proposal.md's slot (the open artifact), clarify/design render clipped,
- * tasks.md joins for real (bug-fix implement writes it — proven on the
- * demo-bugfix6 walk), and verify.md closes the rail as on full-go.
+ * mode skips shown as 「已裁剪」 rows instead of dropped.
+ * 【变更】2026-09-30 (demo31 问题 4 · 文档类型名称与全流程一致，只是裁剪): the
+ * rail is now ROW-FOR-ROW the full-go rail — proposal.md is the open artifact
+ * (bug-record.md is gone), clarify/design/plan.md render clipped, and the
+ * fast-path ledger keeps plan.json's slot.
  */
 const BUG_FIX_ARTIFACT_ORDER = [
-  BUG_RECORD_FILE,
+  BUG_FIX_PROPOSAL_FILE,
   ARTIFACT_FILES.clarify,
   ARTIFACT_FILES.design,
+  ARTIFACT_FILES.plan,
   ARTIFACT_FILES.planJson,
   ARTIFACT_FILES.tasks,
   CHECKLIST_FILE,
   'verify.md',
 ] as const
 
-/** Full-go artifacts the bug-fix path never produces (rendered 已裁剪). */
-const BUG_FIX_CLIPPED_FILES: ReadonlySet<string> = new Set([ARTIFACT_FILES.clarify, ARTIFACT_FILES.design])
+/**
+ * Full-go artifacts the bug-fix path never produces (rendered 已裁剪).
+ * 【变更】2026-09-30 (demo31 问题 4): plan.md joins clarify/design — bug-fix
+ * writes only the plan.json ledger at open, so the narrative plan document
+ * is a clipped row too, giving the rail full-go's exact shape.
+ */
+const BUG_FIX_CLIPPED_FILES: ReadonlySet<string> = new Set([
+  ARTIFACT_FILES.clarify,
+  ARTIFACT_FILES.design,
+  ARTIFACT_FILES.plan,
+])
 
 /** What each documentation stage's gate requires, in customer language. */
 export const DOC_REQUIREMENTS_ZH: Readonly<Record<'open' | 'clarify' | 'design' | 'plan', readonly string[]>> = {
@@ -164,12 +173,12 @@ export const DOC_REQUIREMENTS_ZH: Readonly<Record<'open' | 'clarify' | 'design' 
 
 /**
  * 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path open gate's pass
- * conditions — the clipped counterpart of `DOC_REQUIREMENTS_ZH.open`. The open
- * stage's artifact on this mode is bug-record.md (plus the fast-path ledger
- * inside plan.json), not proposal.md.
+ * conditions — the clipped counterpart of `DOC_REQUIREMENTS_ZH.open`.
+ * 【变更】2026-09-30 (demo31 问题 4): the open stage's artifact is proposal.md
+ * (the clipped bug template), so the conditions name proposal.md.
  */
 export const BUG_RECORD_REQUIREMENTS_ZH: readonly string[] = [
-  'bug-record.md 的 Root cause 节写清诊断出的根因（不是 TODO / 待定位 占位）',
+  'proposal.md 的 Root cause 节写清诊断出的根因（不是 TODO / 待定位 占位）',
   'Impact scope 节列出预期要改的文件（每行一个 - 路径，不是文字描述）',
   'Regression test 节写回归测试文件路径与可执行的运行命令',
   'plan.json（fast-path 账本）：allowlist 覆盖回归测试文件与受影响文件',
@@ -327,7 +336,9 @@ function sectionRealLines(body: string, heading: string): readonly string[] {
 /**
  * The bug record's per-section missing items (customer copy), draft-aware —
  * shared by the gate and the artifact rail row so the two can never disagree.
- * @param body - the bug-record.md text.
+ * 【变更】2026-09-30 (demo31 问题 4): the record IS proposal.md now; the
+ * Problem/Root cause/Impact scope/Regression test sections survive inside it.
+ * @param body - the proposal.md text (bug-fix clipped template).
  * @returns one line per missing section item (empty when complete).
  */
 export function bugRecordSectionMissing(body: string): readonly string[] {
@@ -372,10 +383,10 @@ export function bugRecordSectionMissing(body: string): readonly string[] {
  */
 export async function bugRecordGate(input: GateInput): Promise<GateOutcome> {
   if (input.mode !== 'bug-fix-path') return ok
-  const body = await readArtifact(input, BUG_RECORD_FILE)
+  const body = await readArtifact(input, BUG_FIX_PROPOSAL_FILE)
   if (body === undefined) {
-    return fail(['stage_incomplete'], 'bug-record.md missing', [
-      'bug-record.md 不存在——重新确认缺陷修复路径（/baf-workflow-classify confirm mode=bug-fix-path）生成',
+    return fail(['stage_incomplete'], 'proposal.md missing', [
+      'proposal.md 不存在——重新确认缺陷修复路径（/baf-workflow-classify confirm mode=bug-fix-path）生成',
     ])
   }
   const missing = [...bugRecordSectionMissing(body)]
@@ -398,7 +409,7 @@ export async function bugRecordGate(input: GateInput): Promise<GateOutcome> {
     }
   }
   if (missing.length > 0) {
-    return fail(['stage_incomplete'], 'bug-record.md 未达完成门', missing)
+    return fail(['stage_incomplete'], 'proposal.md 未达完成门', missing)
   }
   return ok
 }
@@ -747,7 +758,11 @@ export async function changeArtifactStatus(input: GateInput): Promise<readonly A
       ? livePath
       : archivedPath
     let row: ArtifactStatusRow
-    if (file === BUG_RECORD_FILE) {
+    // 【变更】2026-09-30 (demo31 问题 4): the rename made BUG_FIX_PROPOSAL_FILE
+    // === 'proposal.md' — the mode guard is now LOAD-BEARING, or full-go's
+    // proposal row (## Why/Impact sections) would be judged by the bug
+    // template's Problem/Root cause rules and read as an unfilled template.
+    if (file === BUG_FIX_PROPOSAL_FILE && input.mode === 'bug-fix-path') {
       // 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix open artifact's row
       // judges by the same section rules `bugRecordGate` applies — a draft
       // record (TODO placeholders) reads 仍是未填的模板 with the per-item

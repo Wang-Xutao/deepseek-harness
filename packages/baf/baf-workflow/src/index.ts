@@ -181,6 +181,14 @@ export {
 export { beginIntake, type BeginIntakeOutcome } from './begin-intake.ts'
 /** §18.6 focus cache — host-plane readers (baf-guard ranking, §22.19 Phase 3). */
 export { focusFor, resetFocusCache } from './session-focus.ts'
+/**
+ * 【变更】2026-09-28 (用户问题: BAF 门禁与工作流不得影响其他模式): the preset
+ * membership test the two host-plane per-agent rows (`baf-guard-install`,
+ * `baf-session-gate`) share, so their `agents.list()` sweeps and
+ * `agent-preset/selected` syncs stay confined to agents composed under this
+ * preset's standing mount. Re-exported for `dsh-baf-guard/install`.
+ */
+export { presetCovers } from './preset-cover.ts'
 export {
   bindSessionChange,
   deriveSessionChangeFromEvents,

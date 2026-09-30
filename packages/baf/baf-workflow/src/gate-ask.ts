@@ -636,11 +636,28 @@ export function apply(ctx: Context): void {
         // the customer's modification text — this is a MODEL-tool pop (no
         // dispatch channel by the red line), so the note hands the text back
         // as an instruction: revise the artifact yourself, the system re-pops.
-        const note = outcome.kind === 'paused'
-          ? '【结果】\n  客户暂未选择（关闭了确认框）。\n  不要替客户决定，也不要指导客户点页签或输入命令——系统会在你下一个回合结束时自动重新弹出这张卡；如实说明当前状态即可。'
-          : outcome.kind === 'revise'
-            ? `【结果】\n  客户提交了修改意见：「${outcome.text}」。\n  请按意见直接修订本阶段产物（不要另建文件）；修订完成后系统会在回合结束自动重弹确认卡。`
-            : `【结果】\n  确认框不可用（${outcome.reason}）；上面是选项卡原文。\n  不要指导客户手动操作；系统会在下一个回合结束时自动重弹到期确认卡，如实说明当前状态即可。`
+        // 【变更】2026-09-29 (demo23 问题 4): a paused pop whose change has since
+        // reached a terminal state (the abandon/archive cancel aborted this
+        // dialog) is NOT a re-pop case — the workflow is over. The note says
+        // so plainly instead of promising a card that will never come.
+        let terminalNote: string | undefined
+        if (outcome.kind === 'paused' && input.changeId !== undefined && cwd !== undefined) {
+          const ended = await new ProjectionStore({ workspaceRoot: cwd }).readStatus(input.changeId)
+            .then(s => s.terminal)
+            .catch(() => undefined)
+          if (ended !== undefined) {
+            terminalNote = ended === 'abandoned'
+              ? `【结果】\n  本变更（${input.changeId}）已放弃，工作流已结束——这张确认卡已随放弃关闭，不会再重弹。\n  不要继续推进本变更；客户提出新需求时按新工作流处理。`
+              : `【结果】\n  本变更（${input.changeId}）已完成归档，工作流已结束——这张确认卡已随归档关闭，不会再重弹。\n  不要继续推进本变更；客户提出新需求时按新工作流处理。`
+          }
+        }
+        const note = terminalNote !== undefined
+          ? terminalNote
+          : outcome.kind === 'paused'
+            ? '【结果】\n  客户暂未选择（关闭了确认框）。\n  不要替客户决定，也不要指导客户点页签或输入命令——系统会在你下一个回合结束时自动重新弹出这张卡；如实说明当前状态即可。'
+            : outcome.kind === 'revise'
+              ? `【结果】\n  客户提交了修改意见：「${outcome.text}」。\n  请按意见直接修订本阶段产物（不要另建文件）；修订完成后系统会在回合结束自动重弹确认卡。`
+              : `【结果】\n  确认框不可用（${outcome.reason}）；上面是选项卡原文。\n  不要指导客户手动操作；系统会在下一个回合结束时自动重弹到期确认卡，如实说明当前状态即可。`
         parts.push(card.text ?? '', note)
         return [textBlock(parts.join('\n\n'))] as unknown as JsonValue[]
       }

@@ -18,7 +18,7 @@ import {
   type ProjectionEvent,
   type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
-import { BUG_RECORD_FILE } from '../src/stages/bug-fix-path.ts'
+import { BUG_FIX_PROPOSAL_FILE } from '../src/stages/bug-fix-path.ts'
 import { confirmIntake, createWorkflowService, rejectIntake } from '../src/workflow-service.ts'
 import { ProjectionStore } from '../src/projection.ts'
 import { StagePipeline } from '../src/stages/pipeline.ts'
@@ -49,7 +49,7 @@ describe('deriveLanes', () => {
     const lanes = deriveLanes(log(
       { type: 'intake-confirmed', by: 'user' },
       { type: 'stage-entered', node: 'open' },
-      { type: 'stage-completed', node: 'open', artifacts: ['bug-record.md'] },
+      { type: 'stage-completed', node: 'open', artifacts: ['proposal.md'] },
       { type: 'stage-entered', node: 'implement' },
     ))
     expect(lanes).toBeUndefined()
@@ -59,7 +59,7 @@ describe('deriveLanes', () => {
     const lanes = deriveLanes(log(
       { type: 'intake-confirmed', by: 'user' },
       { type: 'stage-entered', node: 'open' },
-      { type: 'stage-completed', node: 'open', artifacts: ['bug-record.md'] },
+      { type: 'stage-completed', node: 'open', artifacts: ['proposal.md'] },
       { type: 'stage-entered', node: 'implement' },
       { type: 'stage-failed', node: 'implement', reason: 'escalated: scope grew' },
       { type: 'mode-upgraded', from: 'bug-fix-path', to: 'full-go-path', cause: 'scope grew' },
@@ -86,8 +86,8 @@ describe('deriveLanes', () => {
       at: '2026-09-17T00:00:05.000Z',
     })
 
-    // §18.4.3 「升级前 fast-path 的产物不删」 — the bug record survives the split.
-    expect(lanes?.preservedArtifacts).toEqual(['bug-record.md'])
+    // §18.4.3 「升级前 fast-path 的产物不删」 — the clipped proposal survives the split.
+    expect(lanes?.preservedArtifacts).toEqual(['proposal.md'])
   })
 
   it('keeps the upgrade edge on screen for a degenerate log', () => {
@@ -150,7 +150,7 @@ describe('Tab payload for an escalated change', () => {
       // The bug record written by the fast-path open survives the escalation;
       // `stage-completed` records absolute paths, so compare basenames.
       const preserved = (view.lanes?.preservedArtifacts ?? []).map(p => basename(p))
-      expect(preserved).toContain(BUG_RECORD_FILE)
+      expect(preserved).toContain(BUG_FIX_PROPOSAL_FILE)
       // Parked on an interrupted implement, not on a gate: no confirm button.
       expect(view.gate).toBeUndefined()
       expect(view.actions.some(a => a.id === 'confirm-gate')).toBe(false)

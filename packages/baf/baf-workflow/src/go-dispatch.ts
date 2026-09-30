@@ -49,7 +49,6 @@
 
 import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
-import { BUG_RECORD_FILE } from './stages/bug-fix-path.ts'
 import { BUG_RECORD_REQUIREMENTS_ZH, CHECKLIST_FILE, CHECKLIST_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH } from './stages/gates.ts'
 import { sharedHostSet } from './host-memory.ts'
 
@@ -69,10 +68,12 @@ export interface DispatchSignal {
   /** Optional verification reason (the T11 fix loop / the checklist gates / the 2026-09-28 gate revision loop). */
   readonly cause?: 'verify-failed' | 'checklist-missing' | 'checklist-open' | 'gate-revise'
   /**
-   * 【变更】2026-09-26 (用户需求 工作流 3): the change's mode — on
-   * bug-fix-path the open rest's artifact is bug-record.md (not proposal.md)
-   * and its completion conditions are the bug-record requirements. Absent =
-   * full-go-path (every pre-existing caller/serialization).
+   * 【变更】2026-09-26 (用户需求 工作流 3): the change's mode — on bug-fix-path
+   * the open rest's completion conditions are the bug-record requirements
+   * (proposal.md's clipped template). Absent = full-go-path (every
+   * pre-existing caller/serialization).
+   * 【变更】2026-09-30 (demo31 问题 4): the open artifact file itself is
+   * proposal.md on both modes now — the flag only selects the conditions.
    */
   readonly mode?: 'full-go-path' | 'bug-fix-path'
 }
@@ -151,21 +152,17 @@ export function expireDispatchLedger(cwd: string): void {
  * not `tasks.md`, so the order points the model at the file it will be
  * judged by.
  *
- * 【变更】2026-09-26 (用户需求 工作流 3): `mode='bug-fix-path'` reroutes the
- * open rest's order at bug-record.md — the artifact that mode's open gate
- * actually judges.
+ * 【变更】2026-09-30 (demo31 问题 4): bug-fix open's artifact IS proposal.md
+ * now (was bug-record.md) — same file on both modes, so the `mode` parameter
+ * is gone (the mode flag on DispatchSignal still selects the completion
+ * conditions).
  * @param changeId - change id.
  * @param node - dispatch stage.
- * @param mode - workflow mode (default full-go-path).
  * @returns the workspace-relative path.
  */
-export function artifactPathFor(
-  changeId: string,
-  node: DispatchNode,
-  mode?: 'full-go-path' | 'bug-fix-path',
-): string {
+export function artifactPathFor(changeId: string, node: DispatchNode): string {
   const file = node === 'open'
-    ? mode === 'bug-fix-path' ? BUG_RECORD_FILE : ARTIFACT_FILES.proposal
+    ? ARTIFACT_FILES.proposal
     : node === 'clarify'
       ? ARTIFACT_FILES.clarify
       : node === 'design'
@@ -251,6 +248,13 @@ export function workOrderText(signal: DispatchSignal): string {
     '',
     '执行要求：',
     '1. 直接编辑上方产物补齐，不要另建文件；',
+    // 【变更】2026-09-30 (demo31 问题 5 · demo30 卡滞): the fix-loop order names
+    // the allowlist escape up front — a failed fix often needs a NEW file
+    // (demo30: lite_hsm.h 等), and before this the model created it, bounced
+    // off scope_exceeded, and concluded the chosen fix was infeasible.
+    ...(cause === 'verify-failed'
+      ? ['1a. 若修复必须新建 allowlist 之外的文件：先把文件路径加进 plan.json 的 allowlist（并补对应任务）再创建；拿不准要不要扩范围时用 baf_question_ask 问客户；']
+      : []),
     '2. 补齐后立即结束本回合——系统会在回合结束时自动弹出下一阶段裁决卡，无需你调用任何命令；',
     '3. 需要客户决策时调用 baf_question_ask，不要用文字向客户提问；',
     `4. 本工单由客户${cause === 'gate-revise' ? '在确认卡输入修改意见' : '敲 /baf-go'} 生成（客户已授权），照单执行即可。`,

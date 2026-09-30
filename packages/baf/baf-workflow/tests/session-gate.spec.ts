@@ -17,14 +17,20 @@ import { chmod, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
+import { bindScopeParent, createScope, scopeTarget } from '@deepseek-ai/dsh-scope'
+import type { Scope, ScopeParentBinding } from '@deepseek-ai/dsh-scope'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { SessionId } from '@deepseek-ai/dsh-session'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { describe, expect, it, vi } from 'vitest'
 import { ProjectionStore } from '../src/projection.ts'
 import {
   STARTUP_GATE_COMMAND,
   WELCOME_COMMAND,
   apply,
+  inject,
+  name as gateName,
   probeMountFlags,
   probeToolchain,
   renderProbeLines,
@@ -569,6 +575,199 @@ describe('BAF session gate · row install (§18.3)', () => {
       await new Promise(resolve => setTimeout(resolve, 25))
       expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
     } finally {
+      await cleanup(root)
+    }
+  })
+})
+
+// ── virgin-session deferral (demo31 问题 1, 2026-09-30) ───────────────────────
+
+describe('BAF session gate · virgin-session deferral (demo31 问题 1)', () => {
+  /**
+   * 【变更】2026-09-30: a blank session boots under the workspace DEFAULT
+   * preset; firing /baf-welcome + /baf-gate at agent creation left the cards
+   * in the transcript of sessions the customer then switched to 标准模式 (the
+   * switch recomposes in place — the residue renders with the first message).
+   * A virgin session (firstLiveSeq 0) must ARM: no card executes until the
+   * first genuine user message; disposal unwinds the arm so nothing ever runs.
+   */
+  function virginAgent(root: string, id: string): Agent {
+    return {
+      session: { header: { cwd: root, id }, firstLiveSeq: 0 },
+      ctx: {
+        inject: () => ({ dispose: async () => undefined }),
+      },
+    } as unknown as Agent
+  }
+
+  function gatingCtx(agent: Agent, calls: string[]): { ctx: Context; handlers: Map<string, (...args: unknown[]) => void> } {
+    const handlers = new Map<string, (...args: unknown[]) => void>()
+    const ctx = fakeCtx({
+      agents: { list: () => [] as Agent[], get: () => agent },
+      commands: { execute: async (_agent: unknown, line: string) => { calls.push(line); return {} } },
+      logger: quietLogger(),
+      on: ((event: string, handler: (...args: never[]) => void) => {
+        handlers.set(event, handler as (...args: unknown[]) => void)
+      }),
+      effect: () => undefined,
+    })
+    return { ctx, handlers }
+  }
+
+  const message = (kind: string): [unknown, unknown] => [
+    { header: { id: 'sess-virgin' } },
+    { type: 'user/message', data: { source: { kind }, content: [] } },
+  ]
+
+  it('arms a virgin session and fires the welcome only after the first genuine message', async () => {
+    const root = await emptyWorkspace()
+    try {
+      const calls: string[] = []
+      const agent = virginAgent(root, 'sess-virgin')
+      const { ctx, handlers } = gatingCtx(agent, calls)
+      apply(ctx)
+      handlers.get('agent/created')?.({ agent })
+      await new Promise(resolve => setTimeout(resolve, 50))
+      // Armed: the transcript is untouched — no welcome, no env gate card.
+      expect(calls).toEqual([])
+
+      // A plugin/tool-injected message is not the customer settling the mode.
+      handlers.get('session/event')?.(...message('plugin'))
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(calls).toEqual([])
+
+      // The first genuine message settles the mode and fires the card pair once.
+      handlers.get('session/event')?.(...message('user'))
+      await vi.waitFor(() => { expect(calls).toContain(WELCOME_COMMAND) }, { timeout: 10_000 })
+      expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
+
+      // Later messages must not fire it again.
+      handlers.get('session/event')?.(...message('user'))
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('never fires when the blank session is switched away from baf before typing', async () => {
+    const root = await emptyWorkspace()
+    try {
+      const calls: string[] = []
+      const agent = virginAgent(root, 'sess-virgin')
+      const { ctx, handlers } = gatingCtx(agent, calls)
+      apply(ctx)
+      handlers.get('agent/created')?.({ agent })
+      // The picker selection away from baf unwinds the arm (agent-preset/
+      // selected → dispose in production; the disposal edge carries the same
+      // cleanup in this double).
+      handlers.get('agent/disposed')?.({ agent })
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(calls).toEqual([])
+      handlers.get('session/event')?.(...message('user'))
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(calls).toEqual([])
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('fires immediately when an explicit picker selection settles an armed session', async () => {
+    const root = await emptyWorkspace()
+    try {
+      const calls: string[] = []
+      const agent = virginAgent(root, 'sess-virgin')
+      const { ctx, handlers } = gatingCtx(agent, calls)
+      apply(ctx)
+      handlers.get('agent/created')?.({ agent })
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(calls).toEqual([])
+      // agent-preset/selected INTO this preset (fakeCtx has no scope marker,
+      // so presetCovers is true) — the customer picked baf deliberately.
+      handlers.get('agent-preset/selected')?.('sess-virgin')
+      await vi.waitFor(() => { expect(calls).toContain(WELCOME_COMMAND) }, { timeout: 10_000 })
+      expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
+    } finally {
+      await cleanup(root)
+    }
+  })
+})
+
+// ── preset isolation (2026-09-28) ────────────────────────────────────────────
+
+describe('BAF session gate · preset isolation (用户问题 2026-09-28)', () => {
+  /**
+   * 【变更】2026-09-28: the 启动门 prompt section must land on exactly the
+   * agents composed under this standing mount — end-to-end against a real
+   * Cordis tree with the real SystemPrompt registry, covering the two paths
+   * that used to cross presets (the `agents.list()` sweep at mount time, and
+   * `agent-preset/selected` after a blank-session recompose).
+   */
+  it('confines the 启动门 section to this mount\'s agents across sweep, created, and recompose', async () => {
+    const cordis = new Context()
+    const root = await emptyWorkspace()
+    // session-gate.ts `SECTION_NAME` (module-private; asserted by literal).
+    const SECTION = 'baf:session-gate'
+    try {
+      await cordis.plugin(SystemPrompt, {})
+      const registry = new Map<string, Agent>()
+      cordis.provide('agents', {
+        list: () => [...registry.values()],
+        get: (id: string) => registry.get(id),
+      } as never)
+      cordis.provide('commands', { execute: () => undefined } as never)
+
+      /** Mint a standing preset scope — where the gate row is mounted. */
+      const mount = async (key: object): Promise<Scope> => {
+        let scope!: Scope
+        await cordis.plugin((inner: Context) => { scope = createScope(inner, key) })
+        return scope
+      }
+      /** Mint a live agent joined to a preset; the key doubles as the Agent. */
+      const join = async (id: string, presetKey: object): Promise<{ agent: Agent; binding: ScopeParentBinding }> => {
+        const agent = { id: id as SessionId, session: { header: { cwd: root } } } as Agent
+        const binding = bindScopeParent(agent, presetKey)
+        let scope!: Scope
+        await cordis.plugin(Object.assign(
+          (inner: Context) => { scope = createScope(inner, agent) },
+          { inject: ['systemPrompt'] },
+        ))
+        ;(agent as { ctx?: Context }).ctx = scope.ctx
+        registry.set(id, agent)
+        return { agent, binding }
+      }
+      /** Whether the agent's own assembly resolves the gate section. */
+      const gateInstalled = async (agent: Agent): Promise<boolean> =>
+        (await cordis.systemPrompt.assemble({ scope: agent }))
+          .sections.some(section => section.name === SECTION)
+
+      const bafKey = { preset: 'baf' }
+      const standardKey = { preset: 'standard' }
+      await mount(standardKey)
+      // A standard-mode agent is live at row-mount time — the sweep must
+      // skip it (the first cross-preset leak vector).
+      const standard = await join('std-session', standardKey)
+      const bafScope = await mount(bafKey)
+      await bafScope.ctx.plugin({ name: gateName, inject, apply })
+      expect(await gateInstalled(standard.agent)).toBe(false)
+
+      // A baf agent created later is heard through its own carrier.
+      const baf = await join('baf-session', bafKey)
+      await cordis.serial(scopeTarget(baf.agent, baf.agent), 'agent/created', { agent: baf.agent } as never)
+      await vi.waitFor(async () => { expect(await gateInstalled(baf.agent)).toBe(true) })
+      expect(await gateInstalled(standard.agent)).toBe(false)
+
+      // Recompose away: the section unwinds with the re-linked chain.
+      baf.binding.rebind(standardKey)
+      cordis.emit('agent-preset/selected', baf.agent.id, 'standard')
+      await vi.waitFor(async () => { expect(await gateInstalled(baf.agent)).toBe(false) })
+      // And back: it returns with the chain.
+      baf.binding.rebind(bafKey)
+      cordis.emit('agent-preset/selected', baf.agent.id, 'baf')
+      await vi.waitFor(async () => { expect(await gateInstalled(baf.agent)).toBe(true) })
+      expect(await gateInstalled(standard.agent)).toBe(false)
+    } finally {
+      await cordis.fiber.dispose()
       await cleanup(root)
     }
   })

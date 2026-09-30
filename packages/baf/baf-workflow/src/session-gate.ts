@@ -18,6 +18,23 @@
  *
  * **Two audiences, two channels** — the same snapshot is rendered twice:
  *
+ * 【变更】2026-09-30 (demo31 问题 1 · 非 BAF 模式不得自动执行 baf-welcome):
+ * a brand-new session boots under the workspace's **default** preset before the
+ * customer has committed to any mode. Firing the welcome at `agent/created`
+ * left `/baf-welcome` + `/baf-gate scaffold` outputs in the transcript of a
+ * blank session the customer then switched to 标准模式 via the composer picker
+ * (the switch recomposes in place, same session) — the cards became visible as
+ * soon as the first message flipped the empty-state hero into the conversation
+ * view, so a 标准/极简/PTC session opened with BAF boot residue. A **virgin**
+ * session (`firstLiveSeq === 0` — no event has ever been appended) now *arms*
+ * the gate instead: the probe runs (read-only, primes the prompt-section
+ * snapshot so the first model turn still reads facts), but no card executes
+ * until the session's first genuine user message — by which time the mode
+ * picker is settled. Switching away before typing disposes the arm and nothing
+ * ever executes. Non-virgin installs (reopened sessions, forks, the mount-time
+ * sweep, and an explicit picker selection via `agent-preset/selected`) keep the
+ * immediate fire.
+ *
  * - the customer reads the card in the conversation. The gate fires
  *   `/baf-welcome` through `ctx.commands.execute`, which is the only mechanism
  *   in dsh that puts a card in the transcript before the first turn. It is
@@ -50,6 +67,7 @@ import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-session' // Context 'session/event' augmentation
 // Type-only: brings the `'agent-preset/selected'` Events declaration into this
 // compilation face (the registry emits it app-wide; no runtime import).
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
@@ -57,6 +75,7 @@ import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import { isBafError } from '@deepseek-ai/dsh-baf-core'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
 import { createLocalOpenSpecAdapter } from '@deepseek-ai/dsh-baf-openspec'
+import { presetCovers } from './preset-cover.ts'
 import { formatCommandReport, modeZh } from './command-format.ts'
 import { listActiveChanges, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
 import type { ScaffoldAdapterOptions, ScaffoldAdapterOutcome } from './pipeline-factory.ts'
@@ -474,9 +493,44 @@ export function sessionGateSection(cwd: string): string {
 }
 
 /**
+ * Probe the toolchain and binding and cache the snapshot — without touching
+ * the transcript.
+ *
+ * 【变更】2026-09-30 (demo31 问题 1): split out of {@link runSessionGate} so an
+ * armed (virgin) session can prime the model-facing section facts at open —
+ * the prompt section then reads real probe rows on the first model turn —
+ * while both card executions wait for the settle signal.
+ * @param ctx - standing-mount context carrying `logger`.
+ * @param agent - the agent whose workspace should be probed.
+ * @returns the cached snapshot, or undefined when the workspace is unset or
+ * the probe failed (already logged).
+ */
+export async function primeGateSnapshot(
+  ctx: Context,
+  agent: Agent,
+): Promise<GateSnapshot | undefined> {
+  const cwd = agent.session.header.cwd
+  if (cwd === undefined || cwd === '') return undefined
+  try {
+    const probe = await probeToolchain(cwd, { ...probeMountFlags(ctx, agent) })
+    const binding = await resolveStartupBinding(cwd)
+    const snapshot: GateSnapshot = { cwd, probe, binding, at: Date.now() }
+    snapshotCache.set(cwd, snapshot)
+    ctx.logger.info(sessionGateLogLine(snapshot))
+    return snapshot
+  } catch (error: unknown) {
+    ctx.logger.warn(
+      `baf-session-gate: probe failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
+    return undefined
+  }
+}
+
+/**
  * Run the gate for one agent: probe, log, then fire the welcome card.
  *
- * Called from the preset row's `agent/created` handler. Never throws: a gate
+ * Called once per agent at the settle signal (first genuine user message for
+ * a virgin session; install time for everything else). Never throws: a gate
  * failure is a log line, because a broken workspace must still open a session.
  * @param ctx - standing-mount context carrying `commands` and `logger`.
  * @param agent - the agent that just appeared.
@@ -487,11 +541,15 @@ export async function runSessionGate(ctx: Context, agent: Agent): Promise<void> 
   const controller = new AbortController()
   inflight.set(agent, controller)
   try {
-    const probe = await probeToolchain(cwd, { ...probeMountFlags(ctx, agent) })
-    const binding = await resolveStartupBinding(cwd)
-    const snapshot: GateSnapshot = { cwd, probe, binding, at: Date.now() }
-    snapshotCache.set(cwd, snapshot)
-    ctx.logger.info(sessionGateLogLine(snapshot))
+    // Reuse the arm-time snapshot while it is fresh; a settled (reopened /
+    // swept / explicitly selected) session has none yet, so this is also the
+    // first probe. Outside the TTL the probe re-runs — the card must state the
+    // workspace as it is NOW, not as it was at arm time.
+    const cached = snapshotCache.get(cwd)
+    const probe = cached !== undefined && Date.now() - cached.at < PROBE_TTL_MS
+      ? cached.probe
+      : (await primeGateSnapshot(ctx, agent))?.probe
+    if (probe === undefined) return
     const execution = await ctx.commands.execute(agent, WELCOME_COMMAND, [], controller.signal)
     if (execution === undefined) {
       ctx.logger.warn(`baf-session-gate: ${WELCOME_COMMAND} is not registered; welcome card skipped`)
@@ -522,8 +580,26 @@ export async function runSessionGate(ctx: Context, agent: Agent): Promise<void> 
  */
 export function apply(ctx: Context): void {
   const fibers = new Map<Agent, ReturnType<Context['inject']>>()
+  /**
+   * 【变更】2026-09-30 (demo31 问题 1): virgin sessions whose welcome is armed
+   * but not yet fired, keyed by session id. The card pair executes when the
+   * session's mode is settled: its first genuine user message, or an explicit
+   * `agent-preset/selected` INTO this preset. Disposal (switching the picker
+   * away before typing) removes the arm — the session's transcript never sees
+   * a BAF card.
+   */
+  const armed = new Map<string, Agent>()
 
-  const install = (agent: Agent): void => {
+  const sessionKeyOf = (agent: Agent): string => String(agent.session.header.id)
+
+  const fire = (agent: Agent): void => {
+    armed.delete(sessionKeyOf(agent))
+    if (gateFired.has(agent)) return
+    gateFired.add(agent)
+    void runSessionGate(ctx, agent)
+  }
+
+  const install = (agent: Agent, settled: boolean): void => {
     if (fibers.has(agent)) return
     const cwd = agent.session.header.cwd
     const fiber = agent.ctx.inject(['systemPrompt'], (scope) => {
@@ -534,13 +610,20 @@ export function apply(ctx: Context): void {
       })
     })
     fibers.set(agent, fiber)
-    // Fire-and-forget: the first screen must not wait on the probe (§17.7 R20).
     if (gateFired.has(agent)) return
-    gateFired.add(agent)
-    void runSessionGate(ctx, agent)
+    // Fire-and-forget: the first screen must not wait on the probe (§17.7 R20).
+    if (settled) {
+      fire(agent)
+      return
+    }
+    // Virgin session: prime the section snapshot (read-only, no transcript
+    // writes) and wait for the settle signal before any card executes.
+    void primeGateSnapshot(ctx, agent)
+    armed.set(sessionKeyOf(agent), agent)
   }
 
   const dispose = (agent: Agent): void => {
+    armed.delete(sessionKeyOf(agent))
     gateFired.delete(agent)
     inflight.get(agent)?.abort()
     inflight.delete(agent)
@@ -554,8 +637,28 @@ export function apply(ctx: Context): void {
     })
   }
 
-  for (const agent of ctx.agents.list()) install(agent)
-  ctx.on('agent/created', ({ agent }) => { install(agent) })
+  // 【变更】2026-09-28 (用户问题: BAF 门禁与工作流不得影响其他模式): the sweep
+  // is preset-filtered. The standing mount can be created while agents of
+  // OTHER presets are live (a baf session — or a cold transcript read of one —
+  // opened next to a standard-mode session); without the filter the 启动门
+  // prompt section (and the welcome probe) would land on those agents too.
+  // Agents alive at mount time existed before this apply — their mode is
+  // settled, so they fire immediately (the double-trigger regression test in
+  // `session-gate.spec.ts` pins this).
+  for (const agent of ctx.agents.list()) {
+    if (presetCovers(ctx, agent)) install(agent, true)
+  }
+  // 【变更】2026-09-30 (demo31 问题 1): a brand-new session boots under the
+  // workspace DEFAULT preset before the customer has committed to a mode —
+  // firing at agent creation left /baf-welcome + /baf-gate outputs in the
+  // transcript of sessions the customer then switched to 标准模式 (they render
+  // as soon as the first message leaves the empty-state hero). A virgin
+  // session (firstLiveSeq 0 — nothing was ever appended, so nothing was ever
+  // shown or fed to a model) arms instead; every non-virgin create (resume,
+  // fork) fires as before. Fakes without firstLiveSeq count as non-virgin.
+  ctx.on('agent/created', ({ agent }) => {
+    install(agent, (agent.session.firstLiveSeq ?? 1) !== 0)
+  })
   ctx.on('agent/disposed', ({ agent }) => { dispose(agent) })
   // 【变更】2026-09-25 (post-master-merge regression): a blank session created
   // under one preset and then switched to BAF re-links its agent scope via the
@@ -567,15 +670,41 @@ export function apply(ctx: Context): void {
   // events broadcast app-wide, so this standing mount hears it. Entering BAF
   // installs; leaving BAF unwinds (section fiber + gate dedupe) so the prompt
   // section never outlives the composition switch.
-  ctx.on('agent-preset/selected', (sessionId, agentPreset) => {
+  // 【变更】2026-09-28 (用户问题: BAF 不得影响其他模式): membership is now read
+  // from the agent's re-linked scope chain instead of the literal preset id —
+  // leaving baf unwinds by the same chain test the sweep uses, and a
+  // user-copied baf preset keeps its gate instead of being unwound by the
+  // `!== 'baf'` comparison.
+  // 【变更】2026-09-30 (demo31 问题 1): a committed picker selection settles the
+  // mode even for a session that armed at creation — selecting INTO this
+  // preset fires immediately instead of waiting for typing.
+  ctx.on('agent-preset/selected', (sessionId) => {
     const agent = ctx.agents.get(sessionId)
     if (agent === undefined) return
-    if (agentPreset === 'baf') install(agent)
+    if (presetCovers(ctx, agent)) {
+      if (armed.has(String(sessionId))) fire(agent)
+      else install(agent, true)
+    }
     else dispose(agent)
+  })
+  // 【变更】2026-09-30 (demo31 问题 1): the first genuine user message is the
+  // settle signal for an armed session — by then the customer has kept (or
+  // switched) the mode deliberately, and the welcome + gate cards execute
+  // right before the first model turn instead of polluting blank sessions
+  // that were only resting on the default preset.
+  ctx.on('session/event', (session, event) => {
+    if (event.type !== 'user/message') return
+    // Genuine typing only — plugin/tool-injected messages are not the
+    // customer committing to this session's mode.
+    if ((event.data as { source?: { kind?: string } }).source?.kind !== 'user') return
+    const agent = armed.get(String(session.header.id))
+    if (agent === undefined) return
+    fire(agent)
   })
   ctx.effect(() => async () => {
     for (const controller of inflight.values()) controller.abort()
     inflight.clear()
+    armed.clear()
     const pending = [...fibers.values()]
     for (const agent of fibers.keys()) gateFired.delete(agent)
     fibers.clear()

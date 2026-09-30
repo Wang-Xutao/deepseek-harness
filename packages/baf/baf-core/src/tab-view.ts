@@ -162,7 +162,14 @@ export interface WorkflowTabArtifact {
 /** One node card in the Tab. */
 export interface WorkflowTabNode {
   readonly id: WorkflowNode
-  readonly status: NodeStatus | 'template'
+  /**
+   * Live stage status, plus the display-only states. 【变更】2026-09-30
+   * (demo31 问题 4): `clipped` marks the full-flow stages the bug-fix path
+   * cuts (clarify/design/plan) — the graph is identical to full-go-path, and
+   * those nodes read 已裁剪 instead of 已忽略 whether the change is live or
+   * terminal. A T15 escalation backfills them with live statuses, which win.
+   */
+  readonly status: NodeStatus | 'template' | 'clipped'
   readonly catalog: NodeCatalogEntry
   readonly onPath: boolean
   readonly reasonCodes?: readonly string[]
@@ -251,6 +258,25 @@ export interface WorkflowDashboardRow {
   readonly durationMs?: number
   readonly inputTokens?: number
   readonly outputTokens?: number
+  /**
+   * 【变更】2026-09-29 (demo23 问题 3): the artifacts the change actually
+   * generated — one compact row per file that exists on disk (live or
+   * archived), so an ABANDONED change's dashboard entry still shows what was
+   * produced before the give-up (the history modal's rail was already
+   * terminal-aware; the overview row was not). `missing`/`clipped` files are
+   * dropped (nothing to show); the open button keys off `path`.
+   */
+  readonly artifacts?: readonly WorkflowDashboardArtifact[]
+}
+
+/** One generated-artifact chip of a dashboard row (issue 3's compact shape). */
+export interface WorkflowDashboardArtifact {
+  /** Artifact file name inside the change directory (e.g. `clarify.md`). */
+  readonly file: string
+  /** Workspace-relative path (live or archive, wherever the file lives). */
+  readonly path: string
+  /** Customer-facing state of the generated file. */
+  readonly state: 'template' | 'planned' | 'filled'
 }
 
 /** The 变更总览 dashboard payload: every change row, newest first. */
@@ -406,9 +432,16 @@ export function statusToTabView(
     // its recorded outcome, an abandoned one likewise, and every node the
     // flow never touched reads 已忽略 (skipped) — never 锁定/空闲: past the
     // terminal state nothing is locked or pending.
+    // 【变更】2026-09-30 (demo31 问题 4): bug-fix-path renders the FULL flow
+    // graph; the stages this mode cuts (clarify/design/plan — full-path nodes
+    // that are off the bug happy path) read 已裁剪 (clipped) live AND in
+    // terminal context, instead of 已忽略. A T15 escalation writes live
+    // statuses onto those nodes, which take precedence here.
     let nodeStatus: WorkflowTabNode['status']
     if (live !== undefined) {
       nodeStatus = live
+    } else if (status.mode === 'bug-fix-path' && !onPath.has(catalog.id) && catalog.onFullGoPath) {
+      nodeStatus = 'clipped'
     } else if (status.terminal !== undefined) {
       nodeStatus = 'skipped'
     } else {

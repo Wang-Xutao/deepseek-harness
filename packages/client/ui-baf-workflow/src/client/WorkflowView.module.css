@@ -1166,6 +1166,59 @@
   color: var(--wf-muted);
 }
 
+/* 【变更】2026-09-29 (demo23 问题 3): terminal dashboard rows list the files
+   the change actually generated — one chip per file below the pick button,
+   each opening the file in the right sidebar (state tint mirrors the rail's
+   artifact states). */
+.dashboardArtifacts {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.3rem 0.65rem 0.45rem;
+}
+
+.dashboardArtifactsLabel {
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--wf-muted);
+}
+
+.dashboardArtifactChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.dashboardArtifactChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--dsw-alias-bg-canvas, var(--wf-card)) 80%, transparent);
+  font: inherit;
+  font-size: 0.68rem;
+  color: var(--wf-ink);
+  cursor: pointer;
+}
+
+.dashboardArtifactChip:hover {
+  border-color: color-mix(in srgb, var(--wf-accent) 45%, var(--wf-line));
+}
+
+.dashboardArtifactChip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wf-accent) 45%, transparent);
+}
+
+.dashboardArtifactState {
+  font-size: 0.62rem;
+  color: var(--wf-muted);
+}
+
 @media (max-width: 900px) {
   .body { flex-direction: column; }
   .splitter { width: 100%; height: 8px; cursor: row-resize; }

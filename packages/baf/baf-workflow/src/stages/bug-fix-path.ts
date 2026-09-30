@@ -14,8 +14,17 @@ import type { StageContext } from './context.ts'
 import { writeArtifact } from './write.ts'
 import { stageArtifactPaths } from './artifacts.ts'
 
-/** Minimal bug record file name (fast-path replacement for the OpenSpec skeleton). */
-export const BUG_RECORD_FILE = 'bug-record.md'
+/**
+ * The bug-fix open stage's artifact file — the SAME doc type name as the full
+ * flow (proposal.md), carrying the clipped bug-fix template (Problem / Root
+ * cause / Impact scope / Regression test).
+ * 【变更】2026-09-30 (demo31 问题 4 · bug 记录的产物文档不要，文档类型名称与
+ * 全流程一致，只是裁剪): was its own `bug-record.md`; the customer wants the
+ * bug-fix path to read as the full flow with clipping, so the file joins
+ * proposal.md's slot (rail row, gate revise path, dispatch orders all follow
+ * this constant).
+ */
+export const BUG_FIX_PROPOSAL_FILE = ARTIFACT_FILES.proposal
 
 /**
  * 【变更】2026-09-26 (用户需求 工作流 3): the placeholder a fieldless
@@ -91,10 +100,12 @@ export function renderBugRecordBody(
   input: BugFixPathBugInput,
   workspace: { readonly gitRevision?: string; readonly baselineId?: string },
 ): string {
+  // 【变更】2026-09-30 (demo31 问题 4): head shape matches the full-go proposal
+  // skeleton (`# <title>` + Change id) — same doc type, clipped sections.
   const lines: string[] = [
-    `# Bug record — ${input.changeId}`,
+    `# ${input.title}`,
     '',
-    `- Title: ${input.title}`,
+    `Change id: ${input.changeId}`,
     '',
     '## Problem',
     '',
@@ -165,7 +176,7 @@ export async function driveBugFixPathOpen(
       : { gitRevision: ctx.workspace.git.revision }),
     ...(ctx.baseline === undefined ? {} : { baselineId: ctx.baseline.baselineId }),
   })
-  await writeArtifact(ctx.workspace.root, input.changeId, BUG_RECORD_FILE, body)
+  await writeArtifact(ctx.workspace.root, input.changeId, BUG_FIX_PROPOSAL_FILE, body)
 
   const ledger: BugFixPathLedgerView = {
     bugFixPath: true,
@@ -194,7 +205,7 @@ export async function driveBugFixPathOpen(
   return {
     status: await ctx.store.readStatus(input.changeId),
     artifacts: stageArtifactPaths(ctx.workspace.root, input.changeId, [
-      BUG_RECORD_FILE,
+      BUG_FIX_PROPOSAL_FILE,
       ARTIFACT_FILES.planJson,
     ]),
     rootCauseRecorded: input.rootCause.trim() !== '',
@@ -212,7 +223,7 @@ export async function readBugRecord(
   changeId: string,
 ): Promise<string | undefined> {
   try {
-    return await readFile(join(changeDir(workspaceRoot, changeId), BUG_RECORD_FILE), 'utf8')
+    return await readFile(join(changeDir(workspaceRoot, changeId), BUG_FIX_PROPOSAL_FILE), 'utf8')
   } catch {
     return undefined
   }

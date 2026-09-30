@@ -12,11 +12,13 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
+  WorkflowDashboardArtifact,
   WorkflowDashboardRow,
   WorkflowDashboardView,
 } from '@deepseek-ai/dsh-baf-core'
 import { deriveWorkflowMetrics, type UsagePoint } from './metrics.ts'
 import type { ProjectionIndexEntry, ProjectionStore } from './projection.ts'
+import { changeArtifactStatus } from './stages/gates.ts'
 
 /**
  * Read one change's plan ledger task counts, live dir first, archive second.
@@ -84,6 +86,36 @@ function rankOf(index: { readonly changes: readonly ProjectionIndexEntry[] }, ro
   return index.changes.find(c => c.changeId === row.changeId)?.seq ?? 0
 }
 
+/**
+ * 【变更】2026-09-29 (demo23 问题 3): the artifacts a change actually
+ * generated — one row per file on disk (live directory first, archive
+ * fallback), for terminal changes especially the abandoned ones whose
+ * directory is preserved in place. `missing`/`clipped` rows drop out (there
+ * is nothing to show or open). Best-effort like every other per-change read.
+ */
+async function generatedArtifacts(
+  workspaceRoot: string,
+  entry: ProjectionIndexEntry,
+): Promise<readonly WorkflowDashboardArtifact[] | undefined> {
+  try {
+    const rows = await changeArtifactStatus({
+      workspaceRoot,
+      changeId: entry.changeId,
+      mode: entry.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+    })
+    // The loop (not filter+map) narrows ArtifactState to the three generated
+    // states the wire type carries.
+    const generated: WorkflowDashboardArtifact[] = []
+    for (const row of rows) {
+      if (row.state !== 'template' && row.state !== 'planned' && row.state !== 'filled') continue
+      generated.push({ file: row.file, path: row.path, state: row.state })
+    }
+    return generated.length > 0 ? generated : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Fold one index entry into a dashboard row, tolerating partial reads. */
 async function dashboardRowFor(
   store: ProjectionStore,
@@ -97,6 +129,9 @@ async function dashboardRowFor(
     current: entry.current,
     ...(entry.current === 'completed' || entry.current === 'abandoned' ? { endedAt: entry.updatedAt } : {}),
   }
+  // Issue 3 rides outside the metrics try — an unreadable event log must not
+  // cost the artifacts the customer is asking about.
+  const artifacts = await generatedArtifacts(workspaceRoot, entry)
   try {
     const { events } = await store.readEvents(entry.changeId)
     // 【变更】2026-09-28 (用户问题 4): usage samples ride along so per-node
@@ -117,8 +152,9 @@ async function dashboardRowFor(
       ...(durationMs > 0 ? { durationMs } : {}),
       ...(inputTokens > 0 || outputTokens > 0 ? { inputTokens, outputTokens } : {}),
       ...(tasks === undefined ? {} : { tasks }),
+      ...(artifacts === undefined ? {} : { artifacts }),
     }
   } catch {
-    return base
+    return artifacts === undefined ? base : { ...base, artifacts }
   }
 }

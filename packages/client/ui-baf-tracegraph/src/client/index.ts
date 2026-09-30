@@ -8,7 +8,8 @@
  *   (【变更】2026-09-25: the host settings namespace round-trip was a silent
  *   no-op after the master merge; see ../workflow-settings.ts).
  * - The toggle lives under General settings; the dedicated 工作流 section
- *   keeps placeholders for future BAF workflow preferences.
+ *   hosts the feature-registered workflow preference rows
+ *   (`settings.workflow.item`).
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -99,12 +100,17 @@ export function apply(ctx: ClientContext): void {
   }, TraceGraphRow))
 
   // Nav glyph for id `workflow` is owned by ui-settings-general SettingsRoot.
+  // 【变更】2026-09-29 (demo23 问题 5): the section declares its child row slot
+  // (same composition General settings uses) — feature packages register
+  // workflow preference rows into 'settings.workflow.item' instead of the
+  // section carrying placeholders.
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'workflow',
     order: 20,
     label: () => tSection('section.title'),
     locale: WORKFLOW_NS,
+    children: { 'settings.workflow.item': { kind: 'list', scope: 'root' } },
   }, WorkflowSection))
 
   const viewInject = (): TraceGraphViewInjected => ({

@@ -4,15 +4,22 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import type {} from './remote-types.ts'
 import { WorkflowView, type WorkflowViewInjected } from './WorkflowView.tsx'
+import { WorkflowTabRow, type WorkflowTabRowInjected } from './WorkflowTabRow.tsx'
+import {
+  INITIAL_WORKFLOW_TAB_PREFS, WORKFLOW_TAB_PREF_KEY, type BafWorkflowTabSettings,
+} from '../workflow-tab-settings.ts'
 import { buildClientEmptyTabView, type WorkflowTabView } from './tab-types.ts'
 import { en, zh, NS, type WorkflowTabKey } from './locales.ts'
 import { isBafGatePending } from './gate-ask.ts'
@@ -77,6 +84,33 @@ export function apply(ctx: ClientContext): void {
   ))
 
   const t = ctx.locale.bind(NS)
+
+  // 【变更】2026-09-29 (demo23 问题 5): the 是否显示工作流 Tab preference —
+  // device-local (localStorage via the client snapshot store), default on.
+  // The same 2026-09-25 lesson the 轨迹图 toggle learned applies: browser-local
+  // tab visibility never crosses the wire, so it persists client-side.
+  const prefs = createSnapshotStore(INITIAL_WORKFLOW_TAB_PREFS, {
+    persist: { name: WORKFLOW_TAB_PREF_KEY },
+  })
+  const observePrefs = (): HostObservable<BafWorkflowTabSettings | undefined> => ({
+    getSnapshot: () => prefs.getSnapshot(),
+    subscribe: listener => prefs.subscribe(listener),
+  })
+  const settingsInject = (): WorkflowTabRowInjected => ({
+    hooks: { settings: observePrefs() },
+    setShowWorkflowTab: async (value) => {
+      prefs.set({ showWorkflowTab: value })
+    },
+  })
+  // The 工作流 settings section (owned by ui-baf-tracegraph) declares this
+  // child slot; the row rides it exactly like General-settings rows do.
+  ctx.slots.inject('settings.workflow.item', () => ctx.slots.register({
+    name: 'settings.workflow.item',
+    id: 'workflow-tab',
+    order: 10,
+    locale: NS,
+    inject: settingsInject,
+  }, WorkflowTabRow))
 
   const installView = (): (() => void) => ctx.slots.register({
     name: 'conversation.view',
@@ -163,7 +197,9 @@ export function apply(ctx: ClientContext): void {
   }, WorkflowView)
 
   // Tabs are global to the conversation chrome: keep the entry mounted only
-  // while the *current* session's agentPreset is baf.
+  // while the *current* session's agentPreset is baf AND the device-local
+  // 是否显示工作流 Tab switch is on (demo23 问题 5 — the switch unmounts the
+  // tab immediately, no restart).
   ctx.effect(() => {
     let disposeView: (() => void) | undefined
     let disposePreset: (() => void) | undefined
@@ -194,20 +230,22 @@ export function apply(ctx: ClientContext): void {
         return
       }
       const read = (): void => {
-        setWanted(face.getSnapshot() === 'baf')
+        setWanted(face.getSnapshot() === 'baf' && prefs.getSnapshot().showWorkflowTab)
       }
       read()
       disposePreset = face.subscribe(read)
     }
 
+    const offPrefs = prefs.subscribe(() => { sync() })
     const offCurrent = ctx.uiSession.adapter.current.subscribe(sync)
     const offList = ctx.sessions.list.subscribe(sync)
     sync()
     return () => {
+      offPrefs()
       offCurrent()
       offList()
       disposePreset?.()
       disposeView?.()
     }
-  }, 'ui-baf-workflow: tab gated by current agentPreset')
+  }, 'ui-baf-workflow: tab gated by current agentPreset and the workflow-tab preference')
 }

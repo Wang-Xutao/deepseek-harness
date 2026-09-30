@@ -39,7 +39,7 @@ import { ProjectionStore } from './projection.ts'
 import { isActiveChange } from './projection.ts'
 import { StagePipeline } from './stages/pipeline.ts'
 import { BUG_RECORD_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH, bugRecordGate, checklistGate, checklistTickedGate, implementGate, proposalGate } from './stages/gates.ts'
-import { BUG_RECORD_FILE } from './stages/bug-fix-path.ts'
+import { BUG_FIX_PROPOSAL_FILE } from './stages/bug-fix-path.ts'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { readLedger } from './stages/implement.ts'
 import { formatCommandReport } from './command-format.ts'
@@ -543,12 +543,13 @@ async function route(context: RouteContext): Promise<CommandResult> {
       // direct-advance path the legacy CLI does.
       //
       // 【变更】2026-09-26 (用户需求 工作流 3): bug-fix-path gets the SAME shape
-      // here — its open gate is `bugRecordGate` (bug-record.md + the fast-path
-      // ledger), its advance gate card is 'bugfix-open-advance' (clipped
-      // wording), and its advance lands in implement with the
-      // regression-test-first dispatch. Before this, open on bug-fix-path had
-      // no gate at all (`openRefusal` returned undefined unconditionally), so
-      // a draft record could be advanced past with nothing adjudicating it.
+      // here — its open gate is `bugRecordGate` (proposal.md's clipped
+      // template + the fast-path ledger), its advance gate card is
+      // 'bugfix-open-advance' (clipped wording), and its advance lands in
+      // implement with the regression-test-first dispatch. Before this, open
+      // on bug-fix-path had no gate at all (`openRefusal` returned undefined
+      // unconditionally), so a draft record could be advanced past with
+      // nothing adjudicating it.
       const bugFix = status.mode === 'bug-fix-path'
       const openRefusal = async (): Promise<CommandResult | undefined> => {
         if (bugFix) {
@@ -559,13 +560,15 @@ async function route(context: RouteContext): Promise<CommandResult> {
           const parts = dispatchParts(
             dispatchWorkOrder(context, 'open', gate.missing ?? [], undefined, 'bug-fix-path'),
             [
-              '对模型说补齐「缺什么」列出的项（或直接编辑 bug-record.md / plan.json）',
+              '对模型说补齐「缺什么」列出的项（或直接编辑 proposal.md / plan.json）',
               '完成后敲 /baf-go 或点 Tab「推进」重新裁决',
             ],
           )
-          return errorCard('open 裁决门未通过 · Bug 记录未完成', [
-            { title: '原因', lines: [gate.detail ?? 'bug-record.md 未达完成门'] },
-            { title: '产物', lines: [`openspec/changes/${changeId}/${BUG_RECORD_FILE} · 本次裁决对象`] },
+          // 【变更】2026-09-30 (demo31 问题 4): 提案 wording — same doc name as
+          // the full flow; only the judged sections are the clipped bug set.
+          return errorCard('open 裁决门未通过 · 提案未完成', [
+            { title: '原因', lines: [gate.detail ?? 'proposal.md 未达完成门'] },
+            { title: '产物', lines: [`openspec/changes/${changeId}/${BUG_FIX_PROPOSAL_FILE} · 本次裁决对象`] },
             ...(gate.missing === undefined || gate.missing.length === 0 ? [] : [{ title: '缺什么', lines: [...gate.missing] }]),
             { title: '满足条件', lines: [...BUG_RECORD_REQUIREMENTS_ZH] },
             { title: '下一步', lines: [...parts.next] },
@@ -1337,7 +1340,11 @@ async function resolveViaDialog(
     readonly cwd: string
     readonly adapters: DriveAdapters
     readonly dispatch?: GoDispatch
-    /** 2026-09-23 issue #1 / 2026-09-28 用户问题 1.7: callers that have one pass the full RouteContext; the revision dispatch is as customer-origin as an option click. */
+    /**
+     * 2026-09-23 issue #1 / 2026-09-28 用户问题 1.7: callers that have one pass
+     * the full RouteContext; the revision dispatch is as customer-origin as an
+     * option click.
+     */
     readonly dispatchOrigin?: DispatchOrigin
     readonly changeId?: string
   },
@@ -1599,9 +1606,10 @@ function listActives(actives: readonly ActiveRow[]): string[] {
  * @param node - stage whose artifact is incomplete.
  * @param missing - the gate's missing-item lines (the order's work list).
  * @param cause - set for the T11 fix loop; plain authoring rests leave it off.
- * @param mode - the change's mode; `bug-fix-path` reroutes the open order at
- *   bug-record.md with the bug-record completion conditions
- *   (【变更】2026-09-26 用户需求 工作流 3).
+ * @param mode - the change's mode; `bug-fix-path` swaps the open order's
+ *   completion conditions to the bug-record (clipped proposal.md) ones
+ *   (【变更】2026-09-26 用户需求 工作流 3; demo31 问题 4 — the file itself is
+ *   proposal.md on both modes now).
  * @returns the outcome, or 'unavailable' when this drive may not dispatch.
  */
 function dispatchWorkOrder(
@@ -1625,7 +1633,7 @@ function dispatchWorkOrder(
   const signal: DispatchSignal = {
     changeId,
     node,
-    artifactPath: artifactPathOverride ?? artifactPathFor(changeId, node, mode),
+    artifactPath: artifactPathOverride ?? artifactPathFor(changeId, node),
     missing,
     ...(cause === undefined ? {} : { cause }),
     ...(mode === undefined ? {} : { mode }),

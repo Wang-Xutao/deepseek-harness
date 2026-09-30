@@ -231,18 +231,17 @@ export function adjudicateFsWrite(
   // stage begins, or the stage order the gates enforce becomes decorative.
   if (inChangeDir && stage === 'open' && state.changeDirRel !== undefined) {
     // 【变更】2026-09-28 (用户问题 3 · demo-21 死锁): open's artifact set is
-    // path-dependent. Full-go authors proposal.md; bug-fix authors
-    // bug-record.md + plan.json — the open work order explicitly tells the
-    // model to fill them. Allowing ONLY proposal.md left every bug-fix
-    // record write bouncing as protected_path, cornering the model into
-    // calling the abandon gate after six dead turns (demo-21
-    // change-20260927-ecum-demo-1e45, forced abandon).
-    if (state.mode !== 'bug-fix-path' && rel === `${state.changeDirRel}/proposal.md`) {
+    // path-dependent — full-go authors proposal.md; bug-fix additionally keeps
+    // the plan.json fast-path ledger, and the open work order explicitly tells
+    // the model to fill both.
+    // 【变更】2026-09-30 (demo31 问题 4): bug-fix open authors the SAME
+    // proposal.md as full-go (bug-record.md is gone — the artifact rail is
+    // row-for-row the full-go one with clarify/design/plan clipped), so the
+    // proposal allowance no longer forks on mode.
+    if (rel === `${state.changeDirRel}/proposal.md`) {
       return allow
     }
-    if (state.mode === 'bug-fix-path'
-      && (rel === `${state.changeDirRel}/bug-record.md`
-        || rel === `${state.changeDirRel}/plan.json`)) return allow
+    if (state.mode === 'bug-fix-path' && rel === `${state.changeDirRel}/plan.json`) return allow
   }
   // §22.15 D: built-in protected paths apply even when the baseline omits
   // them. Once the change-dir allowance above has cleared the active change's
@@ -258,7 +257,14 @@ export function adjudicateFsWrite(
   if (stage === 'implement') {
     const withinAllowlist = state.allowlist.some(entry => matchesPathEntry(rel, entry))
     if (withinAllowlist) return allow
-    return deny('scope_exceeded', `${rel} is outside the plan allowlist for ${state.changeId}`)
+    // 【变更】2026-09-30 (demo31 问题 5 · demo30 卡滞): the denial now names the
+    // LEGAL escape instead of just bouncing — at implement the change dir is
+    // writable, so a fix that genuinely needs this new file extends
+    // plan.json's allowlist first (that is the customer-visible scope change),
+    // and a scope decision the model must not make alone goes to the customer
+    // via baf_question_ask. Before this, the model read a bare "outside the
+    // plan allowlist", concluded the plan was unfixable, and prose-asked.
+    return deny('scope_exceeded', `${rel} is outside the plan allowlist for ${state.changeId} — if the fix needs it, add the file to plan.json's allowlist (openspec/changes/${state.changeId}/plan.json is writable at implement) and add a matching task, or ask the customer with baf_question_ask before expanding scope`)
   }
   return deny('invalid_transition', `stage ${stage} does not permit writing ${rel}`)
 }

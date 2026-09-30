@@ -98,14 +98,14 @@ describe('fast-path happy path', () => {
       expect(status.current).toBe('open')
       expect(status.nodes.open).toBe('completed')
 
-      const bugRecord = await readFile(
-        join(root, 'openspec', 'changes', changeId, 'bug-record.md'),
+      const proposal = await readFile(
+        join(root, 'openspec', 'changes', changeId, 'proposal.md'),
         'utf8',
       )
-      expect(bugRecord).toContain('## Root cause')
+      expect(proposal).toContain('## Root cause')
 
-      // No full-go-path skeleton templates: fast path created only the bug record
-      // and the implement ledger.
+      // No full-go-path skeleton templates: fast path created only the clipped
+      // proposal and the implement ledger.
       await expect(readFile(
         join(root, 'openspec', 'changes', changeId, ARTIFACT_FILES.clarify),
         'utf8',
@@ -140,7 +140,7 @@ describe('fast-path happy path', () => {
       status = await store.readStatus(changeId)
       expect(status.terminal).toBe('completed')
       const archived = await readFile(
-        join(root, 'openspec', 'changes', 'archive', changeId, 'bug-record.md'),
+        join(root, 'openspec', 'changes', 'archive', changeId, 'proposal.md'),
         'utf8',
       )
       expect(archived).toContain('## Root cause')
@@ -156,11 +156,11 @@ describe('fast-path happy path', () => {
       const status = await store.readStatus(changeId)
       expect(status.nodes.open).toBe('completed')
 
-      const bugRecord = await readFile(
-        join(root, 'openspec', 'changes', changeId, 'bug-record.md'),
+      const proposal = await readFile(
+        join(root, 'openspec', 'changes', changeId, 'proposal.md'),
         'utf8',
       )
-      expect(bugRecord.toLowerCase()).toContain('git revision unavailable')
+      expect(proposal.toLowerCase()).toContain('git revision unavailable')
 
       const { events } = await store.readEvents(changeId)
       expect(events.some(e => e.type === 'baseline-locked')).toBe(false)
@@ -176,7 +176,7 @@ describe('fast-path gates', () => {
     try {
       await pipeline.driveBugFixPathOpenStage(bugInput(changeId), 'slash')
       await writeFile(
-        join(root, 'openspec', 'changes', changeId, 'bug-record.md'),
+        join(root, 'openspec', 'changes', changeId, 'proposal.md'),
         '# Bug record\n\n## Problem\n\nParser crashes.\n',
         'utf8',
       )

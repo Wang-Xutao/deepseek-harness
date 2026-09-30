@@ -9,126 +9,113 @@
 
 ---
 
-
-
 ## 实现进度（仓库实况 · 2026-09-17）
 
 > 本表是**当前仓库事实**，不是计划。设计正文（第 1–11、12 章步骤）仍描述目标态；实现时以本表为准判断「已做完什么」。
 
-
-
 ### 总览
 
-
-| Phase | 目标                                                                         | 状态      |
-| ----- | -------------------------------------------------------------------------- | ------- |
-| **0** | 企业输入登记、错误码、兼容矩阵、route 核查、baseline schema/fixture、projection/change id 冻结   | **已完成** |
-| **1** | shipped `presets/baf`、`trust: system`、skills、locale、roster/authoring 测试与金标 | **已完成** |
-| **2** | `baf-core` 骨架 + baseline loader + adapter stub                             | **已完成** |
-| **3** | route resolver + 审计                                                        | **已完成** |
-| **4** | intake + projection + transition + Web 工作流 Tab（半交互）                        | **已完成** |
-| 5     | full-go-path 各阶段                                                                | **已完成** |
-| 6     | bug-fix-path / 升级                                                         | **已完成** |
-| 7     | quality / standard / guard / scaffold                                      | **已完成** |
-| **8** | slash 全集 + `baf-cli` standalone CLI + desktop IPC + **变更 Dashboard（listChanges Remote）** | **已完成**（commit `3ab67a934f`；`baf-dsh 0.0.14` 已出包） |
-| **8.7** | `baf-go` 自动驱动 + 两个强制确认门（design 完成 → plan 之前、verify 通过 → archive 之前） + 单会话单工作流约束 | **已完成（2026-09-17）**：命令行主路径 + Tab 门高亮 + §18.4.3 双泳道视图均落地；细节见 §18.9 / §18.11 |
-| **8.8** | 会话启动门：绑定 / 新建工作流选择 + 必须工具链体检 + BAF 欢迎语（缺件引导下载） | **已完成（2026-09-17）**：`session-gate.ts` + preset 行 `baf-session-gate`、`/baf-welcome` slash + `baf welcome` CLI、`/baf-doctor` 复用同一探针，`tests/session-gate.spec.ts` 18 例通过；落地细节见 §18.10。**待出包后在桌面里看首屏观感**（与 §8.7.8 同批） |
-| **8.9** | `/baf-workflow-resume`：N8 drift 的交互式复位入口（T13 合法目标集，客户选点） | **已完成（2026-09-17）**：域层 `driveResumeStage` + slash + CLI + Tab 按钮 + `BafWorkflowTabRemote.resume()` + `pipeline-factory.ts` 共用 provider 全部接通；细节见 §18.11 / §19。`tests/resume.spec.ts` 12 例通过；顺带修掉 §21.6/§21.7 两个假阳性与 park 语义 bug |
-| **8.10** | BAF 工作流输出规范（状态行 / 卡片 / 日志统一格式 + i18n key 清单） | **设计阶段**（§20 + Phase 12 §8.10；代码未动） |
-| 9     | harness + plugin 两 scope 更新、签名、managed system root（热更）；baseline scope 暂缓（baseline 仍随 plugin zip 以 `overlay/plugin/standards/baf-baseline-c/baseline.yml` 静态 fixture 形式发布，无独立版本号/独立 hot-update 路径） | **未开始** |
-| 10    | release 门禁                                                                 | **未开始** |
-
+| Phase          | 目标                                                                                                                                                                                                                                   | 状态                                                                                                                                                                                                                                                                                    |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0**    | 企业输入登记、错误码、兼容矩阵、route 核查、baseline schema/fixture、projection/change id 冻结                                                                                                                                         | **已完成**                                                                                                                                                                                                                                                                        |
+| **1**    | shipped`presets/baf`、`trust: system`、skills、locale、roster/authoring 测试与金标                                                                                                                                                 | **已完成**                                                                                                                                                                                                                                                                        |
+| **2**    | `baf-core` 骨架 + baseline loader + adapter stub                                                                                                                                                                                     | **已完成**                                                                                                                                                                                                                                                                        |
+| **3**    | route resolver + 审计                                                                                                                                                                                                                  | **已完成**                                                                                                                                                                                                                                                                        |
+| **4**    | intake + projection + transition + Web 工作流 Tab（半交互）                                                                                                                                                                            | **已完成**                                                                                                                                                                                                                                                                        |
+| 5              | full-go-path 各阶段                                                                                                                                                                                                                    | **已完成**                                                                                                                                                                                                                                                                        |
+| 6              | bug-fix-path / 升级                                                                                                                                                                                                                    | **已完成**                                                                                                                                                                                                                                                                        |
+| 7              | quality / standard / guard / scaffold                                                                                                                                                                                                  | **已完成**                                                                                                                                                                                                                                                                        |
+| **8**    | slash 全集 +`baf-cli` standalone CLI + desktop IPC + **变更 Dashboard（listChanges Remote）**                                                                                                                                  | **已完成**（commit `3ab67a934f`；`baf-dsh 0.0.14` 已出包）                                                                                                                                                                                                                    |
+| **8.7**  | `baf-go` 自动驱动 + 两个强制确认门（design 完成 → plan 之前、verify 通过 → archive 之前） + 单会话单工作流约束                                                                                                                     | **已完成（2026-09-17）**：命令行主路径 + Tab 门高亮 + §18.4.3 双泳道视图均落地；细节见 §18.9 / §18.11                                                                                                                                                                          |
+| **8.8**  | 会话启动门：绑定 / 新建工作流选择 + 必须工具链体检 + BAF 欢迎语（缺件引导下载）                                                                                                                                                        | **已完成（2026-09-17）**：`session-gate.ts` + preset 行 `baf-session-gate`、`/baf-welcome` slash + `baf welcome` CLI、`/baf-doctor` 复用同一探针，`tests/session-gate.spec.ts` 18 例通过；落地细节见 §18.10。**待出包后在桌面里看首屏观感**（与 §8.7.8 同批） |
+| **8.9**  | `/baf-workflow-resume`：N8 drift 的交互式复位入口（T13 合法目标集，客户选点）                                                                                                                                                        | **已完成（2026-09-17）**：域层 `driveResumeStage` + slash + CLI + Tab 按钮 + `BafWorkflowTabRemote.resume()` + `pipeline-factory.ts` 共用 provider 全部接通；细节见 §18.11 / §19。`tests/resume.spec.ts` 12 例通过；顺带修掉 §21.6/§21.7 两个假阳性与 park 语义 bug   |
+| **8.10** | BAF 工作流输出规范（状态行 / 卡片 / 日志统一格式 + i18n key 清单）                                                                                                                                                                     | **设计阶段**（§20 + Phase 12 §8.10；代码未动）                                                                                                                                                                                                                                  |
+| 9              | harness + plugin 两 scope 更新、签名、managed system root（热更）；baseline scope 暂缓（baseline 仍随 plugin zip 以`overlay/plugin/standards/baf-baseline-c/baseline.yml` 静态 fixture 形式发布，无独立版本号/独立 hot-update 路径） | **未开始**                                                                                                                                                                                                                                                                        |
+| 10             | release 门禁                                                                                                                                                                                                                           | **未开始**                                                                                                                                                                                                                                                                        |
 
 MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 **baf-dsh 0.0.14** 分发（commit `3ab67a934f`，commit `cb814b7be2` 配套修了 Windows `tar` `--force-local` 与 5 个 dsh client 包版本对齐 `0.1.5-alpha.1`）；full-go-path 主链（open→clarify→design→plan→implement→verify→archive，含门禁与非法转换拒绝）随 0.0.12 起桌面分发；bug fast-path 与 T15 风险升级（Phase 6）随 0.0.12 起；baseline 驱动的 quality/standard/guard/scaffold（Phase 7）随 0.0.13 起；slash 全集 + `baf-cli` standalone CLI + `listChanges` Remote（Phase 8）随 **0.0.14** 起。`packages/baf` 域层 **22/22 文件 / 166/166 用例绿**（2026-09-17 复跑，含 §18 coordinator、§19 resume 与 §18.3 会话启动门的新增用例）；`surface-parity.spec.ts` 锁住 slash / CLI / Remote / drives 四入口命名一致性 6/6 绿。
 **已知问题（2026-09-14 复核，均非 Phase 8 引入）**：① `agent-presets` 通用测试 `mount.spec.ts`「scopes prompt sections…」1 例失败——merge `9c2aa8a6d4` 带入的上游 system-prompt 变更所致（Phase 8 提交未触及相关源码；BAF 专属 roster/mount 测试 7/7 绿）；② `packages/baf` 未达仓库 per-file 100% 覆盖率门禁（`pnpm run test:coverage` 会失败；Phase 2 起累积的债），需专项补测试或做豁免决策。
 
 ### Phase 4 — 已完成明细
 
-
-| 项                                 | 状态  | 落点                                                                |
-| --------------------------------- | --- | ----------------------------------------------------------------- |
-| `NODE_CATALOG` / `WORKFLOW_GRAPH` | 已完成 | `baf-core` `catalog.ts` / `graph.ts`（§5.1–5.3 权威，UI 只渲染）          |
-| append-only projection + replay   | 已完成 | `baf-workflow` `projection.ts`；单 writer + atomic rename；损坏诊断      |
-| `transition` 裁决                   | 已完成 | `transition.ts`；表外 → `invalid_transition`                         |
-| intake 规则引擎 + confirm             | 已完成 | `intake.ts`（启发式 suggest + 规则 review/decide/confirm）               |
-| `WorkflowService` 实现              | 已完成 | `workflow-service.ts`；挂到 `BafWorkflow`                            |
-| Web `WorkflowTabView` Remote      | 已完成 | `baf-workflow` Typert Remote；按 session cwd 读写 projection          |
-| 会话 Tab「工作流」                       | 已完成 | `packages/client/ui-baf-workflow/`；仅 `agentPreset === baf` 显示；半交互 |
-| 与「轨迹图」隔离                          | 已完成 | 设置原「工作流」section 改名为「轨迹图」；两 Tab 并存、职责分离                            |
+| 项                                    | 状态   | 落点                                                                          |
+| ------------------------------------- | ------ | ----------------------------------------------------------------------------- |
+| `NODE_CATALOG` / `WORKFLOW_GRAPH` | 已完成 | `baf-core` `catalog.ts` / `graph.ts`（§5.1–5.3 权威，UI 只渲染）      |
+| append-only projection + replay       | 已完成 | `baf-workflow` `projection.ts`；单 writer + atomic rename；损坏诊断       |
+| `transition` 裁决                   | 已完成 | `transition.ts`；表外 → `invalid_transition`                             |
+| intake 规则引擎 + confirm             | 已完成 | `intake.ts`（启发式 suggest + 规则 review/decide/confirm）                  |
+| `WorkflowService` 实现              | 已完成 | `workflow-service.ts`；挂到 `BafWorkflow`                                 |
+| Web`WorkflowTabView` Remote         | 已完成 | `baf-workflow` Typert Remote；按 session cwd 读写 projection                |
+| 会话 Tab「工作流」                    | 已完成 | `packages/client/ui-baf-workflow/`；仅 `agentPreset === baf` 显示；半交互 |
+| 与「轨迹图」隔离                      | 已完成 | 设置原「工作流」section 改名为「轨迹图」；两 Tab 并存、职责分离               |
 
 ### Phase 5 — 已完成明细
 
-| 项                                        | 状态  | 落点                                                                                              |
-| ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
-| `baf-openspec` 独立包（Cordis Service）          | 已完成 | `packages/baf/baf-workflow-openspec/`；本地文件模式 OpenSpec adapter（骨架、读取、校验、原子归档）+ `BafOpenspec` service |
-| 阶段运行时上下文                                  | 已完成 | `baf-workflow` `stages/context.ts`；绑定 projection store / adapter / workspace / baseline            |
-| N1 `open` 骨架创建                            | 已完成 | `stages/open.ts`；Git revision 前置检查 + change skeleton + `stage-entered`                          |
-| N2 `clarify` 产物 + T6 门禁                     | 已完成 | `stages/clarify.ts`；阻塞问题/验收条件/非目标渲染，模板态可覆写、已填态拒绝                        |
-| N3 `design` 产物 + 引用核验                      | 已完成 | `stages/design.ts`；设计引用仓库路径存在性检查，缺失即 `invalid_transition`                          |
-| N4 `plan` 产物 + T8 门禁                      | 已完成 | `stages/plan.ts`；`plan.md` + `plan.json`（任务/allowlist/验证命令/回滚点）                       |
-| N5 `implement` 任务状态 + allowlist             | 已完成 | `stages/implement.ts`；任务开始/完成/阻塞记录 + 越界修改拒绝                                       |
-| N6 `verify` 检查聚合                          | 已完成 | `stages/verify.ts`；`CheckRunner` 接 OpenSpec validate + `verify-report.json`                       |
-| N7 `archive` 人工确认 + 原子归档                  | 已完成 | `stages/archive.ts`；verify 报告作为 T10 证据 + OpenSpec 原子归档 + `change-archived`                  |
-| `StagePipeline` 编排                        | 已完成 | `stages/pipeline.ts`；绑定 `WorkflowService.transition`，进入/完成/拒绝事件全程入 projection            |
-| N8 `drift` 检测 + `baseline-locked` 锚点       | 已完成 | `stages/drift.ts`；Git revision / baseline id / baseline 内容 / verify-report 过期 / 已完成产物删除五个触发器；`pipeline.driveDriftStage` 写入 `drift-detected`，T13 由调用方经 `decideTransition` 走回最早受影响节点；open-stage 落 `baseline-locked` 事件锁定 baseline + sourceRevision |
-| T11 verify 失败回 implement（修复回环）        | 已完成 | `stages/pipeline.ts` `driveVerifyStage`；必需检查失败 → `stage-failed` + `verify → implement` 重新进入 |
-| `abandon` 入口（T16）                          | 已完成 | `stages/abandon.ts`；`driveAbandon` 需显式确认 → `change-abandoned`；幂等保留产物，保留全部审计             |
-| 阶段测试（happy path + 门禁失败 + 非法进入 + 全链路 + T11 + drift + abandon） | 已完成 | `baf-workflow` `tests/stages.spec.ts`                                                          |
-| 桌面分发                                      | 已完成 | `pack-dsh.mjs` force 打包 `baf-openspec`；`baf-product-versions.json` 嵌入 `bafOpenspec` 字段          |
+| 项                                                                            | 状态   | 落点                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baf-openspec` 独立包（Cordis Service）                                     | 已完成 | `packages/baf/baf-workflow-openspec/`；本地文件模式 OpenSpec adapter（骨架、读取、校验、原子归档）+ `BafOpenspec` service                                                                                                                                                                       |
+| 阶段运行时上下文                                                              | 已完成 | `baf-workflow` `stages/context.ts`；绑定 projection store / adapter / workspace / baseline                                                                                                                                                                                                      |
+| N1`open` 骨架创建                                                           | 已完成 | `stages/open.ts`；Git revision 前置检查 + change skeleton + `stage-entered`                                                                                                                                                                                                                     |
+| N2`clarify` 产物 + T6 门禁                                                  | 已完成 | `stages/clarify.ts`；阻塞问题/验收条件/非目标渲染，模板态可覆写、已填态拒绝                                                                                                                                                                                                                       |
+| N3`design` 产物 + 引用核验                                                  | 已完成 | `stages/design.ts`；设计引用仓库路径存在性检查，缺失即 `invalid_transition`                                                                                                                                                                                                                     |
+| N4`plan` 产物 + T8 门禁                                                     | 已完成 | `stages/plan.ts`；`plan.md` + `plan.json`（任务/allowlist/验证命令/回滚点）                                                                                                                                                                                                                   |
+| N5`implement` 任务状态 + allowlist                                          | 已完成 | `stages/implement.ts`；任务开始/完成/阻塞记录 + 越界修改拒绝                                                                                                                                                                                                                                      |
+| N6`verify` 检查聚合                                                         | 已完成 | `stages/verify.ts`；`CheckRunner` 接 OpenSpec validate + `verify-report.json`                                                                                                                                                                                                                 |
+| N7`archive` 人工确认 + 原子归档                                             | 已完成 | `stages/archive.ts`；verify 报告作为 T10 证据 + OpenSpec 原子归档 + `change-archived`                                                                                                                                                                                                           |
+| `StagePipeline` 编排                                                        | 已完成 | `stages/pipeline.ts`；绑定 `WorkflowService.transition`，进入/完成/拒绝事件全程入 projection                                                                                                                                                                                                    |
+| N8`drift` 检测 + `baseline-locked` 锚点                                   | 已完成 | `stages/drift.ts`；Git revision / baseline id / baseline 内容 / verify-report 过期 / 已完成产物删除五个触发器；`pipeline.driveDriftStage` 写入 `drift-detected`，T13 由调用方经 `decideTransition` 走回最早受影响节点；open-stage 落 `baseline-locked` 事件锁定 baseline + sourceRevision |
+| T11 verify 失败回 implement（修复回环）                                       | 已完成 | `stages/pipeline.ts` `driveVerifyStage`；必需检查失败 → `stage-failed` + `verify → implement` 重新进入                                                                                                                                                                                    |
+| `abandon` 入口（T16）                                                       | 已完成 | `stages/abandon.ts`；`driveAbandon` 需显式确认 → `change-abandoned`；幂等保留产物，保留全部审计                                                                                                                                                                                              |
+| 阶段测试（happy path + 门禁失败 + 非法进入 + 全链路 + T11 + drift + abandon） | 已完成 | `baf-workflow` `tests/stages.spec.ts`                                                                                                                                                                                                                                                           |
+| 桌面分发                                                                      | 已完成 | `pack-dsh.mjs` force 打包 `baf-openspec`；`baf-product-versions.json` 嵌入 `bafOpenspec` 字段                                                                                                                                                                                               |
 
 ### Phase 6 — 已完成明细（2026-09-12）
 
-| 项                                        | 状态  | 落点                                                                                              |
-| ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
-| fast-path open（T3 + 最小 Bug 记录）           | 已完成 | `stages/fastpath.ts` `driveFastPathOpen` + `pipeline.driveFastPathOpenStage`；`bug-record.md`（问题/根因/影响范围/回归测试/Workspace 锚点）+ fast-path 版 `plan.json` ledger（regression-test 任务先行）；Git revision 缺失仅告警不阻断（full-go-path 会阻断）；不创建 OpenSpec 骨架 |
-| T5 机器证据（root cause recorded）           | 已完成 | `fastpath.ts` `rootCauseRecorded` 从 bug-record 读回根因段判定；`pipeline.enterImplementStage` 以该裁决为 T5 evidence，证据缺失 → `invalid_transition` 且停留在 open |
-| 回归测试先行（regression-test-first）           | 已完成 | `fastpath.ts` `assertRegressionFirst` 挂在 `implement.recordTouched`（allowlist 检查之后、写入之前拒绝 → 可恢复）；`gates.ts` implement 门禁 fast-path 分支按 durable ledger 复核（任务存在、done、回归文件已 touched，否则 `regression_test_required`） |
-| fast-path verify 检查集                        | 已完成 | `stages/verify.ts` `buildVerifyRunner(ctx, changeId, mode)`；fast-path：`regression-test` 为必需检查（结构性判定 ledger），`openspec-validate` 降级为非必需并标注「未走 OpenSpec：intake reason codes」；报告新增 `mode` 字段（`check-runner.ts`） |
-| T15 升级（结构化范围扩大自动触发）                | 已完成 | `stages/escalate.ts` `driveEscalate` + `pipeline.driveImplementStage` 预检 `scopeGrowthFiles`（touched ∉ allowlist）；顺序约束：先在 mode 仍为 bug-fix-path 时裁决 T15，再写 `stage-failed(implement)` + `mode-upgraded`（否则表过滤会吞掉该边） |
-| T15 升级（语义原因显式触发）                      | 已完成 | `pipeline.driveEscalateStage({changeId, cause})`；非 fast-path implement 拒绝（`invalid_transition`）并留 `transition-rejected` 审计 |
-| 升级后 OpenSpec 补建 + 审计保留                | 已完成 | `escalate.ts`：`plan.json` → `fastpath-ledger.json` 原子改名保留 fast-path 审计；安装携带 bug 上下文（Problem/Root cause）的 `proposal.md` 与 `tasks.md` 模板；随后 `stage-entered(clarify)`，`pipeline.enterStage` 幂等续入（同节点 in-progress 直接续跑），补走 clarify → design → plan → implement → verify → archive |
-| mode 感知实现门禁修复                            | 已完成 | `implement.ts` `driveImplementComplete` 不再硬编码 `full-go-path`，mode 由 projection status 读出 |
-| 阶段测试（fast-path 全链路 / T5 / 回归先行拒绝 / 自动升级 / 显式升级 / 升级后补走） | 已完成 | `baf-workflow` `tests/fastpath.spec.ts`（8 用例）；`packages/baf` 全量 56/56 绿 |
+| 项                                                                                  | 状态   | 落点                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| fast-path open（T3 + 最小 Bug 记录）                                                | 已完成 | `stages/fastpath.ts` `driveFastPathOpen` + `pipeline.driveFastPathOpenStage`；`bug-record.md`（问题/根因/影响范围/回归测试/Workspace 锚点）+ fast-path 版 `plan.json` ledger（regression-test 任务先行）；Git revision 缺失仅告警不阻断（full-go-path 会阻断）；不创建 OpenSpec 骨架                                               |
+| T5 机器证据（root cause recorded）                                                  | 已完成 | `fastpath.ts` `rootCauseRecorded` 从 bug-record 读回根因段判定；`pipeline.enterImplementStage` 以该裁决为 T5 evidence，证据缺失 → `invalid_transition` 且停留在 open                                                                                                                                                                |
+| 回归测试先行（regression-test-first）                                               | 已完成 | `fastpath.ts` `assertRegressionFirst` 挂在 `implement.recordTouched`（allowlist 检查之后、写入之前拒绝 → 可恢复）；`gates.ts` implement 门禁 fast-path 分支按 durable ledger 复核（任务存在、done、回归文件已 touched，否则 `regression_test_required`）                                                                          |
+| fast-path verify 检查集                                                             | 已完成 | `stages/verify.ts` `buildVerifyRunner(ctx, changeId, mode)`；fast-path：`regression-test` 为必需检查（结构性判定 ledger），`openspec-validate` 降级为非必需并标注「未走 OpenSpec：intake reason codes」；报告新增 `mode` 字段（`check-runner.ts`）                                                                               |
+| T15 升级（结构化范围扩大自动触发）                                                  | 已完成 | `stages/escalate.ts` `driveEscalate` + `pipeline.driveImplementStage` 预检 `scopeGrowthFiles`（touched ∉ allowlist）；顺序约束：先在 mode 仍为 bug-fix-path 时裁决 T15，再写 `stage-failed(implement)` + `mode-upgraded`（否则表过滤会吞掉该边）                                                                                |
+| T15 升级（语义原因显式触发）                                                        | 已完成 | `pipeline.driveEscalateStage({changeId, cause})`；非 fast-path implement 拒绝（`invalid_transition`）并留 `transition-rejected` 审计                                                                                                                                                                                                   |
+| 升级后 OpenSpec 补建 + 审计保留                                                     | 已完成 | `escalate.ts`：`plan.json` → `fastpath-ledger.json` 原子改名保留 fast-path 审计；安装携带 bug 上下文（Problem/Root cause）的 `proposal.md` 与 `tasks.md` 模板；随后 `stage-entered(clarify)`，`pipeline.enterStage` 幂等续入（同节点 in-progress 直接续跑），补走 clarify → design → plan → implement → verify → archive |
+| mode 感知实现门禁修复                                                               | 已完成 | `implement.ts` `driveImplementComplete` 不再硬编码 `full-go-path`，mode 由 projection status 读出                                                                                                                                                                                                                                      |
+| 阶段测试（fast-path 全链路 / T5 / 回归先行拒绝 / 自动升级 / 显式升级 / 升级后补走） | 已完成 | `baf-workflow` `tests/fastpath.spec.ts`（8 用例）；`packages/baf` 全量 56/56 绿                                                                                                                                                                                                                                                        |
 
 ### Phase 8 — 已完成明细（2026-09-14）
 
-| 项                                        | 状态  | 落点                                                                                              |
-| ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
-| slash 全集（`/baf-help` `/baf-version` `/baf-status` `/baf-list` `/baf-doctor` + 11 个阶段 / quality / guard 驱动器） | 已完成 | `packages/baf/baf-workflow/src/commands.ts`；handler 仅委派 `command-drives.ts`，统一错误码走 `CommandResult` |
-| 命令驱动器（slash / CLI 共源）                     | 已完成 | `packages/baf/baf-workflow/src/command-drives.ts` + `src/cli-args.ts`；slash / CLI / Remote / drives 四入口读同一 `WorkflowService` |
-| standalone CLI（Commander 树，无新增 bin）       | 已完成 | `packages/baf/baf-workflow/src/cmdline.ts`（subpath `./cmdline`）；启用：`dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- <subcommand>`；`verify-application-entrypoints` 仍绿 |
-| CLI enable patch                          | 已完成 | `packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml`：把默认 disable 的 `baf-cli` row 翻成 enabled；普通 `baf` agent session 不引入此 row |
-| `baf-cli` row（默认 disable）                | 已完成 | `packages/preset/agent-presets/presets/baf/agent.cordis.yml` 末尾新增 `@deepseek-ai/dsh-baf-workflow/cmdline` row，`disabled: true`，普通 preset 不引入 |
-| desktop bridge（framed-byte IPC → api-gateway → Typert Remote） | 已完成 | `packages/api/remotes` + `packages/client/ui-baf-workflow`（`BafWorkflowTabRemote`）；desktop-host child process 在 Phase 4–7 已提供，本步仅新增 `listChanges` |
-| 工作流 Tab（Electron） | 已完成 | Web Tab + Typert Remote 已在 Phase 4 落地；Phase 8 不另起 Electron Tab，复用同一 `WorkflowTabView` / domain service |
-| `listChanges` Remote（变更 Dashboard） | 已完成 | `BafWorkflowTabRemote.listChanges`（`packages/client/ui-baf-workflow/src/index.ts`）；typert 边界类型 `BafWorkflowChangeRow` 在 `types.ts` 自有（避免 root-realm 类型穿越）；读 projection index，返回 `changeId / mode / current / seq / updatedAt` |
-| 四入口一致性 snapshot                          | 已完成 | `packages/baf/baf-workflow/tests/surface-parity.spec.ts`：slash / CLI / Remote / drives 命名 / 命令表一致 5/5 绿 |
-| 桌面分发                                  | 已完成 | `baf-dsh 0.0.14` 已构建：`overlay/desktop/dist/win-unpacked/baf-dsh.exe`（≈ 205 MB），含 `cmdline.js`（140.58 kB）、`listChanges` Remote、7 个 `dsh-baf-*` 包版本 `0.1.5-alpha.1` |
-| 配套修复                                  | 已完成 | commit `cb814b7be2`：`scripts/release/tarball.ts` + `apps/desktop/scripts/prepare-package-set.ts` 给 tar 调用加 `--force-local`（Windows 上 GNU tar 把 `D:\...` 解析为 `user@host:path`）；5 个 dsh client 包（`ui-baf-desktop / ui-baf-tracegraph / ui-baf-workflow / ui-settings-general / ui-settings-updates`）从 `0.1.3` bump 到 `0.1.5-alpha.1` 对齐 dsh family |
-
+| 项                                                                                                                              | 状态   | 落点                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| slash 全集（`/baf-help` `/baf-version` `/baf-status` `/baf-list` `/baf-doctor` + 11 个阶段 / quality / guard 驱动器） | 已完成 | `packages/baf/baf-workflow/src/commands.ts`；handler 仅委派 `command-drives.ts`，统一错误码走 `CommandResult`                                                                                                                                                                                                                                                                    |
+| 命令驱动器（slash / CLI 共源）                                                                                                  | 已完成 | `packages/baf/baf-workflow/src/command-drives.ts` + `src/cli-args.ts`；slash / CLI / Remote / drives 四入口读同一 `WorkflowService`                                                                                                                                                                                                                                              |
+| standalone CLI（Commander 树，无新增 bin）                                                                                      | 已完成 | `packages/baf/baf-workflow/src/cmdline.ts`（subpath `./cmdline`）；启用：`dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- <subcommand>`；`verify-application-entrypoints` 仍绿                                                                                                                                           |
+| CLI enable patch                                                                                                                | 已完成 | `packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml`：把默认 disable 的 `baf-cli` row 翻成 enabled；普通 `baf` agent session 不引入此 row                                                                                                                                                                                                                               |
+| `baf-cli` row（默认 disable）                                                                                                 | 已完成 | `packages/preset/agent-presets/presets/baf/agent.cordis.yml` 末尾新增 `@deepseek-ai/dsh-baf-workflow/cmdline` row，`disabled: true`，普通 preset 不引入                                                                                                                                                                                                                          |
+| desktop bridge（framed-byte IPC → api-gateway → Typert Remote）                                                               | 已完成 | `packages/api/remotes` + `packages/client/ui-baf-workflow`（`BafWorkflowTabRemote`）；desktop-host child process 在 Phase 4–7 已提供，本步仅新增 `listChanges`                                                                                                                                                                                                                |
+| 工作流 Tab（Electron）                                                                                                          | 已完成 | Web Tab + Typert Remote 已在 Phase 4 落地；Phase 8 不另起 Electron Tab，复用同一`WorkflowTabView` / domain service                                                                                                                                                                                                                                                                   |
+| `listChanges` Remote（变更 Dashboard）                                                                                        | 已完成 | `BafWorkflowTabRemote.listChanges`（`packages/client/ui-baf-workflow/src/index.ts`）；typert 边界类型 `BafWorkflowChangeRow` 在 `types.ts` 自有（避免 root-realm 类型穿越）；读 projection index，返回 `changeId / mode / current / seq / updatedAt`                                                                                                                         |
+| 四入口一致性 snapshot                                                                                                           | 已完成 | `packages/baf/baf-workflow/tests/surface-parity.spec.ts`：slash / CLI / Remote / drives 命名 / 命令表一致 5/5 绿                                                                                                                                                                                                                                                                     |
+| 桌面分发                                                                                                                        | 已完成 | `baf-dsh 0.0.14` 已构建：`overlay/desktop/dist/win-unpacked/baf-dsh.exe`（≈ 205 MB），含 `cmdline.js`（140.58 kB）、`listChanges` Remote、7 个 `dsh-baf-*` 包版本 `0.1.5-alpha.1`                                                                                                                                                                                         |
+| 配套修复                                                                                                                        | 已完成 | commit`cb814b7be2`：`scripts/release/tarball.ts` + `apps/desktop/scripts/prepare-package-set.ts` 给 tar 调用加 `--force-local`（Windows 上 GNU tar 把 `D:\...` 解析为 `user@host:path`）；5 个 dsh client 包（`ui-baf-desktop / ui-baf-tracegraph / ui-baf-workflow / ui-settings-general / ui-settings-updates`）从 `0.1.3` bump 到 `0.1.5-alpha.1` 对齐 dsh family |
 
 ### Phase 7 — 已完成明细（2026-09-13）
 
-| 项                                        | 状态  | 落点                                                                                              |
-| ---------------------------------------- | --- | ----------------------------------------------------------------------------------------------- |
-| `baf-standard` 独立包（Cordis Service）         | 已完成 | `packages/baf/baf-standard/`；`StandardSummary` schema + `summarizeStandard` + `renderStandardPrompt`；占位态返回 `policy_missing` 并给出 `sourceRef#anchor` 指引，prompt 渲染走 service 表面 |
-| `baf-quality` 独立包（Cordis Service）          | 已完成 | `packages/baf/baf-check-quality/`；`createCStackAdapter` 接 C 栈（compiler probe / build / test / coverage / analyzers）；`QualityReport` schema 含 `toolVersions / checks / passed / diagnostics`；占位命令以 `policy_missing` 标记，coverage 数字阈值 fail-closed |
-| `baf-guard` 独立包（service + install row）      | 已完成 | `packages/baf/baf-check-guard/`；`BafGuard` 服务暴露 `policy(root)`（action `verify`/`secret-scan`），同步从 `.baf/projection/index.json` + change log + allowlist 重读裁决；`./install` 非隔离 row 经 host `agents` 服务给每个 agent 装 `tools.guard`（同 baf-commands 模式） |
-| 工具硬门禁裁决                              | 已完成 | `baf-guard/src/policy.ts`：fs write 走结构路径→密钥扫描→active change→intakeConfirmed→DOC_STAGES change dir → implement allowlist；shell 走危险模式（rm-root / format / shutdown / git-force-push）+ 间接写（`>`/`>>` 重定向、fd-to-file、heredoc、tee、sed -i、perl -i、truncate、shred、cp/mv、unzip/tar、wget/curl）双重识别 |
-| `baf-scaffold` 独立包（Cordis Service）        | 已完成 | `packages/baf/baf-scaffold/`；`planScaffold` 生成 `.baf/baseline.yml`（含 §15 占位）与 `openspec/changes/.gitkeep`；`applyScaffold` 不覆盖：相同内容跳过、内容不同→`<path>.baf-backup-<iso 时间戳>`；`scaffoldWorkspace` 必须 `humanConfirmed:true`，否则返回 `{kind:'refused', reason:'human_confirmation_required'}` |
-| verify CheckRunner 接线 stack/guard      | 已完成 | `baf-workflow` `stages/context.ts` 收 `stack?: StackAdapter` + `guard?: GuardPolicy`；`stages/verify.ts` 新增 quality row（`required: ctx.stack && ctx.baseline`）与 guard row（`ctx.guard.check({action:'verify', paths})`），secret-scan row 在 `baseline.guard.secretScan === 'off'` 时跳过；`toolVersions` 通过 `buildVerifyRunner(ctx, changeId, mode, options)` 注入并经 `Object.assign` 合并到报告 |
-| verify 阶段测试（Phase 7 wiring）             | 已完成 | `baf-workflow` `tests/stages.spec.ts`：quality 失败→T11 + 结构化 reasons + toolVersions 合并；guard 失败→`protected_path` 门禁；双通过→完成 |
-| 工具硬门禁测试                               | 已完成 | `baf-guard` `tests/tool-guard.spec.ts`：策略 reason codes、shell allow/deny 集、classification、stable-prefix denials、re-adjudication flip、sync disk state（空 workspace→`intake_confirmation_required`、real projection 驱动到 implement→allowlist honored）、GuardPolicy actions（verify/secret-scan/off）、install row 装配合约 |
-| baf 域 isolate 新成员                          | 已完成 | `presets/baf/agent.cordis.yml` `baf-domain` group 增 `bafStandard/bafQuality/bafGuard/bafScaffold` 至 isolate；新 row `baf-guard-install`（`@deepseek-ai/dsh-baf-guard/install`）位于 isolate 之外触达 host `agents`；`baf-roster.spec.ts` 增 Phase 7 断言；`baf-mount.spec.ts` 新测 Phase 7 服务在 isolate 下共享实例 |
-| workspace 自动发现 + pnpm 链接                  | 已完成 | `pnpm-workspace.yaml` `packages/*/*` 自动纳入；`tsconfig.base.json` 新增 4 条 path mapping；`pnpm install` 完成 workspace 链接 |
-| 桌面打包 FORCE_PACKAGES 补齐                    | 已完成 | `overlay/scripts/pack-dsh.mjs` FORCE_PACKAGES 新增 `baf-standard/baf-check-quality/baf-check-guard/baf-scaffold` |
-| 桌面版本说明                                  | 已完成 | `overlay/desktop/version-notes.json` Phase 7 desktop 注释 + 4 个新包 entries |
-| 阶段测试（standard/quality/guard/scaffold + verify 接线） | 已完成 | `packages/baf` 全量 17/17 文件 / 103/103 用例绿（无新增失败） |
-
-
-
-
-
+| 项                                                        | 状态   | 落点                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baf-standard` 独立包（Cordis Service）                 | 已完成 | `packages/baf/baf-standard/`；`StandardSummary` schema + `summarizeStandard` + `renderStandardPrompt`；占位态返回 `policy_missing` 并给出 `sourceRef#anchor` 指引，prompt 渲染走 service 表面                                                                                                                                                                                                                       |
+| `baf-quality` 独立包（Cordis Service）                  | 已完成 | `packages/baf/baf-check-quality/`；`createCStackAdapter` 接 C 栈（compiler probe / build / test / coverage / analyzers）；`QualityReport` schema 含 `toolVersions / checks / passed / diagnostics`；占位命令以 `policy_missing` 标记，coverage 数字阈值 fail-closed                                                                                                                                                   |
+| `baf-guard` 独立包（service + install row）             | 已完成 | `packages/baf/baf-check-guard/`；`BafGuard` 服务暴露 `policy(root)`（action `verify`/`secret-scan`），同步从 `.baf/projection/index.json` + change log + allowlist 重读裁决；`./install` 非隔离 row 经 host `agents` 服务给每个 agent 装 `tools.guard`（同 baf-commands 模式）                                                                                                                                |
+| 工具硬门禁裁决                                            | 已完成 | `baf-guard/src/policy.ts`：fs write 走结构路径→密钥扫描→active change→intakeConfirmed→DOC_STAGES change dir → implement allowlist；shell 走危险模式（rm-root / format / shutdown / git-force-push）+ 间接写（`>`/`>>` 重定向、fd-to-file、heredoc、tee、sed -i、perl -i、truncate、shred、cp/mv、unzip/tar、wget/curl）双重识别                                                                                      |
+| `baf-scaffold` 独立包（Cordis Service）                 | 已完成 | `packages/baf/baf-scaffold/`；`planScaffold` 生成 `.baf/baseline.yml`（含 §15 占位）与 `openspec/changes/.gitkeep`；`applyScaffold` 不覆盖：相同内容跳过、内容不同→`<path>.baf-backup-<iso 时间戳>`；`scaffoldWorkspace` 必须 `humanConfirmed:true`，否则返回 `{kind:'refused', reason:'human_confirmation_required'}`                                                                                      |
+| verify CheckRunner 接线 stack/guard                       | 已完成 | `baf-workflow` `stages/context.ts` 收 `stack?: StackAdapter` + `guard?: GuardPolicy`；`stages/verify.ts` 新增 quality row（`required: ctx.stack && ctx.baseline`）与 guard row（`ctx.guard.check({action:'verify', paths})`），secret-scan row 在 `baseline.guard.secretScan === 'off'` 时跳过；`toolVersions` 通过 `buildVerifyRunner(ctx, changeId, mode, options)` 注入并经 `Object.assign` 合并到报告 |
+| verify 阶段测试（Phase 7 wiring）                         | 已完成 | `baf-workflow` `tests/stages.spec.ts`：quality 失败→T11 + 结构化 reasons + toolVersions 合并；guard 失败→`protected_path` 门禁；双通过→完成                                                                                                                                                                                                                                                                            |
+| 工具硬门禁测试                                            | 已完成 | `baf-guard` `tests/tool-guard.spec.ts`：策略 reason codes、shell allow/deny 集、classification、stable-prefix denials、re-adjudication flip、sync disk state（空 workspace→`intake_confirmation_required`、real projection 驱动到 implement→allowlist honored）、GuardPolicy actions（verify/secret-scan/off）、install row 装配合约                                                                                    |
+| baf 域 isolate 新成员                                     | 已完成 | `presets/baf/agent.cordis.yml` `baf-domain` group 增 `bafStandard/bafQuality/bafGuard/bafScaffold` 至 isolate；新 row `baf-guard-install`（`@deepseek-ai/dsh-baf-guard/install`）位于 isolate 之外触达 host `agents`；`baf-roster.spec.ts` 增 Phase 7 断言；`baf-mount.spec.ts` 新测 Phase 7 服务在 isolate 下共享实例                                                                                          |
+| workspace 自动发现 + pnpm 链接                            | 已完成 | `pnpm-workspace.yaml` `packages/*/*` 自动纳入；`tsconfig.base.json` 新增 4 条 path mapping；`pnpm install` 完成 workspace 链接                                                                                                                                                                                                                                                                                          |
+| 桌面打包 FORCE_PACKAGES 补齐                              | 已完成 | `overlay/scripts/pack-dsh.mjs` FORCE_PACKAGES 新增 `baf-standard/baf-check-quality/baf-check-guard/baf-scaffold`                                                                                                                                                                                                                                                                                                            |
+| 桌面版本说明                                              | 已完成 | `overlay/desktop/version-notes.json` Phase 7 desktop 注释 + 4 个新包 entries                                                                                                                                                                                                                                                                                                                                                  |
+| 阶段测试（standard/quality/guard/scaffold + verify 接线） | 已完成 | `packages/baf` 全量 17/17 文件 / 103/103 用例绿（无新增失败）                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### Phase 4 确认结论（2026-09-07）
 
@@ -141,81 +128,63 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 7. **空态**：无 active change 仍渲染完整模板图 + 顶栏引导。
 8. **顺序**：文档 → domain → UI（本落地已按此执行）。
 
-
-
 ### Phase 3 — 已完成明细
 
-
-| 项                                    | 状态                   | 落点                                                                             |
-| ------------------------------------ | -------------------- | ------------------------------------------------------------------------------ |
-| `EnterpriseRoutePolicy` 类型/schema/加载 | 已完成                  | `baf-core` `route-policy.ts` + `schema/enterprise-route-policy.schema.json`    |
-| 加载入口冻结                               | 已完成                  | **发行/部署配置路径**（独立文件，session 创建冻结）；登记见 `enterprise-inputs.md` / `route-notes.md` |
-| `resolveRoute()`                     | 已完成                  | `packages/baf/baf-workflow/src/route.ts`；§6.2 边界测试 `tests/route.spec.ts`       |
-| `baf/route-resolved` 审计              | 已完成                  | `route-audit.ts`；session log 权威                                                |
-| `RouteStatusView`                    | 已完成                  | `baf-core` `buildRouteStatusView`；`BafWorkflow.routeStatus()`                  |
-| 阶段 route → agent ModelSelection      | 已完成                  | `phase-route.ts`（主路径）；workflow `agent()` 仅扇出                                   |
-| composition 挂载 `baf-workflow`        | 已完成                  | `presets/baf/agent.cordis.yml`（`isolate.bafWorkflow`）                          |
-| 工作流 Tab UI                           | **Phase 4 已完成（Web）** | Electron IPC 仍属 Phase 8                                                        |
-
-
-
+| 项                                         | 状态                            | 落点                                                                                                            |
+| ------------------------------------------ | ------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `EnterpriseRoutePolicy` 类型/schema/加载 | 已完成                          | `baf-core` `route-policy.ts` + `schema/enterprise-route-policy.schema.json`                               |
+| 加载入口冻结                               | 已完成                          | **发行/部署配置路径**（独立文件，session 创建冻结）；登记见 `enterprise-inputs.md` / `route-notes.md` |
+| `resolveRoute()`                         | 已完成                          | `packages/baf/baf-workflow/src/route.ts`；§6.2 边界测试 `tests/route.spec.ts`                              |
+| `baf/route-resolved` 审计                | 已完成                          | `route-audit.ts`；session log 权威                                                                            |
+| `RouteStatusView`                        | 已完成                          | `baf-core` `buildRouteStatusView`；`BafWorkflow.routeStatus()`                                            |
+| 阶段 route → agent ModelSelection         | 已完成                          | `phase-route.ts`（主路径）；workflow `agent()` 仅扇出                                                       |
+| composition 挂载`baf-workflow`           | 已完成                          | `presets/baf/agent.cordis.yml`（`isolate.bafWorkflow`）                                                     |
+| 工作流 Tab UI                              | **Phase 4 已完成（Web）** | Electron IPC 仍属 Phase 8                                                                                       |
 
 ### Phase 0 — 已完成明细
 
-
-| 项                                 | 状态  | 落点                                                                                            |
-| --------------------------------- | --- | --------------------------------------------------------------------------------------------- |
-| `enterprise-inputs.md`            | 已完成 | `overlay/docs/baf/enterprise-inputs.md`（OpenSpec/gcc/覆盖率已确认；其余多为 `unavailable`）               |
-| `error-codes.md`                  | 已完成 | `overlay/docs/baf/error-codes.md`                                                             |
-| `compatibility-matrix.md`         | 已完成 | `overlay/docs/baf/compatibility-matrix.md`（模板 + fixture 行）                                    |
-| `route-notes.md`                  | 已完成 | `overlay/docs/baf/route-notes.md`（Phase 0 核查 + Phase 3 接线）                                    |
-| baseline / routeProfile schema    | 已完成 | `packages/baf/baf-core/schema/*`                                                              |
-| fixture baseline                  | 已完成 | `overlay/plugin/standards/baf-baseline-c/` + `packages/baf/baf-core/tests/fixtures/baseline/` |
-| projection / change id 规则冻结       | 已完成 | 记入 `enterprise-inputs.md` §8                                                                  |
-| 包落点冻结 `packages/baf/`             | 已完成 | 同上                                                                                            |
-| InstalledVersions schema 2 字段映射登记 | 已完成 | `enterprise-inputs.md` §7（**实现代码仍属 Phase 9**）                                                 |
-| fixture 校验脚本                      | 已完成 | `overlay/scripts/verify-baf-baseline-fixture.mjs`（`npm run verify-baf-baseline`）              |
-
-
-
+| 项                                      | 状态   | 落点                                                                                              |
+| --------------------------------------- | ------ | ------------------------------------------------------------------------------------------------- |
+| `enterprise-inputs.md`                | 已完成 | `overlay/docs/baf/enterprise-inputs.md`（OpenSpec/gcc/覆盖率已确认；其余多为 `unavailable`）  |
+| `error-codes.md`                      | 已完成 | `overlay/docs/baf/error-codes.md`                                                               |
+| `compatibility-matrix.md`             | 已完成 | `overlay/docs/baf/compatibility-matrix.md`（模板 + fixture 行）                                 |
+| `route-notes.md`                      | 已完成 | `overlay/docs/baf/route-notes.md`（Phase 0 核查 + Phase 3 接线）                                |
+| baseline / routeProfile schema          | 已完成 | `packages/baf/baf-core/schema/*`                                                                |
+| fixture baseline                        | 已完成 | `overlay/plugin/standards/baf-baseline-c/` + `packages/baf/baf-core/tests/fixtures/baseline/` |
+| projection / change id 规则冻结         | 已完成 | 记入`enterprise-inputs.md` §8                                                                  |
+| 包落点冻结`packages/baf/`             | 已完成 | 同上                                                                                              |
+| InstalledVersions schema 2 字段映射登记 | 已完成 | `enterprise-inputs.md` §7（**实现代码仍属 Phase 9**）                                    |
+| fixture 校验脚本                        | 已完成 | `overlay/scripts/verify-baf-baseline-fixture.mjs`（`npm run verify-baf-baseline`）            |
 
 ### Phase 1 — 已完成明细
 
-
-| 项                                                       | 状态  | 落点                                                                                  |
-| ------------------------------------------------------- | --- | ----------------------------------------------------------------------------------- |
-| `presets/baf/preset.yml`                                | 已完成 | `order: 2`；与 `ptc` 并列时按 id 排在 `standard` 后                                          |
-| `agent.cordis.yml`                                      | 已完成 | 自 `standard` 复制；BAF persona **先中后英**；domain group 挂载 `baf-core` + `baf-workflow`    |
-| skills `baf-go` / `baf-c-guidance` / `baf-verification` | 已完成 | preset skills 树；`skill-filesystem.customSkillDirs` 指向 `skills/`                     |
-| display / UI locale 键                                   | 已完成 | `presetBafName` / `presetBafDescription`                                            |
-| `baf-roster.spec.ts` + shipped-root / display / locales | 已完成 | unit 已绿；**拒绝 copy 官方 baf**                                                          |
-| CLI e2e 列表 + **挂载冒烟**（工具目录 + BAF skills + persona）      | 已完成 | `apps/cli/tests/web-agent-presets.e2e.ts`                                           |
-| Web authoring/selection 金标                              | 已手改 | `apps/web/tests/expected/agent-preset-*`；验收以设置页为准                                   |
-| 桌面不同步官方 preset 到 user root                              | 已完成 | `overlay/desktop/src/main.ts` 仅同步 `skills/`                                         |
-| 官方 BAF 不可复制（API + UI）                                   | 已完成 | `isPresetCopyable` / `copyable: false` / `officialNoCopy`                           |
-| 本地 `dist:dir` 产物                                        | 已打出 | `overlay/desktop/dist/win-unpacked/baf-dsh.exe`（含 shipped `presets/baf`）            |
-| Agent Note                                              | 已完成 | `.agents/notes/implemented/feature/2026-09-05-baf-system-preset`；内置-only 见同日后续 note |
-| `pack-dsh` 打包后复检注释                                      | 已完成 | `overlay/scripts/pack-dsh.mjs`                                                      |
-
-
-
+| 项                                                                  | 状态   | 落点                                                                                                   |
+| ------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| `presets/baf/preset.yml`                                          | 已完成 | `order: 2`；与 `ptc` 并列时按 id 排在 `standard` 后                                              |
+| `agent.cordis.yml`                                                | 已完成 | 自`standard` 复制；BAF persona **先中后英**；domain group 挂载 `baf-core` + `baf-workflow` |
+| skills`baf-go` / `baf-c-guidance` / `baf-verification`        | 已完成 | preset skills 树；`skill-filesystem.customSkillDirs` 指向 `skills/`                                |
+| display / UI locale 键                                              | 已完成 | `presetBafName` / `presetBafDescription`                                                           |
+| `baf-roster.spec.ts` + shipped-root / display / locales           | 已完成 | unit 已绿；**拒绝 copy 官方 baf**                                                                |
+| CLI e2e 列表 +**挂载冒烟**（工具目录 + BAF skills + persona） | 已完成 | `apps/cli/tests/web-agent-presets.e2e.ts`                                                            |
+| Web authoring/selection 金标                                        | 已手改 | `apps/web/tests/expected/agent-preset-*`；验收以设置页为准                                           |
+| 桌面不同步官方 preset 到 user root                                  | 已完成 | `overlay/desktop/src/main.ts` 仅同步 `skills/`                                                     |
+| 官方 BAF 不可复制（API + UI）                                       | 已完成 | `isPresetCopyable` / `copyable: false` / `officialNoCopy`                                        |
+| 本地`dist:dir` 产物                                               | 已打出 | `overlay/desktop/dist/win-unpacked/baf-dsh.exe`（含 shipped `presets/baf`）                        |
+| Agent Note                                                          | 已完成 | `.agents/notes/implemented/feature/2026-09-05-baf-system-preset`；内置-only 见同日后续 note          |
+| `pack-dsh` 打包后复检注释                                         | 已完成 | `overlay/scripts/pack-dsh.mjs`                                                                       |
 
 ### 明确尚未完成（Phase 0/1 范围外或债）
 
-
-| 项                                               | 说明                                                                                            |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `packages/baf/baf-core` 运行时包                    | **已完成**（`@deepseek-ai/dsh-baf-core`；baseline loader + unavailable adapters + RouteStatusView） |
-| composition 启用 `baf-core` / `baf-workflow` row  | **已完成**（`isolate.bafCore` + `isolate.bafWorkflow` + `isolate.bafOpenspec`）                        |
-| go 状态机 / intake / projection                    | **Phase 4 已完成**；full-go-path 阶段 handler 与 `StagePipeline` **Phase 5 已完成**；Web 工作流 Tab 已落地                |
-| ToolGuard / quality / OpenSpec adapter          | **全部已完成**：OpenSpec `baf-openspec`（本地文件模式）；quality `baf-quality`；ToolGuard `baf-guard`（Phase 7，含 per-agent 非隔离 install row） |
-| slash / `baf` CLI profile / desktop bridge      | 只读 slash 子集已先行（`/baf-help` `/baf-status` `/baf-version` `/baf-doctor`，`baf-workflow/commands`）；阶段命令、CLI profile、desktop IPC 属 Phase 8 |
-| `overlay/plugin` → `~/.dsh/.agent-presets` 官方同步 | **已关闭**（桌面不同步 `agent-presets`；官方 BAF 仅 shipped）                                               |
-| 更新签名强制 / InstalledVersions schema 2 代码          | 未实现（Phase 9）                                                                                  |
-| 企业输入真值（模型清单/公钥等）                                | 部分已填：OpenSpec=`latest`、编译器=`gcc`、覆盖率=`project-config`；其余仍 `unavailable`                       |
-
-
-
+| 项                                                       | 说明                                                                                                                                                              |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/baf/baf-core` 运行时包                       | **已完成**（`@deepseek-ai/dsh-baf-core`；baseline loader + unavailable adapters + RouteStatusView）                                                       |
+| composition 启用`baf-core` / `baf-workflow` row      | **已完成**（`isolate.bafCore` + `isolate.bafWorkflow` + `isolate.bafOpenspec`）                                                                       |
+| go 状态机 / intake / projection                          | **Phase 4 已完成**；full-go-path 阶段 handler 与 `StagePipeline` **Phase 5 已完成**；Web 工作流 Tab 已落地                                          |
+| ToolGuard / quality / OpenSpec adapter                   | **全部已完成**：OpenSpec `baf-openspec`（本地文件模式）；quality `baf-quality`；ToolGuard `baf-guard`（Phase 7，含 per-agent 非隔离 install row）     |
+| slash /`baf` CLI profile / desktop bridge              | 只读 slash 子集已先行（`/baf-help` `/baf-status` `/baf-version` `/baf-doctor`，`baf-workflow/commands`）；阶段命令、CLI profile、desktop IPC 属 Phase 8 |
+| `overlay/plugin` → `~/.dsh/.agent-presets` 官方同步 | **已关闭**（桌面不同步 `agent-presets`；官方 BAF 仅 shipped）                                                                                             |
+| 更新签名强制 / InstalledVersions schema 2 代码           | 未实现（Phase 9）                                                                                                                                                 |
+| 企业输入真值（模型清单/公钥等）                          | 部分已填：OpenSpec=`latest`、编译器=`gcc`、覆盖率=`project-config`；其余仍 `unavailable`                                                                  |
 
 ### Phase 0/1 确认结论（2026-09-05）
 
@@ -228,32 +197,28 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 
 ---
 
-
-
 ## 0. 怎么读这份文档（逻辑地图）
 
-
-| 问题                           | 看哪章                 |
-| ---------------------------- | ------------------- |
-| **哪些已实现、哪些没有、有何待确认**         | **文首「实现进度」与「确认结论」** |
-| 要做什么、给谁用、不做什么                | 第 1、2 章             |
-| 架构分几层、每层谁负责、复用哪些现有代码         | 第 3 章               |
-| 官方资源如何隔离（内置-only，不可复制）       | 第 4 章               |
-| **工作流怎么走、每个节点做什么**           | **第 5 章（核心）**       |
-| **一条命令驱动整个工作流（`baf-go` + 两个确认门）** | **第 18 章** |
-| **会话打开时怎么绑定/新建工作流、体检工具链、欢迎语长什么样** | **第 18.3 节 + 第 20.3 节** |
-| **drift（依据漂移）之后怎么回到合法节点** | **第 19 章** |
-| **日志、卡片、状态行按什么格式打印** | **第 20 章** |
-| **还有哪几项没拍板（开工前要确认）** | **第 21 章** |
-| 不同阶段怎么用不同模型                  | 第 6 章               |
-| 企业规则和工具从哪里来                  | 第 7 章               |
-| 代码怎么拆成插件、命令长什么样              | 第 8、9 章             |
-| 用户看到什么：preset、roster、工作流 Tab | 第 10 章              |
-| 桌面应用怎么打包、升级、回滚               | 第 11 章              |
-| **从零到一按什么顺序做、每步怎么做**         | **第 12 章（核心）**      |
-| 怎么证明做完了                      | 第 13–16 章           |
-| 有无遗漏/风险、能否落地、MVP 怎么裁         | **第 17 章**          |
-
+| 问题                                                                | 看哪章                                   |
+| ------------------------------------------------------------------- | ---------------------------------------- |
+| **哪些已实现、哪些没有、有何待确认**                          | **文首「实现进度」与「确认结论」** |
+| 要做什么、给谁用、不做什么                                          | 第 1、2 章                               |
+| 架构分几层、每层谁负责、复用哪些现有代码                            | 第 3 章                                  |
+| 官方资源如何隔离（内置-only，不可复制）                             | 第 4 章                                  |
+| **工作流怎么走、每个节点做什么**                              | **第 5 章（核心）**                |
+| **一条命令驱动整个工作流（`baf-go` + 两个确认门）**         | **第 18 章**                       |
+| **会话打开时怎么绑定/新建工作流、体检工具链、欢迎语长什么样** | **第 18.3 节 + 第 20.3 节**        |
+| **drift（依据漂移）之后怎么回到合法节点**                     | **第 19 章**                       |
+| **日志、卡片、状态行按什么格式打印**                          | **第 20 章**                       |
+| **还有哪几项没拍板（开工前要确认）**                          | **第 21 章**                       |
+| 不同阶段怎么用不同模型                                              | 第 6 章                                  |
+| 企业规则和工具从哪里来                                              | 第 7 章                                  |
+| 代码怎么拆成插件、命令长什么样                                      | 第 8、9 章                               |
+| 用户看到什么：preset、roster、工作流 Tab                            | 第 10 章                                 |
+| 桌面应用怎么打包、升级、回滚                                        | 第 11 章                                 |
+| **从零到一按什么顺序做、每步怎么做**                          | **第 12 章（核心）**               |
+| 怎么证明做完了                                                      | 第 13–16 章                             |
+| 有无遗漏/风险、能否落地、MVP 怎么裁                                 | **第 17 章**                       |
 
 三条主线贯穿全文：
 
@@ -269,11 +234,7 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 
 ---
 
-
-
 ## 1. 需求结论：要做什么、给谁用、解决什么问题
-
-
 
 ### 1.1 你要做的东西
 
@@ -285,8 +246,6 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 4. 一套企业基线，规定 OpenSpec、Matt Pocock 轻量工程实践、C 工具链、质量阈值和安全策略；
 5. 一套统一的 slash command、独立 `baf` CLI 和桌面 UI/更新入口，桌面端含可视化工作流 Tab（流程图 + 当前位置）；
 6. 一套随桌面应用打包、签名、升级、校验和回滚的官方资源分发机制。
-
-
 
 ### 1.2 给谁用
 
@@ -304,8 +263,6 @@ BAF 面向企业同事。普通用户可以：
 - 修改官方 provider/model allowed list、fallback 集合或 route policy；
 - 跳过 intake 分类强行进入实现阶段。
 
-
-
 ### 1.3 用来解决什么问题
 
 - 所有人使用同一套企业规定的工作流；
@@ -316,8 +273,6 @@ BAF 面向企业同事。普通用户可以：
 - 官方规则不会被用户目录中的同名资源覆盖；
 - 企业可以发布新版本，并安全地升级和回滚；
 - 后续可以增加 GitLab、Jira、Python 和知识库适配，而不重写核心工作流。
-
-
 
 ### 1.4 明确不做什么（第一期）
 
@@ -334,11 +289,7 @@ BAF 面向企业同事。普通用户可以：
 
 ---
 
-
-
 ## 2. BAF 的本质：它是什么，不是什么
-
-
 
 ### 2.1 产品定义
 
@@ -360,28 +311,22 @@ BAF 不是：单独的一段 system prompt、单独的 `baf` 命令、单独的 
 
 ### 2.2 BAF 的核心对象
 
-
-| 对象                  | 作用                                        | 是否官方锁定                    |
-| ------------------- | ----------------------------------------- | ------------------------- |
-| `baf` preset        | 描述 Agent 采用哪些 dsh 插件、工具、prompt 和 skill    | 是                         |
-| BAF plugin          | 提供 workflow、OpenSpec、quality、guard 等服务和命令 | 官方版本锁定                    |
-| enterprise baseline | 提供规则、模板、工具路径、版本、阈值和 route profile         | 是                         |
-| workflow projection | 保存当前项目的可恢复阶段状态                            | 可写，但必须由 domain service 维护 |
-| change intake 结果    | 每个 change 的分类、模式、理由和用户确认记录                | 可写，同上                     |
-| update manifest     | 描述可验证的升级内容、版本、hash 和签名                    | 官方签名                      |
-
-
-
+| 对象                | 作用                                                 | 是否官方锁定                       |
+| ------------------- | ---------------------------------------------------- | ---------------------------------- |
+| `baf` preset      | 描述 Agent 采用哪些 dsh 插件、工具、prompt 和 skill  | 是                                 |
+| BAF plugin          | 提供 workflow、OpenSpec、quality、guard 等服务和命令 | 官方版本锁定                       |
+| enterprise baseline | 提供规则、模板、工具路径、版本、阈值和 route profile | 是                                 |
+| workflow projection | 保存当前项目的可恢复阶段状态                         | 可写，但必须由 domain service 维护 |
+| change intake 结果  | 每个 change 的分类、模式、理由和用户确认记录         | 可写，同上                         |
+| update manifest     | 描述可验证的升级内容、版本、hash 和签名              | 官方签名                           |
 
 ### 2.3 与 dsh 原生「workflow」能力的边界（必读）
 
-
-| 概念                                               | 所有者                           | 做什么                             | BAF 是否使用                                         |
-| ------------------------------------------------ | ----------------------------- | ------------------------------- | ------------------------------------------------ |
-| BAF `go` 工作流                                     | `baf-workflow` domain service | 固定阶段状态机、intake 分类、projection、门禁 | **是，核心**                                         |
-| dsh `workflow` / `tool-workflow` / `ralph`       | `packages/workflow/*`         | 模型编写编排脚本，扇出子代理                  | **否**，不得驱动阶段转换                                   |
-| dsh workflow `agent({ provider, model, phase })` | `workflow-worker-thread`      | 子代理请求级 route 转发                 | **可选复用**：仅当某阶段需要子代理扇出时借用 route 字段；阶段权威仍在 BAF 状态机 |
-
+| 概念                                              | 所有者                          | 做什么                                        | BAF 是否使用                                                                           |
+| ------------------------------------------------- | ------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------- |
+| BAF`go` 工作流                                  | `baf-workflow` domain service | 固定阶段状态机、intake 分类、projection、门禁 | **是，核心**                                                                     |
+| dsh`workflow` / `tool-workflow` / `ralph`   | `packages/workflow/*`         | 模型编写编排脚本，扇出子代理                  | **否**，不得驱动阶段转换                                                         |
+| dsh workflow`agent({ provider, model, phase })` | `workflow-worker-thread`      | 子代理请求级 route 转发                       | **可选复用**：仅当某阶段需要子代理扇出时借用 route 字段；阶段权威仍在 BAF 状态机 |
 
 实现红线：
 
@@ -390,8 +335,6 @@ BAF 不是：单独的一段 system prompt、单独的 `baf` 命令、单独的 
 - 文档与代码中凡写 `workflow` 必须标明是 **BAF go** 还是 **dsh workflow tool**，禁止混称。
 
 ---
-
-
 
 ## 3. 自下而上的总体架构
 
@@ -407,27 +350,23 @@ BAF 不是：单独的一段 system prompt、单独的 `baf` 命令、单独的 
 - 路径必须经过 workspace containment 检查；
 - 缺少工具返回结构化 `tool_unavailable`，不用“看起来成功”的文本代替结果。
 
-
-
 ### 3.2 第 1 层：dsh Host Plane（复用，不重写）
 
 由 dsh 宿主提供：Cordis runtime 和 scope、Agent/session 生命周期、provider/model route（第 6 章）、shell sandbox 和审批、filesystem、search、web、jobs、session persistence、plugin/skill/command registry、desktop bridge、更新下载和重启能力。
 
 已确认的复用点（实现时直接引用，不新建平行实现）：
 
-
-| 能力                            | 位置                                                                                                                                         |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| preset 发现/挂载/复制/删除            | `packages/preset/agent-presets/src/{index,discovery,mount,authoring,session}.ts`                                                           |
-| standard composition          | `packages/preset/agent-presets/presets/standard/agent.cordis.yml`                                                                          |
-| 人类命令 registry                 | `packages/interaction/commands`（`@deepseek-ai/dsh-commands`）：`CommandRuntime.register()`、`parseCommand()`、`CommandResult`、lifecycle events |
-| launcher 参数边界                 | `packages/boot/cmdline` 的 `parseCmdline()`                                                                                                 |
-| workflow worker 与 phase route | `packages/workflow/workflow-worker-thread/src/{runtime,host,meta}.ts`（`agent()` 支持 `provider`/`model`）                                     |
-| session 模型选择                  | `packages/api/session-controller/src/{agent,commands,catalog}.ts`（projection、header 恢复、`session/model-unavailable`）                        |
-| 默认模型                          | `packages/core/agent-default-model`                                                                                                        |
-| usage/定价                      | `packages/llm/token-meter`                                                                                                                 |
-| desktop 更新                    | `overlay/desktop/src/update/{manifest,github,plan,apply,service}.ts`、`overlay/desktop/src/versions.ts`                                     |
-
+| 能力                           | 位置                                                                                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| preset 发现/挂载/复制/删除     | `packages/preset/agent-presets/src/{index,discovery,mount,authoring,session}.ts`                                                                         |
+| standard composition           | `packages/preset/agent-presets/presets/standard/agent.cordis.yml`                                                                                        |
+| 人类命令 registry              | `packages/interaction/commands`（`@deepseek-ai/dsh-commands`）：`CommandRuntime.register()`、`parseCommand()`、`CommandResult`、lifecycle events |
+| launcher 参数边界              | `packages/boot/cmdline` 的 `parseCmdline()`                                                                                                            |
+| workflow worker 与 phase route | `packages/workflow/workflow-worker-thread/src/{runtime,host,meta}.ts`（`agent()` 支持 `provider`/`model`）                                         |
+| session 模型选择               | `packages/api/session-controller/src/{agent,commands,catalog}.ts`（projection、header 恢复、`session/model-unavailable`）                              |
+| 默认模型                       | `packages/core/agent-default-model`                                                                                                                      |
+| usage/定价                     | `packages/llm/token-meter`                                                                                                                               |
+| desktop 更新                   | `overlay/desktop/src/update/{manifest,github,plan,apply,service}.ts`、`overlay/desktop/src/versions.ts`                                                |
 
 host-plane service 不得放进 preset 的 per-agent isolate realm，否则产生实例泄漏、重复注册或桌面侧无法读取。
 
@@ -486,15 +425,13 @@ workflow tab   ─┘
 
 ### 3.9 代码落点决策（packages vs overlay）
 
-
-| 落点                                                               | 放什么                                          | 理由                                                         |
-| ---------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------- |
-| `packages/preset/agent-presets/presets/baf/`                     | 官方 preset 本体                                 | shipped-root 发现已内建于该包；`trust: system` 最直接                  |
-| `packages/baf/*` 或 `packages/experimental/baf-*`（二选一，Phase 0 冻结） | BAF domain 插件源码                              | 需 Cordis 挂载、workspace 依赖、类型与测试；与现有 `@deepseek-ai/dsh-*` 同构 |
-| `packages/client/ui-baf-workflow/`                               | 工作流 Tab UI                                   | 与现有 `ui-baf-desktop` 同层；走 slots + i18n                     |
-| `overlay/desktop`、`overlay/scripts`、`overlay/plugin`             | 打包、更新、managed system root、baseline bundle 分发 | 二次开发层；减少与上游热文件冲突                                           |
-| **禁止** `~/.dsh/.agent-presets` 作为官方安装目标                          | —                                            | 该路径是 user root；写进去则无法满足 system trust                       |
-
+| 落点                                                                          | 放什么                                                | 理由                                                                          |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `packages/preset/agent-presets/presets/baf/`                                | 官方 preset 本体                                      | shipped-root 发现已内建于该包；`trust: system` 最直接                       |
+| `packages/baf/*` 或 `packages/experimental/baf-*`（二选一，Phase 0 冻结） | BAF domain 插件源码                                   | 需 Cordis 挂载、workspace 依赖、类型与测试；与现有`@deepseek-ai/dsh-*` 同构 |
+| `packages/client/ui-baf-workflow/`                                          | 工作流 Tab UI                                         | 与现有`ui-baf-desktop` 同层；走 slots + i18n                                |
+| `overlay/desktop`、`overlay/scripts`、`overlay/plugin`                  | 打包、更新、managed system root、baseline bundle 分发 | 二次开发层；减少与上游热文件冲突                                              |
+| **禁止** `~/.dsh/.agent-presets` 作为官方安装目标                     | —                                                    | 该路径是 user root；写进去则无法满足 system trust                             |
 
 **推荐冻结**：domain 插件进 `packages/baf/`（pnpm workspace 已 glob `packages/*/`*）；若上游合入冲突面过大，再迁 `packages/experimental/` 并在 release 打包时显式纳入。`overlay/AGENTS.md`「优先 overlay」适用于桌面壳与安装器，**不**适用于必须进入 shipped preset root 与 Cordis composition 的 Agent 能力。
 
@@ -502,20 +439,14 @@ workflow tab   ─┘
 
 ---
 
-
-
 ## 4. Trust boundary 与资源分层
-
-
 
 ### 4.1 两类资源
 
-
-| 层              | 来源                         | dsh trust | 用户权限                       |
-| -------------- | -------------------------- | --------- | -------------------------- |
-| system/shipped | 桌面安装包或企业签名更新               | `system`  | 可使用、查看摘要；**不可复制、编辑、删除、覆盖** |
-| user           | 用户自建或其他允许的扩展（**不含**官方 BAF） | `user`    | 可按 dsh 规则编辑、删除、运行          |
-
+| 层             | 来源                                               | dsh trust  | 用户权限                                               |
+| -------------- | -------------------------------------------------- | ---------- | ------------------------------------------------------ |
+| system/shipped | 桌面安装包或企业签名更新                           | `system` | 可使用、查看摘要；**不可复制、编辑、删除、覆盖** |
+| user           | 用户自建或其他允许的扩展（**不含**官方 BAF） | `user`   | 可按 dsh 规则编辑、删除、运行                          |
 
 官方 BAF 必须在 shipped/managed system root 被发现为 `trust: system`。禁止同步到 `~/.dsh/.agent-presets`（user root）。官方 `baf` 的 `copyable` 为 `false`。
 
@@ -532,8 +463,6 @@ workflow tab   ─┘
 9. 官方资源缺失或损坏显示 broken system row，不静默隐藏；
 10. UI 不向普通用户提供编辑、打开官方 canonical 目录或复制官方 BAF 的入口。
 
-
-
 ### 4.3 host-plane 与 agent-plane
 
 - host-plane：更新服务、全局 registry、session persistence、凭证、审批、桌面桥接、共享网络服务；
@@ -543,11 +472,7 @@ BAF plugin 每个 service row 的放置位置（realm）在设计阶段逐项标
 
 ---
 
-
-
 ## 5. 完整工作流：状态机、流程图和每个节点的定义（核心章）
-
-
 
 ### 5.1 总流程图
 
@@ -599,32 +524,28 @@ bug-fix-path 主链（低风险 Bug）：
 - verify 失败回 implement、drift 后回最早受影响节点、fast path 升级 full-go-path 是仅有的三类回环，模型不能创造第四类；
 - `● 完成` 与 `● 已放弃` 是仅有的两个终态；`active`（archive 延后）是合法的非终态驻留。
 
-
-
 ### 5.2 状态转换表
 
-
-| #   | 当前状态                | 目标状态            | 允许条件（由 domain service 检查）                                                |
-| --- | ------------------- | --------------- | ------------------------------------------------------------------------ |
-| T1  | （无 change）          | intake          | 任何 BAF 输入                                                                |
-| T2  | intake              | open（full-go-path）   | 分类确认为新需求或高风险 Bug                                                         |
-| T3  | intake              | open（fast path） | 确认为低风险 Bug 且 baseline 策略允许                                               |
-| T4  | open                | clarify         | full-go-path、change skeleton 创建成功且 clarify 未并入 open                           |
-| T4a | open                | design          | full-go-path、change skeleton 创建成功且 clarify 已按 5.5 并入 open，合并产物和理由已记录          |
-| T5  | open                | implement       | fast path 且根因/影响范围记录完成                                                   |
-| T6  | clarify             | design          | 阻塞问题已回答或明确延期；验收条件可测试                                                     |
-| T7  | design              | plan            | 设计引用可验证文件/API 并被确认，且 design 未并入 plan                                     |
-| T7a | design              | implement       | design 已按 5.5 并入 plan；合并的设计理由、任务、文件范围、验证命令和回滚点均已记录                       |
-| T8  | plan                | implement       | 计划有文件范围、验证命令和回滚点                                                         |
-| T9  | implement           | verify          | 全部任务有结果且无越界修改                                                            |
-| T10 | verify              | archive         | 全部必需检查通过且无 drift（full-go-path 与 fast path 均进入 archive；fast path 在此写最终 Bug 记录） |
-| T11 | verify              | implement       | 任一必需检查失败（修复回环）                                                           |
-| T12 | 任意 active 节点        | drift           | 检测到依据变化（文件/分支/baseline/规格/composition/报告）并记录来源节点及最早受影响节点                 |
-| T13 | drift               | 最早受影响节点         | 依据已恢复或经用户重新确认；目标由 drift evidence 决定，不得跳过尚未完成或已失效阶段                       |
-| T14 | archive             | 完成              | 人工确认且原子归档成功                                                              |
-| T15 | fast-path implement | clarify（补充）     | 风险升级为 full-go-path，补齐 N2/N3/N4                                                |
-| T16 | 任意 active           | 已放弃             | 用户显式确认                                                                   |
-
+| #   | 当前状态            | 目标状态             | 允许条件（由 domain service 检查）                                                                    |
+| --- | ------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
+| T1  | （无 change）       | intake               | 任何 BAF 输入                                                                                         |
+| T2  | intake              | open（full-go-path） | 分类确认为新需求或高风险 Bug                                                                          |
+| T3  | intake              | open（fast path）    | 确认为低风险 Bug 且 baseline 策略允许                                                                 |
+| T4  | open                | clarify              | full-go-path、change skeleton 创建成功且 clarify 未并入 open                                          |
+| T4a | open                | design               | full-go-path、change skeleton 创建成功且 clarify 已按 5.5 并入 open，合并产物和理由已记录             |
+| T5  | open                | implement            | fast path 且根因/影响范围记录完成                                                                     |
+| T6  | clarify             | design               | 阻塞问题已回答或明确延期；验收条件可测试                                                              |
+| T7  | design              | plan                 | 设计引用可验证文件/API 并被确认，且 design 未并入 plan                                                |
+| T7a | design              | implement            | design 已按 5.5 并入 plan；合并的设计理由、任务、文件范围、验证命令和回滚点均已记录                   |
+| T8  | plan                | implement            | 计划有文件范围、验证命令和回滚点                                                                      |
+| T9  | implement           | verify               | 全部任务有结果且无越界修改                                                                            |
+| T10 | verify              | archive              | 全部必需检查通过且无 drift（full-go-path 与 fast path 均进入 archive；fast path 在此写最终 Bug 记录） |
+| T11 | verify              | implement            | 任一必需检查失败（修复回环）                                                                          |
+| T12 | 任意 active 节点    | drift                | 检测到依据变化（文件/分支/baseline/规格/composition/报告）并记录来源节点及最早受影响节点              |
+| T13 | drift               | 最早受影响节点       | 依据已恢复或经用户重新确认；目标由 drift evidence 决定，不得跳过尚未完成或已失效阶段                  |
+| T14 | archive             | 完成                 | 人工确认且原子归档成功                                                                                |
+| T15 | fast-path implement | clarify（补充）      | 风险升级为 full-go-path，补齐 N2/N3/N4                                                                |
+| T16 | 任意 active         | 已放弃               | 用户显式确认                                                                                          |
 
 不在表中的转换一律返回结构化 `invalid_transition`。模型在回复里声称“已进入下一阶段”不构成转换条件。
 
@@ -650,8 +571,6 @@ bug-fix-path 主链（低风险 Bug）：
 - 模型路由：轻量低延迟 route（第 6 章）。
 - 硬规则：**分类确认之前禁止任何源码写入**；用户要求跳过 full-go-path 但规则判定必须走时，拒绝并展示 reason codes。
 
-
-
 #### N1 `open` — 建立变更身份
 
 - 前置条件：intake 已确认；workspace 可读；本地 Git 可用（不可用时 full-go-path 阻断、fast path 警告并留档）；baseline 可解析。
@@ -662,8 +581,6 @@ bug-fix-path 主链（低风险 Bug）：
 - 失败处理：OpenSpec 不可用且流程需要规格 → `openspec_unavailable`；不覆盖任何已有文件。
 - 入口：intake 自动进入；`/baf-workflow-open`、`baf open`、Tab 节点“开始”。
 - 模型路由：轻量 route。
-
-
 
 #### N2 `clarify` — 澄清需求（full-go-path）
 
@@ -676,8 +593,6 @@ bug-fix-path 主链（低风险 Bug）：
 - 入口：自动于 N1 后；`/baf-workflow-clarify`、Tab。
 - 模型路由：低成本、长上下文整理 route。
 
-
-
 #### N3 `design` — 技术设计（full-go-path）
 
 - 前置条件：N2 完成。
@@ -688,8 +603,6 @@ bug-fix-path 主链（低风险 Bug）：
 - 失败处理：读取后仓库已变化 → drift 标记；引用无法验证 → 不允许进入 plan。
 - 入口：自动于 N2 后；`/baf-workflow-design`、Tab。
 - 模型路由：高推理、长上下文 route。
-
-
 
 #### N4 `plan` — 任务计划（full-go-path）
 
@@ -702,8 +615,6 @@ bug-fix-path 主链（低风险 Bug）：
 - 入口：自动于 N3 后；`/baf-workflow-plan`、Tab。
 - 模型路由：高推理、结构化输出 route。
 
-
-
 #### N5 `implement` — 实现与测试
 
 - 前置条件：full-go-path 要求 N4 完成；fast path 要求 N1 完成（含根因记录）。
@@ -714,8 +625,6 @@ bug-fix-path 主链（低风险 Bug）：
 - 失败处理：guard 拒绝 → blocked + 稳定 reason code；取消 → 不产生虚假 completed；fast path 发现范围扩大 → T15 升级。
 - 入口：自动转换；`/baf-workflow-implement`、`baf implement`、Tab。
 - 模型路由：代码生成、工具调用 route。
-
-
 
 #### N6 `verify` — 验证
 
@@ -728,8 +637,6 @@ bug-fix-path 主链（低风险 Bug）：
 - 入口：自动转换；`/baf-workflow-verify`、`baf verify`、Tab。
 - 模型路由：稳定、严谨、结构化报告分析 route；机器门禁结果优先于模型解释。
 
-
-
 #### N7 `archive` — 归档
 
 - 前置条件：N6 通过且无 drift；人工确认。
@@ -741,22 +648,16 @@ bug-fix-path 主链（低风险 Bug）：
 - 入口：`/baf-workflow-archive`、Tab“确认归档”。
 - 模型路由：低延迟、严格指令遵循 route；模型不能自行触发归档。
 
-
-
 #### N8 `drift` — 漂移处理（横切）
 
 - 触发：文件删除、分支变化、baseline 变化、报告过期、composition 变化、规格与 projection 冲突。
 - 动作：标记受影响阶段为 `drifted`；要求重新验证（回 N6）或经用户重新确认；不静默修复。
 - 说明：OpenSpec 文件始终是规格权威，projection 是可恢复索引；两者冲突时标记 drift。
 
-
-
 #### 横切行为 `resume` / `abandon`
 
 - `resume`：崩溃、重开 session、child 重启后，从最后一致阶段恢复，并恢复分类结果、裁剪理由、baseline lock 和 route 语义。**注意与 drift 复位的区别**：`resume` 是自动恢复（阶段不变），drift 之后的显式复位是**客户决策**（阶段可能回退），入口是 `/baf-workflow-resume`（第 19 章）；两者语义不能混用，也不能互相替代；
 - `abandon`：任意 active change 经用户确认进入 `已放弃` 终态；保留全部产物与审计记录；不自动删除 OpenSpec change（用户选择保留或手工清理，选择被记录）。
-
-
 
 ### 5.4 约束分级
 
@@ -768,15 +669,13 @@ bug-fix-path 主链（低风险 Bug）：
 
 ### 5.5 受控裁剪规则
 
-
-| 裁剪                                              | 允许条件                         | 必须保留                                           |
-| ----------------------------------------------- | ---------------------------- | ---------------------------------------------- |
-| clarify 并入 open                                 | 小变更                          | 目标、边界、验收记录                                     |
-| design 并入 plan                                  | 纯文案/单行配置                     | “为何不需要独立设计”的理由                                 |
+| 裁剪                                                 | 允许条件                              | 必须保留                                                  |
+| ---------------------------------------------------- | ------------------------------------- | --------------------------------------------------------- |
+| clarify 并入 open                                    | 小变更                                | 目标、边界、验收记录                                      |
+| design 并入 plan                                     | 纯文案/单行配置                       | “为何不需要独立设计”的理由                              |
 | Bug fast path（clarify+design+plan+OpenSpec 全跳过） | 低风险 Bug + baseline 允许 + 用户确认 | change identity、根因、回归测试、implement、verify、guard |
-| archive 延后                                      | 用户选择                         | change 保持 active，不谎称已归档                        |
-| open / plan（full-go-path 内） / implement / verify     | 不可删除                         | 即使单任务也要有完成条件；无代码变更可 no-op 并记录                  |
-
+| archive 延后                                         | 用户选择                              | change 保持 active，不谎称已归档                          |
+| open / plan（full-go-path 内） / implement / verify  | 不可删除                              | 即使单任务也要有完成条件；无代码变更可 no-op 并记录       |
 
 轻量策略只能减少阶段文档，不得关闭硬门禁。第一期只实现 full-go-path、bug-fix-path 和上表合并规则，不实现任意自定义流程图。
 
@@ -784,12 +683,10 @@ bug-fix-path 主链（低风险 Bug）：
 
 每个阶段有两种合法驱动，禁止第三种：
 
-
-| 驱动     | 谁发起                             | domain service 做什么                                         |
-| ------ | ------------------------------- | ---------------------------------------------------------- |
-| 显式命令   | `/baf-*`、`baf *`、Tab 按钮         | 校验前置 → `transition` → 可选启动带 phase route 的 agent turn → 写事件 |
-| 受控阶段工具 | 模型调用 `baf_stage_*`（只读建议或「请求转换」） | 工具体只调用同一 `WorkflowService`；成功才改状态；失败返回 reason code         |
-
+| 驱动         | 谁发起                                            | domain service 做什么                                                       |
+| ------------ | ------------------------------------------------- | --------------------------------------------------------------------------- |
+| 显式命令     | `/baf-*`、`baf *`、Tab 按钮                   | 校验前置 →`transition` → 可选启动带 phase route 的 agent turn → 写事件 |
+| 受控阶段工具 | 模型调用`baf_stage_*`（只读建议或「请求转换」） | 工具体只调用同一`WorkflowService`；成功才改状态；失败返回 reason code     |
 
 禁止：
 
@@ -809,11 +706,7 @@ bug-fix-path 主链（低风险 Bug）：
 
 ---
 
-
-
 ## 6. 多模型路由：复用 dsh 原生能力
-
-
 
 ### 6.1 dsh 已有的原生 contract
 
@@ -839,20 +732,16 @@ BAF 不新建 LLM client、provider registry 或第二套模型切换协议。
 
 ### 6.3 阶段与模型能力映射
 
-
-| 阶段          | 首选模型能力          | 路由目的                                 | 失败处理                                               |
-| ----------- | --------------- | ------------------------------------ | -------------------------------------------------- |
-| `intake`    | 低延迟、基础工具调用      | 快速分类和影响范围判断                          | 批准的轻量 fallback；无可用 route 则 `clarify-required` 人工兜底 |
-| `open`      | 低延迟、基础工具调用      | 快速检查 workspace、Git 和 change identity | 批准的轻量 fallback；无可用 route 则阻断                       |
-| `clarify`   | 低成本、长上下文整理      | 提取问题、边界、非目标和验收条件                     | 同等能力 fallback；不得跳过记录                               |
-| `design`    | 高推理、长上下文、仓库分析   | 接口、数据流、错误路径和风险方案                     | 仅允许能力兼容 fallback；产物仍须人工/规则确认                       |
-| `plan`      | 高推理、结构化输出       | 任务分解、文件范围、验证命令和回滚点                   | route 失败则暂停，不生成未验证的计划                              |
-| `implement` | 代码生成、工具调用、上下文保持 | 按计划修改源码和测试                           | 不得因模型切换扩大允许文件范围                                    |
-| `verify`    | 稳定、严谨、结构化报告分析   | 解释机器报告并识别未解决问题                       | 机器门禁优先；无合规 route 不能声称通过                            |
-| `archive`   | 低延迟、严格指令遵循      | 展示摘要并请求归档确认                          | 归档条件由 domain service 判断                            |
-
-
-
+| 阶段          | 首选模型能力                   | 路由目的                                   | 失败处理                                                          |
+| ------------- | ------------------------------ | ------------------------------------------ | ----------------------------------------------------------------- |
+| `intake`    | 低延迟、基础工具调用           | 快速分类和影响范围判断                     | 批准的轻量 fallback；无可用 route 则`clarify-required` 人工兜底 |
+| `open`      | 低延迟、基础工具调用           | 快速检查 workspace、Git 和 change identity | 批准的轻量 fallback；无可用 route 则阻断                          |
+| `clarify`   | 低成本、长上下文整理           | 提取问题、边界、非目标和验收条件           | 同等能力 fallback；不得跳过记录                                   |
+| `design`    | 高推理、长上下文、仓库分析     | 接口、数据流、错误路径和风险方案           | 仅允许能力兼容 fallback；产物仍须人工/规则确认                    |
+| `plan`      | 高推理、结构化输出             | 任务分解、文件范围、验证命令和回滚点       | route 失败则暂停，不生成未验证的计划                              |
+| `implement` | 代码生成、工具调用、上下文保持 | 按计划修改源码和测试                       | 不得因模型切换扩大允许文件范围                                    |
+| `verify`    | 稳定、严谨、结构化报告分析     | 解释机器报告并识别未解决问题               | 机器门禁优先；无合规 route 不能声称通过                           |
+| `archive`   | 低延迟、严格指令遵循           | 展示摘要并请求归档确认                     | 归档条件由 domain service 判断                                    |
 
 ### 6.4 模型切换的硬约束
 
@@ -865,11 +754,7 @@ BAF 不新建 LLM client、provider registry 或第二套模型切换协议。
 
 ---
 
-
-
 ## 7. 企业基线和适配器：具体规则放在哪里
-
-
 
 ### 7.1 企业基线是什么
 
@@ -971,11 +856,7 @@ projection 落盘位置和 change id 生成规则是 Phase 0 冻结项（推荐 
 
 ---
 
-
-
 ## 8. 插件详细职责和边界
-
-
 
 ### 8.1 `baf-core`
 
@@ -1035,19 +916,13 @@ protected path 检查；path traversal 和 workspace escape 检查；危险 shel
 - shell 间接写入（重定向、脚本）按 shell 策略拒绝或要求 allowlist 内路径；
 - listener 顺序不能 force-allow：`tools/pre-execute` 的 allow 不能覆盖随后的 monotonic guard。
 
-
-
 ### 8.7 `baf-scaffold`
 
 初始化 OpenSpec、C 构建/测试骨架和 baseline 引用。先检查已有文件，默认不覆盖；覆盖需用户确认并使用可恢复备份或原子写入。
 
 ---
 
-
-
 ## 9. 命令设计
-
-
 
 ### 9.1 统一实现原则
 
@@ -1061,53 +936,45 @@ slash command 复用 `@deepseek-ai/dsh-commands`（`CommandRuntime.register()`�
 - CLI 拥有自己的 Commander tree 并通过 `parseCmdline(ctx, program)` 接入；**不复制** slash handler 业务逻辑；
 - 禁止：`packages/*/package.json` 增加可执行 Node 入口冒充独立应用。
 
-
-
 ### 9.2 命令表
 
 独立 CLI 使用 `baf <command>`；slash 形式 `/baf-<command>`（现有 command name 是单层名称）。
 
-
-| 命令                        | 作用                                                         | 是否改变状态      |
-| ------------------------- | ---------------------------------------------------------- | ----------- |
-| `help`                    | 展示命令和规则说明                                                  | 否           |
-| `version`                 | 展示 BAF、preset、baseline、dsh/runtime 版本                      | 否           |
-| `status`                  | 展示 preset、Git、OpenSpec、workflow（含分类和当前阶段）、quality、guard 状态 | 否           |
-| `doctor`                  | 诊断 composition、工具、目录、权限、配置和更新元数据                           | 否           |
-| `docs`                    | 打开或输出企业文档和基线引用                                             | 否           |
-| `init`                    | 初始化 BAF/OpenSpec/C 项目骨架（与 `/baf-scaffold` 同源；详见 §22）              | 是，需确认       |
-| `open`                    | 新建或选择 change（先走 intake 分类）                                 | 是           |
-| `classify`                | 对当前输入重新执行/查看 intake 分类                                     | 是（重分类需确认）   |
-| `clarify`                 | 记录需求问题和决策                                                  | 是           |
-| `design`                  | 创建/更新技术设计                                                  | 是           |
-| `plan`                    | 创建任务计划和允许文件范围                                              | 是           |
-| `implement`               | 执行或恢复实现阶段                                                  | 是           |
-| `verify`                  | 运行所有必要检查                                                   | 写入报告        |
-| `archive`                 | 归档已验证 change                                               | 是，需确认       |
-| `abandon`                 | 放弃当前 active change                                         | 是，需确认       |
-| `baf-workflow-*`           | 阶段单步驱动器（保留 §5.6 「命令 + 阶段工具」入口，便于脚本化复跑）           | 各阶段         |
-| `baf-workflow-resume [节点]` | **drift 复位**：列出 T13 合法目标节点，客户交互式选点后回退并重跑；无参数时只列候选不猜；详见 §19      | drift       |
-| `baf-go [描述]`            | **自动驱动**：无参数为主——把本 session 推进到下一个需要客户动作的点并重放待决卡片；停靠在确认门 / 待决 intake / 未初始化工作区时**重新弹出 §22.17 交互确认框**（无弹窗通道时退化为卡片，门上再敲一次 `baf-go` 即确认）；drift 时自动转 `/baf-workflow-resume`；带描述仅在「未绑定」时等价于直接说需求；详见 §18 / §22.17 | 各阶段 |
-| `baf-go-confirm`           | **不弹确认框直接继续**：走确认门正路径（门 A 进 plan / 门 B 归档）、确认待决 intake、未初始化工作区直接 scaffold；drift 仍强制弹候选（§19 永不自动选点）；详见 §22.17 | 确认门 / intake / scaffold |
-| `quality`                 | 运行或查看 C 质量检查                                               | 写入报告        |
-| `guard`                   | 查看或运行策略门禁                                                  | 写入诊断        |
-| `update check`            | 检查三类 scope 的签名 manifest 和本地兼容性                             | 否           |
-| `update download [scope]` | 下载并校验指定 scope，不改变当前生效版本                                    | 否，受策略许可     |
-| `update apply [scope]`    | 应用已下载更新；必要时重启 child 或交接 installer                          | 是，需策略许可     |
-| `update rollback [scope]` | 回滚指定 scope 最近一次成功更新                                        | 是，需管理员/策略许可 |
-| `update status`           | 展示三类 scope 当前版本和状态                                         | 否           |
-| `git status`              | 展示本地 Git 信息                                                | 否           |
-
+| 命令                           | 作用                                                                                                                                                                                                                                                                                                                                          | 是否改变状态               |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `help`                       | 展示命令和规则说明                                                                                                                                                                                                                                                                                                                            | 否                         |
+| `version`                    | 展示 BAF、preset、baseline、dsh/runtime 版本                                                                                                                                                                                                                                                                                                  | 否                         |
+| `status`                     | 展示 preset、Git、OpenSpec、workflow（含分类和当前阶段）、quality、guard 状态                                                                                                                                                                                                                                                                 | 否                         |
+| `doctor`                     | 诊断 composition、工具、目录、权限、配置和更新元数据                                                                                                                                                                                                                                                                                          | 否                         |
+| `docs`                       | 打开或输出企业文档和基线引用                                                                                                                                                                                                                                                                                                                  | 否                         |
+| `init`                       | 初始化 BAF/OpenSpec/C 项目骨架（与`/baf-scaffold` 同源；详见 §22）                                                                                                                                                                                                                                                                         | 是，需确认                 |
+| `open`                       | 新建或选择 change（先走 intake 分类）                                                                                                                                                                                                                                                                                                         | 是                         |
+| `classify`                   | 对当前输入重新执行/查看 intake 分类                                                                                                                                                                                                                                                                                                           | 是（重分类需确认）         |
+| `clarify`                    | 记录需求问题和决策                                                                                                                                                                                                                                                                                                                            | 是                         |
+| `design`                     | 创建/更新技术设计                                                                                                                                                                                                                                                                                                                             | 是                         |
+| `plan`                       | 创建任务计划和允许文件范围                                                                                                                                                                                                                                                                                                                    | 是                         |
+| `implement`                  | 执行或恢复实现阶段                                                                                                                                                                                                                                                                                                                            | 是                         |
+| `verify`                     | 运行所有必要检查                                                                                                                                                                                                                                                                                                                              | 写入报告                   |
+| `archive`                    | 归档已验证 change                                                                                                                                                                                                                                                                                                                             | 是，需确认                 |
+| `abandon`                    | 放弃当前 active change                                                                                                                                                                                                                                                                                                                        | 是，需确认                 |
+| `baf-workflow-*`             | 阶段单步驱动器（保留 §5.6 「命令 + 阶段工具」入口，便于脚本化复跑）                                                                                                                                                                                                                                                                          | 各阶段                     |
+| `baf-workflow-resume [节点]` | **drift 复位**：列出 T13 合法目标节点，客户交互式选点后回退并重跑；无参数时只列候选不猜；详见 §19                                                                                                                                                                                                                                      | drift                      |
+| `baf-go [描述]`              | **自动驱动**：无参数为主——把本 session 推进到下一个需要客户动作的点并重放待决卡片；停靠在确认门 / 待决 intake / 未初始化工作区时**重新弹出 §22.17 交互确认框**（无弹窗通道时退化为卡片，门上再敲一次 `baf-go` 即确认）；drift 时自动转 `/baf-workflow-resume`；带描述仅在「未绑定」时等价于直接说需求；详见 §18 / §22.17 | 各阶段                     |
+| `baf-go-confirm`             | **不弹确认框直接继续**：走确认门正路径（门 A 进 plan / 门 B 归档）、确认待决 intake、未初始化工作区直接 scaffold；drift 仍强制弹候选（§19 永不自动选点）；详见 §22.17                                                                                                                                                                 | 确认门 / intake / scaffold |
+| `quality`                    | 运行或查看 C 质量检查                                                                                                                                                                                                                                                                                                                         | 写入报告                   |
+| `guard`                      | 查看或运行策略门禁                                                                                                                                                                                                                                                                                                                            | 写入诊断                   |
+| `update check`               | 检查三类 scope 的签名 manifest 和本地兼容性                                                                                                                                                                                                                                                                                                   | 否                         |
+| `update download [scope]`    | 下载并校验指定 scope，不改变当前生效版本                                                                                                                                                                                                                                                                                                      | 否，受策略许可             |
+| `update apply [scope]`       | 应用已下载更新；必要时重启 child 或交接 installer                                                                                                                                                                                                                                                                                             | 是，需策略许可             |
+| `update rollback [scope]`    | 回滚指定 scope 最近一次成功更新                                                                                                                                                                                                                                                                                                               | 是，需管理员/策略许可      |
+| `update status`              | 展示三类 scope 当前版本和状态                                                                                                                                                                                                                                                                                                                 | 否                         |
+| `git status`                 | 展示本地 Git 信息                                                                                                                                                                                                                                                                                                                             | 否                         |
 
 普通用户不能通过命令关闭官方 guard、降低质量阈值、修改 system preset、跳过 intake 分类或跳过签名验证。
 
 ---
 
-
-
 ## 10. 官方 preset、UI 和工作流 Tab
-
-
 
 ### 10.1 preset
 
@@ -1122,8 +989,6 @@ composition 从 standard 完整复制，替换 persona 为 BAF persona，追加 
 - broken system BAF 保留在列表并显示修复/升级提示；
 - default 改变只影响新 session；session 创建后 composition 固定；
 - 创造模式在企业发行版默认隐藏（是否显示由发行配置决定，不删 dsh 通用实现）。
-
-
 
 ### 10.3 BAF 工作流 Tab（流程图页面）
 
@@ -1151,11 +1016,7 @@ locked / available / in-progress / completed / failed / blocked / drifted / skip
 
 ---
 
-
-
 ## 11. 桌面打包、更新、签名和回滚
-
-
 
 ### 11.1 打包
 
@@ -1197,13 +1058,11 @@ locked / available / in-progress / completed / failed / blocked / drifted / skip
 
 ### 11.5 三类更新的统一模型
 
-
-| 更新 scope   | 更新内容                                           | 推荐分发方式                                                       | 是否重装桌面应用            | 默认策略                      |
-| ---------- | ---------------------------------------------- | ------------------------------------------------------------ | ------------------- | ------------------------- |
-| `harness`  | dsh 源码、runtime、桌面壳和随壳核心资源                      | 官方签名 installer 或完整 runtime payload；Windows 优先现有 installer 路径 | installer 原地升级；不先卸载 | 后台检查；安全/兼容强制更新，普通更新提示后更新  |
-| `baseline` | OpenSpec、Matt 规则/模板、C 工具链描述、版本和阈值              | 版本化 baseline bundle；baseline manager 安装到 managed 目录          | 不需要                 | 默认只检查和下载；安装/切换需确认或管理员策略   |
-| `plugin`   | BAF 插件、preset、skills、workflow、system resources | 签名 system payload，原子替换 managed system root                   | 不需要，但需重启 dsh child  | 可后台下载；安全点提示并重启；强制兼容更新不得跳过 |
-
+| 更新 scope   | 更新内容                                             | 推荐分发方式                                                               | 是否重装桌面应用             | 默认策略                                           |
+| ------------ | ---------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------- |
+| `harness`  | dsh 源码、runtime、桌面壳和随壳核心资源              | 官方签名 installer 或完整 runtime payload；Windows 优先现有 installer 路径 | installer 原地升级；不先卸载 | 后台检查；安全/兼容强制更新，普通更新提示后更新    |
+| `baseline` | OpenSpec、Matt 规则/模板、C 工具链描述、版本和阈值   | 版本化 baseline bundle；baseline manager 安装到 managed 目录               | 不需要                       | 默认只检查和下载；安装/切换需确认或管理员策略      |
+| `plugin`   | BAF 插件、preset、skills、workflow、system resources | 签名 system payload，原子替换 managed system root                          | 不需要，但需重启 dsh child   | 可后台下载；安全点提示并重启；强制兼容更新不得跳过 |
 
 目录边界：
 
@@ -1222,8 +1081,6 @@ baseline bundle 第一期只含签名的规则、模板、配置、版本约束�
 2. plugin 和可热替换 runtime 用 `UpdateService` 的下载、hash、签名、`.next`、`.bak`、原子交换和 child restart（不触碰用户复制品，不写 user root）；
 3. 第三方工具链是企业 baseline 受控依赖：先检查版本是否满足，再按策略下载安装，安装后重新探测、校验、生成 baseline lock；项目执行中只允许下载不热替换；
 4. 三类更新都先验证 manifest/schema、签名、hash、版本兼容、目标 scope 和降级规则；不越权写入另一类 scope。
-
-
 
 ### 11.6 版本、兼容性和更新状态
 
@@ -1300,8 +1157,6 @@ slash 对应 `/baf-update-status` 等；scope 只能取 `harness`/`plugin`/`base
 
 ---
 
-
-
 ## 12. 可落地详细实施计划：每一步怎么做
 
 > **约定**：
@@ -1313,19 +1168,13 @@ slash 对应 `/baf-update-status` 等；scope 只能取 `harness`/`plugin`/`base
 > - **MVP 裁剪（见 17.4）**：对外可演示的最小完成线是 Phase 0–5 + Phase 7 的 ToolGuard + Phase 8 的 slash/`status`；fast-path、工作流 Tab、三 scope 签名更新可并行但可后置。
 > - **工时量级（单人熟悉 dsh，仅供排期）**：Phase 0–1 ≈ 3–5 人日；2–4 ≈ 8–12；5 ≈ 10–15；6 ≈ 3–5；7 ≈ 8–12；8 ≈ 10–15；9 ≈ 10–20；10 ≈ 3–5。合计约 8–12 人周到 MVP，12–20 人周到企业可分发（含签名与打包 hardening）。
 
-
-
 ### Phase 0：冻结企业输入和公共 contract（不写业务代码）
-
-
 
 #### 0.1 建立企业输入登记表
 
 - 新建 `overlay/docs/baf/enterprise-inputs.md`：按第 15 章清单逐项列条目，每项含“字段、消费者、当前值（默认 `unavailable`）、决定人、冻结版本”。
 - 新建 `overlay/docs/baf/error-codes.md`：冻结错误码清单（`tool_unavailable`、`openspec_unavailable`、`baseline_unavailable`、`baseline_incompatible`、`policy_missing`、`invalid_transition`、`intake_confirmation_required`、`protected_path`、`secret_detected`、`verify_required`、`system_resource_conflict`、`model_route_unavailable`、`model_route_incompatible`、`model_fallback_blocked`），每个含语义、载荷字段和触发场景。
 - 新建 `overlay/docs/baf/compatibility-matrix.md`：dsh/BAF-plugin/baseline 版本兼容矩阵模板和 rollback minimum version 字段。
-
-
 
 #### 0.2 冻结 schema 与 fixture
 
@@ -1334,24 +1183,16 @@ slash 对应 `/baf-update-status` 等；scope 只能取 `harness`/`plugin`/`base
 - 冻结 projection 落盘决定：`<workspace>/.baf/projection/<changeId>.jsonl`（事件日志，append-only）+ `<workspace>/.baf/projection/index.json`；是否 gitignore 由企业 Git policy 决定，写入 enterprise-inputs。
 - 冻结 change id 规则：`change-<yyyymmdd>-<slug>-<4 位随机>`，slug 限 `[a-z0-9-]`、长度 ≤ 32。
 
-
-
 #### 0.3 确认 dsh 原生 route 边界
 
 - 只读核查（写进 `overlay/docs/baf/route-notes.md`）：发行配置注入 allowed provider/model 的入口（settings/deployment config）；session override 的存储；child 继承语义；dsh 是否有原生 fallback（结论决定 BAF fallback 层的实现位置）；usage/审计字段。结论标注“复用点/缺口”，缺口进 Phase 3 任务。
-
-
 
 #### 0.4 冻结更新模型决定
 
 - 在 enterprise-inputs 中登记：channel 策略、Ed25519 key id 和公钥（用 `overlay/scripts/gen-update-keypair.mjs` 生成测试对，正式 key 由企业出）、rollback 保留窗口、管理员审批范围、`InstalledVersions` schema 2 字段映射。
 - 验收：三份文档评审通过；schema 可被 `ajv`/`zod` 解析；fixture 循环校验通过。
 
-
-
 ### Phase 1：BAF 成为真正可发现的 system preset
-
-
 
 #### 1.1 创建 preset 目录与 metadata
 
@@ -1362,8 +1203,6 @@ name: BAF 模式
 description: 企业级受控编码 Agent：intake 分类 + go 工作流 + OpenSpec + C 质量门禁 + 安全 guard。
 order: 2
 ```
-
-
 
 #### 1.2 创建 composition
 
@@ -1397,15 +1236,11 @@ order: 2
 #       name: '@deepseek-ai/dsh-baf-scaffold'
 ```
 
-
-
 #### 1.3 创建最小 skills
 
 - 新建 `packages/preset/agent-presets/presets/baf/skills/baf-go/SKILL.md`（go 工作流总览：引用第 5 章节点定义，声明“阶段转换必须经 domain service”）；
 - 新建 `skills/baf-c-guidance/SKILL.md`（C 规范入口，内容引用 baseline，不内嵌具体规则值）；
 - 新建 `skills/baf-verification/SKILL.md`（verify 检查集合与报告解读指引）。
-
-
 
 #### 1.4 roster 测试
 
@@ -1413,30 +1248,20 @@ order: 2
 - 检查并更新 `tests/{display,shipped-root,composition-inventory}.spec.ts` 中按 preset 枚举的快照/断言；
 - 新增 authoring 用例：**拒绝**复制官方 `baf`、删除 system `baf` 抛 `agent-preset/read-only`、user 目录名 `baf` 不 shadow shipped；roster 对 `baf` 输出 `copyable: false`。
 
-
-
 #### 1.5 roster UI
 
 - 更新 `packages/client/ui-agent-preset` 的 fixture/快照：BAF 显示“内置”、standard 显示默认；跑该包 e2e（`apps/web/tests/agent-preset-authoring.e2e.ts`、`apps/cli/tests/web-agent-presets.e2e.ts` 如有枚举断言则更新）。
-
-
 
 #### 1.6 打包链路检查
 
 - `overlay/scripts/pack-dsh.mjs` 打包后用真实 roster 复检 `baf` 存在、trust 正确（临时脚本或手工验证步骤写入脚本注释）。
 - **验收**：开发模式 roster 可见 BAF 并能挂载真实 session；全部 preset 测试绿；standard 仍是默认。
 
-
-
 ### Phase 2：`baf-core` 骨架、baseline loader 和 adapter contract
-
-
 
 #### 2.1 建包
 
 - 新建 `packages/baf/baf-core/`（`package.json` 名 `@deepseek-ai/dsh-baf-core`，依赖 `zod`、`@deepseek-ai/dsh-agent-presets` 等按需）；同步在 workspace 依赖注册。
-
-
 
 #### 2.2 公共类型
 
@@ -1461,31 +1286,21 @@ export type ProjectionEvent =
 - `src/identity.ts`：workspace identity（root、Git branch/revision 探测接口）、change id 生成（Phase 0 冻结规则）；
 - `src/result.ts`：`DomainResult<T>`（`status`、`diagnostics`、`artifacts`、`exitCode`、`startedAt`、`finishedAt`、`baselineVersion`、`sourceEventSeq`）。
 
-
-
 #### 2.3 baseline loader
 
 - `src/baseline.ts`：用 zod 实现 Phase 0 schema 的解析与校验；校验项：schema 版本、`bafCompatibility` 与当前 BAF 版本比对、`routeProfile.default` 在 `allowed` 内、每个 phase route 在 `allowed` 内、fallback group 存在且成员在 `allowed` 内、`bugFixPath.maxScope` 合法、openspec/stack/guard 字段完整；失败返回 `baseline_unavailable`/`baseline_incompatible`。
 - `tests/baseline.spec.ts`：合法 fixture、缺字段、版本不兼容、route 不在 allowed、fallback group 缺失、fast path 策略非法各一例。
 
-
-
 #### 2.4 adapter contract 与 stub
 
 - `src/adapters.ts`：7.3 的四个 interface + `AdapterContext`；提供每个 adapter 的 `unavailable` 实现（全部返回结构化 `tool_unavailable`/`baseline_unavailable`），保证后续 Phase 在无真实工具时也能走通失败路径。
-
-
 
 #### 2.5 启用 composition rows
 
 - 打开 `presets/baf/agent.cordis.yml` 中 `baf-core` row（此时其余仍注释）；`mount.spec.ts` 增加 BAF 挂载用例（含 isolate realm 断言：无 root-realm 注册、重复挂载不冲突）。
 - **验收**：`packages/baf/baf-core` 测试绿；BAF session 挂载后能注册 `baf-core` 服务；坏 baseline 被结构化拒绝。
 
-
-
 ### Phase 3：接通 dsh 原生模型路由
-
-
 
 #### 3.1 route resolver
 
@@ -1514,53 +1329,37 @@ export function resolveRoute(
 
 - `tests/route.spec.ts`：覆盖 6.2 的 1–7 条边界（企业策略独立于 profile 且只能收紧、override 不在 allowed 被拒、fallback 不兼容被拒、无 fallback 返回 `model_fallback_blocked` 等）。
 
-
-
 #### 3.2 phase route 传递
 
 - **优先路径**：阶段启动 agent turn 时，经 session/agent 请求级 API 设置该 turn 的 `provider`/`model`（与 catalog / default-model 同源），不强制经过 dsh `workflow` 工具。
 - **可选路径**：仅当该阶段需要子代理扇出时，把 `resolveRoute()` 结果写入 dsh `agentOptions.provider/model`（复用 `workflow-worker-thread` 转发）；phase metadata 从冻结的 `routeProfile.phases` 生成。
 - 无论哪条路径，route 失败都阻断需要模型产物的阶段；不得静默落到企业策略外的默认模型。
 
-
-
 #### 3.3 route 审计
 
 - `src/route-audit.ts`：每次解析先向 dsh session log 追加 typed `baf/route-resolved` 事件，载荷为 `RouteAuditEntry { provider, model, source, phase, fallbackFrom, at, sessionId, changeId, failureReason? }`；这是重放模型请求身份和 fallback 原因的权威记录，满足“所有 model-visible 输入可由 session log 重建”。`<workspace>/.baf/audit/route.jsonl` 仅作为可选派生索引，由 session/projection 事件生成，不能成为唯一记录；token usage 归因沿用 dsh token-meter 原生记录，不重复计费。
-
-
 
 #### 3.4 route 状态暴露
 
 - `baf-core` 增加 `RouteStatusView`（routeProfile 版本、默认 route、各 phase 首选/实际 route、fallback 状态），供设置页、Tab、`baf status` 读取。
 - **验收**：route 失败阻断阶段且错误码稳定；resume 保留 route 语义；换模型不能改变 projection/门禁结果。
 
-
-
 ### Phase 4：intake 分类器 + workflow projection + 状态查询 + Web 工作流 Tab
-
-
 
 #### 4.1 建包与事件存储
 
 - 在已有 `packages/baf/baf-workflow/` 实现 `src/projection.ts`：append-only 事件日志（单 writer queue + workspace/change lock；每次 append 携带 `expectedSeq`，在锁内重读尾部并 compare-and-swap，随后以临时文件 + fsync + atomic rename 提交；多进程不支持可靠文件锁的平台显式拒绝第二 writer，而不是退化为无锁写入）、`replay()` 从事件重建 `WorkflowStatus`、事件 schema 版本迁移、损坏文件诊断（单条损坏 → 停在该 seq 并报 `projection_corrupted`，不静默丢弃）。`index.json` 仅是由 change 日志重建的派生索引，与事件提交同一临界区更新；启动时若 revision/seq 不一致则重建，不能把 index 当权威。
 - `tests/projection.spec.ts`：重放一致性、相同 event id 的幂等追加、stale `expectedSeq` 拒绝、同进程并发序列化、双 writer 冲突、事件已提交但 index 更新中断后的重建、损坏检测。
 
-
-
 #### 4.2 转换执行器
 
 - `src/transition.ts`：输入 `(current, target, evidence)`，按 `TRANSITIONS` 表和 5.2 条件裁决；表外 → `invalid_transition`；每次放行/拒绝都追加审计事件。
-
-
 
 #### 4.3 intake 规则引擎
 
 - `src/intake.ts`：`suggest()` 可用启发式（Phase 4）或模型（后续）产出候选分类；`review()` 用规则引擎复核；`decide()` 合成最终 `ChangeIntake` + `requiresUserConfirmation`；`confirm()` 接收用户确认写事件。
 - 规则清单代码化：`cross-module`/`public-api`/数据格式/并发/安全/性能/集成 → 强制 full-go-path；`single-file`/`small-local` 且 baseline 允许且可写回归测试 → 允许 fast path；证据不足 → `clarify-required`。
 - `tests/intake.spec.ts`：新需求、单文件低风险 Bug、跨模块 Bug、公共 API Bug、用户误报、低置信度、baseline 缺失各一例；断言“分类确认前 `implement` 转换被拒”。
-
-
 
 #### 4.4 状态查询 service + Web Tab
 
@@ -1571,11 +1370,7 @@ export function resolveRoute(
 - 暴露选型：**Web Typert Remote（不进 root realm 的 domain 逻辑仍在 isolate；Remote 为读投影/写确认的 Host 面）**；Electron IPC 留 Phase 8。记入 route-notes。
 - **验收**：非法转换被拒；事件重放一致；分类未确认时无法进入 implement；BAF session 可见工作流 Tab 且与 projection 一致。
 
-
-
 ### Phase 5：full-go-path 全阶段实现
-
-
 
 #### 5.1 open（`baf-openspec` 建包）
 
@@ -1583,44 +1378,30 @@ export function resolveRoute(
 - `baf-workflow/src/stages/open.ts`：探测 workspace/Git/baseline/OpenSpec；多 active change 强制选择；change id 生成；写 `stage-entered`。
 - `tests/openspec.spec.ts`：用本地 OpenSpec CLI fixture（或 stub 执行器）覆盖 validate 成功/失败/不可用。
 
-
-
 #### 5.2 clarify
 
 - `src/stages/clarify.ts` + `skills/baf-go` 补 clarify 指引：产出 `openspec/<change>/clarify.md`（问题、决策含确认来源、非目标、验收条件）；完成校验：阻塞问题全部有答案或 `deferred` 标记 + 验收条件存在。
-
-
 
 #### 5.3 design
 
 - `src/stages/design.ts`：产出 `design.md`（引用实际文件/API、风险清单）；guard 预检查调 `baf-guard` stub（Phase 7 替换为真实实现）；完成校验：引用路径存在（抽样验证）。
 
-
-
 #### 5.4 plan
 
 - `src/stages/plan.ts`：产出 `plan.md` + 结构化 `plan.json`（任务数组：输入/输出/影响文件/验证命令/回滚点）+ `allowlist`（文件集合）+ guard snapshot；完成校验：每个任务有验证命令和影响文件。
-
-
 
 #### 5.5 implement
 
 - `src/stages/implement.ts`：按任务驱动 Agent 编辑（模型只产出编辑建议，写入经 dsh filesystem/shell 工具并受 allowlist 检查）；任务状态记录；取消处理；越界写 → blocked + `protected_path`/`scope_exceeded`。
 - guard 检查点：每次文件写入前比对 allowlist。
 
-
-
 #### 5.6 verify（骨架）
 
 - `src/stages/verify.ts`：`CheckRunner` 聚合框架（注册 checks：openspec-validate 已接、quality/guard/secret 为占位接口）；报告聚合为 `verify-report.json`（含 source revision、baseline、tool versions、route metadata、新鲜度字段）；T11/T12 触发逻辑。
 
-
-
 #### 5.7 archive
 
 - `src/stages/archive.ts`：人工确认（复用 dsh 审批/ask-user 机制）→ `OpenSpecAdapter.archive()` 原子归档 → 写 `change-archived`；失败保持 active；幂等重试。
-
-
 
 #### 5.8 resume/drift/abandon
 
@@ -1631,83 +1412,57 @@ export function resolveRoute(
 
 > **Phase 5 完成记录（2026-09-09）**：5.1–5.8 全部落地（落点见文首「Phase 5 — 已完成明细」）；5.8 新增 `stages/drift.ts` 检测 5 类触发器（git revision 变化 / baseline id 变化 / baseline 内容变化 / verify-report 过期 / 已完成产物删除），`stages/abandon.ts` 提供 T16 `driveAbandon` 入口（显式确认 + 幂等）；`pipeline.driveVerifyStage` 落 T11（必需检查失败回 implement），`pipeline.driveDriftStage` 落 T12（写入 `drift-detected`），T13 由调用方经 `decideTransition` 裁决；新增 `baseline-locked` 投影事件 + fold 字段，让 drift 检测有不可变锚点。`tests/stages.spec.ts` 在原覆盖基础上新增 T11（openspec validate 失败回 implement）、drift（artifact 删除触发 + record=false）、abandon（无确认拒绝 + 幂等）三类用例。验收中「模型声明不推动转换」由 `WorkflowService.transition` 裁决保证。
 
-
-
 ### Phase 6：bug-fix-path 与风险升级
 
 - `src/fastpath.ts`：仅当 projection 中 intake 为 `bug-fix + fast path + 已确认` 时允许 T5；open 阶段创建最小 Bug 记录（问题/根因/影响范围/回归测试占位）；implement 强制先写回归测试；verify 必跑回归测试；图中/报告中标注“未走 OpenSpec：reason codes”。
 - `src/escalate.ts`：implement 中检测范围扩大（实际修改文件 ∉ allowlist、或发现公共 API/数据格式影响）→ 自动 T15 升级：写 `mode-upgraded` 事件、生成待补的 clarify/design/plan 阶段、要求补 OpenSpec change；原 identity 和审计保留。
 - `tests/fastpath.spec.ts`：低风险 Bug 全链路、范围扩大升级、升级后补阶段、fast path 试图跳回归测试被拒。
 
-
-
 ### Phase 7：C quality、standard 和 guard 硬门禁
-
-
 
 #### 7.1 `baf-quality` 建包
 
 - 新建 `packages/baf/baf-check-quality/`：`StackAdapter`/`QualityRunner` 实现——从 baseline `stack` 读取编译器/构建/测试/覆盖率/分析器配置；每个 check 独立受控执行（超时、取消、退出码、stdout/stderr 截断脱敏）；产出 `QualityReport`（8.5 结构）。
 - verify 的 `CheckRunner` 接入全部 quality checks + 阈值判定。
 
-
-
 #### 7.2 `baf-standard` 建包
 
 - 新建 `packages/baf/baf-standard/`：`StandardBaselineProvider` 加载 baseline `standard` 段，输出结构化规则摘要（供 prompt 注入、plan 校验、guard 引用）；不内嵌具体规则值。
-
-
 
 #### 7.3 `baf-guard` 建包
 
 - 新建 `packages/baf/baf-check-guard/`：protected path、workspace escape、path traversal、危险命令清单、secret scan（正则规则来自 baseline）、`invalid_transition`、`verify_required`、system_resource_conflict；通过 BAF agent 的 `agent.ctx` 注册现有 `ctx.tools.guard()` 单调 guard，覆盖所有 mutating filesystem/shell tool，而不只覆盖 stage handler。guard 从 projection 读取 intake 确认、当前阶段、allowlist 和 snapshot：确认前任何源码写入返回 `intake_confirmation_required`，implement 外或越界写入返回稳定策略错误；每次 tool body 前重新判定，listener 顺序不能 force-allow。补 `tests/tool-guard.spec.ts` 覆盖普通自然语言触发的工具调用、slash/CLI/Tab 旁路尝试、shell 间接写入、scope 隔离和 disposer/HMR 清理。
 - 打开 composition 中 `baf-quality`/`baf-standard`/`baf-guard` rows。
 
-
-
 #### 7.4 `baf-scaffold` 建包
 
 - 新建 `packages/baf/baf-scaffold/`：`init` 命令实现（OpenSpec 目录、C 构建测试骨架、baseline 引用；不覆盖已有文件，覆盖需确认 + 备份）；打开对应 composition row。
 - **验收**：verify 报告结构化且区分失败原因；任一门禁失败阻断 archive；guard 测试全绿。
 
-
-
 ### Phase 8：统一交互面——slash、CLI、desktop bridge 和工作流 Tab
-
-
 
 #### 8.1 slash commands
 
 - 新建 `packages/baf/baf-workflow/src/commands.ts`：用 `CommandRuntime.register()` 注册第 9.2 全部命令（`/baf-help`、`/baf-status`、`/baf-doctor`、`/baf-version`、`/baf-workflow-open`、`/baf-workflow-classify`、`/baf-workflow-clarify`、`/baf-workflow-design`、`/baf-workflow-plan`、`/baf-workflow-implement`、`/baf-workflow-verify`、`/baf-workflow-archive`、`/baf-workflow-abandon`、`/baf-check-quality`、`/baf-check-guard`、`/baf-update-*`）；每个 handler 只调 `WorkflowService`/`UpdateService`，统一错误码转 `CommandResult`。
-
-
 
 #### 8.2 standalone CLI
 
 - 按 9.1：新建 `baf-cli` profile（或 patch）+ 可选 thin wrapper；Commander tree，`parseCmdline(ctx, program)` 接入；命令表同 9.2；输出格式与 slash 一致（同一 formatters 模块）。
 - 验收：`verify-application-entrypoints` 不因新增 Node 应用 bin 失败。
 
-
-
 #### 8.3 desktop bridge
 
 - `overlay/desktop/src/preload-desktop.ts` 增加 IPC：`baf:getWorkflowStatus`、`baf:confirmIntake`、`baf:getRouteStatus`、`baf:getUpdateState`；main process 转发到 domain service（经 api controller/projection），UI 不直接碰文件。
-
-
 
 #### 8.4 工作流 Tab（Electron 补齐；Web 已在 Phase 4）
 
 - Web Tab（`packages/client/ui-baf-workflow/`）与 Typert Remote 已在 Phase 4 落地；本步仅补 8.3 Electron IPC 到同一 `WorkflowTabView` / domain service，并做四入口一致性快照。
 - 组件分层已存在：`WorkflowGraph`、`IntakeCard`、`NodeDetail`、`StatusStrip`、空态/阻断态；补 desktop 桥接测试与断线重连用例。
 
-
-
 #### 8.5 一致性测试
 
 - `tests/surface-parity.spec.ts`：同一 projection 状态下 slash/CLI/desktop/Tab 的 status 输出快照一致。
 - **验收**：四入口同状态；Tab 无法触发转换表外操作。
-
-
 
 #### 8.6 变更 Dashboard（归档总览；本 Phase 交付）
 
@@ -1717,16 +1472,16 @@ export function resolveRoute(
 
 **先行（Phase 4 已落地）**：工作流 Tab 顶栏「变更总览」按钮 → 模态列出 `WorkflowTabView.changes`（无筛选/导出）。完整能力仍属本 Phase。
 
-| 项 | 说明 |
-| --- | --- |
-| 入口 | 工作流 Tab 明确按钮（已有）；可选后续加 `/baf-changes` |
-| 数据 | Typert Remote 读 projection index + 各 change 摘要；禁止 Browser 直读 `.baf/` |
-| 列表列 | changeId、mode、current、updatedAt、archive 标记 |
-| 筛选 | active / archived / abandoned；按 mode |
-| 操作 | 聚焦到图（set focus）；只读打开产物路径提示；禁止未授权 transition |
-| 导出 | JSON/CSV 摘要（可选，非 MVP 阻断） |
-| 空态 | 引导「新建变更」/ intake |
-| 验收 | 多变更夹杂 archived 时列表正确；聚焦切换后顶栏与图一致；与 `/baf-status` 焦点一致 |
+| 项     | 说明                                                                               |
+| ------ | ---------------------------------------------------------------------------------- |
+| 入口   | 工作流 Tab 明确按钮（已有）；可选后续加`/baf-changes`                            |
+| 数据   | Typert Remote 读 projection index + 各 change 摘要；禁止 Browser 直读`.baf/`     |
+| 列表列 | changeId、mode、current、updatedAt、archive 标记                                   |
+| 筛选   | active / archived / abandoned；按 mode                                             |
+| 操作   | 聚焦到图（set focus）；只读打开产物路径提示；禁止未授权 transition                 |
+| 导出   | JSON/CSV 摘要（可选，非 MVP 阻断）                                                 |
+| 空态   | 引导「新建变更」/ intake                                                           |
+| 验收   | 多变更夹杂 archived 时列表正确；聚焦切换后顶栏与图一致；与`/baf-status` 焦点一致 |
 
 落点建议：`packages/client/ui-baf-workflow/` 面板升级 + `baf-workflow` Remote `listChanges`（若现有 `getTabView` 不足）；desktop IPC 复用 8.3。
 
@@ -1760,16 +1515,16 @@ export function resolveRoute(
 
 **Phase 8.7 落地实况（2026-09-17）**
 
-| 子项 | 状态 | 落点 / 证据 |
-| --- | --- | --- |
-| 8.7.1 coordinator | 已完成 | `packages/baf/baf-workflow/src/go-coordinator.ts`：`driveGo(input)` 是**纯路由器**——`route()` 按 `status.current` × `status.mode` 派发到既有 drive / `pipeline` 方法，自身不拥有任何 transition |
-| 8.7.2 路由表 | 已完成 | §18.4.2 每行都有对应用例（`open` 两分支由 `reachDesign` / `reachImplement` 夹具覆盖，`drift` 行在 drift handoff 组）；细节见 §18.9 |
-| 8.7.3 两个确认门 | 已完成 | `gateUnlocked()` / `parkOnGate()`；两张卡的标题与 §18.5 逐字一致（含 `awaiting_customer_confirm` 标记），由 `tests/go.spec.ts` 的「names both gate cards with the awaiting_customer_confirm marker」逐字断言 |
-| 8.7.4 单会话单工作流守卫 | 已完成 | `src/session-focus.ts`：`focusFor(cwd)` 按 workspace root 键控的进程内缓存（**不写 projection**）；`resolveBinding()` 六步判定，五种拒绝卡见 §18.9 |
-| 8.7.5 slash / CLI 接入 | 已完成 | `commands.ts` 注册 `/baf-go`（与其它 slash 同层、非 isolate）；`cmdline.ts` 新增 `baf go` subcommand + doctor 行 + 两份 help 文本首行 |
-| 8.7.6 一致性测试 | 已完成 | `tests/surface-parity.spec.ts` 增 `baf-go` 行与 `go` 的「第三类入口」说明；`tests/cmdline.spec.ts` 子命令名单增 `go`；`npx vitest run packages/baf` → 22 文件 / 166 用例全绿（含 8.8 新增，见 §18.10） |
-| 8.7.7 工作流 Tab 适配 | **未完成** | 确认门节点高亮、`awaiting_customer_confirm` 配色与「确认进入下一阶段」按钮、双泳道视图（§18.4.3）均未实现——与 §19.5 的 Tab 复位按钮同批做，属于纯 UI 层，不阻塞命令行主路径 |
-| 8.7.8 桌面分发 | 待下次出包 | 无新依赖、无新 bin（未动 `package.json` 的 `bin` 字段）；`verify-application-entrypoints` 不受影响 |
+| 子项                     | 状态             | 落点 / 证据                                                                                                                                                                                                           |
+| ------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8.7.1 coordinator        | 已完成           | `packages/baf/baf-workflow/src/go-coordinator.ts`：`driveGo(input)` 是**纯路由器**——`route()` 按 `status.current` × `status.mode` 派发到既有 drive / `pipeline` 方法，自身不拥有任何 transition  |
+| 8.7.2 路由表             | 已完成           | §18.4.2 每行都有对应用例（`open` 两分支由 `reachDesign` / `reachImplement` 夹具覆盖，`drift` 行在 drift handoff 组）；细节见 §18.9                                                                          |
+| 8.7.3 两个确认门         | 已完成           | `gateUnlocked()` / `parkOnGate()`；两张卡的标题与 §18.5 逐字一致（含 `awaiting_customer_confirm` 标记），由 `tests/go.spec.ts` 的「names both gate cards with the awaiting_customer_confirm marker」逐字断言 |
+| 8.7.4 单会话单工作流守卫 | 已完成           | `src/session-focus.ts`：`focusFor(cwd)` 按 workspace root 键控的进程内缓存（**不写 projection**）；`resolveBinding()` 六步判定，五种拒绝卡见 §18.9                                                       |
+| 8.7.5 slash / CLI 接入   | 已完成           | `commands.ts` 注册 `/baf-go`（与其它 slash 同层、非 isolate）；`cmdline.ts` 新增 `baf go` subcommand + doctor 行 + 两份 help 文本首行                                                                         |
+| 8.7.6 一致性测试         | 已完成           | `tests/surface-parity.spec.ts` 增 `baf-go` 行与 `go` 的「第三类入口」说明；`tests/cmdline.spec.ts` 子命令名单增 `go`；`npx vitest run packages/baf` → 22 文件 / 166 用例全绿（含 8.8 新增，见 §18.10）  |
+| 8.7.7 工作流 Tab 适配    | **未完成** | 确认门节点高亮、`awaiting_customer_confirm` 配色与「确认进入下一阶段」按钮、双泳道视图（§18.4.3）均未实现——与 §19.5 的 Tab 复位按钮同批做，属于纯 UI 层，不阻塞命令行主路径                                     |
+| 8.7.8 桌面分发           | 待下次出包       | 无新依赖、无新 bin（未动`package.json` 的 `bin` 字段）；`verify-application-entrypoints` 不受影响                                                                                                               |
 
 #### 8.8 会话启动门 + 必须工具链体检 + BAF 欢迎语（落点：Phase 8.8）
 
@@ -1784,14 +1539,14 @@ export function resolveRoute(
 
 **Phase 8.8 落地实况（2026-09-17）**
 
-| 子项 | 状态 | 落点 / 证据 |
-| --- | --- | --- |
-| 8.8.1 gate row | 已完成 | `packages/baf/baf-workflow/src/session-gate.ts`：`apply()` 对每个 agent 装一次（`agents.list()` 补装已存在的 + `agent/created` / `agent/disposed`）；preset 行 `baf-session-gate` 落在 `agent.cordis.yml` 的 `baf-commands` **之后**；`package.json` `exports` 与 `tsdown.config.ts` 各加一个入口（第四入口）。细节见 §18.10 |
-| 8.8.2 绑定判定 | 已完成（口径微调） | `resolveStartupBinding(cwd)` 读 `ProjectionStore.readIndex()` + 复用 `isActiveChange()`——与 `baf-go` 同一个谓词，不另写一份「什么算未完成」；`0 / 1 / ≥2` 三分支按 §18.3.1 出卡。**卡是只读的**：不替客户落绑定，改由卡片【下一步】印出 `/baf-go continue`（或 `/baf-go change=<id>`），绑定仍走 §18.6 `resolveBinding`（§18.10-2） |
-| 8.8.3 工具链体检 | 已完成 | `probeToolchain(cwd, options)`：七项 = workspace / baseline / Git / OpenSpec / C / guard+quality / 版本；逐项预算 1.5s，超时记 `?` 并把仍能拿到的判定照常显示；`/baf-doctor` 与启动卡共用 `renderProbeLines()`，两处不可能不一致 |
-| 8.8.4 欢迎卡渲染 | 已完成 | §20.3 骨架：首行结论（`BAF 模式已就绪 · <目录> · 无未完成工作流 / 检测到未完成工作流 <id>（当前 N<k>）· 继续还是新开？`）+【环境体检】+【本会话绑定】+【下一步】+【可用指令】+【版本】；缺件 `✗` + `↳ 引导` 行，未探测 `?`，`info` 行不带符号 |
-| 8.8.5 测试 | 已完成 | `tests/session-gate.spec.ts` **18 例**：探针七项不抛 / 目录不存在降级为 `✗` / guard+quality 未挂载点名 / **C 工具链首屏不 spawn**（§21.4）/ TTL 内复用同一次探针 / 符号逐态渲染 / **挂住的外部命令降级为 `?`**（真写一个 `openspec.cmd` 存根挂住 PATH）/ 三分支 + 已归档不计入 / 全缺件仍出可用卡 / §20.4 日志行只含元数据且不泄露变更内容 / 模型侧 section 先报「进行中」再报事实 / 卡片投递方式（执行 `/baf-welcome`，缺失时只记日志）/ **命令层抛异常也出卡** / 每 agent 一段 section + 挂载标志读取 |
-| 验收项状态 | 已由测试固定 | 「首屏出卡」「三分支」「缺件不阻断」「超时降级」「不替客户选」都有逐字断言（含「卡片里绝不出现凭空绑定」与「焦点缓存不落 projection」）。**未覆盖**：真正的桌面首屏观感——要出包后在 GUI 里看，与 §8.7.8 同批；guard 的拒绝 reason code 是 Phase 0 既有能力，本 Phase 未改一行 guard |
+| 子项             | 状态               | 落点 / 证据                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8.8.1 gate row   | 已完成             | `packages/baf/baf-workflow/src/session-gate.ts`：`apply()` 对每个 agent 装一次（`agents.list()` 补装已存在的 + `agent/created` / `agent/disposed`）；preset 行 `baf-session-gate` 落在 `agent.cordis.yml` 的 `baf-commands` **之后**；`package.json` `exports` 与 `tsdown.config.ts` 各加一个入口（第四入口）。细节见 §18.10                                                                                                                                                                                    |
+| 8.8.2 绑定判定   | 已完成（口径微调） | `resolveStartupBinding(cwd)` 读 `ProjectionStore.readIndex()` + 复用 `isActiveChange()`——与 `baf-go` 同一个谓词，不另写一份「什么算未完成」；`0 / 1 / ≥2` 三分支按 §18.3.1 出卡。**卡是只读的**：不替客户落绑定，改由卡片【下一步】印出 `/baf-go continue`（或 `/baf-go change=<id>`），绑定仍走 §18.6 `resolveBinding`（§18.10-2）                                                                                                                                                                              |
+| 8.8.3 工具链体检 | 已完成             | `probeToolchain(cwd, options)`：七项 = workspace / baseline / Git / OpenSpec / C / guard+quality / 版本；逐项预算 1.5s，超时记 `?` 并把仍能拿到的判定照常显示；`/baf-doctor` 与启动卡共用 `renderProbeLines()`，两处不可能不一致                                                                                                                                                                                                                                                                                                     |
+| 8.8.4 欢迎卡渲染 | 已完成             | §20.3 骨架：首行结论（`BAF 模式已就绪 · <目录> · 无未完成工作流 / 检测到未完成工作流 <id>（当前 N<k>）· 继续还是新开？`）+【环境体检】+【本会话绑定】+【下一步】+【可用指令】+【版本】；缺件 `✗` + `↳ 引导` 行，未探测 `?`，`info` 行不带符号                                                                                                                                                                                                                                                                                |
+| 8.8.5 测试       | 已完成             | `tests/session-gate.spec.ts` **18 例**：探针七项不抛 / 目录不存在降级为 `✗` / guard+quality 未挂载点名 / **C 工具链首屏不 spawn**（§21.4）/ TTL 内复用同一次探针 / 符号逐态渲染 / **挂住的外部命令降级为 `?`**（真写一个 `openspec.cmd` 存根挂住 PATH）/ 三分支 + 已归档不计入 / 全缺件仍出可用卡 / §20.4 日志行只含元数据且不泄露变更内容 / 模型侧 section 先报「进行中」再报事实 / 卡片投递方式（执行 `/baf-welcome`，缺失时只记日志）/ **命令层抛异常也出卡** / 每 agent 一段 section + 挂载标志读取 |
+| 验收项状态       | 已由测试固定       | 「首屏出卡」「三分支」「缺件不阻断」「超时降级」「不替客户选」都有逐字断言（含「卡片里绝不出现凭空绑定」与「焦点缓存不落 projection」）。**未覆盖**：真正的桌面首屏观感——要出包后在 GUI 里看，与 §8.7.8 同批；guard 的拒绝 reason code 是 Phase 0 既有能力，本 Phase 未改一行 guard                                                                                                                                                                                                                                                 |
 
 #### 8.9 `/baf-workflow-resume`：drift 交互式复位（落点：Phase 8.9）
 
@@ -1813,54 +1568,38 @@ export function resolveRoute(
 
 ### Phase 9：桌面打包、三 scope 更新、签名和回滚
 
-
-
 #### 9.1 版本 schema 迁移
 
 - `overlay/desktop/src/versions.ts`：实现 `InstalledVersions`（schema 2）+ `migrateVersions()`（旧三字段 → 新结构；旧 `bafPlugin` 只映射到 `plugin.baf`，baseline 字段置 `unknown`）；写入用临时文件 + rename；`dsh` 永远取 seed（保持现有行为）；`tests/versions-migrate.spec.ts`：旧格式、幂等、损坏文件。
 
-
-
 #### 9.2 manifest schema 2
 
 - `overlay/desktop/src/update/manifest.ts`：parser 扩展（11.2 字段、signed `issuedAt`/`expiresAt`/`releaseEpoch`、signature 块、systemResources、rollback）；缺字段/坏类型拒绝；定义可信时钟、允许 clock skew、时钟回拨与离线包例外策略。
-
-
 
 #### 9.3 签名链
 
 - `overlay/scripts/generate-manifest.mjs`：canonical JSON + artifact SHA-256 + 逐文件 hash + Ed25519 签名（`manifest.sig`）；`public-key.ts` 换正式 key/keyId（测试 key 标注不进生产）；生产强制校验，开发跳过须显式 env。
 - `tests/manifest-sign.spec.ts`：缺签名、错 key、篡改、过期、降级各拒。
 
-
-
 #### 9.4 scoped plan
 
 - `overlay/desktop/src/update/plan.ts`：`buildUpdatePlan()` 返回 `ScopedUpdatePlan[]`（11.6 结构）；`service.ts` 按 11.6 顺序协调；`apply.ts` 拆 per-scope apply/rollback（plugin：pending→`.next`→原子交换→child restart→roster/trust/composition 复检→失败仅回滚 plugin；baseline：装 `managed baselines/<id>/<v>/` → 探测 → 原子切 active pointer；harness：installer handoff，记录状态安全退出）。
 - `tests/apply-scoped.spec.ts`：多 scope 事务、单 scope 失败不误回滚他 scope、installer handoff 状态。
-
-
 
 #### 9.5 splash 与设置
 
 - `overlay/desktop/src/main.ts`：splash 按 11.7 十条实现（按 scope 展示、超时放行、强制阻断、installer 交接）；`promptUpdateAfterReady()` 改按 scope+required。
 - 设置页三区（11.8）：只读版本区、策略区（受企业上限）、操作区；新增 route/baseline 状态展示。
 
-
-
 #### 9.6 命令接入
 
 - `baf update status|check|download|apply|rollback` 与 `/baf-update-*` 接 `UpdateService`。
-
-
 
 #### 9.7 打包与分发
 
 - `pack-plugin.mjs`：plugin zip manifest 增加 schema、payload scope、逐文件 hash、preset schema、BAF version、systemResources 声明；system/user payload 目标分离；zip 路径校验（拒 `..`/绝对路径/symlink 逃逸）。
 - `pack-dsh.mjs`/`build-release.mjs`：canonical BAF 进 shipped root；打包后 roster 复检脚本化。
 - **验收**：11.6 全部事务边界测试绿；离线/超时/强制更新/installer 退出/plugin 回滚各有确定行为。
-
-
 
 ### Phase 10：发布门禁和后续扩展
 
@@ -1869,11 +1608,7 @@ export function resolveRoute(
 
 ---
 
-
-
 ## 13. 文件实施清单
-
-
 
 ### 新增
 
@@ -1884,8 +1619,6 @@ export function resolveRoute(
 - `overlay/docs/baf/{enterprise-inputs,error-codes,compatibility-matrix,route-notes}.md`；
 - `overlay/plugin/standards/baf-baseline-c/`（baseline fixture）；
 - baseline/workflow/quality/guard/manifest/signature 各类 fixture 与 spec。
-
-
 
 ### 修改
 
@@ -1904,11 +1637,7 @@ export function resolveRoute(
 
 ---
 
-
-
 ## 14. 测试和验收标准
-
-
 
 ### 14.1 Preset 和信任
 
@@ -1944,8 +1673,6 @@ slash、CLI、desktop、Tab 同输入同状态；`baf status/doctor/version/clas
 
 ---
 
-
-
 ## 15. 企业必须提供的输入
 
 必须由企业在 Phase 0 提供（缺失时系统显示 unavailable 或 policy missing，不得使用 Ceedling、gcc、gcovr、cpplint、cppcheck 等旧默认值）：
@@ -1964,8 +1691,6 @@ slash、CLI、desktop、Tab 同输入同状态；`baf status/doctor/version/clas
 12. allowed provider/model 清单、能力标签、fallback group 和 route policy 版本。
 
 ---
-
-
 
 ## 16. 完成定义
 
@@ -1986,13 +1711,9 @@ slash、CLI、desktop、Tab 同输入同状态；`baf status/doctor/version/clas
 
 ---
 
-
-
 ## 17. 评审结论：遗漏、风险、可落地性与逐步实现门禁
 
 > 本章回答：需求是否理解完整、文档有无漏洞、计划能否按步落地、第一期如何裁剪。**结论先行：能落地；按 Phase 顺序可一步步做出基于 dsh 的公司级自定义 Agent；但必须先纠正三处硬错误，并用 MVP 裁剪控制爆炸半径。**
-
-
 
 ### 17.1 需求理解核对
 
@@ -2009,47 +1730,39 @@ slash、CLI、desktop、Tab 同输入同状态；`baf status/doctor/version/clas
 
 ### 17.2 遗漏与必须补充（已部分回填正文）
 
-
-| #   | 缺口                                               | 影响                                     | 处置                                                                  |
-| --- | ------------------------------------------------ | -------------------------------------- | ------------------------------------------------------------------- |
-| G1  | **dsh** `workflow` **工具与 BAF go 状态机混称**          | 实现者会误用 model-authored 脚本驱动阶段           | 已补 2.3；代码命名强制区分                                                     |
-| G2  | **独立** `baf` **Node bin 违规**                     | 会被 `verify-application-entrypoints` 拒绝 | 已补 9.1 / Phase 8.2：profile + thin wrapper                           |
-| G3  | **现状 plugin → user root**                        | 与 system trust / 完成定义矛盾                | 已补 3.9；Phase 1/9 关闭；改 overlay 文档与同步逻辑                               |
-| G4  | **自然语言如何推进阶段**                                   | 只有状态机没有驱动面                             | 已补 5.6：命令 + `baf_stage_`* 工具                                        |
-| G5  | **session log vs** `.baf/projection` **权威**      | 双写漂移、resume 不一致                        | 已补 5.7                                                              |
-| G6  | **MCP / 子代理 / ralph 旁路 ToolGuard**               | 硬门禁被绕过                                 | 已补 8.6 旁路面；Phase 7 测试清单                                             |
-| G7  | **包落点 packages vs overlay**                      | 与二次开发策略冲突、上游合并难                        | 已补 3.9 决策表                                                          |
-| G8  | **公开仓默认不验签**                                     | Phase 9 假设生产强制签名                       | Phase 0 登记：企业通道开启 `signatureVerificationEnabled`；公开演示仓可保留跳过但企业发行禁止  |
-| G9  | **Windows 投影锁与 fsync**                           | 多进程/杀进程半写                              | Phase 4 显式测：atomic rename、损坏检测、第二 writer 拒绝；不依赖 POSIX flock         |
-| G10 | **阶段 route 不经 dsh workflow 时如何传 provider/model** | 文档过度绑定 `agent()` options               | Phase 3：优先 session/agent 请求级 API；仅子代理扇出时复用 workflow `agent()`       |
-| G11 | **UI i18n / slots**                              | Tab 文案硬编码会被 `verify-client-ui-i18n` 拒绝 | Phase 8 按 `ui-baf-desktop` 模式注册 locale                              |
-| G12 | **conversation 内阶段提示**                           | 仅 Tab 时用户在聊天里看不见当前阶段                   | Phase 8 可选：conversation header/status strip 只读投影；第一期可后置             |
-| G13 | **plan mode / todo 与 BAF plan 阶段关系**             | 两套「计划」概念冲突                             | 冻结：BAF `plan` 阶段产物权威；dsh plan mode 在 BAF session 默认关闭或只读提示，不双写      |
-| G14 | **OpenSpec CLI 分发**                              | baseline 不含二进制时 verify 不可用             | Phase 0 企业输入：安装方式；fixture 用 stub 执行器；真实环境 `openspec_unavailable` 阻断 |
-| G15 | **多 change / 多 workspace**                       | 文档有选择逻辑但缺并发矩阵                          | Phase 4 验收：同 workspace 多 change 强制选择；跨 workspace 状态不串               |
-| G16 | **企业输入阻塞感过强**                                    | 误以为 Phase 0 齐才能开工                      | 已补第 12 章：0–4 不阻塞；5+ 用 fixture                                       |
-
-
-
+| #   | 缺口                                                           | 影响                                             | 处置                                                                                           |
+| --- | -------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| G1  | **dsh** `workflow` **工具与 BAF go 状态机混称**  | 实现者会误用 model-authored 脚本驱动阶段         | 已补 2.3；代码命名强制区分                                                                     |
+| G2  | **独立** `baf` **Node bin 违规**                 | 会被`verify-application-entrypoints` 拒绝      | 已补 9.1 / Phase 8.2：profile + thin wrapper                                                   |
+| G3  | **现状 plugin → user root**                             | 与 system trust / 完成定义矛盾                   | 已补 3.9；Phase 1/9 关闭；改 overlay 文档与同步逻辑                                            |
+| G4  | **自然语言如何推进阶段**                                 | 只有状态机没有驱动面                             | 已补 5.6：命令 +`baf_stage_`* 工具                                                           |
+| G5  | **session log vs** `.baf/projection` **权威**    | 双写漂移、resume 不一致                          | 已补 5.7                                                                                       |
+| G6  | **MCP / 子代理 / ralph 旁路 ToolGuard**                  | 硬门禁被绕过                                     | 已补 8.6 旁路面；Phase 7 测试清单                                                              |
+| G7  | **包落点 packages vs overlay**                           | 与二次开发策略冲突、上游合并难                   | 已补 3.9 决策表                                                                                |
+| G8  | **公开仓默认不验签**                                     | Phase 9 假设生产强制签名                         | Phase 0 登记：企业通道开启`signatureVerificationEnabled`；公开演示仓可保留跳过但企业发行禁止 |
+| G9  | **Windows 投影锁与 fsync**                               | 多进程/杀进程半写                                | Phase 4 显式测：atomic rename、损坏检测、第二 writer 拒绝；不依赖 POSIX flock                  |
+| G10 | **阶段 route 不经 dsh workflow 时如何传 provider/model** | 文档过度绑定`agent()` options                  | Phase 3：优先 session/agent 请求级 API；仅子代理扇出时复用 workflow`agent()`                 |
+| G11 | **UI i18n / slots**                                      | Tab 文案硬编码会被`verify-client-ui-i18n` 拒绝 | Phase 8 按`ui-baf-desktop` 模式注册 locale                                                   |
+| G12 | **conversation 内阶段提示**                              | 仅 Tab 时用户在聊天里看不见当前阶段              | Phase 8 可选：conversation header/status strip 只读投影；第一期可后置                          |
+| G13 | **plan mode / todo 与 BAF plan 阶段关系**                | 两套「计划」概念冲突                             | 冻结：BAF`plan` 阶段产物权威；dsh plan mode 在 BAF session 默认关闭或只读提示，不双写        |
+| G14 | **OpenSpec CLI 分发**                                    | baseline 不含二进制时 verify 不可用              | Phase 0 企业输入：安装方式；fixture 用 stub 执行器；真实环境`openspec_unavailable` 阻断      |
+| G15 | **多 change / 多 workspace**                             | 文档有选择逻辑但缺并发矩阵                       | Phase 4 验收：同 workspace 多 change 强制选择；跨 workspace 状态不串                           |
+| G16 | **企业输入阻塞感过强**                                   | 误以为 Phase 0 齐才能开工                        | 已补第 12 章：0–4 不阻塞；5+ 用 fixture                                                       |
 
 ### 17.3 风险登记（按严重度）
 
-
-| 风险                             | 等级  | 为何危险                          | 缓解                                              |
-| ------------------------------ | --- | ----------------------------- | ----------------------------------------------- |
-| R1 用 prompt/skill 冒充门禁         | 高   | Agent 一句话跳过 OpenSpec/verify   | ToolGuard + `WorkflowService` 表驱动；测试「模型声称完成」不推进 |
-| R2 官方资源落在 user root            | 高   | 用户可改/删/shadow；升级污染用户副本        | managed system root；shipped-root-first 测试       |
-| R3 把 BAF go 做成 dsh workflow 脚本 | 高   | 状态不可审计、可被模型改写                 | 2.3 红线；code review checklist                    |
-| R4 更新验签未开就宣称企业可分发              | 高   | 供应链攻击面                        | 完成定义绑定强制验签；公开仓演示与企业发行通道分离                       |
-| R5 C 工具链环境差异                   | 中   | CI 绿、同事机红                     | `tool_unavailable` 结构化；doctor；不伪造通过             |
-| R6 projection 损坏/半写            | 中   | 无法 resume 或谎报阶段               | append-only + CAS + 损坏停在 seq；archive 原子         |
-| R7 上游 dsh 合入冲突                 | 中   | `packages/baf` 与 preset 改动难回灌 | 3.9；尽量少改 host 热文件；preset 新增优于改 standard         |
-| R8 一期范围过大（Tab+三 scope+全质量）     | 中   | 半年无可用产品                       | 17.4 MVP 裁剪                                     |
-| R9 intake 规则误杀/漏放              | 中   | 小 Bug 过重或大改走快路径               | 用户确认卡；reason codes；升级 T15；规则可测                  |
-| R10 企业输入长期 `unavailable`       | 低   | 永远停在 fixture                  | 产品可演示；企业发行 checklist 单独门禁                       |
-
-
-
+| 风险                                   | 等级 | 为何危险                              | 缓解                                                              |
+| -------------------------------------- | ---- | ------------------------------------- | ----------------------------------------------------------------- |
+| R1 用 prompt/skill 冒充门禁            | 高   | Agent 一句话跳过 OpenSpec/verify      | ToolGuard +`WorkflowService` 表驱动；测试「模型声称完成」不推进 |
+| R2 官方资源落在 user root              | 高   | 用户可改/删/shadow；升级污染用户副本  | managed system root；shipped-root-first 测试                      |
+| R3 把 BAF go 做成 dsh workflow 脚本    | 高   | 状态不可审计、可被模型改写            | 2.3 红线；code review checklist                                   |
+| R4 更新验签未开就宣称企业可分发        | 高   | 供应链攻击面                          | 完成定义绑定强制验签；公开仓演示与企业发行通道分离                |
+| R5 C 工具链环境差异                    | 中   | CI 绿、同事机红                       | `tool_unavailable` 结构化；doctor；不伪造通过                   |
+| R6 projection 损坏/半写                | 中   | 无法 resume 或谎报阶段                | append-only + CAS + 损坏停在 seq；archive 原子                    |
+| R7 上游 dsh 合入冲突                   | 中   | `packages/baf` 与 preset 改动难回灌 | 3.9；尽量少改 host 热文件；preset 新增优于改 standard             |
+| R8 一期范围过大（Tab+三 scope+全质量） | 中   | 半年无可用产品                        | 17.4 MVP 裁剪                                                     |
+| R9 intake 规则误杀/漏放                | 中   | 小 Bug 过重或大改走快路径             | 用户确认卡；reason codes；升级 T15；规则可测                      |
+| R10 企业输入长期`unavailable`        | 低   | 永远停在 fixture                      | 产品可演示；企业发行 checklist 单独门禁                           |
 
 ### 17.4 能否落地 / 计划是否够细 / 如何一步步做
 
@@ -2104,8 +1817,6 @@ Phase 10 release 门禁
 - 不在公开演示通道关闭验签的同时声称「企业供应链安全已完成」；
 - 不把 `overlay/plugin` 同步到 user presets 当作临时「也行」长期留下。
 
-
-
 ### 17.6 给实现负责人的开工检查单
 
 开始写代码前只确认这 8 项：
@@ -2130,27 +1841,24 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 
 > 与 §18、§19、§20 配套：本节是评审视角的运行时风险登记，方便实现 Phase 8.7–8.10 时一一对照。
 
-| 风险                                                | 等级  | 为什么                                                        | 缓解                                                                                          |
-| ------------------------------------------------- | --- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| R11 coordinator 自己写了第二套转换规则，与 §5.2 转换表分叉         | 高   | 状态机权威被稀释，resume / audit 不一致                            | coordinator 必须是纯路由器：不调 `WorkflowService.transition`，所有状态改走现有 drive                                                |
-| R12 coordinator 把单步驱动器（`/baf-workflow-*`）偷偷替换或废弃       | 中   | 客户脚本化复跑被破坏                                              | §18.1 明确：单步驱动器原样保留；coordinator 是上层习惯，不强制门禁                                                            |
-| R13 确认门 A/B 被模型用自然语言绕过（「继续」「好的」「下一步」）                | 中   | 误把客户在会话中说的「继续」当作 confirm；跳过 review              | confirm 只认**人因入口**：§22.17 弹窗点击（source `gate-card`）或 `/baf-go-confirm` / 二次 `/baf-go` 斜杠命令（§18.5）；自然语言回复不触发任何 drive，`baf_gate_ask` 工具只弹框不代答；确认门卡片第一行必须出现动作词（「确认弹窗点确认 / 回复 /baf-go-confirm」） |
-| R14 同 session 跨变更（active change = 1 + 新描述）被模型自动开第二条   | 中   | 工作流视图按 session 分组时被多条变更污染；审计链路交叉                  | §18.6 守卫 5：硬返回「请新开 session」卡，coordinator 不调 driveOpen                                                |
-| R15 drift / 已放弃 / completed 状态下 `/baf-go` 误把旧变更当新需求启动 | 中 | 失去终态语义 | §18.7 边界表：drift → 转 §19 候选卡（不自动选点）；终态一律返回错误卡，走新会话新 intake |
-| R16 verify 报告过期，confirm 后仍直接 archive                | 低   | 依赖新鲜度未校验                                              | coordinator confirm 路径重读 `verify-report.json` 时间戳与 source revision，不匹配返回 `verify_stale` 卡                      |
-| R17 coordinator 与 §8.6 listChanges 的会话维度冲突             | 低   | dashboard 列全 cwd 变更；Tab 只列本 session 焦点变更；客户误读为 bug | §18.6 明确两个视图分工：dashboard = cwd 全集；Tab = session 焦点；文案区分                                                |
-| R18 drift 下 `/baf-go` 自动替客户选回退节点                     | 中   | 客户没意识到哪些已完成工作被判失效，静默丢工作                          | §19.4 明确：`baf-go` 只做检测 + 渲染候选卡，**永不自动选节点**；选点是客户对「哪些工作作废」的决策                                    |
-| R19 会话启动门体检失败/超时阻塞会话打开                          | 中   | 缺一个外部工具就打不开 BAF 会话，比不体检更糟                          | §18.3 体检是**只读 + 不阻断**：超时降级为「未探测」，缺件只影响对应阶段（如缺 OpenSpec → full-go-path 启动时才 `openspec_unavailable`）        |
-| R20 启动门在 `agent/created` 做 I/O 拖慢首屏                   | 低   | 首屏白屏或卡顿                                            | 体检异步、结果缓存到 session 焦点旁路；首屏先出绑定结论，体检明细后填                                                       |
-| R21 双 path 视图把 fast-path ledger 与 full-go-path 产物画成一条线     | 中   | 客户看不懂「从哪跳的」，追溯断裂                                  | §18.4.3 明确**两泳道 + 一条升级边**；fast-path 产物（`fastpath-ledger.json`、最小 bug 记录）永久保留并单独标注                           |
-| R22 日志行泄露内容或凭证                                     | 中   | 排障日志把源码/密钥写进会话                                          | §20.4 只打 `key=value` 元数据；不打文件内容、不打 token；受 `secret-scan` 门禁                                        |
-| R23 新增 i18n key 漏登记，落地时被 `verify-client-ui-i18n` 卡住 | 低   | 实现阶段返工                                              | §20.7 先冻结 key 清单；客户端文案一律走字典，禁止硬编码                                                              |
-| R24 新增 `awaiting-confirm` 事件但漏改 `projection.ts` replay 的穷尽 `switch` | **高** | `default` 分支抛 `projection_corrupted`，**任何含该事件的 projection 重放全部判损坏**，已归档审计链一起失效 | §18.8 已注明：加事件的同一次提交必须加 `case`；PR 检查单列为必查项；`tests/projection.spec.ts` 加未知事件用例 |
-
+| 风险                                                                               | 等级         | 为什么                                                                                                                | 缓解                                                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R11 coordinator 自己写了第二套转换规则，与 §5.2 转换表分叉                        | 高           | 状态机权威被稀释，resume / audit 不一致                                                                               | coordinator 必须是纯路由器：不调`WorkflowService.transition`，所有状态改走现有 drive                                                                                                                                                                                             |
+| R12 coordinator 把单步驱动器（`/baf-workflow-*`）偷偷替换或废弃                  | 中           | 客户脚本化复跑被破坏                                                                                                  | §18.1 明确：单步驱动器原样保留；coordinator 是上层习惯，不强制门禁                                                                                                                                                                                                                |
+| R13 确认门 A/B 被模型用自然语言绕过（「继续」「好的」「下一步」）                  | 中           | 误把客户在会话中说的「继续」当作 confirm；跳过 review                                                                 | confirm 只认**人因入口**：§22.17 弹窗点击（source `gate-card`）或 `/baf-go-confirm` / 二次 `/baf-go` 斜杠命令（§18.5）；自然语言回复不触发任何 drive，`baf_gate_ask` 工具只弹框不代答；确认门卡片第一行必须出现动作词（「确认弹窗点确认 / 回复 /baf-go-confirm」） |
+| R14 同 session 跨变更（active change = 1 + 新描述）被模型自动开第二条              | 中           | 工作流视图按 session 分组时被多条变更污染；审计链路交叉                                                               | §18.6 守卫 5：硬返回「请新开 session」卡，coordinator 不调 driveOpen                                                                                                                                                                                                              |
+| R15 drift / 已放弃 / completed 状态下`/baf-go` 误把旧变更当新需求启动            | 中           | 失去终态语义                                                                                                          | §18.7 边界表：drift → 转 §19 候选卡（不自动选点）；终态一律返回错误卡，走新会话新 intake                                                                                                                                                                                        |
+| R16 verify 报告过期，confirm 后仍直接 archive                                      | 低           | 依赖新鲜度未校验                                                                                                      | coordinator confirm 路径重读`verify-report.json` 时间戳与 source revision，不匹配返回 `verify_stale` 卡                                                                                                                                                                        |
+| R17 coordinator 与 §8.6 listChanges 的会话维度冲突                                | 低           | dashboard 列全 cwd 变更；Tab 只列本 session 焦点变更；客户误读为 bug                                                  | §18.6 明确两个视图分工：dashboard = cwd 全集；Tab = session 焦点；文案区分                                                                                                                                                                                                        |
+| R18 drift 下`/baf-go` 自动替客户选回退节点                                       | 中           | 客户没意识到哪些已完成工作被判失效，静默丢工作                                                                        | §19.4 明确：`baf-go` 只做检测 + 渲染候选卡，**永不自动选节点**；选点是客户对「哪些工作作废」的决策                                                                                                                                                                        |
+| R19 会话启动门体检失败/超时阻塞会话打开                                            | 中           | 缺一个外部工具就打不开 BAF 会话，比不体检更糟                                                                         | §18.3 体检是**只读 + 不阻断**：超时降级为「未探测」，缺件只影响对应阶段（如缺 OpenSpec → full-go-path 启动时才 `openspec_unavailable`）                                                                                                                                  |
+| R20 启动门在`agent/created` 做 I/O 拖慢首屏                                      | 低           | 首屏白屏或卡顿                                                                                                        | 体检异步、结果缓存到 session 焦点旁路；首屏先出绑定结论，体检明细后填                                                                                                                                                                                                              |
+| R21 双 path 视图把 fast-path ledger 与 full-go-path 产物画成一条线                 | 中           | 客户看不懂「从哪跳的」，追溯断裂                                                                                      | §18.4.3 明确**两泳道 + 一条升级边**；fast-path 产物（`fastpath-ledger.json`、最小 bug 记录）永久保留并单独标注                                                                                                                                                            |
+| R22 日志行泄露内容或凭证                                                           | 中           | 排障日志把源码/密钥写进会话                                                                                           | §20.4 只打`key=value` 元数据；不打文件内容、不打 token；受 `secret-scan` 门禁                                                                                                                                                                                                 |
+| R23 新增 i18n key 漏登记，落地时被`verify-client-ui-i18n` 卡住                   | 低           | 实现阶段返工                                                                                                          | §20.7 先冻结 key 清单；客户端文案一律走字典，禁止硬编码                                                                                                                                                                                                                           |
+| R24 新增`awaiting-confirm` 事件但漏改 `projection.ts` replay 的穷尽 `switch` | **高** | `default` 分支抛 `projection_corrupted`，**任何含该事件的 projection 重放全部判损坏**，已归档审计链一起失效 | §18.8 已注明：加事件的同一次提交必须加`case`；PR 检查单列为必查项；`tests/projection.spec.ts` 加未知事件用例                                                                                                                                                                  |
 
 ---
-
-
 
 ## 18. `baf-go`：会话启动门、自动驱动与强制客户确认
 
@@ -2173,14 +1881,14 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 
 ### 18.2 入口语义：说需求 vs 推流程
 
-| 客户动作 | 触发什么 | 要 `/baf-go` 吗 |
-| --- | --- | --- |
-| **直接说需求**（自然语言） | 启动门 →（新开时）intake 分类 → 弹**分类卡** | **不要**。这是主路径 |
-| **分类卡被错过 / 对话中断后想重新弹出** | coordinator 重放那张待决卡 | 要：`/baf-go` |
-| **在途阶段想推到下一步**（clarify 答完、design 写完、plan 写完、implement 做完…） | 路由表派发到对应 drive | 要：`/baf-go` |
-| **停在确认门上**（门 A / 门 B） | **重新弹出 §22.17 交互确认框**；弹窗里点「确认」即进入下一阶段 | 要：`/baf-go`（不弹框直接继续用 `/baf-go-confirm`，见 §22.17） |
-| **drift 状态** | 自动转 `/baf-workflow-resume` 的交互式选点 | 要：`/baf-go`（自动映射） |
-| **终态**（completed / abandoned） | 错误卡：请新开工作流 | 要：`/baf-go`（只报错） |
+| 客户动作                                                                                 | 触发什么                                                              | 要`/baf-go` 吗                                                    |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **直接说需求**（自然语言）                                                         | 启动门 →（新开时）intake 分类 → 弹**分类卡**                  | **不要**。这是主路径                                          |
+| **分类卡被错过 / 对话中断后想重新弹出**                                            | coordinator 重放那张待决卡                                            | 要：`/baf-go`                                                     |
+| **在途阶段想推到下一步**（clarify 答完、design 写完、plan 写完、implement 做完…） | 路由表派发到对应 drive                                                | 要：`/baf-go`                                                     |
+| **停在确认门上**（门 A / 门 B）                                                    | **重新弹出 §22.17 交互确认框**；弹窗里点「确认」即进入下一阶段 | 要：`/baf-go`（不弹框直接继续用 `/baf-go-confirm`，见 §22.17） |
+| **drift 状态**                                                                     | 自动转`/baf-workflow-resume` 的交互式选点                           | 要：`/baf-go`（自动映射）                                         |
+| **终态**（completed / abandoned）                                                  | 错误卡：请新开工作流                                                  | 要：`/baf-go`（只报错）                                           |
 
 **`baf-go` 的统一定义**：*「把本 session 推进到下一个需要客户动作的点，并渲染那张卡片」*。它**幂等**——已经停在同一张待决卡上时再敲一次只是重渲同一张卡，不重复推进状态、不产生新事件。
 
@@ -2188,16 +1896,16 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 
 **`/baf-go-confirm` 是什么**（2026-09-17 曾拍板「不做 confirm 子命令」，2026-09-20 §22.17 引入弹窗通道后**修订**）：`/baf-go` 在确认门上改为**重新弹出交互确认框**——它不再兼作「静默确认」，因为「客户想再看看那张确认框」和「客户已确认」是两个不同的动作，合在一个命令上就分不清。`/baf-go-confirm` 是那个**不弹框的正路径**：门 A 直接进 plan、门 B 直接归档、待决 intake 直接确认、未初始化工作区直接 scaffold（drift 除外——§19 永不自动选点）。原决策担心的「`confirm` 一词两义」并未复发：`/baf-workflow-classify confirm` 与 `/baf-go-confirm` 是两个完整命令名，路径依旧不通用（见 §18.5 统一约定）。
 
-| 形态 | 调用 | 描述参数处理 |
-| --- | --- | --- |
-| slash（**主用法**） | `/baf-go` | 无参数 |
-| slash（边缘） | `/baf-go <描述...>` | 未绑定 → 等价于说需求；已绑定 → 「请新开 session」卡 |
-| slash | `/baf-workflow-resume [节点]` | 见第 19 章 |
-| slash（§22.17） | `/baf-go-confirm` | 无参数；不弹框直接走确认门 / intake / scaffold 正路径 |
-| standalone CLI | `dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- go` | 同 slash 无参形态 |
-| standalone CLI（§22.17） | `… -- go-confirm` | 同 `/baf-go-confirm`；CLI 无弹窗通道，`baf go` 保持「门上再敲一次即确认」的既有语义 |
-| desktop 工作流 Tab | 顶栏「继续 / 自动驱动」按钮 | 不带描述 |
-| Remote（Typert） | `BafWorkflowTabRemote.go()` | 与 slash / CLI 共源 |
+| 形态                      | 调用                                                                                                         | 描述参数处理                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| slash（**主用法**） | `/baf-go`                                                                                                  | 无参数                                                                                 |
+| slash（边缘）             | `/baf-go <描述...>`                                                                                        | 未绑定 → 等价于说需求；已绑定 → 「请新开 session」卡                                 |
+| slash                     | `/baf-workflow-resume [节点]`                                                                              | 见第 19 章                                                                             |
+| slash（§22.17）          | `/baf-go-confirm`                                                                                          | 无参数；不弹框直接走确认门 / intake / scaffold 正路径                                  |
+| standalone CLI            | `dsh --from-default-profile baf --patch packages/baf/baf-workflow/overlays/baf-cli.cordis.patch.yml -- go` | 同 slash 无参形态                                                                      |
+| standalone CLI（§22.17） | `… -- go-confirm`                                                                                         | 同`/baf-go-confirm`；CLI 无弹窗通道，`baf go` 保持「门上再敲一次即确认」的既有语义 |
+| desktop 工作流 Tab        | 顶栏「继续 / 自动驱动」按钮                                                                                  | 不带描述                                                                               |
+| Remote（Typert）          | `BafWorkflowTabRemote.go()`                                                                                | 与 slash / CLI 共源                                                                    |
 
 ### 18.3 会话启动门（Session Binding Gate）
 
@@ -2207,19 +1915,19 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 
 **三件事，一次呈现**：
 
-| 步骤 | 做什么 | 输出 |
-| --- | --- | --- |
-| 3.1 绑定判定 | 读 `<workspace>/.baf/projection/index.json`，数 `current ∉ {completed, abandoned}` 的 change | `0` / `1` / `>= 2` 条 |
-| 3.2 工具链体检 | 只读探测必须工具链（§18.3.2） | 每项 `✓ / ✗ / ?` + 缺失引导 |
-| 3.3 欢迎语 | 把 3.1 + 3.2 合成一张 BAF 欢迎卡（模板见 §20.3） | 一张卡，一次呈现 |
+| 步骤           | 做什么                                                                                           | 输出                           |
+| -------------- | ------------------------------------------------------------------------------------------------ | ------------------------------ |
+| 3.1 绑定判定   | 读`<workspace>/.baf/projection/index.json`，数 `current ∉ {completed, abandoned}` 的 change | `0` / `1` / `>= 2` 条    |
+| 3.2 工具链体检 | 只读探测必须工具链（§18.3.2）                                                                   | 每项`✓ / ✗ / ?` + 缺失引导 |
+| 3.3 欢迎语     | 把 3.1 + 3.2 合成一张 BAF 欢迎卡（模板见 §20.3）                                                | 一张卡，一次呈现               |
 
 #### 18.3.1 绑定判定
 
-| projection 现状 | 卡片 | 客户可选 |
-| --- | --- | --- |
-| 无 active change | 「无未完成工作流 · 请描述需求」 | 直接说需求 |
-| 恰好 1 条 active change | 「检测到未完成工作流 `<id>`（当前 `N<x>` · `mode`）· 继续还是新开？」 | `继续` / `新开` |
-| `>= 2` 条 active change | 列出候选（id · 模式 · 当前节点 · 最后活动时间） | 选一条继续 / 新开 |
+| projection 现状           | 卡片                                                                         | 客户可选            |
+| ------------------------- | ---------------------------------------------------------------------------- | ------------------- |
+| 无 active change          | 「无未完成工作流 · 请描述需求」                                             | 直接说需求          |
+| 恰好 1 条 active change   | 「检测到未完成工作流`<id>`（当前 `N<x>` · `mode`）· 继续还是新开？」 | `继续` / `新开` |
+| `>= 2` 条 active change | 列出候选（id · 模式 · 当前节点 · 最后活动时间）                           | 选一条继续 / 新开   |
 
 - 选「**继续**」→ 该 `changeId` 成为本 session 的**焦点变更**，缓存在 `BafWorkflow.bindWorkspace()` 旁路（**不写 projection**）；后续说需求视为对该变更的补充，**不再走新 intake**。
   - 实现口径：启动卡**只读**，不替客户落绑定（§18.10-2）。客户说「继续」= 敲卡片【下一步】里印出的那条命令——单条时 `/baf-go continue`，多条时 `/baf-go change=<id>`；绑定走 §18.6 `resolveBinding` 既有路径，不新增判定分支。
@@ -2229,15 +1937,15 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 
 #### 18.3.2 必须工具链体检（同一张卡片打印）
 
-| 检查项 | 探测方式 | 缺失时的引导 |
-| --- | --- | --- |
-| workspace | `cwd` 存在且可写 | 换目录打开 |
-| baseline | `.baf/baseline.yml` 可读可解析 | `baf scaffold` 生成 / 导入企业 baseline |
-| Git | `git rev-parse HEAD`（drift 锚点） | 初始化仓库 |
-| OpenSpec | `openspec` CLI 可执行（超时则记 `?`，见下） + `openspec/` 存在（full-go-path 硬前置） | 安装 OpenSpec CLI / `baf scaffold` |
-| C 工具链 | **首屏不探测**（§21.4 已决）：显示 `? 未探测 · 首次进入 verify 时检查`；逐项探测交给 Phase 7 QualityRunner | 进入 verify 时按 baseline 逐项给出（如 `pip install gcovr`） |
-| guard / quality | `baf-guard` / `baf-quality` 挂载情况 | 检查 preset composition |
-| 版本 | `resolveBafProductVersions()`：`baf-dsh` / dsh / 四个 `baf-*` | 提示更新 |
+| 检查项          | 探测方式                                                                                                             | 缺失时的引导                                                  |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| workspace       | `cwd` 存在且可写                                                                                                   | 换目录打开                                                    |
+| baseline        | `.baf/baseline.yml` 可读可解析                                                                                     | `baf scaffold` 生成 / 导入企业 baseline                     |
+| Git             | `git rev-parse HEAD`（drift 锚点）                                                                                 | 初始化仓库                                                    |
+| OpenSpec        | `openspec` CLI 可执行（超时则记 `?`，见下） + `openspec/` 存在（full-go-path 硬前置）                          | 安装 OpenSpec CLI /`baf scaffold`                           |
+| C 工具链        | **首屏不探测**（§21.4 已决）：显示 `? 未探测 · 首次进入 verify 时检查`；逐项探测交给 Phase 7 QualityRunner | 进入 verify 时按 baseline 逐项给出（如`pip install gcovr`） |
+| guard / quality | `baf-guard` / `baf-quality` 挂载情况                                                                             | 检查 preset composition                                       |
+| 版本            | `resolveBafProductVersions()`：`baf-dsh` / dsh / 四个 `baf-*`                                                  | 提示更新                                                      |
 
 - 体检是**只读探测**：不写 projection、不改状态、不触发任何 transition。
 - **缺件不阻断会话打开**；但缺 OpenSpec 时 full-go-path 一启动就会返回 `openspec_unavailable`（§18.7）——在启动时把这句说清楚，比在 N1 报错好。
@@ -2255,28 +1963,28 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 
 #### 18.4.1 前置：session 绑定
 
-| session 状态 | 下一步 | 停下？ |
-| --- | --- | --- |
-| 未绑定 + 无 active change | 渲染启动卡：「无未完成工作流 · 请描述需求」 | **■** |
-| 未绑定 + 有 active change | 渲染启动卡：「继续 / 新开」 | **■** |
-| 未绑定 + 客户此时说了需求（新开） | `driveOpen` → intake 分类卡 | **■** |
-| 已绑定焦点 change | 进入下面的节点路由 | — |
+| session 状态                      | 下一步                                       | 停下？       |
+| --------------------------------- | -------------------------------------------- | ------------ |
+| 未绑定 + 无 active change         | 渲染启动卡：「无未完成工作流 · 请描述需求」 | **■** |
+| 未绑定 + 有 active change         | 渲染启动卡：「继续 / 新开」                  | **■** |
+| 未绑定 + 客户此时说了需求（新开） | `driveOpen` → intake 分类卡               | **■** |
+| 已绑定焦点 change                 | 进入下面的节点路由                           | —           |
 
 #### 18.4.2 节点路由
 
-| 当前节点 + 模式 | 下一步 drive（coordinator 委派） | 完成后 | 停下？ |
-| --- | --- | --- | --- |
-| `intake`（未 confirm） | 重放 intake 分类卡 | — | **■** |
-| `intake`（已 confirm，未 open） | `pipeline.driveOpenStage` / `driveFastPathOpenStage`（mode 由 intake 决定） | `open` | — |
-| `open` | `pipeline.beginDocStage('clarify')` | `clarify` in-progress | — |
-| `clarify` in-progress | `pipeline.completeDocStage('clarify')` | `design` | — |
-| `clarify` available（已装模板未填） | 装模板停靠点：coordinator 不动状态，但客户手敲 `/baf-go` 会**派单**（§18.4.2 「/baf-go 派单」）唤醒模型填模板 | `design` | — |
-| `design` in-progress | `pipeline.completeDocStage('design')` | **进入门 A** | **■** |
-| `plan` in-progress | `pipeline.completeDocStage('plan')` | `implement` | — |
-| `plan` available | 等模型写 `plan.json`；coordinator 不动状态，客户手敲 `/baf-go` 同样派单 | `implement` | — |
-| `implement` in-progress（full-go-path） | 检查 `plan.json`：有未完成 → 等模型（手敲 `/baf-go` 派单）；全 done → `driveImplementStage` | `verify` | — |
-| `implement` in-progress（fast-path） | 检查 `fastpath-ledger.json`：有未完成 → 等模型；全 done → `driveImplementStage` | 触发 T15 则升级（见下）；否则 `verify` | — |
-| `verify`（`enterStage` 成功） | `pipeline.driveVerifyStage` | 通过 → **门 B**；失败 → 回 `implement`（T11 退回卡同样派单） | 通过时 **■** |
+| 当前节点 + 模式                           | 下一步 drive（coordinator 委派）                                                                                      | 完成后                                                                | 停下？             |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------ |
+| `intake`（未 confirm）                  | 重放 intake 分类卡                                                                                                    | —                                                                    | **■**       |
+| `intake`（已 confirm，未 open）         | `pipeline.driveOpenStage` / `driveFastPathOpenStage`（mode 由 intake 决定）                                       | `open`                                                              | —                 |
+| `open`                                  | `pipeline.beginDocStage('clarify')`                                                                                 | `clarify` in-progress                                               | —                 |
+| `clarify` in-progress                   | `pipeline.completeDocStage('clarify')`                                                                              | `design`                                                            | —                 |
+| `clarify` available（已装模板未填）     | 装模板停靠点：coordinator 不动状态，但客户手敲`/baf-go` 会**派单**（§18.4.2 「/baf-go 派单」）唤醒模型填模板 | `design`                                                            | —                 |
+| `design` in-progress                    | `pipeline.completeDocStage('design')`                                                                               | **进入门 A**                                                    | **■**       |
+| `plan` in-progress                      | `pipeline.completeDocStage('plan')`                                                                                 | `implement`                                                         | —                 |
+| `plan` available                        | 等模型写`plan.json`；coordinator 不动状态，客户手敲 `/baf-go` 同样派单                                            | `implement`                                                         | —                 |
+| `implement` in-progress（full-go-path） | 检查`plan.json`：有未完成 → 等模型（手敲 `/baf-go` 派单）；全 done → `driveImplementStage`                    | `verify`                                                            | —                 |
+| `implement` in-progress（fast-path）    | 检查`fastpath-ledger.json`：有未完成 → 等模型；全 done → `driveImplementStage`                                  | 触发 T15 则升级（见下）；否则`verify`                               | —                 |
+| `verify`（`enterStage` 成功）         | `pipeline.driveVerifyStage`                                                                                         | 通过 →**门 B**；失败 → 回 `implement`（T11 退回卡同样派单） | 通过时**■** |
 
 **【变更】2026-09-28（用户问题 8）：验证检查单 checklist.md（双前置硬门）**
 
@@ -2284,9 +1992,9 @@ Phase 8.7–8.10 开工前追加确认这 4 项：
 - **入口前置（verify-advance 前）**：`checklistGate`（stages/gates.ts）—— checkist 缺失 / 仍是模板 / 无检查项 → `/baf-go` 拒绝卡「验证检查单未就绪 · 不能开始验证」+ 派 `checklist-missing` 工单（implement 节点，产物指 checklist.md）。确认卡（verify-advance）只在通过后才弹，弹的即客户对检查单的确认。
 - **归档前置（门 B 前）**：`checklistTickedGate` —— verify 通过后若仍有 `- [ ]` 未勾项 → 拒绝卡「检查单未全部确认 · 不能归档」逐项列出未确认项 + 派 `checklist-open` 工单（verify 节点）；全 `[x]` 才 park 门 B。baf-guard 同步放行 **verify 阶段仅 checklist.md** 可写（勾选动作），其余产物仍保护。
 - **后续版本**：checklist 的分节模板与用户自定义裁剪（哪些检查项类别默认包含）—— 本版先落地硬门 + 全量清单。
-| `archive`（已通过 verify） | `pipeline.driveArchiveStage(..., humanConfirmed: true)`（**只在客户确认后**） | `archived` | **■** |
-| `drift` | **转 `/baf-workflow-resume` 候选卡**（§19.4） | 客户选点后回到该节点 | **■** |
-| `completed` / `abandoned` | 错误卡「当前工作流已终态；请新开一个会话」 | — | — |
+  | `archive`（已通过 verify） | `pipeline.driveArchiveStage(..., humanConfirmed: true)`（**只在客户确认后**） | `archived` | **■** |
+  | `drift` | **转 `/baf-workflow-resume` 候选卡**（§19.4） | 客户选点后回到该节点 | **■** |
+  | `completed` / `abandoned` | 错误卡「当前工作流已终态；请新开一个会话」 | — | — |
 
 **T15 升级后不换 session**：fast-path 在 implement 阶段升级为 full-go-path 时，`driveEscalateStage` 写 `mode-upgraded` + `stage-entered('clarify')`，`status.current` 变成 `clarify`。下一次 `/baf-go` **自然命中** `clarify in-progress` 那一行，按 full-go-path 继续走 clarify → design → plan → implement → verify。这是**预期行为**，不需要新 session、不需要额外命令；卡片必须显式说明「已升级 full-go-path · 当前 clarify · 缺少的 clarify/design/plan 将补走」，避免客户看到流程图回退而困惑。同时 Tab 切到双泳道视图（§18.4.3）。
 
@@ -2386,21 +2094,21 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 ### 18.7 边界与错误处理
 
-| 场景 | 返回卡片（标题 + 副标题） | 后续动作 |
-| --- | --- | --- |
-| 缺 cwd | `缺少工作区`（同 `missingCwd`） | 同既有 |
-| baseline 缺失 / 不兼容 | `baseline_unavailable` / `baseline_incompatible` | 提示 `baf scaffold` 或导入企业 baseline |
-| **OpenSpec 不可用（fixture 模式或未装 CLI）** | `openspec_unavailable · full-go-path 需要 OpenSpec · 下一步安装 CLI 或 baf scaffold` | 客户装 CLI 后 `/baf-go` 重试 |
-| 会话未绑定 + 空描述 | `请先描述需求，或选择「继续」已有工作流` | 客户说需求 / 选继续 |
-| active change `>= 2` | `多个活动变更，需显式指定` | 客户在卡上选一条 |
-| active change = 1 + 新描述 | `本 session 已有工作流 · 请新开一个会话`（§18.6 守卫 5） | 客户新开 conversation |
-| 当前 `intake` 未 confirm | `请 /baf-workflow-classify confirm` | 客户补 confirm |
-| 当前 `drift` | `drift detected · 请选择复位目标节点`（转第 19 章候选卡） | 客户选点 |
-| 当前 `completed` / `abandoned` | `当前 change 已终态` | 客户 `/baf-go <新描述>` 或放弃 |
-| `verify` 失败（T11） | `必需检查失败 · T11 回实现` | 客户修复后 `/baf-go` 续跑 |
-| T15 升级（fast-path 范围扩大） | `T15 已升级 full-go-path · 当前 clarify · 补齐 clarify/design/plan 后继续` | 客户 `/baf-go` 续跑 |
-| 两个确认门任一处客户回复自然语言（非命令 / 非弹窗点击） | 卡片重放（幂等，状态不动） | 客户敲 `/baf-go`（重弹确认框）或 `/baf-go-confirm` |
-| 模型在确认前重跑设计（`/baf-workflow-design`） | 单步驱动器成功；coordinator 不视为冲突，继续等确认 | 客户最终 `/baf-go` |
+| 场景                                                    | 返回卡片（标题 + 副标题）                                                                | 后续动作                                              |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 缺 cwd                                                  | `缺少工作区`（同 `missingCwd`）                                                      | 同既有                                                |
+| baseline 缺失 / 不兼容                                  | `baseline_unavailable` / `baseline_incompatible`                                     | 提示`baf scaffold` 或导入企业 baseline              |
+| **OpenSpec 不可用（fixture 模式或未装 CLI）**     | `openspec_unavailable · full-go-path 需要 OpenSpec · 下一步安装 CLI 或 baf scaffold` | 客户装 CLI 后`/baf-go` 重试                         |
+| 会话未绑定 + 空描述                                     | `请先描述需求，或选择「继续」已有工作流`                                               | 客户说需求 / 选继续                                   |
+| active change`>= 2`                                   | `多个活动变更，需显式指定`                                                             | 客户在卡上选一条                                      |
+| active change = 1 + 新描述                              | `本 session 已有工作流 · 请新开一个会话`（§18.6 守卫 5）                             | 客户新开 conversation                                 |
+| 当前`intake` 未 confirm                               | `请 /baf-workflow-classify confirm`                                                    | 客户补 confirm                                        |
+| 当前`drift`                                           | `drift detected · 请选择复位目标节点`（转第 19 章候选卡）                             | 客户选点                                              |
+| 当前`completed` / `abandoned`                       | `当前 change 已终态`                                                                   | 客户`/baf-go <新描述>` 或放弃                       |
+| `verify` 失败（T11）                                  | `必需检查失败 · T11 回实现`                                                           | 客户修复后`/baf-go` 续跑                            |
+| T15 升级（fast-path 范围扩大）                          | `T15 已升级 full-go-path · 当前 clarify · 补齐 clarify/design/plan 后继续`           | 客户`/baf-go` 续跑                                  |
+| 两个确认门任一处客户回复自然语言（非命令 / 非弹窗点击） | 卡片重放（幂等，状态不动）                                                               | 客户敲`/baf-go`（重弹确认框）或 `/baf-go-confirm` |
+| 模型在确认前重跑设计（`/baf-workflow-design`）        | 单步驱动器成功；coordinator 不视为冲突，继续等确认                                       | 客户最终`/baf-go`                                   |
 
 **错误码全部沿用 §0.1**（`tool_unavailable` / `openspec_unavailable` / `baseline_unavailable` / `baseline_incompatible` / `policy_missing` / `invalid_transition` / `intake_confirmation_required` / `scope_exceeded` / `protected_path` / `verify_required` …）；coordinator 不引入新错误码。
 
@@ -2423,10 +2131,10 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 **文件分工**
 
-| 文件 | 职责 |
-| --- | --- |
+| 文件                  | 职责                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
 | `go-coordinator.ts` | `driveGo(input)`：绑定判定 → 读 status → 路由 → 渲染卡片。**纯路由**，不拥有任何 transition |
-| `session-focus.ts` | `focusFor(cwd)`：本 session 焦点变更的进程内缓存（§18.6 守卫 3 的「旁路」） |
+| `session-focus.ts`  | `focusFor(cwd)`：本 session 焦点变更的进程内缓存（§18.6 守卫 3 的「旁路」）                         |
 
 `driveGo` **故意不放进 `command-drives.ts`**：`surface-parity.spec.ts` 的 `DRIVE_TO_SLASH` 是「一个 drive = 一次阶段转换」的严格映射，coordinator 组合 drive 却不拥有转换，放进那张表会让映射语义失真。它也**不是第五个入口**——它是「入口的组合」，四条表面（slash / CLI / Remote / drives）照旧，`/baf-go` 只是在 slash 与 CLI 两条上各加一行。
 
@@ -2450,12 +2158,12 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 **文件分工**
 
-| 文件 | 职责 |
-| --- | --- |
+| 文件                | 职责                                                                                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `session-gate.ts` | 探针（`probeToolchain`）+ 绑定判定（`resolveStartupBinding`）+ 卡片（`renderWelcomeCard`）+ 日志行（`sessionGateLogLine`）+ 模型侧 section（`sessionGateSection`）+ 挂载行（`apply`） |
-| `commands.ts` | `/baf-welcome`：**卡片的唯一渲染入口**（门也走它）；`/baf-doctor` 改为消费同一份探针与渲染函数 |
-| `cmdline.ts` | `baf welcome`（与 slash 同源渲染，§9.1 一致性）+ `baf doctor` 增体检块 |
-| `projection.ts` | `isActiveChange()` 参数放宽为最小结构——`baf-go` / 门 / `command-drives.ts` 三处共用同一谓词 |
+| `commands.ts`     | `/baf-welcome`：**卡片的唯一渲染入口**（门也走它）；`/baf-doctor` 改为消费同一份探针与渲染函数                                                                                          |
+| `cmdline.ts`      | `baf welcome`（与 slash 同源渲染，§9.1 一致性）+ `baf doctor` 增体检块                                                                                                                       |
+| `projection.ts`   | `isActiveChange()` 参数放宽为最小结构——`baf-go` / 门 / `command-drives.ts` 三处共用同一谓词                                                                                               |
 
 **八处实现细节（就地拍板）**
 
@@ -2486,15 +2194,15 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 **文件分工**
 
-| 文件 | 职责 |
-| --- | --- |
-| `baf-workflow/src/lanes.ts` | `deriveLanes(events)`：在事件时间轴上以 `mode-upgraded` 为切点折两条泳道；纯函数、无副作用，Tab 每次刷新都重跑 |
-| `baf-workflow/src/pipeline-factory.ts` | `pipelineFor(cwd)`：workspace → baseline + git revision + pipeline 的统一构造器；slash / CLI / Tab Remote 三入口共用 |
-| `baf-core/src/graph.ts` | 把私有的 `FAST_PATH_ROWS` / `FULL_GO_ROWS` 提升为导出常量（§18.4.3 泳道行序的唯一定义者） |
-| `baf-core/src/tab-view.ts` | 新增 `gateToTabView` 单源谓词、`'confirm-gate' \| 'resume'` 两个 action ID；`statusToTabView` 加 4th `extras` 参数 |
-| `baf-workflow/src/tab-view.ts` | `buildWorkflowTabView` 接受 `resume?` provider；只有 `current === 'drift'` 时才调用 |
-| `baf-workflow/src/command-drives.ts` | 复用 `pipeline-factory.ts` 的 helper；保留 `driveResumeStage` 的暴露 |
-| `client/ui-baf-workflow/src/{client,types,index,typert.remote-client}` | i18n key 16 条、`<LanePanel>` / `<ResumeCard>` / `stripGate` UI、`@Remote('resume')` 方法 |
+| 文件                                                                        | 职责                                                                                                                            |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `baf-workflow/src/lanes.ts`                                               | `deriveLanes(events)`：在事件时间轴上以 `mode-upgraded` 为切点折两条泳道；纯函数、无副作用，Tab 每次刷新都重跑              |
+| `baf-workflow/src/pipeline-factory.ts`                                    | `pipelineFor(cwd)`：workspace → baseline + git revision + pipeline 的统一构造器；slash / CLI / Tab Remote 三入口共用         |
+| `baf-core/src/graph.ts`                                                   | 把私有的`FAST_PATH_ROWS` / `FULL_GO_ROWS` 提升为导出常量（§18.4.3 泳道行序的唯一定义者）                                   |
+| `baf-core/src/tab-view.ts`                                                | 新增`gateToTabView` 单源谓词、`'confirm-gate' \| 'resume'` 两个 action ID；`statusToTabView` 加 4th `extras` 参数        |
+| `baf-workflow/src/tab-view.ts`                                            | `buildWorkflowTabView` 接受 `resume?` provider；只有 `current === 'drift'` 时才调用                                       |
+| `baf-workflow/src/command-drives.ts`                                      | 复用`pipeline-factory.ts` 的 helper；保留 `driveResumeStage` 的暴露                                                         |
+| `client/ui-baf-workflow/src/{client,types,index,typert.remote-client}`    | i18n key 16 条、`<LanePanel>` / `<ResumeCard>` / `stripGate` UI、`@Remote('resume')` 方法                               |
 | `typert-artifacts/typert.remote-client.d.ts` + `client/remote-types.ts` | `resume` namespace 注册到 host `$bafWorkflowView` + client `$626166576f726b666c6f7756696577`，与 5 个既有 descriptor 并列 |
 
 **五处实现细节（就地拍板）**
@@ -2520,10 +2228,10 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 ---
 
-
 ## 19. `/baf-workflow-resume`：drift 之后的交互式复位
 
 > **本章补的是一条曾经完全缺失的出口**。落地前的事实核对：
+>
 > - `packages/baf/baf-workflow/src/stages/drift.ts` 的 `detectAndRecord()` 会把 `drift-detected` 写进 projection，replay 后 `state.current = 'drift'`、被影响节点标 `drifted`；
 > - `WorkflowService.transition()`（`workflow-service.ts`）在 T13 上允许 `drift → 最早受影响节点`；
 > - `TransitionService` 之前的出口**没有任何 slash / CLI / Tab / Remote 入口暴露 T13**——`commands.ts` 注册的 11 个驱动器里没有 drift 或 resume；
@@ -2544,11 +2252,11 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 复用 `stages/drift.ts` 已有的纯函数 `earliestAffectedNode(status, signals)`，它已经实现了下面这张表；命令把它当**默认项**：
 
-| 触发信号 | 最早受影响节点 |
-| --- | --- |
-| `artifact-missing`（如 `design.md` 被删） | 该产物所属节点（按 `STAGE_ORDER` 找最早的那个） |
+| 触发信号                                                                          | 最早受影响节点                                      |
+| --------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `artifact-missing`（如 `design.md` 被删）                                     | 该产物所属节点（按`STAGE_ORDER` 找最早的那个）    |
 | `git-revision-changed` / `baseline-id-changed` / `baseline-content-changed` | 在途节点（`status.current`）；已终态则 `verify` |
-| `verify-report-stale` | `verify` |
+| `verify-report-stale`                                                           | `verify`                                          |
 
 候选集 = `earliestAffectedNode()` 及其**之前**的已完成节点（客户可以退得更早、不能跳得更晚），去掉不可重跑的 `intake` / `open`（这两步的记录不会被漂移作废），按**从晚到早**排列，第 0 项是推荐默认。`open` 时就被影响的退化场景里候选集退化为 `[anchor]`。
 
@@ -2600,12 +2308,12 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 ### 19.5 入口与落点
 
-| 形态 | 调用 |
-| --- | --- |
-| slash | `/baf-workflow-resume [节点]` |
-| standalone CLI | `dsh … -- workflow-resume [节点]` |
-| desktop Tab | drift 节点上的「复位到…」按钮 → 候选下拉 |
-| Remote（Typert） | `BafWorkflowTabRemote.resume(node?)` |
+| 形态             | 调用                                       |
+| ---------------- | ------------------------------------------ |
+| slash            | `/baf-workflow-resume [节点]`            |
+| standalone CLI   | `dsh … -- workflow-resume [节点]`       |
+| desktop Tab      | drift 节点上的「复位到…」按钮 → 候选下拉 |
+| Remote（Typert） | `BafWorkflowTabRemote.resume(node?)`     |
 
 落点：`command-drives.ts` 新增 `driveResume`（组合只读检测 + 候选卡 + `pipeline.driveResumeStage`）；`stages/pipeline.ts` 新增公开只读 `resumeOptions(changeId)` 与写路径 `driveResumeStage(changeId, target, observation?)`（顺带改正原 480 行的失效 JSDoc）；`stages/drift.ts` 新增 `resumeCandidates()` 与 `rerunChain()`；`commands.ts` 注册 `/baf-workflow-resume`、`cmdline.ts` 注册 `baf workflow-resume`；`tab-remote` 加 `resume()`。
 
@@ -2614,14 +2322,14 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 ### 19.6 输出与错误
 
-| 场景 | 卡片 | 错误码 |
-| --- | --- | --- |
-| 无 drift | `当前无漂移，无需复位` | — |
-| 有 drift，列出候选 | `drift detected · 请选择复位目标节点` | — |
-| 参数不在候选集 | `目标节点不在候选集内` | `invalid_transition` |
-| 已在目标节点 in-progress | `已在 <节点>`（幂等，不写事件） | — |
-| change 已是终态 | `当前 change 已终态，无需复位` | — |
-| projection 损坏 | `projection_corrupted · 停在 seq <n>` | `projection_corrupted` |
+| 场景                     | 卡片                                     | 错误码                   |
+| ------------------------ | ---------------------------------------- | ------------------------ |
+| 无 drift                 | `当前无漂移，无需复位`                 | —                       |
+| 有 drift，列出候选       | `drift detected · 请选择复位目标节点` | —                       |
+| 参数不在候选集           | `目标节点不在候选集内`                 | `invalid_transition`   |
+| 已在目标节点 in-progress | `已在 <节点>`（幂等，不写事件）        | —                       |
+| change 已是终态          | `当前 change 已终态，无需复位`         | —                       |
+| projection 损坏          | `projection_corrupted · 停在 seq <n>` | `projection_corrupted` |
 
 ---
 
@@ -2631,11 +2339,11 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 ### 20.1 三层输出，各司其职
 
-| 层 | 谁看 | 载体 | 硬约束 |
-| --- | --- | --- | --- |
-| **L1 状态行** | 客户扫一眼 | CLI 末行 / Tab 顶栏 | ≤ 120 字符、单行、恒含 `change · 节点 · 下一步` |
-| **L2 卡片** | 客户读 | `formatCommandReport()` 文本 | 首行 = 折叠态标题；展开 = 固定顺序分段正文 |
-| **L3 日志** | 排障 / 审计 | `ctx.logger` + projection 事件 | 结构化 `key=value`、只打元数据、与 projection 同源 |
+| 层                  | 谁看        | 载体                             | 硬约束                                              |
+| ------------------- | ----------- | -------------------------------- | --------------------------------------------------- |
+| **L1 状态行** | 客户扫一眼  | CLI 末行 / Tab 顶栏              | ≤ 120 字符、单行、恒含`change · 节点 · 下一步` |
+| **L2 卡片**   | 客户读      | `formatCommandReport()` 文本   | 首行 = 折叠态标题；展开 = 固定顺序分段正文          |
+| **L3 日志**   | 排障 / 审计 | `ctx.logger` + projection 事件 | 结构化`key=value`、只打元数据、与 projection 同源 |
 
 模型自然语言回复**不算** BAF 输出（§5.6：自然语言不是转换证据，也不是状态展示）。
 
@@ -2722,13 +2430,13 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 ### 20.5 醒目度约定
 
-| 符号 | 固定语义 | 不许挪用 |
-| --- | --- | --- |
-| `✓` | 成功 / 就绪 | 不用来表示「有内容」 |
-| `✗` | 失败 / 缺失 | — |
-| `?` | 未探测 / 未知 | 不许写成 ✓ |
-| `■` | 停下等客户 | 不使用在自动推进路径 |
-| `→` | 下一步 | — |
+| 符号   | 固定语义      | 不许挪用             |
+| ------ | ------------- | -------------------- |
+| `✓` | 成功 / 就绪   | 不用来表示「有内容」 |
+| `✗` | 失败 / 缺失   | —                   |
+| `?`  | 未探测 / 未知 | 不许写成 ✓          |
+| `■` | 停下等客户    | 不使用在自动推进路径 |
+| `→` | 下一步        | —                   |
 
 - **结论永远在第一行**（折叠态可读）。
 - **需要客户动作的卡片，首行必须出现动作词**（「请确认」「请选择」「请新开 session」）。
@@ -2742,26 +2450,26 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 ### 20.7 新增 i18n key 清单（Phase 8.7–8.10 冻结）
 
-| key | zh | 用在哪 |
-| --- | --- | --- |
-| `baf.sessionGate.noActive` | 无未完成工作流 · 请描述需求 | §18.3 启动卡 |
-| `baf.sessionGate.oneActive` | 检测到未完成工作流 {changeId}（当前 {node} · {mode}）· 继续还是新开？ | 同上 |
-| `baf.sessionGate.multiActive` | 检测到 {count} 条未完成工作流 · 请选择一条继续，或选择新开 | 同上 |
-| `baf.sessionGate.choiceContinue` / `.choiceNew` | 继续 / 新开 | 同上 |
-| `baf.probe.ok` / `.missing` / `.unknown` | 就绪 / 缺失 / 未探测 | §20.3 体检行 |
-| `baf.probe.hint.openspec` | 安装 OpenSpec CLI 或运行 baf scaffold | §18.3.2 |
-| `baf.probe.hint.baseline` | 运行 baf scaffold 或导入企业 baseline | §18.3.2 |
-| `baf.gate.awaitingCustomerConfirm` | 待客户确认 | §18.5 |
-| `baf.gate.designDone` | 设计文档已实现 · 请确认是否进入 plan | §18.5 门 A |
-| `baf.gate.verifyPassed` | verify 已通过 · 请确认是否归档 | §18.5 门 B |
-| `baf.gate.replyToContinue` | 回复 /baf-go 继续 | §20.5 |
-| `baf.go.cardTitle.continue` | 自动驱动 · {node} 已完成 · 下一步 {next} | §20.2 |
-| `baf.resume.noDrift` | 当前无漂移，无需复位 | §19.3 |
-| `baf.resume.candidates` | 检测到漂移 · 请选择复位目标节点 | §19.3 |
-| `baf.resume.invalidTarget` | 目标节点不在候选集内 | §19.6 |
-| `baf.binding.newSessionRequired` | 当前 session 已有工作流 · 请新开一个会话 | §18.6 |
-| `baf.tab.lane.fastpath` / `.lane.fullgo` | 缺陷快路径（升级前） / 完整流程（升级后） | §18.4.3 |
-| `baf.tab.edge.upgraded` | T15 升级：{from} → {to} | §18.4.3 |
+| key                                                 | zh                                                                      | 用在哪        |
+| --------------------------------------------------- | ----------------------------------------------------------------------- | ------------- |
+| `baf.sessionGate.noActive`                        | 无未完成工作流 · 请描述需求                                            | §18.3 启动卡 |
+| `baf.sessionGate.oneActive`                       | 检测到未完成工作流 {changeId}（当前 {node} · {mode}）· 继续还是新开？ | 同上          |
+| `baf.sessionGate.multiActive`                     | 检测到 {count} 条未完成工作流 · 请选择一条继续，或选择新开             | 同上          |
+| `baf.sessionGate.choiceContinue` / `.choiceNew` | 继续 / 新开                                                             | 同上          |
+| `baf.probe.ok` / `.missing` / `.unknown`      | 就绪 / 缺失 / 未探测                                                    | §20.3 体检行 |
+| `baf.probe.hint.openspec`                         | 安装 OpenSpec CLI 或运行 baf scaffold                                   | §18.3.2      |
+| `baf.probe.hint.baseline`                         | 运行 baf scaffold 或导入企业 baseline                                   | §18.3.2      |
+| `baf.gate.awaitingCustomerConfirm`                | 待客户确认                                                              | §18.5        |
+| `baf.gate.designDone`                             | 设计文档已实现 · 请确认是否进入 plan                                   | §18.5 门 A   |
+| `baf.gate.verifyPassed`                           | verify 已通过 · 请确认是否归档                                         | §18.5 门 B   |
+| `baf.gate.replyToContinue`                        | 回复 /baf-go 继续                                                       | §20.5        |
+| `baf.go.cardTitle.continue`                       | 自动驱动 · {node} 已完成 · 下一步 {next}                              | §20.2        |
+| `baf.resume.noDrift`                              | 当前无漂移，无需复位                                                    | §19.3        |
+| `baf.resume.candidates`                           | 检测到漂移 · 请选择复位目标节点                                        | §19.3        |
+| `baf.resume.invalidTarget`                        | 目标节点不在候选集内                                                    | §19.6        |
+| `baf.binding.newSessionRequired`                  | 当前 session 已有工作流 · 请新开一个会话                               | §18.6        |
+| `baf.tab.lane.fastpath` / `.lane.fullgo`        | 缺陷快路径（升级前） / 完整流程（升级后）                               | §18.4.3      |
+| `baf.tab.edge.upgraded`                           | T15 升级：{from} → {to}                                                | §18.4.3      |
 
 ---
 
@@ -2769,18 +2477,18 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 > 21.1–21.5 已由产品负责人确认；21.6 / 21.7 是 Phase 8.9 落地时才暴露、按同一原则（单一算法、不留分叉）就地拍板的补充项；21.8 / 21.9 分别是 Phase 8.7 / 8.8 的落地补充（细节记在 §18.9 / §18.10，本表只登记「有这件事」）。均按「结论」一栏实施；原始取舍记录保留在下面，便于日后回溯为什么这么定。
 
-| # | 结论 | 影响 |
-| --- | --- | --- |
-| 21.1 | **复用 `intake_confirmation_required`**，不新增错误码 | 不动 Phase 0 冻结的错误码 contract；卡片中文文案负责把「没有工作流」说清楚 |
-| 21.2 | **硬拦**：启动门选「新开」且 cwd 仍有未终态 change → 拒绝并提示新开会话 | §18.3.1 的「新开」分支改为硬拦；与 §18.6 守卫 5 合流 |
-| 21.3 | **保留** `/baf-go <描述>` 边缘形式（未绑定时等价于说需求） | CLI / 脚本一次性投喂可用 |
-| 21.4 | **C 工具链不进首屏**：显示 `? 未探测 · 首次进入 verify 时检查` | §18.3.2 检查表首屏只探低成本项 |
-| 21.5 | **删掉** `transition({to:'drift'})` 分支，只留 `earliestAffectedNode()` 一条算法 | Phase 8.9 改 `workflow-service.ts` + `transition.ts` |
-| 21.6 | drift 信号**两侧都能观测**才判定；`baseline-locked` 增补 `contentHash` | 修掉「每次检测都报漂移」的两个假阳性 |
-| 21.7 | drift 锚点可从 `nodes[*] === 'drifted'` 反查；`nodes.drift` 只表示「当前停在 drift」 | 复位能算出候选集；复位后 `resume().drifted` 正确归 false |
-| 21.8 | Phase 8.7 落地期五处原文未覆盖的细节，按「单一判定点 / 幂等 / 不猜」就地拍板 | 见 §18.9；只影响 `go-coordinator.ts` 内部，不改 §18 规范 |
-| 21.9 | Phase 8.8 落地期八处原文未覆盖的细节（探针缓存键与 TTL / 门只读不代绑 / shell 拉 CLI + 超时记 `?` / doctor 反向复用探针 / 卡片经 `/baf-welcome` 投递 / 同步 section 读快照 / 三条 tsconfig 映射手工补 / 卡片上 `版本` 只出现一次） | 见 §18.10；不改 §18.3 规范，只有 §18.3.2 的 OpenSpec 行与 §20.3 样张按实现收紧 |
-| 21.10 | 确认门统一走 §22 注册表 + 标准卡；模型被门挡住时只能调 `baf_gate_ask(gateId)`，不得自创选项 | 见 §22；session-gate 规则第 4 条 + SKILL.md Hard rules 第 6 条同步 |
+| #     | 结论                                                                                                                                                                                                                                    | 影响                                                                               |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 21.1  | **复用 `intake_confirmation_required`**，不新增错误码                                                                                                                                                                           | 不动 Phase 0 冻结的错误码 contract；卡片中文文案负责把「没有工作流」说清楚         |
+| 21.2  | **硬拦**：启动门选「新开」且 cwd 仍有未终态 change → 拒绝并提示新开会话                                                                                                                                                          | §18.3.1 的「新开」分支改为硬拦；与 §18.6 守卫 5 合流                             |
+| 21.3  | **保留** `/baf-go <描述>` 边缘形式（未绑定时等价于说需求）                                                                                                                                                                      | CLI / 脚本一次性投喂可用                                                           |
+| 21.4  | **C 工具链不进首屏**：显示 `? 未探测 · 首次进入 verify 时检查`                                                                                                                                                                 | §18.3.2 检查表首屏只探低成本项                                                    |
+| 21.5  | **删掉** `transition({to:'drift'})` 分支，只留 `earliestAffectedNode()` 一条算法                                                                                                                                              | Phase 8.9 改`workflow-service.ts` + `transition.ts`                            |
+| 21.6  | drift 信号**两侧都能观测**才判定；`baseline-locked` 增补 `contentHash`                                                                                                                                                        | 修掉「每次检测都报漂移」的两个假阳性                                               |
+| 21.7  | drift 锚点可从`nodes[*] === 'drifted'` 反查；`nodes.drift` 只表示「当前停在 drift」                                                                                                                                                 | 复位能算出候选集；复位后`resume().drifted` 正确归 false                          |
+| 21.8  | Phase 8.7 落地期五处原文未覆盖的细节，按「单一判定点 / 幂等 / 不猜」就地拍板                                                                                                                                                            | 见 §18.9；只影响`go-coordinator.ts` 内部，不改 §18 规范                        |
+| 21.9  | Phase 8.8 落地期八处原文未覆盖的细节（探针缓存键与 TTL / 门只读不代绑 / shell 拉 CLI + 超时记`?` / doctor 反向复用探针 / 卡片经 `/baf-welcome` 投递 / 同步 section 读快照 / 三条 tsconfig 映射手工补 / 卡片上 `版本` 只出现一次） | 见 §18.10；不改 §18.3 规范，只有 §18.3.2 的 OpenSpec 行与 §20.3 样张按实现收紧 |
+| 21.10 | 确认门统一走 §22 注册表 + 标准卡；模型被门挡住时只能调`baf_gate_ask(gateId)`，不得自创选项                                                                                                                                           | 见 §22；session-gate 规则第 4 条 + SKILL.md Hard rules 第 6 条同步                |
 
 ### 21.1 「未绑定工作流」是否单列错误码
 
@@ -2860,14 +2568,14 @@ full-go-path 泳道（从升级落点接续，缺失阶段补走）
 
 ### 22.2 现状缺口（与本章一起补齐）
 
-| 缺口 | 修复点 |
-| --- | --- |
-| 选项无注册表 → 模型在 system prompt 挡住时自由发挥编出第二路径 | §22.3 域层 `GATE_REGISTRY` 单一事实源 |
-| scaffold 当时没有 slash / CLI 入口 → 模型只能问「请在 GUI 里点」 | §22.4 补 `/baf-scaffold` slash + `baf scaffold` CLI + Tab 按钮（与 §9.2 命令表同步） |
-| 模型可调 `baf_stage_*` 直推 confirm 门（自然语言推动也是其中一种） | §22.7 `checkEvidence` 增加 `source` 白名单校验 |
-| `.baf/baseline.yml` 可被模型用写文件工具伪造 | §22.8 guard `protectedPaths` 默认增 `.baf/**`、`openspec/**` |
-| Tab 缺常驻门卡按钮（仅会话内弹文本卡） | §22.5 `tabView.pendingGate` 派生态，drift 卡同款模式 |
-| 模型对「被门挡住」缺乏唯一动作指引 | §22.9 模型侧规则第 4 条 + `baf_gate_ask` 工具 |
+| 缺口                                                                | 修复点                                                                                    |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 选项无注册表 → 模型在 system prompt 挡住时自由发挥编出第二路径     | §22.3 域层`GATE_REGISTRY` 单一事实源                                                   |
+| scaffold 当时没有 slash / CLI 入口 → 模型只能问「请在 GUI 里点」   | §22.4 补`/baf-scaffold` slash + `baf scaffold` CLI + Tab 按钮（与 §9.2 命令表同步） |
+| 模型可调`baf_stage_*` 直推 confirm 门（自然语言推动也是其中一种） | §22.7`checkEvidence` 增加 `source` 白名单校验                                        |
+| `.baf/baseline.yml` 可被模型用写文件工具伪造                      | §22.8 guard`protectedPaths` 默认增 `.baf/**`、`openspec/**`                        |
+| Tab 缺常驻门卡按钮（仅会话内弹文本卡）                              | §22.5`tabView.pendingGate` 派生态，drift 卡同款模式                                    |
+| 模型对「被门挡住」缺乏唯一动作指引                                  | §22.9 模型侧规则第 4 条 +`baf_gate_ask` 工具                                           |
 
 ### 22.3 核心：`GATE_REGISTRY`（域层唯一事实源）
 
@@ -2897,14 +2605,14 @@ export function renderGateCard(spec: GateSpec, ctx?: GateContext): CommandResult
 
 首期注册六门：
 
-| `GateId` | 触发时机 | 选项（→ 派发的 slash） |
-| --- | --- | --- |
-| `scaffold` | 会话绑定的工作区无 `.baf/baseline.yml` | [初始化工作区 → /baf-scaffold] [暂不初始化 → 取消] |
-| `intake-classify` | intake 分类待确认 | [确认 · 完整流程 → /baf-workflow-classify confirm mode=full-go-path] [确认 · 缺陷修复路径 → /baf-workflow-classify confirm mode=bug-fix-path] [拒绝，重新描述 → /baf-workflow-classify reject]（§22.17 J 两路径改道可点） |
-| `design-confirm` | design 完成、T?→plan 门 | [确认设计，进入计划 → /baf-go] [退回澄清 → /baf-workflow-clarify] |
-| `verify-archive` | verify 通过、T14 门 | [确认归档 → /baf-go] [退回实现 → /baf-workflow-implement] |
-| `abandon` | T16 | [确认放弃 → /baf-workflow-abandon] [取消 → 取消] |
-| `resume` | drift（T13） | 目标节点选项由 `resumeCandidates()` 派生，仍域层生成 |
+| `GateId`          | 触发时机                                | 选项（→ 派发的 slash）                                                                                                                                                                                                         |
+| ------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scaffold`        | 会话绑定的工作区无`.baf/baseline.yml` | [初始化工作区 → /baf-scaffold] [暂不初始化 → 取消]                                                                                                                                                                            |
+| `intake-classify` | intake 分类待确认                       | [确认 · 完整流程 → /baf-workflow-classify confirm mode=full-go-path] [确认 · 缺陷修复路径 → /baf-workflow-classify confirm mode=bug-fix-path] [拒绝，重新描述 → /baf-workflow-classify reject]（§22.17 J 两路径改道可点） |
+| `design-confirm`  | design 完成、T?→plan 门                | [确认设计，进入计划 → /baf-go] [退回澄清 → /baf-workflow-clarify]                                                                                                                                                             |
+| `verify-archive`  | verify 通过、T14 门                     | [确认归档 → /baf-go] [退回实现 → /baf-workflow-implement]                                                                                                                                                                     |
+| `abandon`         | T16                                     | [确认放弃 → /baf-workflow-abandon] [取消 → 取消]                                                                                                                                                                              |
+| `resume`          | drift（T13）                            | 目标节点选项由`resumeCandidates()` 派生，仍域层生成                                                                                                                                                                           |
 
 **关键约束**（写进 `gate-cards.ts` 顶部注释）：选项只能映射到已注册 slash 命令；新增门 = 改注册表 + 补测试，三端自动同步，**模型永远只引用 `gateId`**。
 
@@ -2998,14 +2706,14 @@ input:
 
 ### 22.10 防绕过清单
 
-| 绕过尝试 | 挡在哪层 |
-| --- | --- |
-| 模型散文里自创第三选项 | section / SKILL 规则 + 工具只返回注册表卡片（第一防线，软） |
-| 模型调 `baf_stage_*` 直推 confirm 门 | `checkEvidence` `source='model-tool'` → `gate_confirmation_required`（硬） |
-| 模型直写 `.baf/baseline.yml` 伪造基线 | guard `protectedPaths`（硬） |
-| 客户口头「你直接写吧」 | 模型标准回应 = 重新弹卡；且上两条硬防线兜底 |
-| 客户敲了选项编号（非点击/命令） | 自然语言不是 evidence（既有 §5.6 规则，保持） |
-| 有未决门时模型用 `ask_user_question` 代答 / 代问 | guard `gate_pending_ask_blocked`（硬，§22.17 J4） |
+| 绕过尝试                                          | 挡在哪层                                                                          |
+| ------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 模型散文里自创第三选项                            | section / SKILL 规则 + 工具只返回注册表卡片（第一防线，软）                       |
+| 模型调`baf_stage_*` 直推 confirm 门             | `checkEvidence` `source='model-tool'` → `gate_confirmation_required`（硬） |
+| 模型直写`.baf/baseline.yml` 伪造基线            | guard`protectedPaths`（硬）                                                     |
+| 客户口头「你直接写吧」                            | 模型标准回应 = 重新弹卡；且上两条硬防线兜底                                       |
+| 客户敲了选项编号（非点击/命令）                   | 自然语言不是 evidence（既有 §5.6 规则，保持）                                    |
+| 有未决门时模型用`ask_user_question` 代答 / 代问 | guard`gate_pending_ask_blocked`（硬，§22.17 J4）                               |
 
 ### 22.11 端到端时序（用 §22.2 事故重演验证）
 
@@ -3030,26 +2738,26 @@ input:
 
 **P0 落地状态（2026-09-18 已合入 baf 分支，25 测试文件 / 197 项全绿，tsc 无新增错误）**：
 
-| P0 交付物 | 状态 |
-| --- | --- |
-| `gate-cards.ts` 注册表 + `renderGateCard` / `renderGate` / `isGateResolvingCommand` | ✅ 已落地（`renderGate` 对未知 id 返回 `unknown_gate` 拒绝值，参数收 `string` 以承接 JSON 入参） |
-| `/baf-scaffold` slash + `baf scaffold` CLI + `driveScaffold`（adapter 注入） | ✅ 已落地（`ScaffoldAdapter` 进 `DriveAdapters`；slash / CLI / 弹窗 / Tab 均经 `resolveScaffoldService` → `resolveIsolateService`（§22.17 H）解析，preset 的 `baf-domain` 组已含 `bafScaffold` isolate） |
-| section / SKILL 第 4 条规则 | ✅ 已落地（过渡措辞，见 §22.9） |
-| 测试 | ✅ `gate-cards.spec.ts`（16 项，含未知 gateId 拒绝）、`drive-scaffold.spec.ts`（6 项桩适配器）、surface-parity / cmdline / session-gate 快照同步 |
-| 包边界 | ✅ baf-workflow **零**直接依赖 baf-scaffold（曾误加 dependency，核查时已移除——与 §22.13 取舍 2 对齐） |
+| P0 交付物                                                                                   | 状态                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gate-cards.ts` 注册表 + `renderGateCard` / `renderGate` / `isGateResolvingCommand` | ✅ 已落地（`renderGate` 对未知 id 返回 `unknown_gate` 拒绝值，参数收 `string` 以承接 JSON 入参）                                                                                                                 |
+| `/baf-scaffold` slash + `baf scaffold` CLI + `driveScaffold`（adapter 注入）          | ✅ 已落地（`ScaffoldAdapter` 进 `DriveAdapters`；slash / CLI / 弹窗 / Tab 均经 `resolveScaffoldService` → `resolveIsolateService`（§22.17 H）解析，preset 的 `baf-domain` 组已含 `bafScaffold` isolate） |
+| section / SKILL 第 4 条规则                                                                 | ✅ 已落地（过渡措辞，见 §22.9）                                                                                                                                                                                       |
+| 测试                                                                                        | ✅`gate-cards.spec.ts`（16 项，含未知 gateId 拒绝）、`drive-scaffold.spec.ts`（6 项桩适配器）、surface-parity / cmdline / session-gate 快照同步                                                                    |
+| 包边界                                                                                      | ✅ baf-workflow**零**直接依赖 baf-scaffold（曾误加 dependency，核查时已移除——与 §22.13 取舍 2 对齐）                                                                                                          |
 
 **P0 明确未含、归并 P1 的两项**（原表把 `baf_gate_ask` 写进了 P0，实施时移入 P1，理由如下）：
 
 1. `baf_gate_ask` 工具注册 —— 工具是「模型的 ask 面」，与 coordinator 自动弹卡、Tab pendingGate 同属「让注册表卡真正出现在客户眼前」的一批改动；单独上线工具而没有自动弹卡，模型仍无门可弹。P0 先把工具依赖的 `renderGate` 契约（含 `unknown_gate` 拒绝值）做实并测试锁定。
 2. go-coordinator / session-gate 自动弹卡 —— 会话侧弹注册表卡（§18.5 两处停靠点 + 欢迎卡无基线分支），与工具、Tab 同批联调一次到位。
 
-| 阶段 | 内容 | 测试 |
-| --- | --- | --- |
-| **P0**（✅ 已落地，即 Phase 8.11） | `gate-cards.ts` 注册表 + 渲染；`/baf-scaffold` slash + `baf scaffold` CLI + `driveScaffold`（adapter 注入）；section / SKILL 第 4 条规则（过渡措辞） | `gate-cards.spec.ts`（注册表快照 / 未知 gateId 拒绝 / 渲染含选项原文）；`drive-scaffold.spec.ts` |
-| **P1**（Tab 交互 + 全部 ask 面，Phase 8.12，详设 §22.14）✅ | tab-view 门卡字段扩展（`gateId/question/options` + `pendingGate`）+ `driveGateResolve`（注册表派发，Remote 唯一解析面）+ `BafWorkflowTabRemote.gateResolve` + WorkflowView 按钮 + go-coordinator/session-gate 自动弹注册表卡 + `baf_gate_ask` 工具 | `surface-parity` 增加 `gateResolve` + `driveGateResolve` Remote-only 哨兵；`session-gate.spec` 欢迎卡补基线缺失/在场分支；`go.spec` 门 A 改查注册表标题 |
-| **P2**（机械强制，Phase 8.13，详设 §22.15）✅ | evidence.source 白名单 + confirm 门校验；guard `protectedPaths` 内置恒生效（`BAF_CONTROLLED_PATHS` = `.baf/**` / `openspec/**`，详见 §22.15 D）；T14/T16 旁路 decideTransition 时也走源守卫；enterStage 把 source 透传进 evidence 让 checkEvidence 看见 | `transition.spec.ts` (38 用例：7 confirm 边 × 6 source × control T4)；`tool-guard.spec` 增 `openspec/**` + `.baf/baseline.yml` 拒写用例；`stage` 系列补 source stamp；`policy.ts` 导出 `BAF_CONTROLLED_PATHS` |
-| **P3**（完善收口，Phase 8.14，详设 §22.16）✅ | 审计行（driveGateResolve `opts.audit` → `[baf] ... session baf:gate gateId=… option=… change=… source=… baseline=…`）；i18n 键冻结（zh = §22 GATE_REGISTRY 原文逐字；en 翻译；领域层渲染不切键，文档记「已冻结、可一次性切换」）；resume 动态选项 `candidates[0] === anchor` 钉死；E2E 验收流 `e2e-acceptance.spec`；Remote 源覆写 + 审计接线 `remote-source.spec` | `gate-i18n.spec`（zh 与 GATE_REGISTRY 逐字节对齐 + en 非空）；`e2e-acceptance.spec`（driveGateResolve 审计行 + 字段）；`remote-source.spec`（service.transition source 覆写 + 审计回调 + 沉默路径）；`resume.spec` 加 anchor pin |
-| **P4**（弹窗通道，Phase 8.15，详设 §22.17）✅ | `gate-dialog.ts`（userQuestions 复用 + `GateAsk` 抽象）；go-coordinator 停靠即弹 + `/baf-go` 重弹 + `/baf-go-confirm` 不弹框直接继续；`baf_gate_ask` 工具升级为真弹窗（等待客户、返回结果卡）；`driveGateResolve` 内层 `/baf-go` 派发补 `change=` 绑定 | `gate-dialog.spec`（15 项答案映射 / 服务解析）；`go.spec` §22.17 组（10 项：门 A/B 弹+确认 / 暂停重弹 / go-confirm 零弹窗直通 / scaffold 门弹窗）；cmdline / surface-parity 快照同步 |
+| 阶段                                                               | 内容                                                                                                                                                                                                                                                                                                                                                                               | 测试                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P0**（✅ 已落地，即 Phase 8.11）                           | `gate-cards.ts` 注册表 + 渲染；`/baf-scaffold` slash + `baf scaffold` CLI + `driveScaffold`（adapter 注入）；section / SKILL 第 4 条规则（过渡措辞）                                                                                                                                                                                                                       | `gate-cards.spec.ts`（注册表快照 / 未知 gateId 拒绝 / 渲染含选项原文）；`drive-scaffold.spec.ts`                                                                                                                                     |
+| **P1**（Tab 交互 + 全部 ask 面，Phase 8.12，详设 §22.14）✅ | tab-view 门卡字段扩展（`gateId/question/options` + `pendingGate`）+ `driveGateResolve`（注册表派发，Remote 唯一解析面）+ `BafWorkflowTabRemote.gateResolve` + WorkflowView 按钮 + go-coordinator/session-gate 自动弹注册表卡 + `baf_gate_ask` 工具                                                                                                                       | `surface-parity` 增加 `gateResolve` + `driveGateResolve` Remote-only 哨兵；`session-gate.spec` 欢迎卡补基线缺失/在场分支；`go.spec` 门 A 改查注册表标题                                                                        |
+| **P2**（机械强制，Phase 8.13，详设 §22.15）✅               | evidence.source 白名单 + confirm 门校验；guard`protectedPaths` 内置恒生效（`BAF_CONTROLLED_PATHS` = `.baf/**` / `openspec/**`，详见 §22.15 D）；T14/T16 旁路 decideTransition 时也走源守卫；enterStage 把 source 透传进 evidence 让 checkEvidence 看见                                                                                                                    | `transition.spec.ts` (38 用例：7 confirm 边 × 6 source × control T4)；`tool-guard.spec` 增 `openspec/**` + `.baf/baseline.yml` 拒写用例；`stage` 系列补 source stamp；`policy.ts` 导出 `BAF_CONTROLLED_PATHS`            |
+| **P3**（完善收口，Phase 8.14，详设 §22.16）✅               | 审计行（driveGateResolve`opts.audit` → `[baf] ... session baf:gate gateId=… option=… change=… source=… baseline=…`）；i18n 键冻结（zh = §22 GATE_REGISTRY 原文逐字；en 翻译；领域层渲染不切键，文档记「已冻结、可一次性切换」）；resume 动态选项 `candidates[0] === anchor` 钉死；E2E 验收流 `e2e-acceptance.spec`；Remote 源覆写 + 审计接线 `remote-source.spec` | `gate-i18n.spec`（zh 与 GATE_REGISTRY 逐字节对齐 + en 非空）；`e2e-acceptance.spec`（driveGateResolve 审计行 + 字段）；`remote-source.spec`（service.transition source 覆写 + 审计回调 + 沉默路径）；`resume.spec` 加 anchor pin |
+| **P4**（弹窗通道，Phase 8.15，详设 §22.17）✅               | `gate-dialog.ts`（userQuestions 复用 + `GateAsk` 抽象）；go-coordinator 停靠即弹 + `/baf-go` 重弹 + `/baf-go-confirm` 不弹框直接继续；`baf_gate_ask` 工具升级为真弹窗（等待客户、返回结果卡）；`driveGateResolve` 内层 `/baf-go` 派发补 `change=` 绑定                                                                                                             | `gate-dialog.spec`（15 项答案映射 / 服务解析）；`go.spec` §22.17 组（10 项：门 A/B 弹+确认 / 暂停重弹 / go-confirm 零弹窗直通 / scaffold 门弹窗）；cmdline / surface-parity 快照同步                                                |
 
 ### 22.13 两个明确取舍（通俗版）
 
@@ -3062,12 +2770,12 @@ input:
 
 #### A. Tab 门卡字段（baf-core 单源扩展，不建第二派生点）
 
-| 落点 | 改动 |
-| --- | --- |
-| [tab-view.ts](packages/baf/baf-core/src/tab-view.ts) `WorkflowTabGate` | 扩展字段：`gateId`（§22 `GateId`）、`question`、`options: { id, label }[]`（注册表原文）。既有 `id`/`node`/`actionKey` 保留（门高亮 Phase 8.10 消费者不受影响） |
-| 同文件 `GATE_NODE` 旁 | 增映射表：`'design-to-plan' → 'design-confirm'`、`'verify-to-archive' → 'verify-archive'`（`confirmGateOf()` 谓词本身不动） |
-| 同文件 `WorkflowTabView` | 新增 `pendingGate?: { gateId: 'scaffold'; question; options[] }` —— 仅工作区级门；`buildEmptyTabView` 分支按「探测无 `.baf/baseline.yml`」挂载（scaffold 未完成时 Tab 只可能是模板态，见 §22.6） |
-| resume 动态门 | 复用既有 `WorkflowTabResume`（anchor + candidates，§19.4）：Tab 上 drift 视图的每个候选节点按钮即 resume 门的动态选项，点击走同一 `gateResolve(gateId='resume', optionId='resume-<node>')` |
+| 落点                                                                    | 改动                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [tab-view.ts](packages/baf/baf-core/src/tab-view.ts) `WorkflowTabGate` | 扩展字段：`gateId`（§22 `GateId`）、`question`、`options: { id, label }[]`（注册表原文）。既有 `id`/`node`/`actionKey` 保留（门高亮 Phase 8.10 消费者不受影响）                           |
+| 同文件`GATE_NODE` 旁                                                  | 增映射表：`'design-to-plan' → 'design-confirm'`、`'verify-to-archive' → 'verify-archive'`（`confirmGateOf()` 谓词本身不动）                                                                      |
+| 同文件`WorkflowTabView`                                               | 新增`pendingGate?: { gateId: 'scaffold'; question; options[] }` —— 仅工作区级门；`buildEmptyTabView` 分支按「探测无 `.baf/baseline.yml`」挂载（scaffold 未完成时 Tab 只可能是模板态，见 §22.6） |
+| resume 动态门                                                           | 复用既有`WorkflowTabResume`（anchor + candidates，§19.4）：Tab 上 drift 视图的每个候选节点按钮即 resume 门的动态选项，点击走同一 `gateResolve(gateId='resume', optionId='resume-<node>')`           |
 
 #### B. Remote `gateResolve`（resolve 通道，typed 边界变更）
 
@@ -3094,11 +2802,11 @@ interface BafWorkflowGateResolveRequest {
 
 #### D. 会话侧自动弹卡（go-coordinator / session-gate）
 
-| 落点 | 改动 |
-| --- | --- |
-| [go-coordinator.ts](packages/baf/baf-workflow/src/go-coordinator.ts) 门 A 停靠（`case 'design'` 的 `gateUnlocked` 未解锁分支） | 手写 `errorCard`（「确认门 A（需求 2）」段落）改为 `renderGate('design-confirm', { cwd, changeId })` 逐字卡，`statusLines` 段落拼在卡后。（§22.17 演进：停靠时即弹交互确认框，`/baf-go` 重弹、`/baf-go-confirm` 直通；无弹窗通道时本行为原样保留） |
-| 同文件门 B 停靠（`case 'verify'` 同构分支） | 改为 `renderGate('verify-archive', …)` 同上（§22.17 同上演进） |
-| [session-gate.ts](packages/baf/baf-workflow/src/session-gate.ts) 欢迎卡「无基线」分支 | 现在只有引导文案行；追加 `renderGate('scaffold', { cwd })` 卡片段（与 Tab pendingGate 同文，客户一步可达）。规则第 4 条同步点名 `baf_gate_ask` 会**弹出确认框并等待选择**（§22.17） |
+| 落点                                                                                                                              | 改动                                                                                                                                                                                                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [go-coordinator.ts](packages/baf/baf-workflow/src/go-coordinator.ts) 门 A 停靠（`case 'design'` 的 `gateUnlocked` 未解锁分支） | 手写`errorCard`（「确认门 A（需求 2）」段落）改为 `renderGate('design-confirm', { cwd, changeId })` 逐字卡，`statusLines` 段落拼在卡后。（§22.17 演进：停靠时即弹交互确认框，`/baf-go` 重弹、`/baf-go-confirm` 直通；无弹窗通道时本行为原样保留） |
+| 同文件门 B 停靠（`case 'verify'` 同构分支）                                                                                     | 改为`renderGate('verify-archive', …)` 同上（§22.17 同上演进）                                                                                                                                                                                            |
+| [session-gate.ts](packages/baf/baf-workflow/src/session-gate.ts) 欢迎卡「无基线」分支                                              | 现在只有引导文案行；追加`renderGate('scaffold', { cwd })` 卡片段（与 Tab pendingGate 同文，客户一步可达）。规则第 4 条同步点名 `baf_gate_ask` 会**弹出确认框并等待选择**（§22.17）                                                                |
 
 #### E. `baf_gate_ask` 工具注册
 
@@ -3112,12 +2820,12 @@ interface BafWorkflowGateResolveRequest {
 
 #### G. 风险与对策
 
-| 风险 | 对策 |
-| --- | --- |
-| typert 工件（`lib/*.d.ts` 提交物）忘记再生成 → 客户端类型缺方法 | surface-parity 快照 + 构建步骤核对（§18.11 既定流程） |
-| 双击 / 迟到点击派发两次 | busy 禁用整卡 + `gateResolve` 幂等（门已过 → 「门已过」卡，不报错） |
-| intake 双通道（既有按钮 + gateResolve）行为漂移 | 两条入口都走同一 drive、同一 source 打点；迁移期并存，P3 复盘 |
-| `WorkflowTabGate` 扩展是 baf-core 类型变更 | workspace tsconfig 映射既有，下游 ui-baf-workflow 同批编译；旧消费者只读旧字段不受影响 |
+| 风险                                                               | 对策                                                                                   |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| typert 工件（`lib/*.d.ts` 提交物）忘记再生成 → 客户端类型缺方法 | surface-parity 快照 + 构建步骤核对（§18.11 既定流程）                                 |
+| 双击 / 迟到点击派发两次                                            | busy 禁用整卡 +`gateResolve` 幂等（门已过 → 「门已过」卡，不报错）                  |
+| intake 双通道（既有按钮 + gateResolve）行为漂移                    | 两条入口都走同一 drive、同一 source 打点；迁移期并存，P3 复盘                          |
+| `WorkflowTabGate` 扩展是 baf-core 类型变更                       | workspace tsconfig 映射既有，下游 ui-baf-workflow 同批编译；旧消费者只读旧字段不受影响 |
 
 ### 22.15 P2 完整设计（机械强制 · Phase 8.13）
 
@@ -3137,13 +2845,13 @@ interface BafWorkflowGateResolveRequest {
 
 #### C. 打点清单（与校验同批落地——漏一处即客户操作被误拒，这是 P2 最大回归面）
 
-| 入口 | source |
-| --- | --- |
-| [commands.ts](packages/baf/baf-workflow/src/commands.ts) 全部 slash 处理器 | `'slash'`（含 `/baf-go`——coordinator 从 log tail 观察到的解锁本就源自客户键击） |
-| [cmdline.ts](packages/baf/baf-workflow/src/cmdline.ts) 全部子命令 | `'cli'` |
-| Remote `startIntake` / `confirmIntake` / `rejectIntake` / `transition` | `'tab'` |
-| Remote `gateResolve`（P1 新增） | `'gate-card'` |
-| `baf_stage_*` 模型工具（若/当注册，见 D） | 宿主包装写死 `'model-tool'` |
+| 入口                                                                          | source                                                                                |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [commands.ts](packages/baf/baf-workflow/src/commands.ts) 全部 slash 处理器     | `'slash'`（含 `/baf-go`——coordinator 从 log tail 观察到的解锁本就源自客户键击） |
+| [cmdline.ts](packages/baf/baf-workflow/src/cmdline.ts) 全部子命令              | `'cli'`                                                                             |
+| Remote`startIntake` / `confirmIntake` / `rejectIntake` / `transition` | `'tab'`                                                                             |
+| Remote`gateResolve`（P1 新增）                                              | `'gate-card'`                                                                       |
+| `baf_stage_*` 模型工具（若/当注册，见 D）                                   | 宿主包装写死`'model-tool'`                                                          |
 
 **as-built 默认源策略 = 混合式**：drive 层（command-drives.ts）每个公开方法默认 `source: TransitionSource = 'slash'`；pipeline 层方法 `source?: TransitionSource` 可选无默认（confirm 边缺失即拒——留给 C2 的后备防线）。覆盖点只有 cmdline（`'cli'`）/ Remote（`'tab'` / `'gate-card'`）。
 
@@ -3167,13 +2875,13 @@ interface BafWorkflowGateResolveRequest {
 
 #### G. 风险与对策
 
-| 风险 | 对策 |
-| --- | --- |
-| 打点遗漏 → 客户合法操作被误拒 | 打点先行、校验后开的两个 commit；发布说明写明错误码与排查（`evidence.source` 可从审计行直接读） |
-| 事件回放 / 投影重建路径构造 TransitionInput 无 source → 误拒 | replay 构造处显式置 `'slash'`（历史事件本就源自人因入口）；**不**按 projectionVersion 分界——保持规则无时间例外 |
-| 内置路径影响存量测试 fixture | 测试清单 F 已列；一次性迁移，CI 兜底 |
-| guard 错误信息未指引出路 | 拒绝卡文案带「走 /baf-* drive」指引（与 §5.6 唯一动作规则同文） |
-| **enterStage 源未透传给 decideTransition（C1 失防）** | C2 显式合并进 evidence；T14/T16 直接源守卫兜底 |
+| 风险                                                          | 对策                                                                                                                    |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 打点遗漏 → 客户合法操作被误拒                                | 打点先行、校验后开的两个 commit；发布说明写明错误码与排查（`evidence.source` 可从审计行直接读）                       |
+| 事件回放 / 投影重建路径构造 TransitionInput 无 source → 误拒 | replay 构造处显式置`'slash'`（历史事件本就源自人因入口）；**不**按 projectionVersion 分界——保持规则无时间例外 |
+| 内置路径影响存量测试 fixture                                  | 测试清单 F 已列；一次性迁移，CI 兜底                                                                                    |
+| guard 错误信息未指引出路                                      | 拒绝卡文案带「走 /baf-* drive」指引（与 §5.6 唯一动作规则同文）                                                        |
+| **enterStage 源未透传给 decideTransition（C1 失防）**   | C2 显式合并进 evidence；T14/T16 直接源守卫兜底                                                                          |
 
 ### 22.16 P3 完整设计（审计、i18n、E2E 收口 · Phase 8.14）
 
@@ -3255,13 +2963,13 @@ GATE_REGISTRY 选项（如门 A「确认设计」）的 `command: '/baf-go'` 在
 
 #### G. 风险与对策
 
-| 风险 | 对策 |
-| --- | --- |
-| 客户搁置弹窗 → `/baf-go` / 工具调用长时间挂起 | `exec.signal` 透传给 ask；会话取消走 `ASK_ABORTED` → paused（不报错）；结果卡的【继续】提示给出 `/baf-go-confirm` 捷径 |
-| 弹窗与 Tab 双通道行为漂移 | 两条通道都收敛到 `driveGateResolve` 单解析面（§22.1 不变式 2 不破）；source 统一 `gate-card`，审计行可分辨 |
-| 宿主 composition 未挂 userQuestions → 弹窗静默缺席 | `makeGateAsk` 返回 undefined → 逐字节降级为 §22.14 卡行为（测试锁定）；CLI 天然无弹窗，`baf go` 保持旧语义 |
-| 内层派发递归弹窗（弹窗确认又触发弹窗） | 内层 `/baf-go` 派发**不带 ask**；`confirm` 与 `ask` 互斥分支先查 confirm |
-| 多变更工作区内层派发丢绑定 | E 节修复 + 测试锁定 |
+| 风险                                                | 对策                                                                                                                          |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 客户搁置弹窗 →`/baf-go` / 工具调用长时间挂起     | `exec.signal` 透传给 ask；会话取消走 `ASK_ABORTED` → paused（不报错）；结果卡的【继续】提示给出 `/baf-go-confirm` 捷径 |
+| 弹窗与 Tab 双通道行为漂移                           | 两条通道都收敛到`driveGateResolve` 单解析面（§22.1 不变式 2 不破）；source 统一 `gate-card`，审计行可分辨                |
+| 宿主 composition 未挂 userQuestions → 弹窗静默缺席 | `makeGateAsk` 返回 undefined → 逐字节降级为 §22.14 卡行为（测试锁定）；CLI 天然无弹窗，`baf go` 保持旧语义              |
+| 内层派发递归弹窗（弹窗确认又触发弹窗）              | 内层`/baf-go` 派发**不带 ask**；`confirm` 与 `ask` 互斥分支先查 confirm                                           |
+| 多变更工作区内层派发丢绑定                          | E 节修复 + 测试锁定                                                                                                           |
 
 #### H. as-built 修订：跨 isolate 服务解析 + 首行统一（2026-09-20 下午）
 
@@ -3281,11 +2989,11 @@ GATE_REGISTRY 选项（如门 A「确认设计」）的 `command: '/baf-go'` 在
 
 **弹窗控制权三分（谁控制什么）**：
 
-| 层 | 控制方 | 事实 |
-| --- | --- | --- |
-| 弹窗通道（能不能弹） | **平台 + 我们（宿主面）**，与模型无关 | `ctx.userQuestions.ask()` 是 isolate 外的宿主面服务，任何 preset 行随时可调；dsh 无需新增任何能力即可「自定义强制弹出」——§22.17 的门弹窗、`ask_user_question` 工具用的是同一通道。宿主面还可经 `ctx.on('session/event', …)` 订阅会话事件做状态驱动触发（acp / schedule 行同款），纯代码问题 |
-| 弹窗内容（弹什么选项） | **我们（注册表）**，模型只读 | §22 `GATE_REGISTRY` 封闭选项集；模型调 `baf_gate_ask` 时无法注入第三个选项，乱点 label 落 `paused/skipped` |
-| 弹窗触发（何时弹） | **混合**——这是我们补全的部分 | 确定性触发（我们的代码）：停靠即弹（`/baf-go` 五个停靠点）、Tab 按钮、`driveGateResolve` 派发。模型触发（软）：`baf_gate_ask` 工具——模型**可以选择不调**而改写文字，这是事故三的形态；靠规则 + 本节的工具补全压缩，硬拦截见「后续」 |
+| 层                     | 控制方                                      | 事实                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 弹窗通道（能不能弹）   | **平台 + 我们（宿主面）**，与模型无关 | `ctx.userQuestions.ask()` 是 isolate 外的宿主面服务，任何 preset 行随时可调；dsh 无需新增任何能力即可「自定义强制弹出」——§22.17 的门弹窗、`ask_user_question` 工具用的是同一通道。宿主面还可经 `ctx.on('session/event', …)` 订阅会话事件做状态驱动触发（acp / schedule 行同款），纯代码问题 |
+| 弹窗内容（弹什么选项） | **我们（注册表）**，模型只读          | §22`GATE_REGISTRY` 封闭选项集；模型调 `baf_gate_ask` 时无法注入第三个选项，乱点 label 落 `paused/skipped`                                                                                                                                                                                      |
+| 弹窗触发（何时弹）     | **混合**——这是我们补全的部分        | 确定性触发（我们的代码）：停靠即弹（`/baf-go` 五个停靠点）、Tab 按钮、`driveGateResolve` 派发。模型触发（软）：`baf_gate_ask` 工具——模型**可以选择不调**而改写文字，这是事故三的形态；靠规则 + 本节的工具补全压缩，硬拦截见「后续」                                                     |
 
 **本轮补全（两处结构性缺口）**：
 
@@ -3312,11 +3020,11 @@ GATE_REGISTRY 选项（如门 A「确认设计」）的 `command: '/baf-go'` 在
 
 **触发三角覆盖图**（I 节「弹窗触发混合」收口）：
 
-| 工作区状态 | 谁保证弹窗 |
-| --- | --- |
-| 空闲（已初始化、无活动变更），客户陈述需求 | J3 宿主面自动弹（平台保证，模型可缺席） |
-| 有未决门（分类 / 门 A / 门 B） | J4 硬拦通用提问——模型只剩 `baf_gate_ask` / 斜杠 / Tab 三条合规路 |
-| 任意时刻模型主动 | `baf_gate_ask`（带判断 + 草案 + 两路径按钮） |
+| 工作区状态                                 | 谁保证弹窗                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------- |
+| 空闲（已初始化、无活动变更），客户陈述需求 | J3 宿主面自动弹（平台保证，模型可缺席）                             |
+| 有未决门（分类 / 门 A / 门 B）             | J4 硬拦通用提问——模型只剩`baf_gate_ask` / 斜杠 / Tab 三条合规路 |
+| 任意时刻模型主动                           | `baf_gate_ask`（带判断 + 草案 + 两路径按钮）                      |
 
 三路全部收敛到 `driveGateResolve` 单解析面（§22.1 不变式 2 不破）。
 
@@ -3443,6 +3151,7 @@ GATE_REGISTRY 新成员 **`bind-workflow`**（dynamicOptions `change-targets`，
 **G. 确认等待停表（问题 4）**：metrics.ts intake 窗口 [intake-classified → intake-confirmed] 保留窗口（token 归属不变）但不计 duration（纯客户等待）；`running` 标志 = 存在非 intake/drift 开窗；客户端 running=false 冻结插值。门间等待（stage-completed → 下一 stage-entered）天然落在窗口之间不计入。
 
 **H. 剩余问题（按影响排序）**：
+
 1. **implement 停靠仍走表**——工单歇工等下一次 /baf-go 属 mid-stage，projection 无 dispatch/turn-end 事件无法切分工作突发；若客户要求剔除歇工时段，需 go-dispatch 先落 projection 事件（建议 `work-order-dispatched` + 回合末 `turn-ended`），再按突发并集计 implement 时长。
 2. **门卡渲染分支未真机验证**——demo22 停 implement 无 pending 门；分段/横排/修改框经 11/11 解析断言 + 415 单测覆盖，真机确认待客户在 web 端触发（推进弹窗/确认卡均可安全点选：前置缺失会出拒绝卡，不派单）。
 3. **会话历史旧消息保留字面星号**——修复只管新输出；不建议清洗历史（transcript 不可变性）。

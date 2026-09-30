@@ -74,11 +74,11 @@ export function renderEscalatedProposal(
     '',
     '## Problem',
     '',
-    ...(problem === undefined || problem.trim() === '' ? ['See bug-record.md'] : [problem.trim()]),
+    ...(problem === undefined || problem.trim() === '' ? ['See proposal.md'] : [problem.trim()]),
     '',
     '## Root cause',
     '',
-    ...(rootCause === undefined || rootCause.trim() === '' ? ['See bug-record.md'] : [rootCause.trim()]),
+    ...(rootCause === undefined || rootCause.trim() === '' ? ['See proposal.md'] : [rootCause.trim()]),
     '',
   ]
   return lines.join('\n')
@@ -217,8 +217,15 @@ async function renameAsideIfExists(source: string, destination: string): Promise
 /**
  * Install the OpenSpec change backfill required of a full-go-path change:
  * proposal.md carrying the bug context plus the tasks.md template the
- * backfilled plan stage fills in. The bug record stays in place
- * (identity/audit preserved).
+ * backfilled plan stage fills in.
+ *
+ * 【变更】2026-09-30 (demo31 问题 4): bug-fix open authors proposal.md itself
+ * now (the record rename is gone), so the backfill first renames the clipped
+ * record aside — the same audit-trail treatment `preserveBugFixPathLedger`
+ * gives plan.json/tasks.md (§18.4.3 升级前产物不删) — or writeArtifact's
+ * filled-content guard rejects the escalated proposal. The record's
+ * Problem/Root cause sections are read BEFORE the rename so the escalated
+ * proposal still carries the bug context.
  * @param ctx - stage context.
  * @param changeId - change id.
  * @param cause - escalation cause.
@@ -229,6 +236,8 @@ async function installOpenSpecBackfill(
   cause: string,
 ): Promise<void> {
   const bugRecord = await readBugRecord(ctx.workspace.root, changeId)
+  const dir = changeDir(ctx.workspace.root, changeId)
+  await renameAsideIfExists(join(dir, ARTIFACT_FILES.proposal), join(dir, 'proposal.bug-fix.md'))
   await writeArtifact(
     ctx.workspace.root,
     changeId,

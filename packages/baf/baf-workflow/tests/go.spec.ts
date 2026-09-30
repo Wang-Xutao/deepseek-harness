@@ -1374,10 +1374,12 @@ describe('/baf-go work-order dispatch (§18.4.2, 2026-09-22 客户决策)', () =
   })
 
   // 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path chain end to end —
-  // fieldless confirm → draft open → refusal + work order at bug-record.md →
+  // fieldless confirm → draft open → refusal + work order at proposal.md →
   // model completes → bugfix-open-advance dialog → click lands in implement.
   // This is the exact chain that used to dead-end at 「fast-path 缺少 Bug 字段」.
-  it('bug-fix-path: draft open gates on the bug record and advances through bugfix-open-advance', { timeout: 60_000 }, async () => {
+  // 【变更】2026-09-30 (demo31 问题 4): the order targets proposal.md now (the
+  // record rename is gone); the completion conditions stay the clipped ones.
+  it('bug-fix-path: draft open gates on the clipped proposal and advances through bugfix-open-advance', { timeout: 60_000 }, async () => {
     const { root, focus } = await setup()
     try {
       await driveGo({ cwd: root, rawInput: 'fix: export API crashes when the input file is empty', focus })
@@ -1389,18 +1391,19 @@ describe('/baf-go work-order dispatch (§18.4.2, 2026-09-22 客户决策)', () =
       expect(confirmed.text).toContain('fast-path 草稿')
       expect((await statusOf(root, changeId)).current).toBe('open')
 
-      // /baf-go at the draft: refusal names the bug record and dispatches the
-      // order at bug-record.md (not proposal.md).
+      // /baf-go at the draft: refusal names the proposal and dispatches the
+      // order at proposal.md with the clipped completion conditions.
       const { signals, dispatch } = recorder()
       const refused = await driveGo({ cwd: root, focus, dispatch, dispatchOrigin: 'customer', rawInput: `change=${changeId}` })
-      expect(refused.text).toContain('Bug 记录未完成')
+      expect(refused.text).toContain('提案未完成')
       expect(signals.at(-1)?.node).toBe('open')
-      expect(signals.at(-1)?.artifactPath).toBe(`openspec/changes/${changeId}/bug-record.md`)
+      expect(signals.at(-1)?.artifactPath).toBe(`openspec/changes/${changeId}/proposal.md`)
       expect(signals.at(-1)?.mode).toBe('bug-fix-path')
 
-      // The model's guarded writes complete the record + ledger.
-      await author(root, changeId, 'bug-record.md', [
-        `# Bug record — ${changeId}`, '',
+      // The model's guarded writes complete the clipped proposal + ledger.
+      await author(root, changeId, 'proposal.md', [
+        '# Fix export crash on empty input', '',
+        `Change id: ${changeId}`, '',
         '## Problem', '',
         'Export dereferences a null token when the input file is empty.', '',
         '## Root cause', '',
@@ -1425,7 +1428,7 @@ describe('/baf-go work-order dispatch (§18.4.2, 2026-09-22 客户决策)', () =
       // implement with the regression-first work order.
       const ask: GateAsk = async (gate) => {
         expect(gate.gateId).toBe('bugfix-open-advance')
-        return { kind: 'answered', optionId: 'advance', label: '确认 Bug 记录 · 进入实施' }
+        return { kind: 'answered', optionId: 'advance', label: '确认提案 · 进入实施' }
       }
       const intoImplement = await driveGo({ cwd: root, focus, ask, dispatch, dispatchOrigin: 'customer', rawInput: `change=${changeId}` })
       expect(intoImplement.text).toContain('已进入 implement')

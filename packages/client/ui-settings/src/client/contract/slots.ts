@@ -90,10 +90,27 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * layer and every registrant already depends on it for `ctx.configForms`.
      */
     'settings.general.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    /**
+     * 【变更】2026-09-29 (demo23 问题 5): one preference row inside the BAF
+     * 工作流 section — the same additive seat shape as
+     * `settings.general.item`, for settings owned by the BAF workflow feature
+     * (ui-baf-workflow → the show-workflow-tab toggle). Options: `id` (row
+     * key), `order` (row position); the section column only stacks rows, so a
+     * row draws its own internals. Declared at runtime by ui-baf-tracegraph's
+     * 工作流 section entry as its child slot; the type lives here with every
+     * other settings slot type (the settings domain's base layer).
+     */
+    'settings.workflow.item': { kind: 'list'; scope: 'root'; owner: SettingsWorkflowItemOwnerProps }
   }
 }
 /** Owner share of a General preference row (the section supplies nothing). */
 export interface SettingsGeneralItemOwnerProps {
+  /** Marker field: item owner props are intentionally empty. */
+  children?: never
+}
+
+/** Owner share of a BAF 工作流 preference row (the section supplies nothing). */
+export interface SettingsWorkflowItemOwnerProps {
   /** Marker field: item owner props are intentionally empty. */
   children?: never
 }

@@ -16,7 +16,7 @@ import { StagePipeline } from '../src/stages/pipeline.ts'
 import { recordTouched, completeTask } from '../src/stages/implement.ts'
 import { detectAndRecord, type DriftObservation } from '../src/stages/drift.ts'
 import { CHECKLIST_FILE, artifactLine, bugRecordGate, changeArtifactStatus, proposalGate } from '../src/stages/gates.ts'
-import { BUG_RECORD_FILE } from '../src/stages/bug-fix-path.ts'
+import { BUG_FIX_PROPOSAL_FILE } from '../src/stages/bug-fix-path.ts'
 
 const FIXTURE_BASELINE = fileURLToPath(
   new URL('../../baf-core/tests/fixtures/baseline/baseline.yml', import.meta.url),
@@ -800,8 +800,8 @@ describe('bugRecordGate (bug-fix-path open 裁决门)', () => {
   /** The draft a fieldless confirm writes (driveClassify's placeholder shape). */
   function draftBody(changeId: string, problem: string): string {
     return [
-      `# Bug record — ${changeId}`, '',
-      `- Title: ${changeId}`, '',
+      '# Fix parser crash on empty input', '',
+      `Change id: ${changeId}`, '',
       '## Problem', '',
       problem, '',
       '## Root cause', '',
@@ -817,7 +817,8 @@ describe('bugRecordGate (bug-fix-path open 裁决门)', () => {
   /** A completed record (root cause / files / regression all real). */
   function completeBody(changeId: string): string {
     return [
-      `# Bug record — ${changeId}`, '',
+      '# Fix parser crash on empty input', '',
+      `Change id: ${changeId}`, '',
       '## Problem', '',
       'Parser dereferences a null token when the input file is empty.', '',
       '## Root cause', '',
@@ -837,9 +838,9 @@ describe('bugRecordGate (bug-fix-path open 裁决门)', () => {
       const missing = await bugRecordGate(input)
       expect(missing.ok).toBe(false)
       expect(missing.reasonCodes).toEqual(['stage_incomplete'])
-      expect(missing.missing?.join('\n')).toContain('bug-record.md 不存在')
+      expect(missing.missing?.join('\n')).toContain('proposal.md 不存在')
 
-      await putFile(root, changeId, BUG_RECORD_FILE, draftBody(changeId, 'feat: add export public API for reports'))
+      await putFile(root, changeId, BUG_FIX_PROPOSAL_FILE, draftBody(changeId, 'feat: add export public API for reports'))
       const draft = await bugRecordGate(input)
       expect(draft.ok).toBe(false)
       const lines = draft.missing?.join('\n') ?? ''
@@ -864,7 +865,7 @@ describe('bugRecordGate (bug-fix-path open 裁决门)', () => {
       expect(ledger.ok).toBe(false)
       expect(ledger.missing?.join('\n')).toContain('allowlist')
 
-      await putFile(root, changeId, BUG_RECORD_FILE, completeBody(changeId))
+      await putFile(root, changeId, BUG_FIX_PROPOSAL_FILE, completeBody(changeId))
       await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
         bugFixPath: true,
         tasks: [
@@ -899,8 +900,9 @@ describe('bugRecordGate (bug-fix-path open 裁决门)', () => {
     const input = { workspaceRoot: root, changeId, mode: 'bug-fix-path' as const }
     try {
       // Verbatim shape from the walk: every field "filled", none real.
-      await putFile(root, changeId, BUG_RECORD_FILE, [
-        `# Bug record — ${changeId}`, '',
+      await putFile(root, changeId, BUG_FIX_PROPOSAL_FILE, [
+        '# Fix parser crash on empty input', '',
+        `Change id: ${changeId}`, '',
         '## Problem', '',
         'ecum 模块导出报表时，如果数据行为空会崩溃', '',
         '## Root cause', '',
@@ -938,8 +940,9 @@ describe('bugRecordGate (bug-fix-path open 裁决门)', () => {
     const { root, changeId } = await setup()
     const input = { workspaceRoot: root, changeId, mode: 'bug-fix-path' as const }
     try {
-      await putFile(root, changeId, BUG_RECORD_FILE, [
-        `# Bug record — ${changeId}`, '',
+      await putFile(root, changeId, BUG_FIX_PROPOSAL_FILE, [
+        '# Fix parser crash on empty input', '',
+        `Change id: ${changeId}`, '',
         '## Problem', '',
         '导出报表空数据行崩溃。', '',
         '## Root cause', '',
@@ -969,12 +972,13 @@ describe('bugRecordGate (bug-fix-path open 裁决门)', () => {
 // 【变更】2026-09-26 (用户需求 工作流 3): the clipped artifact rail — same
 // shape as full-go-path, minus the artifacts this mode never writes.
 describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
-  it('shows exactly bug-record.md / plan.json / verify.md, draft-aware', async () => {
+  it('shows the full-go rail row-for-row — proposal.md real, clarify/design/plan.md clipped', async () => {
     const { root, changeId } = await setup()
     try {
       // Draft record + draft ledger (the fieldless-confirm state).
-      await putFile(root, changeId, BUG_RECORD_FILE, [
-        `# Bug record — ${changeId}`, '',
+      await putFile(root, changeId, BUG_FIX_PROPOSAL_FILE, [
+        '# Fix parser crash on empty input', '',
+        `Change id: ${changeId}`, '',
         '## Problem', '',
         'Parser crashes on empty input.', '',
         '## Root cause', '',
@@ -995,18 +999,20 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
         touched: [],
       }, null, 2)}\n`)
       const rows = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })
-      // 【变更】2026-09-28 (用户问题 3 + 8): parity rail — clipped full-go docs
-      // render as 已裁剪 rows, tasks.md/checklist.md ride for real.
+      // 【变更】2026-09-28 (用户问题 3 + 8) / 【变更】2026-09-30 (demo31 问题 4):
+      // parity rail — the order is the full-go one row-for-row; the clipped
+      // full-go docs render as 已裁剪 rows, tasks.md/checklist.md ride for real.
       expect(rows.map(r => r.file)).toEqual([
-        BUG_RECORD_FILE,
+        BUG_FIX_PROPOSAL_FILE,
         ARTIFACT_FILES.clarify,
         ARTIFACT_FILES.design,
+        ARTIFACT_FILES.plan,
         ARTIFACT_FILES.planJson,
         ARTIFACT_FILES.tasks,
         CHECKLIST_FILE,
         'verify.md',
       ])
-      const record = rows.find(r => r.file === BUG_RECORD_FILE)
+      const record = rows.find(r => r.file === BUG_FIX_PROPOSAL_FILE)
       expect(record?.state).toBe('template')
       expect(record?.missing.join('\n')).toContain('Root cause')
       expect(rows.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('template')
@@ -1014,14 +1020,18 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
       // 【变更】2026-09-28 (用户问题 3): the clipped rows read 已裁剪.
       expect(rows.find(r => r.file === ARTIFACT_FILES.clarify)?.state).toBe('clipped')
       expect(rows.find(r => r.file === ARTIFACT_FILES.design)?.state).toBe('clipped')
+      // 【变更】2026-09-30 (demo31 问题 4): plan.md joins the clipped set —
+      // bug-fix writes only the plan.json ledger, the narrative plan is clipped.
+      expect(rows.find(r => r.file === ARTIFACT_FILES.plan)?.state).toBe('clipped')
       expect(rows.find(r => r.file === ARTIFACT_FILES.tasks)?.state).toBe('missing')
       // 【变更】2026-09-28 (用户问题 8): the checklist row is missing until the
       // implement exit authors it.
       expect(rows.find(r => r.file === CHECKLIST_FILE)?.state).toBe('missing')
 
       // Completed record + real ledger → both rows filled.
-      await putFile(root, changeId, BUG_RECORD_FILE, [
-        `# Bug record — ${changeId}`, '',
+      await putFile(root, changeId, BUG_FIX_PROPOSAL_FILE, [
+        '# Fix parser crash on empty input', '',
+        `Change id: ${changeId}`, '',
         '## Problem', '',
         'Parser crashes on empty input.', '',
         '## Root cause', '',
@@ -1042,7 +1052,7 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
         touched: ['tests/test_parser_empty.c', 'src/parser.c'],
       }, null, 2)}\n`)
       const filled = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })
-      expect(filled.find(r => r.file === BUG_RECORD_FILE)?.state).toBe('filled')
+      expect(filled.find(r => r.file === BUG_FIX_PROPOSAL_FILE)?.state).toBe('filled')
       expect(filled.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('filled')
       // 【变更】2026-09-28 (用户问题 8): an all-ticked checklist reads 已填写.
       await putFile(root, changeId, CHECKLIST_FILE, [

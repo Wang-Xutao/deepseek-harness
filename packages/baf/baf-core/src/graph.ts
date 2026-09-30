@@ -46,7 +46,12 @@ export const FULL_GO_PATH_ROWS: readonly WorkflowNode[] = [
   'intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive',
 ]
 
-/** Node ids on the bug-fix-path. Also the §18.4.3 pre-upgrade lane. */
+/**
+ * Node ids on the bug-fix happy path (the §18.4.3 pre-upgrade lane).
+ * 【变更】2026-09-30 (demo31 问题 4): no longer drives graph placements — the
+ * bug-fix diagram now reuses the full-go lane with clarify/design/plan drawn
+ * off-path. Still the dual-lane escalation view's bug lane (lanes.ts).
+ */
 export const BUG_FIX_PATH_ROWS: readonly WorkflowNode[] = [
   'intake', 'open', 'implement', 'verify', 'archive',
 ]
@@ -72,19 +77,31 @@ function edgeKind(
 /**
  * Build placements for a mode (or the full template when mode is unset).
  * Main path is top-to-bottom (`row`); branches use `column`.
+ *
+ * 【变更】2026-09-30 (demo31 问题 4 · bug-fix 流程图与 full-go 保持一致):
+ * bug-fix-path used to squeeze into its own 5-row layout with clarify/design/
+ * plan parked in side columns. The customer wants ONE diagram: bug-fix-path
+ * renders the SAME 8-row single-column layout as full-go-path — the stages it
+ * cuts (clarify/design/plan) sit in the column with `onPath: false`, so the
+ * Tab renders them 已裁剪 and the flow visibly passes over them, identical
+ * geometry to the full flow.
  * @param mode - workflow mode, or template for empty-state rendering.
  * @returns placements.
  */
 export function placementsForMode(mode: WorkflowMode | 'template'): readonly GraphNodePlacement[] {
   if (mode === 'bug-fix-path') {
     return [
-      ...BUG_FIX_PATH_ROWS.map((id, row) => ({ id, column: 0, row, onPath: true })),
-      { id: 'clarify', column: 1, row: 1, onPath: false },
-      { id: 'design', column: 2, row: 1, onPath: false },
-      { id: 'plan', column: 1, row: 2, onPath: false },
-      { id: 'drift', column: 1, row: 3, onPath: true },
-      { id: 'completed', column: 0, row: 5, onPath: true },
-      { id: 'abandoned', column: 1, row: 5, onPath: true },
+      // Same lane as full-go-path; clarify/design/plan stay in the column but
+      // off the bug happy path (status 已裁剪, no live transition touches them).
+      ...FULL_GO_PATH_ROWS.map((id, row) => ({
+        id,
+        column: 0,
+        row,
+        onPath: id !== 'clarify' && id !== 'design' && id !== 'plan',
+      })),
+      { id: 'drift', column: 1, row: 4, onPath: true },
+      { id: 'completed', column: 0, row: 8, onPath: true },
+      { id: 'abandoned', column: 1, row: 8, onPath: true },
     ]
   }
   // full-go-path and template (clarify-required uses full-go-path visual until confirmed)
@@ -98,18 +115,23 @@ export function placementsForMode(mode: WorkflowMode | 'template'): readonly Gra
 
 /**
  * Edges visible for a mode. Template shows both full-go-path and fast-path edges.
+ *
+ * 【变更】2026-09-30 (demo31 问题 4): bug-fix-path draws the SAME edge list as
+ * full-go-path — one diagram, the cut stages read 已裁剪 while the drawn path
+ * (intake→open→clarify→design→plan→implement) stays identical. The machine
+ * legality of a bug-fix change (T3/T5/T15) still comes from the TRANSITIONS
+ * `modes` column, untouched; only the rendered graph unifies.
  * @param mode - workflow mode or template.
  * @returns edges.
  */
 export function edgesForMode(mode: WorkflowMode | 'template'): readonly GraphEdge[] {
   const wanted = new Set<string>()
-  if (mode === 'template' || mode === 'full-go-path' || mode === 'clarify-required') {
-    for (const id of ['T1', 'T2', 'T4', 'T4a', 'T6', 'T7', 'T7a', 'T8', 'T9', 'T10', 'T11', 'T12', 'T13', 'T14', 'T16']) {
+  if (mode === 'template') {
+    for (const id of ['T1', 'T2', 'T3', 'T4', 'T4a', 'T5', 'T6', 'T7', 'T7a', 'T8', 'T9', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16']) {
       wanted.add(id)
     }
-  }
-  if (mode === 'template' || mode === 'bug-fix-path') {
-    for (const id of ['T1', 'T3', 'T5', 'T9', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16']) {
+  } else {
+    for (const id of ['T1', 'T2', 'T4', 'T4a', 'T6', 'T7', 'T7a', 'T8', 'T9', 'T10', 'T11', 'T12', 'T13', 'T14', 'T16']) {
       wanted.add(id)
     }
   }

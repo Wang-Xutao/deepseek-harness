@@ -122,7 +122,7 @@ export interface BafWorkflowGateReviseRequest {
   readonly gateId?: string
   /** Completed stage the advance dialog rests on (open / clarify / … / implement). */
   readonly node?: WorkflowNode
-  /** The change's mode (bug-fix open revises bug-record.md). */
+  /** The change's mode (bug-fix open quotes the clipped proposal.md conditions). */
   readonly mode?: BafWorkflowMode
   readonly changeId?: string
   /** The customer's modification request (non-empty). */

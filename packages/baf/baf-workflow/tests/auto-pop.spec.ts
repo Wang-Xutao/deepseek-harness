@@ -270,16 +270,57 @@ describe('§22.17 J state-driven auto-pop', () => {
     }
   })
 
-  it('offers at most once per session', async () => {
+  it('【变更】2026-09-29 (demo23 问题 2) every genuine message gets its own pre-question', { timeout: 120_000 }, async () => {
     const root = await setup()
     try {
-      const service = serviceWith([selected('只是聊天，不开始')])
+      // The old one-offer-per-session semantics left the session's second
+      // statement unconfirmed — now each message pops its own pre-question.
+      const service = serviceWith([selected('只是聊天，不开始'), selected('只是聊天，不开始')])
       const { emit } = install(service)
       emit({ header: { id: 'sess-1', cwd: root } }, userMessage('随便聊聊今天的工作安排'))
-      await settle()
+      const first = Date.now() + 60_000
+      while (service.calls.length < 1 && Date.now() < first) await settle()
       emit({ header: { id: 'sess-1', cwd: root } }, userMessage('现在我要正式提一个新需求了'))
+      const deadline = Date.now() + 60_000
+      while (service.calls.length < 2 && Date.now() < deadline) await settle()
+      expect(service.calls).toHaveLength(2)
+      expect(service.calls[0]?.questions[0]?.id).toBe('baf-auto-pop')
+      expect(service.calls[1]?.questions[0]?.id).toBe('baf-auto-pop')
+      expect(await activeCount(root)).toBe(0)
+    } finally {
+      // Fire-and-forget chain may still hold a handle on a loaded parallel
+      // run (Windows ENOTEMPTY); cleanup noise must not fail the assertions.
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+
+  it('【变更】2026-09-29 (demo23 问题 2) a message typed while a dialog is pending does not stack another pre-question', { timeout: 120_000 }, async () => {
+    const root = await setup()
+    try {
+      // Latched ask: the first pre-question stays open until released, so the
+      // second message arrives while the session still has a pending ask.
+      let release: (answer: AskUserQuestionAnswer) => void = () => {}
+      const gate = new Promise<AskUserQuestionAnswer>((resolve) => { release = resolve })
+      const calls: AskUserQuestionRequest[] = []
+      const service = {
+        calls,
+        ask: async (request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer> => {
+          calls.push(request)
+          return await gate
+        },
+      }
+      const { emit } = install(service)
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('第一句先弹个卡'))
+      const popped = Date.now() + 60_000
+      while (calls.length < 1 && Date.now() < popped) await settle()
+      // Second message while the pre-question is still up — presumed context
+      // for THAT dialog, not a fresh requirement to confirm.
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('趁卡还开着再补一句话'))
       await settle()
-      expect(service.calls).toHaveLength(1)
+      await settle()
+      expect(calls).toHaveLength(1)
+      release(selected('只是聊天，不开始'))
+      await settle()
       expect(await activeCount(root)).toBe(0)
     } finally {
       // Fire-and-forget chain may still hold a handle on a loaded parallel

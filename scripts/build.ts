@@ -28,6 +28,29 @@ function runScript(script: string, environment: NodeJS.ProcessEnv): void {
   }
 }
 
+/**
+ * 【变更】2026-09-30 (demo31 问题 2 · 帮助页面空白): build MkDocs and sync it
+ * into the web dist as /help/. `build:web`'s vite run empties `apps/web/dist`,
+ * which used to delete the help copy that only the overlay release chain
+ * (`overlay/scripts/build-docs.mjs` inside `dist`) ever produced — so a
+ * locally built web host served an empty iframe for /help/index.html.
+ *
+ * Best-effort by design: the app build must not hard-fail on a machine
+ * without Python/mkdocs — the release chain still runs the strict overlay
+ * script itself, where a missing docs build IS fatal.
+ * @param environment - build environment (for cwd resolution only).
+ */
+function syncHelpDocs(environment: NodeJS.ProcessEnv): void {
+  const result = spawnSync(process.execPath, ['overlay/scripts/build-docs.mjs'], {
+    cwd: resolve(import.meta.dirname, '..'),
+    env: environment,
+    stdio: 'inherit',
+  })
+  if (result.error !== undefined || result.status !== 0) {
+    console.warn('build: help docs sync skipped (mkdocs unavailable or docs build failed) — /help/ will 404 on this dist')
+  }
+}
+
 /** Run the full build selected by `--profile` or `DSH_BUILD_CLIENT_PROFILE`. */
 function main(): void {
   const { values } = parseArgs({
@@ -44,6 +67,7 @@ function main(): void {
   runScript('build:native-system', buildEnvironment)
   runScript('build:lib', buildEnvironment)
   runScript('build:web', buildEnvironment)
+  syncHelpDocs(buildEnvironment)
   const record = writeClientBuildRecord(root, clientEnvironment)
   console.log(
     `build: recorded ${String(record.artifacts.fileCount)} client artifact(s) with ${String(Object.keys(record.environment).length)} public value(s)`,

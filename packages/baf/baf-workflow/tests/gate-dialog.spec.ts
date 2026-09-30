@@ -883,7 +883,7 @@ describe('§22.17 J path-choice options + bug-field draft (classify dialog v2)',
       const status = await store.readStatus(changeId)
       expect(status.mode).toBe('bug-fix-path')
       expect(status.current).toBe('open')
-      const record = await readFile(join(root, 'openspec', 'changes', changeId, 'bug-record.md'), 'utf8')
+      const record = await readFile(join(root, 'openspec', 'changes', changeId, 'proposal.md'), 'utf8')
       expect(record).toContain('## Root cause')
       expect(record).toContain('TODO')
       // The problem section carries the requirement summary (real content).

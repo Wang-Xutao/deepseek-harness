@@ -154,6 +154,7 @@ export type WorkflowTabKey =
   // the always-on button; not-ready simply does not pop the dialog).
   | 'advanceDialog.title'
   | 'advanceDialog.body'
+  | 'advanceDialog.confirm'
   | 'advanceDialog.dismiss'
   // §22.19 R5 — terminal dead-end escape (回到进行中的变更).
   | 'action.backToActive'
@@ -180,6 +181,12 @@ export type WorkflowTabKey =
   | 'dashboard.note'
   // 【变更】2026-09-23 (demo5 issue #5): the history flow modal's title.
   | 'dashboard.historyTitle'
+  // 【变更】2026-09-29 (demo23 问题 3): terminal dashboard rows list the
+  // artifacts the change actually generated (abandoned included).
+  | 'dashboard.artifacts'
+  // 【变更】2026-09-29 (demo23 问题 5): the 工作流 settings row copy.
+  | 'settings.workflowTab.title'
+  | 'settings.workflowTab.description'
   // 2026-09-21 (session 5.jsonl) — artifact rail card.
   | 'artifact.title'
   | 'artifact.help'
@@ -332,7 +339,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'pendingGate.title': 'Workspace bootstrap required',
   'pendingGate.action': 'Resolve in Tab',
   'pendingGate.classifyTitle': 'Requirement classification awaiting your choice',
-  'pendingGate.bugFixFieldsHelp': 'Bug-fix path can be confirmed with no fields — a TODO draft (bug-record.md) is created and the model completes it from the work order; fill the rail form first to establish the complete record in one step',
+  'pendingGate.bugFixFieldsHelp': 'Bug-fix path can be confirmed with no fields — a TODO draft (proposal.md + plan.json) is created and the model completes it from the work order; fill the rail form first to establish the complete record in one step',
   'gate.bannerTitle': 'Workflow decision',
   // §22.14 — abandon change-level gate button label.
   'action.abandon': 'Abandon this change',
@@ -365,8 +372,9 @@ export const en: Record<WorkflowTabKey, string> = {
   'action.startStage': 'Start stage',
   'action.confirmArchive': 'Confirm archive',
   'action.advance': 'Advance',
-  'advanceDialog.title': 'Ready to advance the workflow',
-  'advanceDialog.body': 'The current stage {from} has finished and can advance. Advance now to continue toward {to}?',
+  'advanceDialog.title': 'Enter {to} · please confirm',
+  'advanceDialog.body': '【Status change】{from} (completed, passed its gate) → {to} (not started)\n\n【After confirming】\n- The workflow advances to {to} and the system dispatches the next work order',
+  'advanceDialog.confirm': 'Confirm · enter {to}',
   'advanceDialog.dismiss': 'Not now',
   'action.backToActive': 'Back to the active change',
   'action.resume': 'Roll back to…',
@@ -391,6 +399,9 @@ export const en: Record<WorkflowTabKey, string> = {
   'dashboard.tasksHelp': 'Plan tasks: done/total checkboxes from the change\'s plan.json task ledger (full-go-path changes only; a change without a plan ledger counts 0).',
   'dashboard.loadFailed': 'Dashboard load failed — retry with Refresh.',
   'dashboard.historyTitle': 'Change history',
+  'dashboard.artifacts': 'Generated artifacts',
+  'settings.workflowTab.title': 'Workflow tab',
+  'settings.workflowTab.description': 'Turn off to hide the Workflow tab on the conversation view.',
   'artifact.title': 'Stage artifacts',
   'artifact.help': 'One row per stage document. Open reviews/edits it in the sidebar; the state mirrors /baf-status.',
   'artifact.open': 'Open',
@@ -546,7 +557,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'pendingGate.title': '工作区需要先初始化',
   'pendingGate.action': '在 Tab 解决',
   'pendingGate.classifyTitle': '需求分类待确认',
-  'pendingGate.bugFixFieldsHelp': '缺陷修复路径可不填字段直接确认——系统建立 TODO 草稿（bug-record.md + plan.json），模型按工单补齐；右侧表单填齐后再提交则一次建立完整记录',
+  'pendingGate.bugFixFieldsHelp': '缺陷修复路径可不填字段直接确认——系统建立 TODO 草稿（proposal.md + plan.json），模型按工单补齐；右侧表单填齐后再提交则一次建立完整记录',
   'gate.bannerTitle': '工作流决策',
   // §22.14 — abandon change-level gate button label.
   'action.abandon': '放弃此变更',
@@ -582,8 +593,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'action.advance': '推进',
   // 【变更】2026-09-25 (用户需求 工作流 1): 常驻推进按钮改为顶部推进对话框，
   // 需要推进时才弹出；确认即推进（advanceDialog 即确认，不再二次弹窗）。
-  'advanceDialog.title': '可以推进工作流了',
-  'advanceDialog.body': '当前阶段「{from}」已完成，可以继续推进。现在推进吗？（下一站：{to}）',
+  'advanceDialog.title': '进入{to} · 请确认',
+  'advanceDialog.body': '【状态变化】{from}（已完成，通过完成门）→ {to}（待开始）\n\n【确认后】\n- 工作流推进到 {to}，系统自动派单给模型继续',
+  'advanceDialog.confirm': '确认推进 · 进入{to}',
   'advanceDialog.dismiss': '暂不推进',
   'action.backToActive': '回到进行中的变更',
   'action.resume': '复位到…',
@@ -607,6 +619,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'dashboard.tasksHelp': '计划任务：该变更 plan.json 任务清单中已勾选完成的数量（仅完整流程变更有计划账本；缺陷修复路径不计数）。',
   'dashboard.loadFailed': '总览加载失败 — 点刷新重试。',
   'dashboard.historyTitle': '历史流程图',
+  'dashboard.artifacts': '已生成产物',
+  'settings.workflowTab.title': '工作流页签',
+  'settings.workflowTab.description': '关闭后，对话 Tab 不再显示「工作流」。',
   'dashboard.focus': '当前焦点',
   'dashboard.openChange': '在工作流页查看该变更',
   'dashboard.note': '点击行即在流程图聚焦该变更；终态行的产物从归档目录读取。',

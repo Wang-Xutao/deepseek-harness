@@ -31,6 +31,7 @@ import { BUG_FIX_DRAFT } from './stages/bug-fix-path.ts'
 import { formatCommandReport, modeZh, cardTitle } from './command-format.ts'
 import { parseArgs, valueOf, valuesOf } from './cli-args.ts'
 import { beginIntake } from './begin-intake.ts'
+import { cancelAsksForChange } from './ask-queue.ts'
 import {
   WORKSPACE_BASELINE_PATH,
   loadWorkspaceBaseline,
@@ -379,10 +380,10 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
     const fastPathLines = draft
       ? [
         ...(missing.length > 0 ? [`未提供字段：${missing.join(' / ')}——已用 TODO 占位`] : []),
-        'bug-record.md 与 plan.json 已按草稿建立，模型按工单补齐根因 / 影响文件 / 回归测试',
+        'proposal.md 与 plan.json 已按草稿建立，模型按工单补齐根因 / 影响文件 / 回归测试',
         '补齐后敲 /baf-go（或工作流页签推进）弹「确认推进」卡',
       ]
-      : ['bug-record.md 与回归测试台账已建立', '下一步：/baf-workflow-implement（先写回归测试）']
+      : ['proposal.md 与回归测试台账已建立', '下一步：/baf-workflow-implement（先写回归测试）']
     return {
       kind: 'success',
       text: formatCommandReport(true, cardTitle('/baf-workflow-classify', `已确认并进入 open · ${modeZh(afterDraft.mode)}`), [
@@ -667,11 +668,16 @@ export async function driveArchive(cwd: string, rawInput: string, source: Transi
   }
   const pipeline = await pipelineFor(cwd)
   await pipeline.driveArchiveStage(resolution.changeId, true, source)
+  // 【变更】2026-09-29 (demo23 问题 4): the completed change's pending dialogs
+  // die with it — a confirm clicked through one surface leaves the same ask
+  // pending on the others (session popup / Tab banner / model tool), and none
+  // of them may keep pushing a terminal change.
+  const canceledAsks = cancelAsksForChange(resolution.changeId)
   const status = await store.readStatus(resolution.changeId)
   return {
     kind: 'success',
     text: formatCommandReport(true, cardTitle('/baf-workflow-archive', `已归档 · ${status.changeId}`), [
-      { title: '状态', lines: [`terminal: ${String(status.terminal)}`] },
+      { title: '状态', lines: [`terminal: ${String(status.terminal)}`, ...(canceledAsks > 0 ? [`已同步关闭 ${canceledAsks} 张未决确认卡`] : [])] },
     ]),
   }
 }
@@ -703,11 +709,20 @@ export async function driveAbandon(cwd: string, rawInput: string, source: Transi
   }
   const pipeline = await pipelineFor(cwd)
   await pipeline.driveAbandonStage({ changeId: resolution.changeId, humanConfirmed: true }, source)
+  // 【变更】2026-09-29 (demo23 问题 4): an abandoned workflow must stop asking.
+  // Every abandon surface funnels through this drive (slash, the Tab 放弃变更
+  // button's gateResolve re-dispatch, dialog clicks), so this one cancel
+  // covers them all: the in-flight gate asks about this change abort with
+  // ASK_ABORTED — the session popup unregisters its pendingInteraction, the
+  // Tab's top dialog (the same carrier) closes, and the model's mid-flight
+  // baf_gate_ask settles as paused. Workspace/session-scoped pops (the
+  // auto-pop pre-question, scaffold) carry no changeId and survive.
+  const canceledAsks = cancelAsksForChange(resolution.changeId)
   const status = await store.readStatus(resolution.changeId)
   return {
     kind: 'success',
     text: formatCommandReport(true, cardTitle('/baf-workflow-abandon', `已放弃 · ${status.changeId}`), [
-      { title: '状态', lines: [`terminal: ${String(status.terminal)}`, '审计与产物保留'] },
+      { title: '状态', lines: [`terminal: ${String(status.terminal)}`, '审计与产物保留', ...(canceledAsks > 0 ? [`已同步关闭 ${canceledAsks} 张未决确认卡`] : [])] },
     ]),
   }
 }

@@ -129,30 +129,28 @@ describe('policy: filesystem writes', () => {
   })
 
   // 【变更】2026-09-28 (用户问题 3 · demo-21 死锁回归): bug-fix-path's open
-  // artifacts are bug-record.md + plan.json — the open work order tells the
+  // artifacts are proposal.md + plan.json — the open work order tells the
   // model to fill them, so they must be writable in bug-fix mode. demo-21's
   // model bounced six turns on protected_path and cornered itself into the
   // abandon gate (forced abandon of change-20260927-ecum-demo-1e45).
-  it('bug-fix open allows exactly bug-record.md and plan.json; full-go open does not', () => {
+  // 【变更】2026-09-30 (demo31 问题 4): the open artifact is the SAME
+  // proposal.md on both modes (bug-record.md is gone); bug-fix keeps the
+  // plan.json fast-path ledger as its extra writable.
+  it('open allows proposal.md on both modes; bug-fix open also allows plan.json', () => {
     const bugfixOpen = state({ stage: 'open', mode: 'bug-fix-path' })
-    const record = adjudicateFsWrite(CONFIG, bugfixOpen, {
-      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'bug-record.md'),
+    const proposal = adjudicateFsWrite(CONFIG, bugfixOpen, {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'proposal.md'),
     })
-    expect(record.allowed).toBe(true)
+    expect(proposal.allowed).toBe(true)
     const plan = adjudicateFsWrite(CONFIG, bugfixOpen, {
       root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'plan.json'),
     })
     expect(plan.allowed).toBe(true)
-    // proposal.md is NOT a bug-fix artifact — stays locked there, and the
-    // bug-fix pair stays locked in full-go mode / later stages.
-    const wrongArtifact = adjudicateFsWrite(CONFIG, bugfixOpen, {
-      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'proposal.md'),
+    // plan.json is a bug-fix-only open artifact — full-go open keeps it locked.
+    const fullGoPlan = adjudicateFsWrite(CONFIG, state({ stage: 'open', mode: 'full-go-path' }), {
+      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'plan.json'),
     })
-    expect(wrongArtifact).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
-    const fullGoRecord = adjudicateFsWrite(CONFIG, state({ stage: 'open', mode: 'full-go-path' }), {
-      root: ROOT, path: join(ROOT, 'openspec', 'changes', 'change-1', 'bug-record.md'),
-    })
-    expect(fullGoRecord).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
+    expect(fullGoPlan).toMatchObject({ allowed: false, reasonCode: 'protected_path' })
   })
 
   // 【变更】2026-09-28 (用户问题 8): verify's one writable artifact is

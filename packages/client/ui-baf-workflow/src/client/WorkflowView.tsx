@@ -223,6 +223,9 @@ function statusClass(status: WorkflowTabNodeView['status']): string {
     // stage's 已忽略 badge read amber while 已放弃's 已忽略 read gray.
     // Only 漂移 itself keeps the amber (its label is 漂移中, never 已忽略).
     case 'skipped': return css.statusIdle ?? ''
+    // 【变更】2026-09-30 (demo31 问题 4): 已裁剪 (bug-fix 裁剪掉的 full-go 节点)
+    // is gray like 已忽略 — the node never runs, it just shows the clip.
+    case 'clipped': return css.statusIdle ?? ''
     default: return css.statusIdle ?? ''
   }
 }
@@ -261,11 +264,13 @@ function modeLabel(mode: string, t: (key: WorkflowTabKey) => string): string {
 /**
  * Whether a catalog action is treated as done for checkbox display.
  * Phase 4 has stage-level status only; completed/skipped stages check all items.
+ * 【变更】2026-09-30 (demo31 问题 4): 'clipped' joins — a 裁剪 node's whole
+ * action list is moot (the flow skips it), so it renders all-done like 已忽略.
  * @param status - node status.
  * @returns true when the stage is finished.
  */
 function stageActionsDone(status: WorkflowTabNodeView['status'] | undefined): boolean {
-  return status === 'completed' || status === 'skipped'
+  return status === 'completed' || status === 'skipped' || status === 'clipped'
 }
 
 /** The §13 R3 bug-fix form's five fields (strings; `file` is one-per-line). */
@@ -855,7 +860,15 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
    * 【变更】2026-09-23 (demo5 issue #5): a TERMINAL row opens the history
    * modal (dashboard stays open underneath); an active row keeps the old
    * focus jump.
+   * 【变更】2026-09-29 (demo23 问题 3): a terminal row also lists the
+   * artifacts the change actually generated — abandoned changes keep their
+   * directory in place, so the overview shows what was produced before the
+   * give-up, each chip opening the file in the right sidebar.
    */
+  const dashboardArtifactStateClass = (state: 'template' | 'planned' | 'filled'): string =>
+    state === 'filled' ? css.artifactStateFilled ?? ''
+      : state === 'planned' ? css.artifactStatePlanned ?? css.artifactStateTemplate ?? ''
+        : css.artifactStateTemplate ?? ''
   const dashboardRow = (row: WorkflowDashboardRow, current: WorkflowTabView, terminal: boolean) => {
     const focused = row.changeId === current.selectedChangeId || row.changeId === current.changeId
     const stageLabel = t(`node.${row.current}` as WorkflowTabKey)
@@ -863,42 +876,65 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     const total = row.tasks?.total ?? 0
     const percent = total === 0 ? 0 : Math.round((done / total) * 100)
     const tokens = formatTokens(row.inputTokens, row.outputTokens)
+    const artifactStateLabel = (state: 'template' | 'planned' | 'filled'): string =>
+      t(`artifact.state.${state}` as WorkflowTabKey)
     return (
-      <button
-        type="button"
-        className={clsx(css.dashboardItem, css.dashboardPick, focused && css.dashboardItemFocus)}
-        disabled={busy}
-        title={t('dashboard.openChange')}
-        onClick={() => {
-          if (terminal) {
-            openHistory(row.changeId, row.endedAt)
-            return
-          }
-          setDashboardOpen(false)
-          void run(() => refresh(row.changeId))
-        }}
-      >
-        <span className={css.dashboardItemMain}>
-          <span className={css.dashboardId}>{row.changeId}</span>
-          <span className={css.dashboardMeta}>
-            {modeLabel(row.mode, t)}
-            {' · '}
-            <span className={clsx(css.dashboardPhase, terminal && css.dashboardPhaseTerminal)}>{stageLabel}</span>
-            {row.endedAt !== undefined && ` · ${row.endedAt.slice(0, 16).replace('T', ' ')}`}
+      <>
+        <button
+          type="button"
+          className={clsx(css.dashboardItem, css.dashboardPick, focused && css.dashboardItemFocus)}
+          disabled={busy}
+          title={t('dashboard.openChange')}
+          onClick={() => {
+            if (terminal) {
+              openHistory(row.changeId, row.endedAt)
+              return
+            }
+            setDashboardOpen(false)
+            void run(() => refresh(row.changeId))
+          }}
+        >
+          <span className={css.dashboardItemMain}>
+            <span className={css.dashboardId}>{row.changeId}</span>
+            <span className={css.dashboardMeta}>
+              {modeLabel(row.mode, t)}
+              {' · '}
+              <span className={clsx(css.dashboardPhase, terminal && css.dashboardPhaseTerminal)}>{stageLabel}</span>
+              {row.endedAt !== undefined && ` · ${row.endedAt.slice(0, 16).replace('T', ' ')}`}
+            </span>
+            <span className={css.dashboardRowMetrics}>
+              {row.tasks !== undefined && (
+                <span className={css.dashboardProgress} title={t('dashboard.tasksHelp')}>
+                  <span className={css.dashboardProgressFill} style={{ width: `${percent}%` }} />
+                  <span className={css.dashboardProgressText}>{done}/{total}</span>
+                </span>
+              )}
+              <span title={t('card.duration')}>{formatDuration(row.durationMs)}</span>
+              <span title={t('card.tokens')}>{tokens}</span>
+            </span>
           </span>
-          <span className={css.dashboardRowMetrics}>
-            {row.tasks !== undefined && (
-              <span className={css.dashboardProgress} title={t('dashboard.tasksHelp')}>
-                <span className={css.dashboardProgressFill} style={{ width: `${percent}%` }} />
-                <span className={css.dashboardProgressText}>{done}/{total}</span>
-              </span>
-            )}
-            <span title={t('card.duration')}>{formatDuration(row.durationMs)}</span>
-            <span title={t('card.tokens')}>{tokens}</span>
-          </span>
-        </span>
-        {focused && <span className={css.currentPill}>{t('dashboard.focus')}</span>}
-      </button>
+          {focused && <span className={css.currentPill}>{t('dashboard.focus')}</span>}
+        </button>
+        {terminal && row.artifacts !== undefined && row.artifacts.length > 0 && (
+          <div className={css.dashboardArtifacts} aria-label={t('dashboard.artifacts')}>
+            <span className={css.dashboardArtifactsLabel}>{t('dashboard.artifacts')}</span>
+            <div className={css.dashboardArtifactChips}>
+              {row.artifacts.map(artifact => (
+                <button
+                  key={`${row.changeId}:${artifact.file}`}
+                  type="button"
+                  className={clsx(css.dashboardArtifactChip, dashboardArtifactStateClass(artifact.state))}
+                  title={artifact.path}
+                  onClick={() => openArtifact(artifact.path)}
+                >
+                  {artifact.file}
+                  <span className={css.dashboardArtifactState}>{artifactStateLabel(artifact.state)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </>
     )
   }
 
@@ -1275,7 +1311,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           暂不推进 for THIS rest point (`${changeId}:${current}` — a stage
           advance re-arms it). 确认推进 posts `advance(changeId, true)` — the
           dialog IS the confirmation, so the host takes the positive confirm
-          path directly and the landed stage still receives the work order. */}
+          path directly and the landed stage still receives the work order.
+          【变更】2026-09-30 (demo31 问题 5 · 非标准样式): the dialog now renders
+          in the SAME shape as the standard §22 gate cards — segmented
+          【状态变化】/【确认后】 body, 「确认推进 · 进入X」 primary option — so
+          the workflow page has ONE decision-card style, not a bespoke one. */}
       {changeActive
         && view.current !== 'drift'
         && view.advance?.ready === true
@@ -1285,18 +1325,21 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         && advanceKey !== null
         && advanceDismissed !== advanceKey && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('action.advance')} data-advance-dialog="">
-          <div className={css.cardTitle}>{t('advanceDialog.title')}</div>
-          <p className={css.hint}>
+          <div className={css.cardTitle}>
             {nextEdge !== null
-              ? fillTemplate(t('advanceDialog.body'), {
-                from: t(`node.${view.current}`),
-                to: t(`node.${nextEdge.to}`),
-              })
-              : fillTemplate(t('advanceDialog.body'), {
-                from: t(`node.${view.current}`),
-                to: '',
-              })}
-          </p>
+              ? fillTemplate(t('advanceDialog.title'), { to: t(`node.${nextEdge.to}`) })
+              : fillTemplate(t('advanceDialog.title'), { to: '' })}
+          </div>
+          {fillTemplate(t('advanceDialog.body'), {
+            from: t(`node.${view.current}`),
+            to: nextEdge !== null ? t(`node.${nextEdge.to}`) : '',
+          }).split('\n\n').map((part, pi) => (
+            // 【…】 headers render as section titles, the rest as hint copy —
+            // the same visual grammar the standard gate cards use.
+            part.startsWith('【') && part.endsWith('】') && !part.includes('\n')
+              ? <div key={`adv-sec-${pi}`} className={css.gateSectionTitle}>{part}</div>
+              : <p key={`adv-p-${pi}`} className={css.hint}>{part}</p>
+          ))}
           <div className={css.actions}>
             <button
               type="button"
@@ -1308,7 +1351,9 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                 void run(() => advance(changeId, true))
               }}
             >
-              {t('action.advance')}
+              {nextEdge !== null
+                ? fillTemplate(t('advanceDialog.confirm'), { to: t(`node.${nextEdge.to}`) })
+                : t('action.advance')}
             </button>
             <button
               type="button"
@@ -2538,7 +2583,10 @@ function ArtifactRail(props: {
   // produces it — 「设计 design.md」「验证 verify.md」— so the rail
   // reads as the stage→document map it is.
   const stageOf = (file: string): string => {
-    if (file === 'proposal.md' || file === 'bug-record.md') return t('node.open')
+    // 【变更】2026-09-30 (demo31 问题 4): bug-record.md is gone — bug-fix open
+    // authors the same proposal.md as full-go (the row just reads 已裁剪-less:
+    // it is the rail's FIRST row on both modes).
+    if (file === 'proposal.md') return t('node.open')
     if (file === 'clarify.md') return t('node.clarify')
     if (file === 'design.md') return t('node.design')
     if (file === 'plan.md' || file === 'plan.json' || file === 'tasks.md') return t('node.plan')

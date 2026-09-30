@@ -97,22 +97,23 @@ describe('workOrderText', () => {
     expect(text).toContain('- test: expected 3 rows, got 2')
   })
 
-  // 【变更】2026-09-26 (用户需求 工作流 3): a bug-fix open rest's order points
-  // at bug-record.md and quotes the bug-record completion conditions — not
-  // proposal.md's.
-  it('routes a bug-fix open order at bug-record.md with the bug-record conditions', () => {
+  // 【变更】2026-09-26 (用户需求 工作流 3): a bug-fix open rest's order quotes
+  // the bug-record (clipped proposal) completion conditions.
+  // 【变更】2026-09-30 (demo31 问题 4): the artifact file itself is proposal.md
+  // on both modes — only the conditions fork on mode now.
+  it('routes a bug-fix open order at proposal.md with the clipped conditions', () => {
     const signal: DispatchSignal = {
       changeId: 'c-bug',
       node: 'open',
-      artifactPath: artifactPathFor('c-bug', 'open', 'bug-fix-path'),
+      artifactPath: artifactPathFor('c-bug', 'open'),
       missing: ['Root cause：诊断出的根因（为什么会出现这个 Bug）'],
       mode: 'bug-fix-path',
     }
     const text = workOrderText(signal)
-    expect(text).toContain('产物：openspec/changes/c-bug/bug-record.md')
+    expect(text).toContain('产物：openspec/changes/c-bug/proposal.md')
     expect(text).toContain('- Impact scope 节列出预期要改的文件（每行一个 - 路径，不是文字描述）')
     expect(text).toContain('- Regression test 节写回归测试文件路径与可执行的运行命令')
-    expect(text).not.toContain('proposal.md')
+    expect(text).toContain('- proposal.md 的 Root cause 节写清诊断出的根因（不是 TODO / 待定位 占位）')
   })
 
   it('still names a gap when the gate reported no missing items', () => {
@@ -139,13 +140,10 @@ describe('artifactPathFor', () => {
     expect(artifactPathFor('c-1', 'implement')).toBe('openspec/changes/c-1/plan.json')
   })
 
-  // 【变更】2026-09-26 (用户需求 工作流 3): bug-fix-path's open gate judges
-  // bug-record.md; every other stage's file is mode-independent.
-  it('reroutes the open order at bug-record.md on bug-fix-path', () => {
-    expect(artifactPathFor('c-1', 'open', 'bug-fix-path')).toBe('openspec/changes/c-1/bug-record.md')
-    expect(artifactPathFor('c-1', 'open', 'full-go-path')).toBe('openspec/changes/c-1/proposal.md')
-    expect(artifactPathFor('c-1', 'implement', 'bug-fix-path')).toBe('openspec/changes/c-1/plan.json')
-  })
+  // 【变更】2026-09-30 (demo31 问题 4): bug-fix-path's open artifact IS
+  // proposal.md now (bug-record.md is gone) — every stage's file is
+  // mode-independent, so the old mode-fork test collapsed into the one above
+  // and `artifactPathFor` lost its `mode` parameter.
 })
 
 describe('workOrderMessage', () => {

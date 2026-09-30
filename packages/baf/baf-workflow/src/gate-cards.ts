@@ -198,18 +198,21 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
     ],
   },
   // 【变更】2026-09-26 (用户需求 工作流 3): the bug-fix-path counterpart of
-  // open-advance — same shape, clipped wording. Pops only after bug-record.md
-  // passes bugRecordGate (the same file-aware rule open-advance got in the
-  // 2026-09-22 report); the confirm advances into implement where the
+  // open-advance — same shape, clipped wording. Pops only after the bug-fix
+  // proposal passes bugRecordGate (the same file-aware rule open-advance got
+  // in the 2026-09-22 report); the confirm advances into implement where the
   // regression test is written first.
+  // 【变更】2026-09-30 (demo31 问题 4 · 怎么还有「Bug 记录」状态): the title and
+  // labels now read 提案 exactly like open-advance — the bug-fix path is the
+  // full flow with clipping, so the open stage's confirm card is the same
+  // 提案已完成 card; only the 【完成情况】/【确认后】 specifics stay clipped-path
+  // (root cause / regression-first).
   'bugfix-open-advance': {
     id: 'bugfix-open-advance',
-    title: 'Bug 记录已完成 · 请确认推进',
-    // 【变更】2026-09-28 (用户问题 1.1/1.5): segmented copy (same shape as
-    // open-advance).
-    question: '【状态变化】Bug 记录（已完成，通过完成门）→ 实施（待开始）\n\n【完成情况】\n- 根因 / 影响文件 / 回归测试均已填写\n\n【确认后】\n- 先写回归测试，再修复根因（改动须在 plan.json 白名单内）',
+    title: '提案已完成 · 请确认推进',
+    question: '【状态变化】提案（已完成，通过完成门）→ 实施（待开始）\n\n【完成情况】\n- 根因 / 影响文件 / 回归测试均已填写\n\n【确认后】\n- 先写回归测试，再修复根因（改动须在 plan.json 白名单内）',
     options: [
-      { id: 'advance', label: '确认 Bug 记录 · 进入实施', command: '/baf-go-confirm' },
+      { id: 'advance', label: '确认提案 · 进入实施', command: '/baf-go-confirm' },
       { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },

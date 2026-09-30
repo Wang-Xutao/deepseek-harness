@@ -44,6 +44,15 @@ export interface AskQueueEntry<T> {
   readonly sessionId: string
   /** Logical identity: same key queued/in-flight again → dropped duplicate. */
   readonly key: string
+  /**
+   * 【变更】2026-09-29 (demo23 问题 4): the change this pop is about, when it
+   * is change-scoped (gate dialogs). Terminal transitions cancel every
+   * in-flight/queued ask of the change they end — the session popup and the
+   * Tab top dialog are the SAME pending ask, and after an abandon neither may
+   * keep pushing the workflow. Absent for workspace/session-scoped pops
+   * (scaffold, the auto-pop pre-question) which must survive.
+   */
+  readonly changeId?: string
   /** Head-of-queue staleness check; true → drop without popping. */
   readonly isMoot?: () => boolean | Promise<boolean>
   /** External abort (tool exec signal / agent disposal). */
@@ -52,10 +61,18 @@ export interface AskQueueEntry<T> {
   readonly run: (controller: AbortController) => Promise<T>
 }
 
+/** A tracked in-flight/queued entry — what {@link cancelAsksForChange} needs. */
+interface ActiveAsk {
+  readonly controller: AbortController
+  readonly changeId?: string
+}
+
 /** Per-session queue state: the FIFO chain tail plus the live key set. */
 interface SessionQueue {
   tail: Promise<unknown>
   active: Set<string>
+  /** Live entries by key — the issue-4 cancel registry. */
+  readonly entries: Map<string, ActiveAsk>
 }
 
 /**
@@ -83,17 +100,19 @@ export function resetAskQueue(): void {
 export async function enqueueAsk<T>(entry: AskQueueEntry<T>): Promise<AskOutcome<T>> {
   let state = queues.get(entry.sessionId)
   if (state === undefined) {
-    state = { tail: Promise.resolve(), active: new Set<string>() }
+    state = { tail: Promise.resolve(), active: new Set<string>(), entries: new Map() }
     queues.set(entry.sessionId, state)
   }
   if (state.active.has(entry.key)) return { kind: 'dropped', reason: 'duplicate' }
 
   state.active.add(entry.key)
   const controller = new AbortController()
+  state.entries.set(entry.key, { controller, ...(entry.changeId === undefined ? {} : { changeId: entry.changeId }) })
   const forwardAbort = () => controller.abort()
   if (entry.signal !== undefined) {
     if (entry.signal.aborted) {
       state.active.delete(entry.key)
+      state.entries.delete(entry.key)
       return { kind: 'dropped', reason: 'aborted' }
     }
     entry.signal.addEventListener('abort', forwardAbort, { once: true })
@@ -102,11 +121,16 @@ export async function enqueueAsk<T>(entry: AskQueueEntry<T>): Promise<AskOutcome
   const previous = state.tail
   const run = async (): Promise<AskOutcome<T>> => {
     try {
-      if (entry.signal?.aborted) return { kind: 'dropped', reason: 'aborted' }
+      // Aborted while queued: either the external signal went off after the
+      // early-abort return, or 【变更】2026-09-29 (demo23 问题 4)
+      // cancelAsksForChange killed the entry's own controller before it
+      // reached the head — either way it must never pop.
+      if (entry.signal?.aborted || controller.signal.aborted) return { kind: 'dropped', reason: 'aborted' }
       if (entry.isMoot !== undefined && await entry.isMoot()) return { kind: 'dropped', reason: 'moot' }
       return { kind: 'answered', value: await entry.run(controller) }
     } finally {
       state.active.delete(entry.key)
+      state.entries.delete(entry.key)
       if (entry.signal !== undefined) entry.signal.removeEventListener('abort', forwardAbort)
     }
   }
@@ -115,4 +139,42 @@ export async function enqueueAsk<T>(entry: AskQueueEntry<T>): Promise<AskOutcome
   // every later pop on the same session.
   state.tail = current.catch(() => undefined)
   return current
+}
+
+/**
+ * 【变更】2026-09-29 (demo23 问题 4): cancel every in-flight or queued ask
+ * about one change — the host-side kill switch a terminal transition fires.
+ *
+ * Aborting the entry's controller makes the underlying `service.ask` reject
+ * with ASK_ABORTED on every surface at once: the client carrier unregisters
+ * the pendingInteraction (the session popup disappears), the Tab's live gate
+ * banner reads the same carrier, and the model's in-flight `baf_gate_ask`
+ * settles as paused('cancelled'). Session/workspace-scoped pops (the
+ * auto-pop pre-question, scaffold) carry no changeId and are untouched.
+ *
+ * @param changeId - the change that just reached a terminal state.
+ * @returns how many asks were canceled (0 when none were about it).
+ */
+export function cancelAsksForChange(changeId: string): number {
+  let canceled = 0
+  for (const state of queues.values()) {
+    for (const entry of state.entries.values()) {
+      if (entry.changeId !== changeId) continue
+      entry.controller.abort()
+      canceled += 1
+    }
+  }
+  return canceled
+}
+
+/**
+ * Whether a session still has any queued or in-flight ask. The auto-pop
+ * offer checks this before offering (issue 2): a message typed while a
+ * dialog is pending is most likely an answer or context for THAT dialog,
+ * not a fresh requirement to confirm.
+ * @param sessionId - the session to inspect.
+ * @returns true when at least one ask is queued or in flight.
+ */
+export function hasPendingAsk(sessionId: string): boolean {
+  return (queues.get(sessionId)?.active.size ?? 0) > 0
 }

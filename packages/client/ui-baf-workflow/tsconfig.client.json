@@ -21,6 +21,8 @@
     "src/client/tab-activity.ts",
     "src/client/BafGateComposer.tsx",
     "src/client/WorkflowView.tsx",
+    "src/client/WorkflowTabRow.tsx",
+    "src/workflow-tab-settings.ts",
     "src/css-modules.d.ts"
   ],
   "references": [
@@ -29,6 +31,7 @@
     { "path": "../../baf/baf-workflow" },
     { "path": "../locale/tsconfig.client.json" },
     { "path": "../ui-conversation/tsconfig.client.json" },
+    { "path": "../ui-settings/tsconfig.client.json" },
     { "path": "../ui-primitives" },
     { "path": "../ui-session" },
     { "path": "../ui-sidebar-right" },

@@ -54,6 +54,8 @@ export type NodeStatusId =
   | 'drifted'
   | 'skipped'
   | 'template'
+  /** 【变更】2026-09-30 (demo31 问题 4): bug-fix 路径裁剪掉的 full-go 节点（clarify/design/plan）——已裁剪，流程经过时直接跳过. */
+  | 'clipped'
 
 export interface WorkflowTabNodeView {
   readonly id: WorkflowNodeId
@@ -148,7 +150,8 @@ export interface WorkflowTabView {
     readonly totalOutputTokens?: number
     /** 【变更】2026-09-25 (用户需求 工作流 3): host epoch-ms stamp of the derivation — the per-second timer anchors here. */
     readonly computedAt?: number
-    /** 【变更】2026-09-28 (用户问题 4 停表): false = the change rests on a customer decision; the live timer freezes (wait time is not workflow time). */
+    /** 【变更】2026-09-28 (用户问题 4 停表): false = the change rests on a customer decision;
+     * the live timer freezes (wait time is not workflow time). */
     readonly running?: boolean
   }
   /** Set while the change is parked on gate A/B (§18.5). */
@@ -224,6 +227,13 @@ export interface WorkflowTabView {
   }
 }
 
+/** One generated-artifact chip of a dashboard row (mirrors baf-core, issue 3). */
+export interface WorkflowDashboardArtifact {
+  readonly file: string
+  readonly path: string
+  readonly state: 'template' | 'planned' | 'filled'
+}
+
 /**
  * 【变更】2026-09-23 (user issue #6): 变更总览 dashboard row — one per change
  * (active and terminal), mirroring `WorkflowDashboardRow` in baf-core.
@@ -239,6 +249,8 @@ export interface WorkflowDashboardRow {
   readonly durationMs?: number
   readonly inputTokens?: number
   readonly outputTokens?: number
+  /** 【变更】2026-09-29 (demo23 问题 3): files the change actually generated. */
+  readonly artifacts?: readonly WorkflowDashboardArtifact[]
 }
 
 /** The dashboard payload: every change row, newest first, plus summary tiles. */

@@ -268,6 +268,11 @@ export async function askGateDialogQueued(
   const outcome = await enqueueAsk({
     sessionId: queueSession,
     key: gateQueueKey(gate),
+    // 【变更】2026-09-29 (demo23 问题 4): change-scoped metadata — a terminal
+    // transition cancels the in-flight dialog of the change it ends, so the
+    // session popup and the Tab banner die together instead of outliving the
+    // workflow they were pushing.
+    ...(gate.changeId === undefined ? {} : { changeId: gate.changeId }),
     ...(controls?.isMoot === undefined ? {} : { isMoot: controls.isMoot }),
     ...(controls?.signal === undefined ? {} : { signal: controls.signal }),
     run: controller => askGateDialog(service, agent, gate, controller.signal),
@@ -337,7 +342,7 @@ export interface GateArtifactSpec {
    * model-revisable (none today).
    */
   readonly reviseNode?: 'open' | 'clarify' | 'design' | 'plan' | 'verify'
-  /** `reviseNode`'s mode override (bug-fix open rest targets bug-record.md). */
+  /** `reviseNode`'s mode override (bug-fix open rest quotes the clipped conditions). */
   readonly reviseMode?: 'full-go-path' | 'bug-fix-path'
 }
 
@@ -351,7 +356,9 @@ export interface GateArtifactSpec {
  */
 export const GATE_ARTIFACTS: Readonly<Partial<Record<GateId, readonly GateArtifactSpec[]>>> = {
   'open-advance': [{ file: 'proposal.md', label: '提案', reviseNode: 'open' }],
-  'bugfix-open-advance': [{ file: 'bug-record.md', label: 'Bug 记录', reviseNode: 'open', reviseMode: 'bug-fix-path' }],
+  // 【变更】2026-09-30 (demo31 问题 4): the bug-fix open artifact joins
+  // proposal.md's slot — same doc type name as the full flow, clipped content.
+  'bugfix-open-advance': [{ file: 'proposal.md', label: '提案', reviseNode: 'open', reviseMode: 'bug-fix-path' }],
   'clarify-advance': [{ file: 'clarify.md', label: '澄清文档', reviseNode: 'clarify' }],
   'design-advance': [{ file: 'design.md', label: '设计文档', reviseNode: 'design' }],
   'design-confirm': [{ file: 'design.md', label: '设计文档', reviseNode: 'design' }],
@@ -396,7 +403,7 @@ export function gateRevisionTarget(
  * artifact table names the revisable document (implement → verify-advance:
  * the artifact that stage just produced is the checklist).
  * @param node - the completed stage the Tab rests on.
- * @param mode - the change's mode (bug-fix open revises bug-record.md).
+ * @param mode - the change's mode (bug-fix open quotes the clipped conditions).
  * @returns the gate id, or undefined for stages with no revisable artifact.
  */
 export function advanceGateIdForNode(

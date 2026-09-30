@@ -6,11 +6,12 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* 【变更】2026-09-30 (demo31 问题 3): title/intro match AgentPresetSection —
+ * 18/600 title, 13px tertiary intro — so every settings page reads the same. */
 .title {
   margin: 0;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .subtitle {
@@ -23,8 +24,7 @@
 
 .intro {
   margin: 0;
-  font-size: 14px;
-  line-height: 22px;
+  font-size: 13px;
   color: var(--dsw-alias-label-tertiary);
 }
 

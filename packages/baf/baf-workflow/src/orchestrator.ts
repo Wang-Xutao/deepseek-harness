@@ -259,7 +259,7 @@ async function docAdvanceDue(cwd: string, changeId: string, status: WorkflowStat
     // the card pops only when proposal.md passes its gate, mirroring
     // clarify/design/plan (dueGateFor's open case returned undefined above).
     // 【变更】2026-09-26 (用户需求 工作流 3): bug-fix-path pops its clipped
-    // counterpart once bug-record.md passes bugRecordGate — the draft-open
+    // counterpart once proposal.md passes bugRecordGate — the draft-open
     // record is the model's authoring domain until then.
     case 'open': return input.mode === 'bug-fix-path'
       ? (await bugRecordGate(input)).ok ? 'bugfix-open-advance' : undefined
@@ -434,8 +434,7 @@ async function popDueGate(
   // re-offered (the customer had to keep typing /baf-go). The doc-aware
   // stages' fingerprint now carries the artifact file's size+mtime: any edit
   // to the file the gate judges re-arms the pop.
-  const artifactSuffix = await artifactFingerprintOf(cwd, changeId, live.current,
-    live.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path')
+  const artifactSuffix = await artifactFingerprintOf(cwd, changeId, live.current)
   await popGate(ctx, cwd, sessionId, gate, `v${live.projectionVersion}${artifactSuffix}`, `${cwd} | ${changeId} | ${due.gateId}`,
     // Stale the moment the resting point moved on (a click elsewhere, a
     // model write) — the queue re-reads at head-of-line time. MUST use the
@@ -478,13 +477,14 @@ async function dispatchRestingGap(
   switch (node) {
     case 'open': {
       // 【变更】2026-09-26 (用户需求 工作流 3): mode-aware — a bug-fix open
-      // rest's gap is the bug-record/ledger draft (proposalGate unconditionally
+      // rest's gap is the proposal/ledger draft (proposalGate unconditionally
       // passes on that mode, which used to silence the dispatch).
+      // 【变更】2026-09-30 (demo31 问题 4): both modes author proposal.md, so
+      // the fallback label no longer forks either.
       const gate = mode === 'bug-fix-path'
         ? await bugRecordGate(input).catch(() => undefined)
         : await proposalGate(input).catch(() => undefined)
-      const label = mode === 'bug-fix-path' ? 'bug-record' : 'proposal'
-      missing = gate !== undefined && !gate.ok ? gate.missing ?? [gate.detail ?? `${label} 未达完成门`] : undefined
+      missing = gate !== undefined && !gate.ok ? gate.missing ?? [gate.detail ?? 'proposal 未达完成门'] : undefined
       break
     }
     case 'clarify': {
@@ -525,7 +525,7 @@ async function dispatchRestingGap(
   const outcome = dispatch({
     changeId,
     node,
-    artifactPath: artifactPathFor(changeId, node, mode),
+    artifactPath: artifactPathFor(changeId, node),
     missing,
     ...(mode === 'bug-fix-path' ? { mode: 'bug-fix-path' as const } : {}),
   })
@@ -547,14 +547,12 @@ async function dispatchRestingGap(
  * @param cwd - workspace root.
  * @param changeId - change id.
  * @param current - the change's current node.
- * @param mode - the change's mode (bug-fix open judges bug-record.md).
  * @returns `:<size>-<mtime>` or ''.
  */
 async function artifactFingerprintOf(
   cwd: string,
   changeId: string,
   current: string,
-  mode?: 'full-go-path' | 'bug-fix-path',
 ): Promise<string> {
   if (current === 'verify') {
     try {
@@ -565,7 +563,7 @@ async function artifactFingerprintOf(
     }
   }
   if (current !== 'open' && current !== 'clarify' && current !== 'design' && current !== 'plan' && current !== 'implement') return ''
-  const relative = artifactPathFor(changeId, current, mode)
+  const relative = artifactPathFor(changeId, current)
   try {
     const s = await stat(join(cwd, relative))
     return `:${s.size}-${Math.floor(s.mtimeMs)}`
