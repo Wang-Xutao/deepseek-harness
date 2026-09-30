@@ -258,10 +258,67 @@ export async function persistVerifyReport(
 }
 
 /**
+ * 【变更】2026-09-30 (demo33 问题 3): 每个检查项的正式报告元数据 — 验证名称 /
+ * 验证内容 / 验证方法。verify.md 不再是单行表格的薄渲染，而是一份完整、
+ * 详尽的测试报告；未知检查名（未来新增的注册项）回退到名称本身。
+ */
+interface CheckCatalogEntry {
+  /** 报告里的验证名称（中文）。 */
+  readonly name: string
+  /** 这项检查验证什么（验证内容）。 */
+  readonly content: string
+  /** 这项检查是怎么执行的（验证方法）。 */
+  readonly method: string
+}
+
+const CHECK_CATALOG_ZH: Readonly<Record<string, CheckCatalogEntry>> = {
+  'regression-test': {
+    name: '回归测试落地检查',
+    content: '缺陷修复路径要求的回归测试是否先于修复代码落地：测试文件已写入、账本中 regression-test 任务已标 done、touched 记录包含该测试文件。',
+    method: '读取实现账本（bug-fix-path-ledger.json / plan.json），核对 regression-test 任务的 done 标记、其登记的测试文件与 touched 写入记录三者一致。',
+  },
+  'openspec-validate': {
+    name: 'OpenSpec 结构校验',
+    content: '变更目录的产物结构是否符合 OpenSpec 规范（文件齐全、字段完整、模板已填写）。缺陷修复路径不走 OpenSpec，本项降级为非必需并标注跳过原因。',
+    method: '调用 OpenSpec 适配器的 validate（openspec validate --change <changeId>），收集其结构诊断；缺陷修复路径直接标注 skipped 与 intake 原因码。',
+  },
+  quality: {
+    name: '质量门禁检查',
+    content: '本次改动是否满足基线设定的质量门禁（构建、测试、覆盖率等阈值）。',
+    method: '调用质量栈适配器（runQuality）按基线配置执行质量流水线，汇总各阈值判定与 reason codes；未接线时标注 tool_unavailable，不计入必需判定。',
+  },
+  guard: {
+    name: '改动范围守卫检查',
+    content: '本次改动触及的文件是否都在策略允许范围内（未越权改动机器/凭据等受保护路径）。',
+    method: '读取实现账本的 touched 列表，逐路径调用守卫适配器（guard.check）做策略判定；未接线时标注 tool_unavailable，不计入必需判定。',
+  },
+  'secret-scan': {
+    name: '敏感信息扫描',
+    content: '本次改动的文件中是否引入了密钥、令牌等敏感信息。',
+    method: '对 touched 列表逐文件调用守卫适配器的 secret-scan 动作；基线配置为 off 时标注 skipped，未接线时标注 tool_unavailable。',
+  },
+}
+
+/** One check's catalog entry with a fallback for unknown future names. */
+function catalogEntryOf(name: string): CheckCatalogEntry {
+  return CHECK_CATALOG_ZH[name]
+    ?? { name, content: `检查项 ${name}（暂无中文元数据，详见诊断信息）。`, method: '由该检查的注册实现执行；详见诊断信息。' }
+}
+
+/** Verdict line for one report row. */
+function checkVerdictZh(check: CheckReportRow): string {
+  if (check.ok) return '✅ 通过'
+  return check.required ? '❌ 失败（必需检查）' : '⚠️ 未通过（非必需，不阻断）'
+}
+
+/**
  * 【变更】2026-09-23 (demo5 issue #3): render verify.md — the verify stage's
  * customer-facing artifact (阶段产物). The rail, gate cards and Tab show
  * verify.md, NOT verify-report.json; the machine JSON stays alongside for
  * drift freshness and quality-tool consumers that read it by name.
+ * 【变更】2026-09-30 (demo33 问题 3): 正式测试报告结构 — 报告头（编号/环境/
+ * 工具版本）→ 验证结论 → 验证总览表 → 每项检查一节（验证名称、验证内容、
+ * 验证方法、验证结果 + 诊断）。
  * @param workspaceRoot - absolute workspace root.
  * @param changeId - change id.
  * @param report - the aggregated report just persisted.
@@ -271,36 +328,58 @@ export async function renderVerifyMd(
   changeId: string,
   report: VerifyReport,
 ): Promise<void> {
+  const requiredTotal = report.checks.filter(c => c.required).length
+  const requiredPassed = report.checks.filter(c => c.required && c.ok).length
   const lines: string[] = [
-    `# Verify — ${changeId}`,
+    `# 验证报告 — ${changeId}`,
     '',
-    `> 结论：${report.passed ? '✅ 通过（必需检查全部通过）' : '❌ 未通过（存在未通过的必需检查）'}`,
+    '> 本报告由验证阶段自动生成，记录本次变更进入归档前执行的全部检查项及其结果。',
     '',
-    `- 模式：${report.mode ?? '—'}`,
-    ...(report.sourceRevision === undefined ? [] : [`- 源版本：\`${report.sourceRevision}\``]),
-    ...(report.baselineId === undefined ? [] : [`- 基线：\`${report.baselineId}\``]),
-    `- 完成时间：${report.finishedAt}`,
+    '## 报告信息',
+    '',
+    '| 项目 | 内容 |',
+    '| --- | --- |',
+    `| 变更编号 | \`${changeId}\` |`,
+    `| 工作流模式 | ${report.mode ?? '—'} |`,
+    ...(report.sourceRevision === undefined ? [] : [`| 源版本 | \`${report.sourceRevision}\` |`]),
+    ...(report.baselineId === undefined ? [] : [`| 基线 | \`${report.baselineId}\` |`]),
     ...(Object.keys(report.toolVersions).length === 0
       ? []
-      : [`- 工具版本：${Object.entries(report.toolVersions).map(([tool, v]) => `${tool}@${v}`).join('、')}`]),
+      : [`| 工具版本 | ${Object.entries(report.toolVersions).map(([tool, v]) => `${tool}@${v}`).join('、')} |`]),
+    `| 完成时间 | ${report.finishedAt} |`,
+    `| 必需检查 | 通过 ${requiredPassed}/${requiredTotal} |`,
     '',
-    '## 检查明细',
+    '## 验证结论',
     '',
-    '| 检查 | 必需 | 结果 | 耗时 |',
-    '| --- | --- | --- | --- |',
+    report.passed
+      ? '**✅ 通过** —— 全部必需检查项均通过，变更满足进入归档的质量要求。'
+      : '**❌ 未通过** —— 存在未通过的必需检查项，变更退回实现阶段修复后重新验证。',
+    '',
+    '## 验证总览',
+    '',
+    '| # | 验证名称 | 类别 | 验证结果 | 耗时 |',
+    '| --- | --- | --- | --- | --- |',
   ]
-  for (const check of report.checks) {
-    const verdict = check.ok ? '✅ 通过' : (check.required ? '❌ 失败' : '⚠️ 跳过/失败（非必需）')
-    lines.push(`| ${check.name} | ${check.required ? '是' : '否'} | ${verdict} | ${check.durationMs}ms |`)
-  }
-  lines.push('', '## 诊断', '')
-  for (const check of report.checks) {
-    if (check.diagnostics.length === 0) continue
-    lines.push(`### ${check.name}`, '')
-    for (const line of check.diagnostics) lines.push(`- ${line}`)
+  report.checks.forEach((check, index) => {
+    const entry = catalogEntryOf(check.name)
+    lines.push(`| ${index + 1} | ${entry.name} | ${check.required ? '必需' : '辅助'} | ${checkVerdictZh(check)} | ${check.durationMs}ms |`)
+  })
+  lines.push('', '## 验证明细', '')
+  report.checks.forEach((check, index) => {
+    const entry = catalogEntryOf(check.name)
+    lines.push(`### ${index + 1}. ${entry.name}`, '')
+    lines.push(`- **检查项**：\`${check.name}\``)
+    lines.push(`- **验证内容**：${entry.content}`)
+    lines.push(`- **验证方法**：${entry.method}`)
+    lines.push(`- **验证结果**：${checkVerdictZh(check)}（耗时 ${check.durationMs}ms）`)
     lines.push('')
-  }
-  lines.push('> 本文档由 verify-report.json 自动渲染；机器消费请读 JSON。', '')
+    if (check.diagnostics.length > 0) {
+      lines.push('  诊断信息：', '')
+      for (const line of check.diagnostics) lines.push(`  - ${line}`)
+      lines.push('')
+    }
+  })
+  lines.push('---', '', '> 本文档由 verify-report.json 自动渲染；机器消费请读 JSON。', '')
   await writeFile(join(changeDir(workspaceRoot, changeId), 'verify.md'), lines.join('\n'), 'utf8')
 }
 

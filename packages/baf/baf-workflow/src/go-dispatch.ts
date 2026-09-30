@@ -50,6 +50,7 @@
 import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { BUG_RECORD_REQUIREMENTS_ZH, CHECKLIST_FILE, CHECKLIST_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH } from './stages/gates.ts'
+import { BUG_FIX_PATH_LEDGER_FILE } from './stages/bug-fix-path.ts'
 import { sharedHostSet } from './host-memory.ts'
 
 /** Artifact-authoring stages a work order can address (`implement` edits the allowlist). */
@@ -160,7 +161,11 @@ export function expireDispatchLedger(cwd: string): void {
  * @param node - dispatch stage.
  * @returns the workspace-relative path.
  */
-export function artifactPathFor(changeId: string, node: DispatchNode): string {
+export function artifactPathFor(
+  changeId: string,
+  node: DispatchNode,
+  mode?: 'full-go-path' | 'bug-fix-path',
+): string {
   const file = node === 'open'
     ? ARTIFACT_FILES.proposal
     : node === 'clarify'
@@ -171,7 +176,11 @@ export function artifactPathFor(changeId: string, node: DispatchNode): string {
           // 【变更】2026-09-28 (用户问题 8): the verify-stage order's only
           // artifact is the checklist — the model ticks it, nothing else.
           ? CHECKLIST_FILE
-          : ARTIFACT_FILES.planJson
+          // 【变更】2026-09-30 (demo33 问题 1): implement's judging artifact is
+          // the ledger, which on bug-fix-path lives at its own file name.
+          : mode === 'bug-fix-path'
+            ? BUG_FIX_PATH_LEDGER_FILE
+            : ARTIFACT_FILES.planJson
   return `openspec/changes/${changeId}/${file}`
 }
 
@@ -181,12 +190,14 @@ export function artifactPathFor(changeId: string, node: DispatchNode): string {
  * ledger inside `plan.json`, not an article).
  */
 const IMPLEMENT_REQUIREMENTS_ZH = [
-  'plan.json 里每个任务的 done 标为 true（剩余任务做完并标记）',
-  '改动文件全部在 plan.json 的 allowlist 内',
+  '实现账本（plan.json / bug-fix-path-ledger.json）里每个任务的 done 标为 true（剩余任务做完并标记）',
+  '改动文件全部在实现账本的 allowlist 内',
   // 【变更】2026-09-28 (用户问题 8): the checklist is implement's exit
   // artifact — teach it here so the model authors it in the same turn the
   // last task completes, instead of waiting for the verify-entry refusal.
-  '全部任务完成后生成 checklist.md（每行一个 `- [ ] 检查项`，来源：各任务 verify 命令 + 验收标准）',
+  // 【变更】2026-09-30 (demo33 问题 2): every item is a NAMED Chinese check —
+  // the model writes what the item checks, not a bare command line.
+  '全部任务完成后生成 checklist.md（每行一个 `- [ ] **检查项名称**：检查内容与判定标准`，中文命名；来源：各任务 verify 命令 + 验收标准 + 回归测试）',
 ] as const
 
 /**

@@ -29,8 +29,12 @@ import { changeArtifactStatus } from './stages/gates.ts'
 async function taskCounts(workspaceRoot: string, changeId: string): Promise<{ done: number; total: number } | undefined> {
   const read = async (path: string): Promise<string | undefined> =>
     await readFile(path, 'utf8').catch(() => undefined)
+  // 【变更】2026-09-30 (demo33 问题 1): bug-fix-path ledgers live at their own
+  // file name (legacy ones still at plan.json) — try both, live first.
   const body = await read(join(workspaceRoot, 'openspec', 'changes', changeId, 'plan.json'))
+    ?? await read(join(workspaceRoot, 'openspec', 'changes', changeId, 'bug-fix-path-ledger.json'))
     ?? await read(join(workspaceRoot, 'openspec', 'changes', 'archive', changeId, 'plan.json'))
+    ?? await read(join(workspaceRoot, 'openspec', 'changes', 'archive', changeId, 'bug-fix-path-ledger.json'))
   if (body === undefined) return undefined
   let tasks: readonly { done?: boolean }[] | undefined
   try {

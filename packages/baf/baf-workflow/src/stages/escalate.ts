@@ -185,7 +185,11 @@ async function preserveBugFixPathLedger(
   const destination = join(dir, BUG_FIX_PATH_LEDGER_FILE)
   try {
     await stat(destination)
-    return false // Already preserved (idempotent re-escalation attempt).
+    // 【变更】2026-09-30 (demo33 问题 1): the fast-path ledger now LIVES at
+    // this name from open (legacy changes arrive with plan.json and take the
+    // rename below) — destination present means the audit trail is already
+    // preserved, whether by this rename or by the new naming scheme.
+    return true
   } catch {
     // Destination free — proceed to move the ledger when it exists.
   }

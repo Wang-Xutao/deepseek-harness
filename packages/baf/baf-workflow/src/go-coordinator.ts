@@ -1633,7 +1633,7 @@ function dispatchWorkOrder(
   const signal: DispatchSignal = {
     changeId,
     node,
-    artifactPath: artifactPathOverride ?? artifactPathFor(changeId, node),
+    artifactPath: artifactPathOverride ?? artifactPathFor(changeId, node, mode),
     missing,
     ...(cause === undefined ? {} : { cause }),
     ...(mode === undefined ? {} : { mode }),

@@ -81,8 +81,10 @@ describe('workOrderText', () => {
       missing: ['plan.json：1/3 个任务已 done——完成剩余任务并把 done 标为 true'],
     })
     expect(text).toContain('产物：openspec/changes/c-1/plan.json')
-    expect(text).toContain('- plan.json 里每个任务的 done 标为 true（剩余任务做完并标记）')
-    expect(text).toContain('- 改动文件全部在 plan.json 的 allowlist 内')
+    // 【变更】2026-09-30 (demo33 问题 1): the ledger is mode-named — the
+    // condition copy names both files instead of plan.json alone.
+    expect(text).toContain('- 实现账本（plan.json / bug-fix-path-ledger.json）里每个任务的 done 标为 true（剩余任务做完并标记）')
+    expect(text).toContain('- 改动文件全部在实现账本的 allowlist 内')
   })
 
   it('marks a T11 fix loop as a verification failure', () => {

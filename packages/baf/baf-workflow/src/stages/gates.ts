@@ -9,7 +9,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { OpenSpecAdapter } from '@deepseek-ai/dsh-baf-core'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
-import { BUG_FIX_PROPOSAL_FILE, REGRESSION_TASK_ID, sectionOf } from './bug-fix-path.ts'
+import { BUG_FIX_PATH_LEDGER_FILE, BUG_FIX_PROPOSAL_FILE, REGRESSION_TASK_ID, sectionOf } from './bug-fix-path.ts'
 import { parsePlanLedger } from './plan-ledger.ts'
 
 /** Outcome of one completion gate. */
@@ -90,9 +90,15 @@ export function parseChecklist(body: string): ChecklistStatus {
   return { items, total: items.length, open: items.filter(item => !item.done).map(item => item.text) }
 }
 
-/** The checklist's pass conditions, quoted by the /baf-go dispatch order. */
+/**
+ * The checklist's pass conditions, quoted by the /baf-go dispatch order.
+ * 【变更】2026-09-30 (demo33 问题 2): every checklist item must be a NAMED
+ * Chinese check — 「检查项是什么」一眼可读，不再是一串裸命令。
+ */
 export const CHECKLIST_REQUIREMENTS_ZH: readonly string[] = [
-  'checklist.md 每行一个 `- [ ] 检查项`（来自 plan.json 每个任务的 verify 命令 + 验收标准）',
+  'checklist.md 每行一个 `- [ ] **检查项名称**：检查内容与判定标准`，检查项名称用中文写清这项在检查什么',
+  '检查项来源：实现账本每个任务的 verify 命令 + 验收标准 + 回归测试，逐条转写为中文检查项（命令保留原文）',
+  '示例：`- [ ] **回归测试通过**：运行 npm test -- src/foo.test.ts，全部用例通过（0 失败）`',
   '验证阶段逐项确认：通过一项勾一项（`- [ ]` 改 `- [x]`）',
   '全部勾选后才允许归档（归档门硬校验）',
 ]
@@ -126,7 +132,9 @@ const DOC_ARTIFACT_ORDER = [
  * 【变更】2026-09-30 (demo31 问题 4 · 文档类型名称与全流程一致，只是裁剪): the
  * rail is now ROW-FOR-ROW the full-go rail — proposal.md is the open artifact
  * (bug-record.md is gone), clarify/design/plan.md render clipped, and the
- * fast-path ledger keeps plan.json's slot.
+ * plan stage's plan.json/tasks.md rows clip the same way (demo33 问题 1: the
+ * fast-path machine ledger lives at bug-fix-path-ledger.json, outside the
+ * customer-editable rail).
  */
 const BUG_FIX_ARTIFACT_ORDER = [
   BUG_FIX_PROPOSAL_FILE,
@@ -142,13 +150,19 @@ const BUG_FIX_ARTIFACT_ORDER = [
 /**
  * Full-go artifacts the bug-fix path never produces (rendered 已裁剪).
  * 【变更】2026-09-30 (demo31 问题 4): plan.md joins clarify/design — bug-fix
- * writes only the plan.json ledger at open, so the narrative plan document
+ * writes only the implement ledger at open, so the narrative plan document
  * is a clipped row too, giving the rail full-go's exact shape.
+ * 【变更】2026-09-30 (demo33 问题 1): plan.json + tasks.md join the clipped
+ * set — the fast-path machine ledger moved to bug-fix-path-ledger.json and
+ * tasks.md is never rendered on this mode, so the plan stage's whole row
+ * family reads 已裁剪 (nothing named 「plan」 generates on bug-fix-path).
  */
 const BUG_FIX_CLIPPED_FILES: ReadonlySet<string> = new Set([
   ARTIFACT_FILES.clarify,
   ARTIFACT_FILES.design,
   ARTIFACT_FILES.plan,
+  ARTIFACT_FILES.planJson,
+  ARTIFACT_FILES.tasks,
 ])
 
 /** What each documentation stage's gate requires, in customer language. */
@@ -499,7 +513,11 @@ export interface PlanDocument {
  * @returns parsed plan or undefined.
  */
 async function readPlan(input: GateInput): Promise<PlanDocument | undefined> {
+  // 【变更】2026-09-30 (demo33 问题 1): the implement ledger is mode-named —
+  // plan.json first (full-go + legacy), the bug-fix name as fallback, the
+  // same priority readLedger applies.
   const body = await readArtifact(input, ARTIFACT_FILES.planJson)
+    ?? await readArtifact(input, BUG_FIX_PATH_LEDGER_FILE)
   if (body === undefined) return undefined
   return parsePlanLedger(body) as PlanDocument | undefined
 }
@@ -641,8 +659,11 @@ export async function checklistGate(input: GateInput): Promise<GateOutcome> {
   }
   if (templateOnly(body)) {
     return fail(['stage_incomplete'], 'checklist.md is still the unfilled template', [
-      '把 TODO 占位替换为逐项检查清单：每行一个 `- [ ] 检查项`',
-      '检查项来源：plan.json 每个任务的 verify 命令 + 验收标准',
+      // 【变更】2026-09-30 (demo33 问题 2): the hint teaches the NAMED Chinese
+      // item format, not a bare checkbox.
+      '把 TODO 占位替换为逐项检查清单：每行一个 `- [ ] **检查项名称**：检查内容与判定标准`（中文命名）',
+      '检查项来源：实现账本每个任务的 verify 命令 + 验收标准 + 回归测试',
+      '示例：`- [ ] **回归测试通过**：运行 npm test -- src/foo.test.ts，全部用例通过（0 失败）`',
     ])
   }
   const status = parseChecklist(body)

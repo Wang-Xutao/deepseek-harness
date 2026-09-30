@@ -184,6 +184,24 @@ export type WorkflowTabKey =
   // 【变更】2026-09-29 (demo23 问题 3): terminal dashboard rows list the
   // artifacts the change actually generated (abandoned included).
   | 'dashboard.artifacts'
+  // 【变更】2026-09-30 (demo33 问题 4): the standalone browser board — the
+  // 变更总览's 在浏览器中打开 button bakes these into a Blob-URL page.
+  | 'dashboard.openExternal'
+  | 'dashboard.board.title'
+  | 'dashboard.board.subtitle'
+  | 'dashboard.board.generatedAt'
+  | 'dashboard.board.snapshotNote'
+  | 'dashboard.board.tileActive'
+  | 'dashboard.board.tileArchived'
+  | 'dashboard.board.tileAbandoned'
+  | 'dashboard.board.tileTasks'
+  | 'dashboard.board.tileDuration'
+  | 'dashboard.board.tileTokens'
+  | 'dashboard.board.chartModes'
+  | 'dashboard.board.chartDuration'
+  | 'dashboard.board.allChanges'
+  | 'dashboard.board.empty'
+  | 'dashboard.board.endedAt'
   // 【变更】2026-09-29 (demo23 问题 5): the 工作流 settings row copy.
   | 'settings.workflowTab.title'
   | 'settings.workflowTab.description'
@@ -400,6 +418,22 @@ export const en: Record<WorkflowTabKey, string> = {
   'dashboard.loadFailed': 'Dashboard load failed — retry with Refresh.',
   'dashboard.historyTitle': 'Change history',
   'dashboard.artifacts': 'Generated artifacts',
+  'dashboard.openExternal': 'Open in browser',
+  'dashboard.board.title': 'BAF Change Board',
+  'dashboard.board.subtitle': 'Every change in this workspace — mode distribution, duration ranking, and each change\'s stage, tasks, and cost.',
+  'dashboard.board.generatedAt': 'Generated at',
+  'dashboard.board.snapshotNote': 'This page is a snapshot taken when it was opened; refresh inside the app\'s change dashboard for live data.',
+  'dashboard.board.tileActive': 'Active changes',
+  'dashboard.board.tileArchived': 'Archived',
+  'dashboard.board.tileAbandoned': 'Abandoned',
+  'dashboard.board.tileTasks': 'Tasks done',
+  'dashboard.board.tileDuration': 'Total duration',
+  'dashboard.board.tileTokens': 'Total tokens',
+  'dashboard.board.chartModes': 'Mode distribution',
+  'dashboard.board.chartDuration': 'Duration ranking (top 8)',
+  'dashboard.board.allChanges': 'All changes',
+  'dashboard.board.empty': 'No change records yet.',
+  'dashboard.board.endedAt': 'Ended at',
   'settings.workflowTab.title': 'Workflow tab',
   'settings.workflowTab.description': 'Turn off to hide the Workflow tab on the conversation view.',
   'artifact.title': 'Stage artifacts',
@@ -616,10 +650,26 @@ export const zh: Record<WorkflowTabKey, string> = {
   // 【变更】2026-09-24 (demo6 问题 7): 「任务」改名「计划任务」并配悬停解释——
   // 统计的是 plan.json 任务清单的勾选数，不是任意待办。
   'dashboard.tasks': '计划任务',
-  'dashboard.tasksHelp': '计划任务：该变更 plan.json 任务清单中已勾选完成的数量（仅完整流程变更有计划账本；缺陷修复路径不计数）。',
+  'dashboard.tasksHelp': '计划任务：该变更实现账本（plan.json / bug-fix-path-ledger.json）中已完成任务的数量。',
   'dashboard.loadFailed': '总览加载失败 — 点刷新重试。',
   'dashboard.historyTitle': '历史流程图',
   'dashboard.artifacts': '已生成产物',
+  'dashboard.openExternal': '在浏览器中打开',
+  'dashboard.board.title': 'BAF 变更看板',
+  'dashboard.board.subtitle': '本工作区全部历史变更记录 — 模式分布、耗时排行，以及每条变更的阶段、任务进度与成本。',
+  'dashboard.board.generatedAt': '生成时间',
+  'dashboard.board.snapshotNote': '本页为打开时刻的数据快照；最新数据请回到应用内「变更总览」刷新查看。',
+  'dashboard.board.tileActive': '进行中变更',
+  'dashboard.board.tileArchived': '已归档',
+  'dashboard.board.tileAbandoned': '已放弃',
+  'dashboard.board.tileTasks': '任务完成',
+  'dashboard.board.tileDuration': '累计耗时',
+  'dashboard.board.tileTokens': '累计 Tokens',
+  'dashboard.board.chartModes': '模式分布',
+  'dashboard.board.chartDuration': '耗时排行（Top 8）',
+  'dashboard.board.allChanges': '全部变更',
+  'dashboard.board.empty': '暂无变更记录',
+  'dashboard.board.endedAt': '结束于',
   'settings.workflowTab.title': '工作流页签',
   'settings.workflowTab.description': '关闭后，对话 Tab 不再显示「工作流」。',
   'dashboard.focus': '当前焦点',

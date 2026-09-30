@@ -1,6 +1,7 @@
 /**
- * N5 implement stage handler (§12 Phase 5.5): track per-task state in
- * plan.json, record touched files, and enforce the allowlist boundary.
+ * N5 implement stage handler (§12 Phase 5.5): track per-task state in the
+ * implement ledger (plan.json on full-go-path, bug-fix-path-ledger.json on
+ * the fast path), record touched files, and enforce the allowlist boundary.
  * Model edits flow through the caller (dsh filesystem/shell tools); this
  * handler owns the durable task ledger and scope verdicts.
  * @module @deepseek-ai/dsh-baf-workflow/stages/implement
@@ -13,10 +14,10 @@ import { ARTIFACT_FILES, changeDir } from '@deepseek-ai/dsh-baf-openspec'
 import type { StageContext } from './context.ts'
 import { implementGate, type PlanDocument } from './gates.ts'
 import { stageArtifactPaths } from './artifacts.ts'
-import { assertRegressionFirst } from './bug-fix-path.ts'
+import { BUG_FIX_PATH_LEDGER_FILE, assertRegressionFirst } from './bug-fix-path.ts'
 import { parsePlanLedger } from './plan-ledger.ts'
 
-/** Mutable task ledger persisted as plan.json during implement. */
+/** Mutable task ledger persisted during implement (per-mode file name). */
 export interface ImplementLedger {
   /** True for the bug fast-path ledger written at fast-path open. */
   readonly bugFixPath?: boolean
@@ -52,32 +53,50 @@ export interface RecordTouchedOptions {
 }
 
 /**
+ * 【变更】2026-09-30 (demo33 问题 1): resolve which ledger file a change uses.
+ * Full-go (and legacy bug-fix changes created before the rename) keep
+ * `plan.json`; new bug-fix-path changes carry `bug-fix-path-ledger.json`.
+ * plan.json wins when both exist (a T15 upgrade writes a fresh full-go
+ * plan.json while the fast-path file remains as audit trail).
+ * @param workspaceRoot - absolute workspace root.
+ * @param changeId - change id.
+ * @returns the ledger file name to read/write.
+ */
+async function ledgerFileFor(workspaceRoot: string, changeId: string): Promise<string> {
+  const dir = changeDir(workspaceRoot, changeId)
+  const planJson = join(dir, ARTIFACT_FILES.planJson)
+  if (await readFile(planJson, 'utf8').then(() => true, () => false)) return ARTIFACT_FILES.planJson
+  return BUG_FIX_PATH_LEDGER_FILE
+}
+
+/**
  * Read the current implement ledger for a change.
  * @param workspaceRoot - absolute workspace root.
  * @param changeId - change id.
  * @returns parsed ledger.
- * @throws {BafError} invalid_transition when plan.json is missing or malformed.
+ * @throws {BafError} invalid_transition when no ledger is missing or malformed.
  */
 export async function readLedger(workspaceRoot: string, changeId: string): Promise<ImplementLedger> {
-  const path = join(changeDir(workspaceRoot, changeId), ARTIFACT_FILES.planJson)
+  const file = await ledgerFileFor(workspaceRoot, changeId)
+  const path = join(changeDir(workspaceRoot, changeId), file)
   let body: string
   try {
     body = await readFile(path, 'utf8')
   } catch {
-    throw new BafError('invalid_transition', 'plan.json missing for implement', { changeId })
+    throw new BafError('invalid_transition', `implement ledger missing (${file})`, { changeId })
   }
   // 【变更】2026-09-23 (demo1 五问题 1–3): the tolerant normalizer accepts the
   // model-natural aliases (`affected_files` / `verify_cmd` / `rollback_point`)
   // exactly like the plan gate now does — one reader contract for every
-  // plan.json consumer.
+  // ledger consumer.
   const normalized = parsePlanLedger(body)
   if (normalized === undefined) {
     try {
       JSON.parse(body)
-      throw new BafError('invalid_transition', 'plan.json lacks tasks/allowlist arrays', { changeId })
+      throw new BafError('invalid_transition', `${file} lacks tasks/allowlist arrays`, { changeId })
     } catch (error) {
       if (error instanceof BafError) throw error
-      throw new BafError('invalid_transition', 'plan.json is not valid JSON', { changeId })
+      throw new BafError('invalid_transition', `${file} is not valid JSON`, { changeId })
     }
   }
   return {
@@ -151,7 +170,9 @@ export async function completeTask(
 
 /**
  * Persist the ledger atomically (temp + rename via the same discipline as
- * projection writes; plan.json is small so a plain write-then-rename is fine).
+ * projection writes; the ledger is small so a plain write-then-rename is fine).
+ * 【变更】2026-09-30 (demo33 问题 1): writes back to the SAME file
+ * {@link readLedger} resolved — the bug-fix name for fast-path changes.
  * @param workspaceRoot - absolute workspace root.
  * @param changeId - change id.
  * @param ledger - new ledger.
@@ -161,7 +182,8 @@ async function persistLedger(
   changeId: string,
   ledger: ImplementLedger,
 ): Promise<void> {
-  const path = join(changeDir(workspaceRoot, changeId), ARTIFACT_FILES.planJson)
+  const file = await ledgerFileFor(workspaceRoot, changeId)
+  const path = join(changeDir(workspaceRoot, changeId), file)
   const tmp = `${path}.implement.tmp`
   await writeFile(tmp, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8')
   await rename(tmp, path)
@@ -199,7 +221,11 @@ export async function driveImplementComplete(
   }
   return {
     status,
-    artifacts: stageArtifactPaths(ctx.workspace.root, changeId, [ARTIFACT_FILES.planJson]),
+    // 【变更】2026-09-30 (demo33 问题 1): report the ledger file this change
+    // actually uses (fast-path name on bug-fix-path).
+    artifacts: stageArtifactPaths(ctx.workspace.root, changeId, [
+      await ledgerFileFor(ctx.workspace.root, changeId),
+    ]),
     ledger,
   }
 }

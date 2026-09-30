@@ -37,7 +37,18 @@ export const BUG_FIX_PROPOSAL_FILE = ARTIFACT_FILES.proposal
  */
 export const BUG_FIX_DRAFT = 'TODO'
 
-/** Preserved fast-path ledger name after a T15 upgrade (audit trail). */
+/**
+ * 【变更】2026-09-30 (demo33 问题 1): the LIVE fast-path implement ledger name.
+ * Was `plan.json` — but the plan stage is clipped on this mode, and a file
+ * the rail names 「plan.json」 generating anyway read as the clipped stage
+ * still running. The machine ledger keeps existing (gates read it: allowlist,
+ * regression-first, T15 scope growth, task rollup) under its own bug-fix
+ * name; the rail renders the plan.json/tasks.md rows as 已裁剪. Legacy
+ * in-flight changes whose ledger still sits at plan.json keep working —
+ * {@link readLedger} prefers plan.json when it exists. After a T15 upgrade
+ * the full-go plan.json replaces it and this file remains as the audit trail
+ * (escalate's aside-rename covers the legacy case).
+ */
 export const BUG_FIX_PATH_LEDGER_FILE = 'bug-fix-path-ledger.json'
 
 /** Ledger task id that must be written and completed first in fast path. */
@@ -195,10 +206,13 @@ export async function driveBugFixPathOpen(
     allowlist: [...new Set([...input.affectedFiles, input.regressionTest.file])],
     touched: [],
   }
+  // 【变更】2026-09-30 (demo33 问题 1): the fast-path ledger writes its own
+  // bug-fix name — plan.json is the plan STAGE's document and that stage is
+  // clipped on this mode (readLedger resolves both names).
   await writeArtifact(
     ctx.workspace.root,
     input.changeId,
-    ARTIFACT_FILES.planJson,
+    BUG_FIX_PATH_LEDGER_FILE,
     `${JSON.stringify(ledger, null, 2)}\n`,
   )
 
@@ -206,7 +220,7 @@ export async function driveBugFixPathOpen(
     status: await ctx.store.readStatus(input.changeId),
     artifacts: stageArtifactPaths(ctx.workspace.root, input.changeId, [
       BUG_FIX_PROPOSAL_FILE,
-      ARTIFACT_FILES.planJson,
+      BUG_FIX_PATH_LEDGER_FILE,
     ]),
     rootCauseRecorded: input.rootCause.trim() !== '',
   }

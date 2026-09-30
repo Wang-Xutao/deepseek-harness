@@ -989,7 +989,7 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
         '- File: TODO',
         '- Command: TODO', '',
       ].join('\n'))
-      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+      await putFile(root, changeId, 'bug-fix-path-ledger.json', `${JSON.stringify({
         bugFixPath: true,
         tasks: [
           { id: 'regression-test', files: ['TODO'], done: false },
@@ -1001,7 +1001,10 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
       const rows = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })
       // 【变更】2026-09-28 (用户问题 3 + 8) / 【变更】2026-09-30 (demo31 问题 4):
       // parity rail — the order is the full-go one row-for-row; the clipped
-      // full-go docs render as 已裁剪 rows, tasks.md/checklist.md ride for real.
+      // full-go docs render as 已裁剪 rows, checklist.md rides for real.
+      // 【变更】2026-09-30 (demo33 问题 1): the whole plan row family clips —
+      // the fast-path machine ledger lives at bug-fix-path-ledger.json
+      // (outside the customer rail), so nothing named plan generates here.
       expect(rows.map(r => r.file)).toEqual([
         BUG_FIX_PROPOSAL_FILE,
         ARTIFACT_FILES.clarify,
@@ -1015,15 +1018,17 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
       const record = rows.find(r => r.file === BUG_FIX_PROPOSAL_FILE)
       expect(record?.state).toBe('template')
       expect(record?.missing.join('\n')).toContain('Root cause')
-      expect(rows.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('template')
+      expect(rows.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('clipped')
       expect(rows.find(r => r.file === 'verify.md')?.state).toBe('missing')
       // 【变更】2026-09-28 (用户问题 3): the clipped rows read 已裁剪.
       expect(rows.find(r => r.file === ARTIFACT_FILES.clarify)?.state).toBe('clipped')
       expect(rows.find(r => r.file === ARTIFACT_FILES.design)?.state).toBe('clipped')
       // 【变更】2026-09-30 (demo31 问题 4): plan.md joins the clipped set —
       // bug-fix writes only the plan.json ledger, the narrative plan is clipped.
+      // 【变更】2026-09-30 (demo33 问题 1): plan.json + tasks.md clip too — the
+      // ledger moved to bug-fix-path-ledger.json and tasks.md never renders.
       expect(rows.find(r => r.file === ARTIFACT_FILES.plan)?.state).toBe('clipped')
-      expect(rows.find(r => r.file === ARTIFACT_FILES.tasks)?.state).toBe('missing')
+      expect(rows.find(r => r.file === ARTIFACT_FILES.tasks)?.state).toBe('clipped')
       // 【变更】2026-09-28 (用户问题 8): the checklist row is missing until the
       // implement exit authors it.
       expect(rows.find(r => r.file === CHECKLIST_FILE)?.state).toBe('missing')
@@ -1042,7 +1047,7 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
         '- File: tests/test_parser_empty.c',
         '- Command: ctest -R parser_empty', '',
       ].join('\n'))
-      await putFile(root, changeId, ARTIFACT_FILES.planJson, `${JSON.stringify({
+      await putFile(root, changeId, 'bug-fix-path-ledger.json', `${JSON.stringify({
         bugFixPath: true,
         tasks: [
           { id: 'regression-test', files: ['tests/test_parser_empty.c'], done: true },
@@ -1053,7 +1058,10 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
       }, null, 2)}\n`)
       const filled = await changeArtifactStatus({ workspaceRoot: root, changeId, mode: 'bug-fix-path' })
       expect(filled.find(r => r.file === BUG_FIX_PROPOSAL_FILE)?.state).toBe('filled')
-      expect(filled.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('filled')
+      // 【变更】2026-09-30 (demo33 问题 1): the ledger at bug-fix-path-ledger.json
+      // is machine state, not a rail row — plan.json stays clipped even with a
+      // live ledger beside it.
+      expect(filled.find(r => r.file === ARTIFACT_FILES.planJson)?.state).toBe('clipped')
       // 【变更】2026-09-28 (用户问题 8): an all-ticked checklist reads 已填写.
       await putFile(root, changeId, CHECKLIST_FILE, [
         '# Checklist', '',
@@ -1073,5 +1081,96 @@ describe('changeArtifactStatus (bug-fix-path clipped rail)', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+})
+
+// 【变更】2026-09-30 (demo33 问题 3): verify.md 是完整、详尽的正式测试报告 —
+// 验证名称 / 验证内容 / 验证方法 / 验证结果 四要素逐项可见，未知检查名回退
+// 名称本身，失败报告与通过报告的结论分开。
+describe('renderVerifyMd (demo33 问题 3 — 正式测试报告)', () => {
+  /** Write one synthetic report through the renderer and hand back the md. */
+  async function render(
+    report: import('../src/stages/check-runner.ts').VerifyReport,
+  ): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), 'baf-verify-md-'))
+    try {
+      const changeDirAbs = join(root, 'openspec', 'changes', report.changeId)
+      await mkdir(changeDirAbs, { recursive: true })
+      const { renderVerifyMd } = await import('../src/stages/verify.ts')
+      await renderVerifyMd(root, report.changeId, report)
+      return await readFile(join(changeDirAbs, 'verify.md'), 'utf8')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }
+
+  const row = (over: Partial<import('../src/stages/check-runner.ts').CheckReportRow> = {}) => ({
+    name: 'regression-test',
+    required: true,
+    ok: true,
+    durationMs: 12,
+    diagnostics: ['regression test written and its task done'],
+    ...over,
+  })
+
+  it('renders the named four-element report for a passing bug-fix verify', async () => {
+    const md = await render({
+      schema: 1,
+      changeId: 'change-x',
+      mode: 'bug-fix-path',
+      toolVersions: { node: '22.0.0' },
+      checks: [row()],
+      passed: true,
+      finishedAt: '2026-09-30T12:00:00.000Z',
+    })
+    expect(md).toContain('# 验证报告 — change-x')
+    expect(md).toContain('## 报告信息')
+    expect(md).toContain('| 变更编号 | `change-x` |')
+    expect(md).toContain('| 工作流模式 | bug-fix-path |')
+    expect(md).toContain('| 工具版本 | node@22.0.0 |')
+    expect(md).toContain('| 必需检查 | 通过 1/1 |')
+    expect(md).toContain('**✅ 通过**')
+    expect(md).toContain('## 验证总览')
+    expect(md).toContain('| 1 | 回归测试落地检查 | 必需 | ✅ 通过 | 12ms |')
+    expect(md).toContain('### 1. 回归测试落地检查')
+    expect(md).toContain('- **检查项**：`regression-test`')
+    expect(md).toContain('- **验证内容**：缺陷修复路径要求的回归测试是否先于修复代码落地')
+    expect(md).toContain('- **验证方法**：读取实现账本（bug-fix-path-ledger.json / plan.json）')
+    expect(md).toContain('- **验证结果**：✅ 通过（耗时 12ms）')
+    expect(md).toContain('- regression test written and its task done')
+  })
+
+  it('falls back to the raw name for unregistered checks and separates the failed verdict', async () => {
+    const md = await render({
+      schema: 1,
+      changeId: 'change-y',
+      toolVersions: {},
+      checks: [
+        row({ name: 'future-check', required: false, ok: false, durationMs: 3, diagnostics: [] }),
+      ],
+      passed: true,
+      finishedAt: '2026-09-30T12:00:00.000Z',
+    })
+    // Unknown catalog name → the name itself is the 验证名称.
+    expect(md).toContain('| 1 | future-check | 辅助 | ⚠️ 未通过（非必需，不阻断） | 3ms |')
+    expect(md).toContain('### 1. future-check')
+    expect(md).toContain('- **验证内容**：检查项 future-check（暂无中文元数据')
+    // A failed non-required row alone keeps the overall conclusion passing.
+    expect(md).toContain('**✅ 通过**')
+    expect(md).toContain('| 必需检查 | 通过 0/0 |')
+  })
+
+  it('renders the failing conclusion when a required check failed', async () => {
+    const md = await render({
+      schema: 1,
+      changeId: 'change-z',
+      toolVersions: {},
+      checks: [row({ ok: false, diagnostics: ['regression_test_required: test not written'] })],
+      passed: false,
+      finishedAt: '2026-09-30T12:00:00.000Z',
+    })
+    expect(md).toContain('**❌ 未通过**')
+    expect(md).toContain('❌ 失败（必需检查）')
+    expect(md).toContain('- regression_test_required: test not written')
   })
 })

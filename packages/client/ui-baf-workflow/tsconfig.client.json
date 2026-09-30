@@ -19,6 +19,7 @@
     "src/client/refresh-scheduler.ts",
     "src/client/gate-ask.ts",
     "src/client/tab-activity.ts",
+    "src/client/dashboard-html.ts",
     "src/client/BafGateComposer.tsx",
     "src/client/WorkflowView.tsx",
     "src/client/WorkflowTabRow.tsx",

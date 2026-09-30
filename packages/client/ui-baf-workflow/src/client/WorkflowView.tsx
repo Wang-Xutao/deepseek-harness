@@ -32,6 +32,7 @@ import { NodeIcon } from './icons.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
 import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel } from './gate-ask.ts'
 import { setWorkflowTabActive } from './tab-activity.ts'
+import { buildDashboardHtml, type DashboardHtmlLabels } from './dashboard-html.ts'
 import css from './WorkflowView.module.css'
 
 /** intake.mode wire value → locale key (the rail's 变更分类 card). */
@@ -723,6 +724,58 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     if (!dashboardOpen) return
     loadDashboard()
   }, [dashboardOpen, loadDashboard])
+
+  /**
+   * 【变更】2026-09-30 (demo33 问题 4): the 变更总览's 在浏览器中打开 —
+   * bakes the current dashboard snapshot into a standalone HTML page (tiles,
+   * mode donut, duration ranking, one card per change) and opens it in a new
+   * browser tab via a Blob URL. The click-originated window.open keeps popup
+   * blockers happy; the URL is revoked a minute later (the page outlives it —
+   * the document is fully baked, no fetches back).
+   */
+  const openDashboardExternal = useCallback(() => {
+    if (dashboardData === null) return
+    const nodeIds = ['intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive', 'drift', 'completed', 'abandoned'] as const
+    const nodeLabels: Record<string, string> = {}
+    for (const id of nodeIds) nodeLabels[id] = t(`node.${id}` as WorkflowTabKey)
+    const modeLabels: Record<string, string> = {
+      'full-go-path': t('mode.fullGoPath'),
+      'bug-fix-path': t('mode.bugFixPath'),
+      'clarify-required': t('mode.clarify'),
+    }
+    const labels: DashboardHtmlLabels = {
+      title: t('dashboard.board.title'),
+      subtitle: t('dashboard.board.subtitle'),
+      generatedAt: t('dashboard.board.generatedAt'),
+      snapshotNote: t('dashboard.board.snapshotNote'),
+      tileActive: t('dashboard.board.tileActive'),
+      tileArchived: t('dashboard.board.tileArchived'),
+      tileAbandoned: t('dashboard.board.tileAbandoned'),
+      tileTasks: t('dashboard.board.tileTasks'),
+      tileDuration: t('dashboard.board.tileDuration'),
+      tileTokens: t('dashboard.board.tileTokens'),
+      chartModes: t('dashboard.board.chartModes'),
+      chartDuration: t('dashboard.board.chartDuration'),
+      allChanges: t('dashboard.board.allChanges'),
+      empty: t('dashboard.board.empty'),
+      tasksHelp: t('dashboard.tasksHelp'),
+      durationHelp: t('card.duration'),
+      tokensHelp: t('card.tokens'),
+      endedAt: t('dashboard.board.endedAt'),
+      artifactsLabel: t('dashboard.artifacts'),
+      artifactStates: {
+        template: t('artifact.state.template'),
+        planned: t('artifact.state.planned'),
+        filled: t('artifact.state.filled'),
+      },
+      nodeLabels,
+      modeLabels,
+    }
+    const html = buildDashboardHtml(dashboardData, labels)
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+    window.open(url, '_blank', 'noopener,noreferrer')
+    window.setTimeout(() => { URL.revokeObjectURL(url) }, 60_000)
+  }, [dashboardData, t])
 
   // §22.19 R5 — synchronous in-flight mirror. `busy` is state, so a closure
   // reading it in the same tick it was set sees the old value; the push
@@ -1766,6 +1819,18 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               <h2 className={css.dashboardTitle}>{t('dashboard.title')}</h2>
               <div className={css.dashboardHeadActions}>
                 {dashboardBusy && <span className={css.dashboardMuted}>{t('action.refresh')}…</span>}
+                {/* 【变更】2026-09-30 (demo33 问题 4): the standalone browser
+                    board — full snapshot page in a new tab. Disabled until the
+                    first payload lands (nothing to bake before that). */}
+                <button
+                  type="button"
+                  className={clsx(css.btn, css.btnGhost)}
+                  disabled={dashboardData === null}
+                  title={t('dashboard.board.snapshotNote')}
+                  onClick={openDashboardExternal}
+                >
+                  {t('dashboard.openExternal')}
+                </button>
                 <button
                   type="button"
                   className={clsx(css.btn, css.btnGhost)}

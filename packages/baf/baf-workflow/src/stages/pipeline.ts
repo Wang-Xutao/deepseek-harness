@@ -329,8 +329,14 @@ export class StagePipeline {
     // implementation will tick off, generated the moment coding starts (and
     // refreshed again at implement completion). plan.md renders alongside, so
     // neither doc can sit as a stale template beside a finished ledger.
-    await renderTasksMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
-    await renderPlanMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+    // 【变更】2026-09-30 (demo33 问题 1): bug-fix-path clips the plan stage —
+    // its ledger renders NEITHER plan.md NOR tasks.md (the rail shows both as
+    // 已裁剪); the machine ledger (bug-fix-path-ledger.json) is all this mode
+    // carries into implement.
+    if (pre.mode !== 'bug-fix-path') {
+      await renderTasksMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+      await renderPlanMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+    }
     if (pre.mode === 'bug-fix-path') {
       return this.enterStage(changeId, 'implement', {
         rootCauseRecorded: await rootCauseRecorded(this.ctx.workspace.root, changeId),
@@ -384,8 +390,12 @@ export class StagePipeline {
     // completed stage.
     // 【变更】2026-09-23 (demo1 十问题 9): tasks.md refreshes with the same
     // done flags — a finished change must not show a stale unchecked list.
-    await renderTasksMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
-    await renderPlanMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+    // 【变更】2026-09-30 (demo33 问题 1): skipped on bug-fix-path — the clipped
+    // plan stage's documents are never generated on that mode.
+    if (status.mode !== 'bug-fix-path') {
+      await renderTasksMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+      await renderPlanMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
+    }
     return { node: 'implement', result, status }
   }
 

@@ -237,7 +237,9 @@ describe('T15 escalation', () => {
       await reachImplementInProgress(pipeline, root, changeId)
 
       // Simulate scope growth the per-write guard missed (hand-edited ledger).
-      const ledgerPath = join(root, 'openspec', 'changes', changeId, ARTIFACT_FILES.planJson)
+      // 【变更】2026-09-30 (demo33 问题 1): the live fast-path ledger lives at
+      // its own name now — the hand edit targets where implement persists.
+      const ledgerPath = join(root, 'openspec', 'changes', changeId, 'bug-fix-path-ledger.json')
       const ledger = JSON.parse(await readFile(ledgerPath, 'utf8')) as { touched: string[] }
       ledger.touched.push('src/other-module.c')
       await writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8')

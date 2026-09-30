@@ -51,6 +51,8 @@ import { resetScaffoldOffer, scaffoldDialogOffered } from './scaffold-offer.ts'
 import type { GateId } from './gate-cards.ts'
 import { bugRecordGate, checklistGate, clarifyGate, designGate, planGate, implementGate, proposalGate, type GateInput } from './stages/gates.ts'
 import { readLedger } from './stages/implement.ts'
+import { BUG_FIX_PATH_LEDGER_FILE } from './stages/bug-fix-path.ts'
+import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { focusFor } from './session-focus.ts'
 import { isActiveChange, pickActiveChange, ProjectionStore } from './projection.ts'
 import type { ProjectionIndexEntry } from './projection.ts'
@@ -525,7 +527,7 @@ async function dispatchRestingGap(
   const outcome = dispatch({
     changeId,
     node,
-    artifactPath: artifactPathFor(changeId, node),
+    artifactPath: artifactPathFor(changeId, node, mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path'),
     missing,
     ...(mode === 'bug-fix-path' ? { mode: 'bug-fix-path' as const } : {}),
   })
@@ -563,13 +565,21 @@ async function artifactFingerprintOf(
     }
   }
   if (current !== 'open' && current !== 'clarify' && current !== 'design' && current !== 'plan' && current !== 'implement') return ''
-  const relative = artifactPathFor(changeId, current)
-  try {
-    const s = await stat(join(cwd, relative))
-    return `:${s.size}-${Math.floor(s.mtimeMs)}`
-  } catch {
-    return ''
+  // 【变更】2026-09-30 (demo33 问题 1): implement's judging artifact is
+  // mode-dependent (the fast-path ledger name); no mode here, so probe both
+  // candidates — the one that exists is the change's ledger.
+  const candidates = current === 'implement'
+    ? [ARTIFACT_FILES.planJson, BUG_FIX_PATH_LEDGER_FILE].map(file => `openspec/changes/${changeId}/${file}`)
+    : [artifactPathFor(changeId, current)]
+  for (const relative of candidates) {
+    try {
+      const s = await stat(join(cwd, relative))
+      return `:${s.size}-${Math.floor(s.mtimeMs)}`
+    } catch {
+      // try the next candidate
+    }
   }
+  return ''
 }
 
 /** ②' — the multi-active bind choice as a registered gate pop. */
