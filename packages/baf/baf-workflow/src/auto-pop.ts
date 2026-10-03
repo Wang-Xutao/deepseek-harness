@@ -44,13 +44,14 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-session' // Context 'session/event' augmentation
 import type { AskUserQuestionAnswer } from '@deepseek-ai/dsh-user-questions'
 import type {} from '@deepseek-ai/dsh-user-questions' // Context.userQuestions augmentation
-import { askGateDialogQueued, judgmentOf, resolveUserQuestions, toolDriveAdapters } from './gate-dialog.ts'
+import { askGateDialogQueued, judgmentOf, reAskGateAfterRefusal, resolveUserQuestions, toolDriveAdapters } from './gate-dialog.ts'
 import { driveGateResolve, loadWorkspaceBaseline } from './command-drives.ts'
 import { beginIntake } from './begin-intake.ts'
 import { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
 import { parkRequirement, clearParkedRequirement } from './requirement-park.ts'
 import { enqueueAsk, hasPendingAsk, type AskOutcome } from './ask-queue.ts'
 import { isActiveChange, ProjectionStore } from './projection.ts'
+import { homeSessionFor } from './session-home.ts'
 
 /** Preset row identity — referenced from `agent.cordis.yml`. */
 export const name = 'baf-auto-pop'
@@ -169,6 +170,11 @@ async function offerAutoPop(
   ctx.logger.info(`[baf] ${new Date().toISOString()} - session baf:auto-pop change=${outcome.kind === 'minted' || outcome.kind === 'reused' ? outcome.changeId : '-'} outcome=${outcome.kind} source=gate-card textLen=${text.length}`)
   if (outcome.kind !== 'minted' && outcome.kind !== 'reused') return
   const minted = outcome.changeId
+  // 【变更】2026-10-02 (demo31 问题 1): the 开始 click chose THIS conversation
+  // for the new workflow — anchor the home so the orchestrator's later pops
+  // (and the work orders that follow the confirm) stay here instead of
+  // drifting to whichever session next ends a turn.
+  homeSessionFor(cwd).set(sessionId)
   try {
     const status = await store.readStatus(minted)
     if (status.intake === undefined) return
@@ -193,6 +199,49 @@ async function offerAutoPop(
         classifyDispatch === undefined ? undefined : { dispatch: classifyDispatch },
       )
       ctx.logger.info(`[baf] ${new Date().toISOString()} - session baf:auto-pop resolved change=${minted} result=${result.kind}${result.kind === 'error' ? ` text=${result.text.slice(0, 160).replaceAll('\n', ' ')}` : ''}`)
+      // 【变更】2026-10-02 (demo31 问题 2): a refused classify click (e.g. the
+      // clarify-required path demanding mode=) must not die in the log line —
+      // re-ask the same gate with the refusal headline so the customer can
+      // pick the path on a card, not by re-typing a slash.
+      if (result.kind === 'error') {
+        const reAsked = await reAskGateAfterRefusal(service, agent as unknown as Parameters<typeof reAskGateAfterRefusal>[1], {
+          gateId: 'intake-classify',
+          changeId: minted,
+          judgment: judgmentOf(status.intake),
+        }, result.text, {
+          sessionId,
+          // 【变更】2026-10-03 (demo31 live walk): kind:'error' does not always
+          // mean the click failed — the confirm's customer-origin follow-up
+          // reports busy as an error-kind card while driveClassify itself
+          // SUCCEEDED (command-drives splices the follow-up behind the ✨
+          // success card), so re-asking would pop a zombie classify card
+          // claiming 「上次选择未生效」 over a choice that took effect. The
+          // queue-head moot re-check re-reads the projection: once the intake
+          // decision is settled (confirmed, or the change moved past intake —
+          // or the change is gone entirely), there is nothing left to ask.
+          isMoot: async () => {
+            const now = await store.readStatus(minted).catch(() => undefined)
+            return now === undefined
+              || now.current !== 'intake'
+              || now.intake?.confirmation === 'confirmed'
+          },
+        })
+        ctx.logger.info(`[baf] ${new Date().toISOString()} - session baf:auto-pop reAsked change=${minted} outcome=${reAsked.kind}${reAsked.kind === 'answered' ? ` option=${reAsked.optionId}` : ''}`)
+        if (reAsked.kind === 'answered') {
+          const retryDispatch = makeGoDispatcher(cwd, agent as unknown as DispatchAgent)
+          const retry = await driveGateResolve(
+            cwd,
+            'intake-classify',
+            reAsked.optionId,
+            toolDriveAdapters(ctx, agent, cwd),
+            undefined,
+            undefined,
+            'gate-card',
+            retryDispatch === undefined ? undefined : { dispatch: retryDispatch },
+          )
+          ctx.logger.info(`[baf] ${new Date().toISOString()} - session baf:auto-pop reResolved change=${minted} result=${retry.kind}`)
+        }
+      }
     }
   } catch (error: unknown) {
     ctx.logger.warn(`baf-auto-pop: classify dialog failed: ${error instanceof Error ? error.message : String(error)}`)

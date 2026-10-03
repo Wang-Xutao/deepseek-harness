@@ -57,6 +57,7 @@ import {
   type DriveAdapters,
 } from './command-drives.ts'
 import { beginIntake } from './begin-intake.ts'
+import { cancelAsksForChangeGates } from './ask-queue.ts'
 import { GATE_REGISTRY, renderGate, type GateId, type GateSpec } from './gate-cards.ts'
 import { gateRevisionTarget, judgmentOf } from './gate-dialog.ts'
 import type { GateJudgment } from './gate-dialog.ts'
@@ -287,8 +288,16 @@ export async function driveGo(input: GoInput): Promise<CommandResult> {
     // `/baf-go gate=<id>` (2026-09-21 user request: 回到指定确认门) — explicit
     // re-pop of one registered gate instead of the coordinator's state-derived
     // routing. Validated against the change's live resting point below.
-    if (gateArg !== undefined) return await explicitGate(context, gateArg)
-    return await route(context)
+    const settled = gateArg !== undefined ? await explicitGate(context, gateArg) : await route(context)
+    // 【变更】2026-10-02 (demo31 问题 3): a typed /baf-go that SUCCEEDED (the
+    // §18.5 second-typing confirm past a parked gate, an advance, a resume)
+    // retires the sibling gate asks still waiting on other surfaces — the
+    // hung mid-turn baf_gate_ask in another conversation settles paused and
+    // its turn finally ends. The misfire risk is bounded: a success that did
+    // NOT clear the gate (a park render, a dismissal card) only closes
+    // siblings that the next completed turn re-pops (the fingerprint moved).
+    if (settled.kind === 'success') cancelAsksForChangeGates(binding.changeId)
+    return settled
   } catch (error) {
     return renderDomainError('/baf-go', error)
   }

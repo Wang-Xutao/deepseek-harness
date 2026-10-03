@@ -23,7 +23,7 @@ import type {
   AskUserQuestionAnswer,
   AskUserQuestionRequest,
 } from '@deepseek-ai/dsh-user-questions'
-import { askGateDialog, makeGateAsk, toolDriveAdapters } from '../src/gate-dialog.ts'
+import { askGateDialog, askGateDialogQueued, makeGateAsk, reAskGateAfterRefusal, toolDriveAdapters } from '../src/gate-dialog.ts'
 import { apply } from '../src/gate-ask.ts'
 import { driveOpen } from '../src/command-drives.ts'
 import { ProjectionStore } from '../src/projection.ts'
@@ -300,6 +300,60 @@ describe('§22.17 gate-dialog answer mapping', () => {
     expect(detail).toContain('{{change:CHG-9}}')
     expect(detail).toContain('现有变更当前进行到：design')
     expect(detail).toContain('客户提出的新需求：「重构ecum模块」')
+  })
+})
+
+describe('【变更】2026-10-02 (demo31 问题 2) reAskGateAfterRefusal — the refused click gets its card back', () => {
+  it('re-asks the SAME gate with the refusal headline and keeps prior note lines', async () => {
+    const service = fakeService(answered('确认归档'))
+    const refusal = [
+      '✗ /baf-go · 检查单未全部确认 · 不能归档',
+      '────────────────────────────────',
+      '类型：系统斜杠指令，无需大模型',
+      '',
+      '【原因】',
+      '  checklist.md 还有 3 项未勾选',
+    ].join('\n')
+    const outcome = await reAskGateAfterRefusal(service, undefined, {
+      gateId: 'verify-archive',
+      changeId: 'CHG-9',
+      note: ['验证已运行，全部必需检查通过'],
+    }, refusal)
+    expect(outcome.kind).toBe('answered')
+    const question = service.calls[0]?.questions[0]
+    expect(question?.question).toBe('检查已通过，请确认归档')
+    const detail = question?.detail ?? ''
+    // The refusal is quoted (headline, not the whole card) beside the
+    // gate's own context — the customer sees WHY the click died.
+    expect(detail).toContain('上次选择未生效')
+    expect(detail).toContain('检查单未全部确认 · 不能归档')
+    expect(detail).toContain('验证已运行，全部必需检查通过')
+    // Decoration lines of the refusal card never leak into the note.
+    expect(detail).not.toContain('────')
+  })
+
+  it('rides the single-flight queue — an in-flight sibling gate ask makes it paused, not a cover', async () => {
+    // The refused click's ask entry settled before the drive refused, so the
+    // key is free; but if another surface holds the same gate, the re-ask
+    // must collapse to paused exactly like every other queued pop. The
+    // holding entry lives on its OWN session so its never-settling pop can
+    // never serialize behind — or block — any other test's asks.
+    const holding = {
+      calls: [] as AskUserQuestionRequest[],
+      async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer> {
+        holding.calls.push(request)
+        return await new Promise<AskUserQuestionAnswer>(() => {})
+      },
+    }
+    const held = askGateDialogQueued(holding, undefined, { gateId: 'verify-archive', changeId: 'CHG-9' }, { sessionId: 'sess-reask-holder' })
+    const service = fakeService(answered('确认归档'))
+    const outcome = await reAskGateAfterRefusal(service, undefined, {
+      gateId: 'verify-archive',
+      changeId: 'CHG-9',
+    }, '✗ /baf-go · 检查单未全部确认 · 不能归档', { sessionId: 'sess-reask-holder' })
+    expect(outcome).toEqual({ kind: 'paused', reason: 'dismissed' })
+    expect(service.calls).toHaveLength(0)
+    void held.catch(() => undefined)
   })
 })
 

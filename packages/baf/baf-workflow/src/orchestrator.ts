@@ -38,6 +38,7 @@ import type {} from '@deepseek-ai/dsh-user-questions' // Context.userQuestions a
 import {
   askGateDialogQueued,
   judgmentOf,
+  reAskGateAfterRefusal,
   resolveUserQuestions,
   toolDriveAdapters,
   type GateDialogAgent,
@@ -54,6 +55,7 @@ import { readLedger } from './stages/implement.ts'
 import { BUG_FIX_PATH_LEDGER_FILE } from './stages/bug-fix-path.ts'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { focusFor } from './session-focus.ts'
+import { homeSessionFor } from './session-home.ts'
 import { isActiveChange, pickActiveChange, ProjectionStore } from './projection.ts'
 import type { ProjectionIndexEntry } from './projection.ts'
 
@@ -115,6 +117,17 @@ export function apply(ctx: Context): void {
  */
 async function orchestrateTurn(ctx: Context, session: SessionLike, cwd: string): Promise<void> {
   const sessionId = String(session.header.id)
+  // 【变更】2026-10-02 (demo31 问题 1): the sticky home session owns the pops.
+  // Before this, every pop / dispatch followed whichever session last ended a
+  // turn on the cwd — after the work order ran in a second conversation, the
+  // customer's home conversation went silent and the decisions drifted with
+  // the work (the demo31 walk twice misread that as "the page froze"). The
+  // home is recorded by genuine customer actions (a typed BAF slash, an
+  // answered pop, the auto-pop 开始 click) and preferred here when its agent
+  // is live; a dead home falls back to the triggering session, so a closed
+  // conversation can never strand a pop. Mid-turn `baf_gate_ask` pops are NOT
+  // retargeted — the tool's own turn awaits that answer.
+  const askSessionId = resolveAskSessionId(ctx, cwd, sessionId)
 
   // 【变更】2026-09-23 (user issue #4): a completed turn re-arms the §18.4.2
   // dispatch ledger for this workspace. Every order sent before this turn has
@@ -134,10 +147,10 @@ async function orchestrateTurn(ctx: Context, session: SessionLike, cwd: string):
   // local SCAFFOLD_SEEN missed the mid-turn gate-ask dialog, so a 暂不初始化
   // click was immediately re-asked at that same turn's end.
   if (await loadWorkspaceBaseline(cwd) === undefined) {
-    if (scaffoldDialogOffered(sessionId)) return
-    await popGate(ctx, cwd, sessionId, {
+    if (scaffoldDialogOffered(askSessionId)) return
+    await popGate(ctx, cwd, askSessionId, {
       gateId: 'scaffold',
-    }, 'no-baseline', `${cwd} || scaffold || ${sessionId}`,
+    }, 'no-baseline', `${cwd} || scaffold || ${askSessionId}`,
     // Moot the moment a baseline appears by any route (model /baf-scaffold,
     // a second host process, the click itself resolving elsewhere).
     async () => await loadWorkspaceBaseline(cwd) !== undefined)
@@ -147,7 +160,7 @@ async function orchestrateTurn(ctx: Context, session: SessionLike, cwd: string):
     // initialized workspace as the 新建工作流 → 分类确认 chain. No-op when
     // nothing is parked (the click answered 暂不初始化, or no requirement was
     // ever stated).
-    const agent = ctx.agents.get(sessionId as Parameters<typeof ctx.agents.get>[0])
+    const agent = ctx.agents.get(askSessionId as Parameters<typeof ctx.agents.get>[0])
     if (agent !== undefined) {
       await continueParkedRequirement(ctx, agent, cwd)
     }
@@ -169,15 +182,29 @@ async function orchestrateTurn(ctx: Context, session: SessionLike, cwd: string):
     if (picked.kind === 'ambiguous') {
       // ②' §22.19 R4 — the multi-active binding choice pops as the
       // registered gate; the click binds via the same /baf-go dispatch.
-      await popBind(ctx, cwd, sessionId, actives)
+      await popBind(ctx, cwd, askSessionId, actives)
     }
     if (picked.kind !== 'one') return // ambiguous handled above; terminal → silent
-    await popDueGate(ctx, cwd, sessionId, store, picked.changeId)
+    await popDueGate(ctx, cwd, askSessionId, store, picked.changeId)
     return
   }
 
   // ③ The due gate for the bound change — the fixed line's decision point.
-  await popDueGate(ctx, cwd, sessionId, store, bound.changeId)
+  await popDueGate(ctx, cwd, askSessionId, store, bound.changeId)
+}
+
+/**
+ * 【变更】2026-10-02 (demo31 问题 1): the session this turn's pops and
+ * dispatches address — the workspace's recorded home when its agent is live,
+ * else the session that ended the turn.
+ */
+function resolveAskSessionId(ctx: Context, cwd: string, triggering: string): string {
+  const home = homeSessionFor(cwd).get()
+  if (home !== undefined && home !== triggering
+    && ctx.agents.get(home as Parameters<typeof ctx.agents.get>[0]) !== undefined) {
+    return home
+  }
+  return triggering
 }
 
 /**
@@ -246,7 +273,50 @@ async function popGate(
       ...(gateDispatch === undefined ? {} : { dispatch: gateDispatch }),
     },
   )
+  // 【变更】2026-10-02 (demo31 问题 1): the click is a customer action in the
+  // session the card landed in — anchor the home there (a no-op when this pop
+  // already retargeted to the home; a re-anchor when a dead home fell back to
+  // the triggering session).
+  homeSessionFor(cwd).set(sessionId)
   ctx.logger.info(`${stamp()} - session baf:orchestrate gate=${gate.gateId} change=${gate.changeId ?? '-'} resolved=${result.kind}${result.kind === 'error' ? ` text=${result.text.slice(0, 160).replaceAll('\n', ' ')}` : ''}`)
+  // 【变更】2026-10-02 (demo31 问题 2): a refusal (the verify hard check, a
+  // guard block, an invalid transition) used to die in the log line above —
+  // the ask was already consumed, the customer saw silence, and the only
+  // revival was knowing to re-type /baf-go. Re-ask the SAME gate with the
+  // refusal headline so the decision stays in the customer's hands. The
+  // anti-spam ledger is bypassed deliberately: this IS the revive. A sibling
+  // surface holding the same gate collapses the re-ask to paused (queue
+  // dedupe), and the original isMoot still guards the queue head.
+  if (result.kind === 'error') {
+    const reAsked = await reAskGateAfterRefusal(service, agent as GateDialogAgent, gate, result.text, {
+      sessionId,
+      ...(isMoot === undefined ? {} : { isMoot }),
+    })
+    ctx.logger.info(`${stamp()} - session baf:orchestrate gate=${gate.gateId} change=${gate.changeId ?? '-'} reAsked=${reAsked.kind}${reAsked.kind === 'answered' ? ` option=${reAsked.optionId}` : ''}`)
+    if (reAsked.kind === 'answered') {
+      const reDispatch = makeGoDispatcher(cwd, agent)
+      const retry = await driveGateResolve(
+        cwd,
+        gate.gateId,
+        reAsked.optionId,
+        toolDriveAdapters(ctx, agent, cwd),
+        gate.resumeCandidates,
+        gate.bindCandidates,
+        'gate-card',
+        {
+          ...(gate.changeId === undefined ? {} : { changeId: gate.changeId }),
+          ...(reDispatch === undefined ? {} : { dispatch: reDispatch }),
+        },
+      )
+      ctx.logger.info(`${stamp()} - session baf:orchestrate gate=${gate.gateId} change=${gate.changeId ?? '-'} reResolved=${retry.kind}`)
+    } else if (reAsked.kind === 'revise') {
+      // Same treatment as the original pop's revise answer — the custom text
+      // is a customer action and gets the revision dispatch.
+      const revisionDispatch = makeGoDispatcher(cwd, agent)
+      const revisionCard = dispatchGateRevisionFromTab(cwd, revisionDispatch, gate.gateId, gate.changeId, reAsked.text)
+      ctx.logger.info(`${stamp()} - session baf:orchestrate gate=${gate.gateId} change=${gate.changeId ?? '-'} reAsked=revise dispatched=${revisionCard !== undefined} textLen=${reAsked.text.length}`)
+    }
+  }
 }
 
 /**
@@ -618,6 +688,9 @@ async function popBind(
   ctx.logger.info(`${stamp()} - session baf:orchestrate gate=bind-workflow change=- outcome=${outcome.kind}${outcome.kind === 'answered' ? ` option=${outcome.optionId}` : ''}`)
   if (outcome.kind !== 'answered') return
 
+  // 【变更】2026-10-02 (demo31 问题 1): the bind pick is a customer action in
+  // this session — anchor the home so the picked change's pops follow it.
+  homeSessionFor(cwd).set(sessionId)
   const picked = candidates.find(id => `bind-${id}` === outcome.optionId)
   if (picked === undefined) return
   // Same record-outside-the-dispatch rule as the coordinator's choose

@@ -21,6 +21,7 @@ import {
   bindSessionChange,
   deriveSessionChangeFromEvents,
   sessionChangeFor,
+  homeSessionFor,
   clearParkedRequirementFor,
   confirmIntake,
   continueParkedRequirement,
@@ -749,6 +750,11 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     // 【变更】2026-09-28 (用户问题 7): this session's Tab just resolved a gate
     // on that change — it is the change this conversation is driving.
     if (resolvedChangeId !== undefined) bindSessionChange(cwd, request.sessionId, resolvedChangeId)
+    // 【变更】2026-10-02 (demo31 问题 1): the Tab click is a customer action in
+    // this session — anchor the home so the orchestrator's later pops (and
+    // the work orders that follow) land in this conversation instead of
+    // drifting to whichever session next ends a turn.
+    homeSessionFor(cwd).set(request.sessionId)
     if (request.gateId === 'resume') {
       // The Tab's `gate.options` for a resume gate are already pinned from
       // the projection, but the host re-derives them so a stale tab cannot
@@ -852,12 +858,16 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     }
     // 【变更】2026-09-28 (用户问题 7): the Tab just acted on that change.
     if (resolvedChangeId !== undefined) bindSessionChange(cwd, request.sessionId, resolvedChangeId)
+    // 【变更】2026-10-02 (demo31 问题 1): a revision click is a customer action
+    // too — anchor the home on this session.
+    homeSessionFor(cwd).set(request.sessionId)
     const gateId = request.gateId !== undefined && request.gateId !== ''
       ? request.gateId
       : advanceGateIdForNode(request.node ?? '', request.mode)
     if (gateId !== undefined) {
       const dispatch = makeGoDispatcher(cwd, this.liveAgentFor(request.sessionId) as DispatchAgent | undefined)
-      const card = dispatchGateRevisionFromTab(cwd, dispatch, gateId as Parameters<typeof dispatchGateRevisionFromTab>[2], resolvedChangeId, request.text)
+      const revisionGate = gateId as Parameters<typeof dispatchGateRevisionFromTab>[2]
+      const card = dispatchGateRevisionFromTab(cwd, dispatch, revisionGate, resolvedChangeId, request.text)
       if (card !== undefined) {
         this.ctx.logger.info(
           `[baf] ${new Date().toISOString()} - session baf:gateRevise gateId=${gateId} change=${resolvedChangeId ?? '-'} source=gate-card textLen=${request.text.length}`,

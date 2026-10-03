@@ -168,6 +168,40 @@ export function cancelAsksForChange(changeId: string): number {
 }
 
 /**
+ * 【变更】2026-10-02 (demo31 问题 3): cancel every in-flight or queued GATE
+ * ask about one change — the gate-scoped sibling of
+ * {@link cancelAsksForChange}, fired when the gate resolves through any
+ * surface.
+ *
+ * The demo31 hang: the model's mid-turn `baf_gate_ask` (session A) blocked
+ * on a dialog the customer never saw, while the same gate was resolved
+ * through another surface (session B's pop click, a typed `/baf-go`). The
+ * resolved drive succeeded, but session A's entry kept waiting — its turn
+ * never ended (no `turn/end` → composer hidden forever) and the orchestrator
+ * ignored the session. Aborting the entry settles the tool as
+ * paused('cancelled'), which lets the turn close and the composer return.
+ *
+ * Only entries with BOTH the change id and a `gate:` key die: the auto-pop
+ * pre-question (`autopop:<sess>`) and the scaffold gate carry no changeId and
+ * survive — the workflow line's workspace-scoped decisions are not about
+ * this change.
+ *
+ * @param changeId - the change whose gate just resolved elsewhere.
+ * @returns how many gate asks were canceled (0 when none were about it).
+ */
+export function cancelAsksForChangeGates(changeId: string): number {
+  let canceled = 0
+  for (const state of queues.values()) {
+    for (const [key, entry] of state.entries) {
+      if (entry.changeId !== changeId || !key.startsWith('gate:')) continue
+      entry.controller.abort()
+      canceled += 1
+    }
+  }
+  return canceled
+}
+
+/**
  * Whether a session still has any queued or in-flight ask. The auto-pop
  * offer checks this before offering (issue 2): a message typed while a
  * dialog is pending is most likely an answer or context for THAT dialog,

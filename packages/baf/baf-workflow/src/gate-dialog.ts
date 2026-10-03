@@ -293,6 +293,51 @@ export async function askGateDialogQueued(
     ? { kind: 'paused', reason: 'cancelled' }
     : { kind: 'paused', reason: 'dismissed' }
 }
+
+/**
+ * 【变更】2026-10-02 (demo31 问题 2): re-pop the SAME gate after its click was
+ * refused by a hard validation, quoting why.
+ *
+ * The demo31 shape: checklist 未全勾时点「确认归档」→ the verify gate's hard
+ * check refuses the drive → the refusing card existed only in a log line,
+ * while the ask entry was already consumed — silence, and the customer's
+ * only revival was knowing to re-type `/baf-go`. This helper re-asks the
+ * same gate with the refusal headline appended to the note, so the customer
+ * sees WHY the click died and can act (fix the gap, click again, or walk
+ * away). It rides the same single-flight queue as every pop: a sibling ask
+ * already holding the gate collapses to paused instead of covering it, and
+ * the caller's `isMoot` (when supplied) still guards the queue head.
+ *
+ * @param service - the resolved `ctx.userQuestions` service.
+ * @param agent - live agent scoping the waterfall to this session's UI.
+ * @param gate - the gate that was just asked and refused.
+ * @param refusal - the refusing drive's card text; its headline line is quoted.
+ * @param controls - queue scope + staleness + abort, as the original pop's.
+ * @returns the outcome; never throws — same contract as askGateDialogQueued.
+ */
+export async function reAskGateAfterRefusal(
+  service: UserQuestionsLike,
+  agent: GateDialogAgent | undefined,
+  gate: GateDialogInput,
+  refusal: string,
+  controls?: GateDialogQueueControls,
+): Promise<GateAskOutcome> {
+  const headline = (refusal.split('\n')
+    .map(line => line.trim())
+    .find(line => line !== '' && !line.startsWith('─'))
+    ?? '所选选项未通过校验')
+    // The refusing card's first line is its collapsed headline, marked ✓/✗ —
+    // quote it without the tone mark.
+    .replace(/^[✓✗]\s*/, '')
+  return askGateDialogQueued(service, agent, {
+    ...gate,
+    note: [
+      ...(gate.note ?? []),
+      `上次选择未生效：${headline}`,
+      '卡片已重新弹出，可直接重选；按提示补齐要求后即可通过。',
+    ],
+  }, controls)
+}
 /**
  * Options for one dialog — the same derivation `driveGateResolve` validates
  * against, so an answered label maps to an option id the dispatch accepts.

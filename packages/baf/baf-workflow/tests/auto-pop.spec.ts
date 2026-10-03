@@ -55,7 +55,7 @@ function selected(label: string): AskUserQuestionAnswer {
 }
 
 /** Install the row against a fake host ctx and return the captured listener. */
-function install(service: unknown): {
+function install(service: unknown, agentExtra?: Record<string, unknown>): {
   emit: (session: unknown, event: unknown) => void
   ctx: Context
   logs: string[]
@@ -67,6 +67,7 @@ function install(service: unknown): {
   const agent = {
     session: { header: { cwd: 'replaced-per-test' } },
     ctx: { get: (name: string) => (name === 'userQuestions' ? service : undefined) },
+    ...agentExtra,
   }
   const ctx = {
     on: (name: string, fn: (session: unknown, event: unknown) => void) => {
@@ -290,6 +291,44 @@ describe('§22.17 J state-driven auto-pop', () => {
     } finally {
       // Fire-and-forget chain may still hold a handle on a loaded parallel
       // run (Windows ENOTEMPTY); cleanup noise must not fail the assertions.
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+
+  it('【变更】2026-10-03 (demo31 live walk) a busy-model follow-up must not re-ask the landed confirm', { timeout: 120_000 }, async () => {
+    // The live shape (2026-10-02 web walk): the classify confirm click lands
+    // while the model's turn is still running. driveClassify itself succeeds
+    // (intake confirmed, change resting at open) but its customer-origin
+    // follow-up reports busy — an error-kind card WITHOUT the dispatch marker
+    // — so the combined result is kind:'error' whose FIRST line is the ✨
+    // success card. Re-asking on that popped a zombie classify card claiming
+    // 「上次选择未生效」 while the choice HAD taken effect (and the parked
+    // composer has no dismiss path, so it blocked the session view).
+    const root = await setup()
+    try {
+      const service = serviceWith([selected('作为新需求开始'), selected('确认 · 缺陷修复路径')])
+      // followup present + status running → makeGoDispatcher answers 'busy'
+      // on the classify confirm's follow-up drive — exactly the live shape.
+      const { emit, logs } = install(service, { followup: () => {}, status: 'running' })
+      emit({ header: { id: 'sess-1', cwd: root } }, userMessage('feat: add export public API for reports'))
+      const popped = Date.now() + 60_000
+      while (service.calls.length < 2 && Date.now() < popped) await settle()
+      expect(service.calls).toHaveLength(2)
+      // The confirm chain lands: intake confirmed, change resting at open.
+      const landed = Date.now() + 60_000
+      for (;;) {
+        const index = await new ProjectionStore({ workspaceRoot: root }).readIndex()
+        const active = index.changes.find(c => c.current !== 'completed' && c.current !== 'abandoned')
+        if (active?.current === 'open') break
+        if (Date.now() > landed) throw new Error(`confirm never landed; row logs:\n${logs.join('\n')}`)
+        await settle()
+      }
+      // Give the (buggy) re-ask every chance to pop, then assert it never
+      // came: no third ask, and no ask anywhere carrying the refusal note.
+      for (let i = 0; i < 12; i++) await settle()
+      expect(service.calls).toHaveLength(2)
+      expect(service.calls.some(c => (c.questions[0]?.detail ?? '').includes('上次选择未生效'))).toBe(false)
+    } finally {
       await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
     }
   })

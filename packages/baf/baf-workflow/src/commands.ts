@@ -62,6 +62,7 @@ import { makeGateAsk, type GateDialogAgent } from './gate-dialog.ts'
 import { renderGate } from './gate-cards.ts'
 import { artifactLine, changeArtifactStatus } from './stages/gates.ts'
 import { focusFor } from './session-focus.ts'
+import { homeSessionFor } from './session-home.ts'
 import {
   probeMountFlags,
   probeToolchain,
@@ -111,6 +112,17 @@ async function guardedDrive(command: string, run: () => Promise<CommandResult>):
   } catch (error) {
     return renderDomainError(command, error)
   }
+}
+
+/**
+ * 【变更】2026-10-02 (demo31 问题 1): anchor the workspace's home session on a
+ * typed workflow command — the customer driving the flow from THIS
+ * conversation is the clearest possible home signal. Structural read of the
+ * runtime agent's session id (the SlashHandlerArgs type declares only cwd).
+ */
+function anchorHomeSession(agent: SlashHandlerArgs['agent'], cwd: string): void {
+  const id = (agent as { session?: { header?: { id?: unknown } } }).session?.header?.id
+  if (typeof id === 'string' && id !== '') homeSessionFor(cwd).set(id)
 }
 
 const HELP_CORE = [
@@ -231,6 +243,10 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-go')
+        // 【变更】2026-10-02 (demo31 问题 1): typing /baf-go here makes this
+        // conversation the workflow's home — later pops follow it instead of
+        // drifting to whichever session ends the next turn.
+        anchorHomeSession(agent, cwd)
         // §22.17: with a `userQuestions` answerer mounted (desktop GUI),
         // /baf-go pops the §22 interactive dialog at each park point. The
         // runtime agent object is the live registry Agent (commands pass it
@@ -269,6 +285,8 @@ export function apply(ctx: Context): void {
       handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
         const cwd = agent.session.header.cwd
         if (cwd === undefined || cwd === '') return missingCwd('/baf-go-confirm')
+        // 【变更】2026-10-02 (demo31 问题 1): same home anchor as /baf-go.
+        anchorHomeSession(agent, cwd)
         // §22.17 confirm mode: take the positive path at the resting gate
         // (scaffold init / intake confirm / gates A+B unlock) without any
         // popup. Drift still asks — auto-picking a rollback node is §19's

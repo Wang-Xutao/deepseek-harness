@@ -13,6 +13,7 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import {
   cancelAsksForChange,
+  cancelAsksForChangeGates,
   enqueueAsk,
   hasPendingAsk,
   resetAskQueue,
@@ -29,6 +30,17 @@ function deferred<T>() {
     reject = rej
   })
   return { promise, resolve, reject }
+}
+
+/** A pop that rejects like the real waterfall does on abort (ASK_ABORTED). */
+function abortablePop(): { promise: Promise<string>; abort: (signal: AbortSignal) => void } {
+  let abort: (signal: AbortSignal) => void = () => {}
+  const promise = new Promise<string>((_, reject) => {
+    abort = signal => signal.addEventListener('abort', () => {
+      reject(Object.assign(new Error('aborted'), { code: 'ASK_ABORTED' }))
+    }, { once: true })
+  })
+  return { promise, abort }
 }
 
 beforeEach(() => {
@@ -160,17 +172,6 @@ describe('§22.19 enqueueAsk — per-session single flight', () => {
 })
 
 describe('§22.19 【变更】2026-09-29 (demo23 问题 4) cancelAsksForChange / hasPendingAsk', () => {
-  /** A pop that rejects like the real waterfall does on abort (ASK_ABORTED). */
-  function abortablePop(): { promise: Promise<string>; abort: (signal: AbortSignal) => void } {
-    let abort: (signal: AbortSignal) => void = () => {}
-    const promise = new Promise<string>((_, reject) => {
-      abort = signal => signal.addEventListener('abort', () => {
-        reject(Object.assign(new Error('aborted'), { code: 'ASK_ABORTED' }))
-      }, { once: true })
-    })
-    return { promise, abort }
-  }
-
   it('cancels the in-flight change-scoped ask and frees its key', async () => {
     const pop = abortablePop()
     const entry = enqueueAsk({
@@ -267,6 +268,83 @@ describe('§22.19 【变更】2026-09-29 (demo23 问题 4) cancelAsksForChange /
     expect(cancelAsksForChange('chg-7')).toBe(2)
     await expect(a).rejects.toMatchObject({ code: 'ASK_ABORTED' })
     await expect(b).rejects.toMatchObject({ code: 'ASK_ABORTED' })
+  })
+})
+
+describe('【变更】2026-10-02 (demo31 问题 3) cancelAsksForChangeGates — gate asks die when the gate resolves elsewhere', () => {
+
+  it('aborts the hung gate ask of the change in ANOTHER session — the turn unhangs', async () => {
+    // demo31 问题 3's shape: the model's mid-turn baf_gate_ask (session A,
+    // awaiting-confirm on design-confirm) hangs the turn because the customer
+    // resolves the gate through another surface (session B's pop, a typed
+    // /baf-go). The successful resolve must abort session A's entry so the
+    // tool settles paused and the turn ends.
+    const pop = abortablePop()
+    const hung = enqueueAsk({
+      sessionId: 'sess-A',
+      key: 'gate:design-confirm:chg-3',
+      changeId: 'chg-3',
+      run: (controller) => {
+        pop.abort(controller.signal)
+        return pop.promise
+      },
+    })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(cancelAsksForChangeGates('chg-3')).toBe(1)
+    await expect(hung).rejects.toMatchObject({ code: 'ASK_ABORTED' })
+    expect(hasPendingAsk('sess-A')).toBe(false)
+  })
+
+  it('drops a still-queued gate ask of the change before it ever pops', async () => {
+    const first = deferred<string>()
+    const a = enqueueAsk({ sessionId: 's1', key: 'a', run: () => first.promise })
+    let ran = false
+    const b = enqueueAsk({
+      sessionId: 's1',
+      key: 'gate:verify-archive:chg-4',
+      changeId: 'chg-4',
+      run: async () => {
+        ran = true
+        return 'must-not-pop'
+      },
+    })
+    expect(cancelAsksForChangeGates('chg-4')).toBe(1)
+    first.resolve('a')
+    expect(await a).toEqual({ kind: 'answered', value: 'a' })
+    expect(await b).toEqual({ kind: 'dropped', reason: 'aborted' })
+    expect(ran).toBe(false)
+  })
+
+  it('leaves workspace/session-scoped pops and other changes untouched', async () => {
+    // The auto-pop pre-question (autopop:<sess>, no changeId) and the scaffold
+    // gate (gate:scaffold:, no changeId) must survive a change-gate cancel —
+    // the workflow line's non-change decisions are not about this change.
+    const heldPre = deferred<string>()
+    const pre = enqueueAsk({
+      sessionId: 's1',
+      key: 'autopop:s1',
+      run: () => heldPre.promise,
+    })
+    const heldScaffold = deferred<string>()
+    const scaffold = enqueueAsk({
+      sessionId: 's2',
+      key: 'gate:scaffold:',
+      run: () => heldScaffold.promise,
+    })
+    const other = enqueueAsk({
+      sessionId: 's3',
+      key: 'gate:design-confirm:chg-other',
+      changeId: 'chg-other',
+      run: async () => 'other',
+    })
+    expect(await other).toEqual({ kind: 'answered', value: 'other' })
+    expect(cancelAsksForChangeGates('chg-5')).toBe(0)
+    expect(hasPendingAsk('s1')).toBe(true)
+    expect(hasPendingAsk('s2')).toBe(true)
+    heldPre.resolve('pre')
+    heldScaffold.resolve('scaffold')
+    expect(await pre).toEqual({ kind: 'answered', value: 'pre' })
+    expect(await scaffold).toEqual({ kind: 'answered', value: 'scaffold' })
   })
 })
 

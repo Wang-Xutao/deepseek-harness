@@ -31,7 +31,8 @@ import { BUG_FIX_DRAFT } from './stages/bug-fix-path.ts'
 import { formatCommandReport, modeZh, cardTitle } from './command-format.ts'
 import { parseArgs, valueOf, valuesOf } from './cli-args.ts'
 import { beginIntake } from './begin-intake.ts'
-import { cancelAsksForChange } from './ask-queue.ts'
+import { cancelAsksForChange, cancelAsksForChangeGates } from './ask-queue.ts'
+import { homeSessionFor } from './session-home.ts'
 import {
   WORKSPACE_BASELINE_PATH,
   loadWorkspaceBaseline,
@@ -322,6 +323,15 @@ export async function driveClassify(cwd: string, rawInput: string, source: Trans
   }
 
   const status = await confirmIntake(store, changeId, 'user')
+  // 【变更】2026-10-02 (demo31 问题 3): the intake is now confirmed — every
+  // sibling intake-classify gate ask is definitively stale, wherever it
+  // waits: the auto-pop dialog answered in one session while a mid-turn
+  // `baf_gate_ask` for the same classify hangs in another. Aborting them
+  // settles those tools as paused('cancelled') so their turns can finally
+  // end (the hung-composer incident). Downstream outcomes of THIS call
+  // (draft opens, baseline refusal) cannot un-confirm the intake, so the
+  // retirement is unconditional from here on.
+  cancelAsksForChangeGates(changeId)
   if (status.current !== 'intake') {
     return {
       kind: 'success',
@@ -673,6 +683,10 @@ export async function driveArchive(cwd: string, rawInput: string, source: Transi
   // pending on the others (session popup / Tab banner / model tool), and none
   // of them may keep pushing a terminal change.
   const canceledAsks = cancelAsksForChange(resolution.changeId)
+  // 【变更】2026-10-02 (demo31 问题 1): the workflow the home session was
+  // about has ended — drop the anchor so the next change's pops follow ITS
+  // customer actions instead of a conversation about finished work.
+  homeSessionFor(cwd).clear()
   const status = await store.readStatus(resolution.changeId)
   return {
     kind: 'success',
@@ -718,6 +732,9 @@ export async function driveAbandon(cwd: string, rawInput: string, source: Transi
   // baf_gate_ask settles as paused. Workspace/session-scoped pops (the
   // auto-pop pre-question, scaffold) carry no changeId and survive.
   const canceledAsks = cancelAsksForChange(resolution.changeId)
+  // 【变更】2026-10-02 (demo31 问题 1): same as archive — the home anchor was
+  // about THIS workflow; drop it with the workflow.
+  homeSessionFor(cwd).clear()
   const status = await store.readStatus(resolution.changeId)
   return {
     kind: 'success',
@@ -1077,6 +1094,20 @@ export async function driveGateResolve(
   opts?: GateResolveOpts,
 ): Promise<CommandResult> {
   const result = await resolveGateDispatch(cwd, gateId, optionId, adapters, resumeCandidates, bindCandidates, source, opts)
+  // 【变更】2026-10-02 (demo31 问题 3): a gate option that resolved through
+  // THIS surface retires every sibling ask about the same change — the same
+  // logical decision is still pending on other surfaces (a session popup, a
+  // hung mid-turn baf_gate_ask in another conversation), and after the
+  // resolve none of them may keep waiting: their dialogs close / their tools
+  // settle paused so their turns end and the composers come back. Error and
+  // refusal results keep the siblings alive — the gate is still genuinely
+  // due, and demo31 问题 2's refusal feedback re-asks it with the reason
+  // instead. (Dismissal cards are success-kind; their premature retirements
+  // self-heal — the orchestrator re-pops the still-due gate at the next
+  // completed turn because the projection fingerprint moved.)
+  if (result.kind === 'success' && opts?.changeId !== undefined) {
+    cancelAsksForChangeGates(opts.changeId)
+  }
   return result
 }
 

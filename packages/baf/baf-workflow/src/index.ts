@@ -181,6 +181,8 @@ export {
 export { beginIntake, type BeginIntakeOutcome } from './begin-intake.ts'
 /** §18.6 focus cache — host-plane readers (baf-guard ranking, §22.19 Phase 3). */
 export { focusFor, resetFocusCache } from './session-focus.ts'
+/** 【变更】2026-10-02 (demo31 问题 1): sticky customer-home session per workspace. */
+export { homeSessionFor, resetHomeSessionCache } from './session-home.ts'
 /**
  * 【变更】2026-09-28 (用户问题: BAF 门禁与工作流不得影响其他模式): the preset
  * membership test the two host-plane per-agent rows (`baf-guard-install`,
