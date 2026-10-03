@@ -72,3 +72,19 @@ vitest-client.tmp.json
 
 # Phase 9 update signing — local test private key (public half lives in desktop/src/update/public-key.ts)
 overlay/scripts/.baf-update-test-private.pem
+
+# baf-dsh desktop/help build outputs — regenerated per build, never committed:
+# pack-dsh.mjs stages the deployment tree into desktop/resources/dsh, then
+# electron-builder writes dist/ (win-unpacked) and release/ (asar/installer),
+# and mkdocs renders the help site into overlay/site.
+overlay/desktop/resources/dsh/
+overlay/desktop/dist/
+overlay/desktop/release/
+overlay/site/
+overlay/desktop/.smoke-*.txt
+
+# In-place tsc shadows in vendored packages (same hazard as packages/**/src)
+vendor/**/src/**/*.js
+vendor/**/src/**/*.js.map
+vendor/**/src/**/*.d.ts
+vendor/**/src/**/*.d.ts.map
