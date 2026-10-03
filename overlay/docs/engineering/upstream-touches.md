@@ -15,6 +15,10 @@
 | `packages/api/session-controller/` | `sessions.ensureOpen(id)`：打开历史窗口但不切换 `current`（轨迹图 inline 子 Session）。 |
 | `packages/session/session-stats/` | `sessionStats.toolCalls` 全日志工具调用计数（轨迹图顶部汇总）。 |
 | `packages/bundle/web-app/cordis.patch.yml` + `package.json` | 挂载 `ui-settings-updates`、`ui-baf-desktop`、`ui-baf-tracegraph`。 |
+| `apps/cli/src/package-manager-env.ts`（新增）+ `apps/cli/src/bin.ts`（+6 行） | 精选插件安装能力：`DSH_PACKAGE_MANAGER` 环境变量（JSON `ProfilePnpmInvocation`）→ `runCli` 桥接为 launcher fact，让 profile plugin-manager 用壳捆绑的 pnpm（`overlay/desktop` extraResources `runtime/pnpm`，main.ts 以 `node --expose-internals pnpm.mjs` 形态导出）。env 缺省/坏值时 fail-soft 回落 PATH pnpm，上游行为不变。 |
+| `packages/baf/baf-featured/`（新增） | 「精选插件」宿主服务：读 `overlay/plugin/featured-plugins.json`（随 bafPlugin zip 热更，经 `BAF_DSH_FEATURED_MANIFEST` env 传路径）× `pluginManager` 编排安装/删除/更新/启停/批量/自动更新/兼容豁免。 |
+| `packages/client/ui-settings-featured-plugins/`（新增） | 设置页「精选插件」区块（order 26），经 harness RPC `remote.featuredPlugins` 驱动，无 `window.bafDesktop` 依赖（web 端同样可用）。 |
+| `packages/api/remotes/src/remote-events.ts`（+1 行） | 白名单转发 `featured-plugins/changed` 事件到客户端。 |
 
 ## 2026-09-12 第四轮修复：根因与打包链路
 
@@ -96,3 +100,17 @@ Windows shell icon API 对 `git-bash.exe` 返回一个非 Git 的多色图标、
 ### 验证（packaged app，CDP 实测）
 
 cmd/powershell/gitbash/explorer 启动均 200 且出现真实窗口（故意用正斜杠路径验证归一化）；设置→通用设置 38 项 checkbox，Git Bash 关闭→下拉消失、开启→恢复；新会话/工作区切换/原生目录选择器（「Select Workspace Directory」窗口实测出现）/帮助 iframe（完整文档渲染）/Agent 预设（standard/BAF/PTC）/历史载入全部正常；hover 头部区域 25 元素 ×4 轮无「个子代理」出现。测试：ui-subagent 33、connection+ui-open-in-app+ui-agent-preset+ui-baf-desktop+ui-workspace 共 486、host open-in-app 64，全绿。
+
+## 2026-10-04 精选插件子系统补全：plugin-manager 三处行为修复（上游核心包触碰）
+
+dsh-feishu 装入 baf profile 暴露出三个 plugin-manager 语义缺口。三处都在 `packages/boot/plugin-manager/src/index.ts`，每处附 `tests/manager.spec.ts` 钉死测试（253 通过）：
+
+| 位置 | 缺口 | 修复 |
+|------|------|------|
+| `protectsManager` + 新增 `userDisabledIds` | feishu 的 patch 声明了 protected module（`@deepseek-ai/dsh-client-connection`），bundle 被永久锁为 not-removable / management-required | **用户层否决**：profile patch、home patch、launch overlay 三层里 `disabled: true` 的行 id 集合可释放锁——另一 bundle 的同名模块才是真正承载 manager 的那份。注意 `managementBundles` 粘性缓存必须被活跃否决穿透（先保护后写 disable 行的 install→repair 次序会留下陈旧缓存），`vetoed.size === 0` 时保留上游短路行为不变 |
+| `removeBundle` in-use 检查 | web-app 与 feishu 都声明 `workspace` 行（同 id 同 name），web-app 的 live entry 命中「本 bundle 贡献的行仍在挂载」→ 误报 `bundle-in-use` | 检查前先读 profile 仍选中 bundles 的全部声明行；**另一仍选中 bundle 也声明的 (id, name) 不算 in-use**——本层离开组合后那份声明继续供着该 entry |
+| （baf-featured 侧）`repairOverlaps` | 组合级失败→重组合成功会**替换**安装结果，把 dsh CLI 安装门的 `incompatible-version` 拒绝（如降版到未豁免版本）误报为成功 | `changed !== true` 的失败（pnpm/门拒阶段，磁盘未变）原样透传给调用方，不写行、不重组；只有 `changed: true` 的组合期失败才由重组合结果取代 |
+
+**行 id 碰撞矩阵**（dedupe 的依据）：web-app 层以 `connection`/`file-upload`/`session-controller` 挂载三个包，feishu 层以 `client-connection`/`client-file-upload`/`api-session-controller` 挂载**同名包** → 不同 id 的两行都会挂载 → 服务重复注册。`packages/baf/baf-featured/src/dedupe.ts` 在安装后自动向 profile patch 追加带 `# baf-featured dedupe` 标记的 disable 行并重组合；删除时剥离。未来任何精选插件同理受益，无需逐一适配。
+
+**typert 产物注意**：`packages/baf/baf-featured/lib/` 里的 `typert.host.js`/`typert.remote-client.js` 由根构建（`build:lib:host` 的 tsdown typert 插件）生成——包内 `rm -rf lib` 后只跑包内 `tsc && pnpm run bundle` **不会**重建它们，必须再跑根 `build:lib:host`，否则启动报 `typert-loader ... ERR_MODULE_NOT_FOUND` + 1 entry did not activate。

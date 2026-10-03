@@ -42,6 +42,14 @@
 # `dsh.client` rows are the browser roster the modules node half scans into
 # window.__DSH_BOOT__; the modules row is simultaneously a host row.
 - insert:
+    # baf-dsh「精选插件」host service: curated-plugin orchestration over the
+    # plugin manager (install/update/remove/enable, bulk, auto-update). App-level
+    # like `plugin-manager` itself, not per-agent — the manifest and user state
+    # are process-global. Degrades to "unavailable" cards when no profile-backed
+    # manager exists (the service resolves `pluginManager` per call).
+    - id: featured-plugins
+      name: '@deepseek-ai/dsh-baf-featured'
+
     - id: desktop-product-telemetry
       name: '@deepseek-ai/dsh-host-product-telemetry-otel'
       disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"
@@ -420,6 +428,12 @@
     # Desktop version display and update controls (baf-dsh「版本与更新」).
     - id: ui-settings-updates
       name: '@deepseek-ai/dsh-client-ui-settings-updates'
+
+    # baf-dsh「精选插件」: curated open-source plugins with install/update/
+    # enable/disable/remove, bulk actions, and auto-update, over the
+    # `featuredPlugins` Remote the featured-plugins host row serves.
+    - id: ui-settings-featured-plugins
+      name: '@deepseek-ai/dsh-client-ui-settings-featured-plugins'
 
     # baf-dsh desktop chrome: hero trailing mark, IDE open, help placeholder.
     - id: ui-baf-desktop

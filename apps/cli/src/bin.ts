@@ -8,6 +8,7 @@
 
 import { getDshRuntimeVersion, loadLayeredEnv, StartupError } from '@deepseek-ai/dsh-app-boot'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { PACKAGE_MANAGER_ENV, packageManagerFromEnv } from './package-manager-env.ts'
 import { parseDshArgs } from './args.ts'
 import { reportStartupFailure } from './startup-diagnostics.ts'
 import type { RunProfileOptions } from './profile-boot.ts'
@@ -25,7 +26,9 @@ export type RunCliOptions = Pick<RunProfileOptions, 'packageManager'> & {
  */
 export async function runCli(options: RunCliOptions = {}): Promise<void> {
   const version = getDshRuntimeVersion()
-  const { manageDesktopProfile, ...profileOptions } = options
+  const packageManager = options.packageManager
+    ?? packageManagerFromEnv(process.env[PACKAGE_MANAGER_ENV], message => process.stderr.write(`dsh: ${message}\n`))
+  const { manageDesktopProfile, ...profileOptions } = { ...options, ...(packageManager === undefined ? {} : { packageManager }) }
   const invocation = parseDshArgs(process.argv.slice(2), version, manageDesktopProfile)
 
   switch (invocation.mode) {
@@ -49,7 +52,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
     }
     case 'plugin': {
       const { runPlugin } = await import('./plugin.ts')
-      process.exit(await runPlugin(invocation.profile, invocation.args, options.packageManager))
+      process.exit(await runPlugin(invocation.profile, invocation.args, profileOptions.packageManager))
       break
     }
     case 'dump-config': {

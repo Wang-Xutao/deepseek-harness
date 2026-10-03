@@ -12,10 +12,10 @@ import z from '@deepseek-ai/schemastery'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import { pluginEntryId, readPluginInventory } from '@deepseek-ai/dsh-host-plugin-inventory'
 import {
-  readPluginMeta, readProfileManifest, resolveBundleDir, loadOverlayPatches, composeEntries,
+  readPluginMeta, readProfileManifest, resolveBundleDir, loadOverlayPatches, loadOptionalPatches, composeEntries,
   reconcileProfilePatches, readProfilePatches, OPTIONAL_BUNDLES, bundlePatchPaths,
   evaluatePluginCompatibility, readProfileCompatibility, readProfileVersionExemptions,
-  setProfileVersionExemption, PROFILE_COMPATIBILITY_FILENAME,
+  setProfileVersionExemption, PROFILE_COMPATIBILITY_FILENAME, PROFILE_PATCH_FILENAME,
 } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-hmr'
 import type { ProfileContext, ProfileManifest } from '@deepseek-ai/dsh-app-boot'
@@ -613,7 +613,15 @@ export class PluginManager extends TypertRemoteService {
           await this.selectBundle(name, false)
           result.warnings = await this.reload()
         }
+        // An entry another still-selected bundle also declares under the same
+        // row id is that bundle's mount once this layer leaves the composition
+        // (later same-id rows override), so removing this package cannot take
+        // the entry's code away with it.
+        const retained = (readProfileManifest('dsh', this.profile.dir).dsh?.profile?.bundles ?? [])
+          .filter(item => item !== name)
+          .flatMap((item) => { try { return this.bundleRows(item) } catch { return [] } })
         if ([...this.ctx.loader.entries()].some(entry => entry.fiber?.uid != null
+          && !retained.some(row => row.id === entry.options.id && row.name === entry.options.name)
           && contributions.some(row => row.id === entry.options.id && row.name === entry.options.name))) {
           throw new ManagementFailure('bundle-in-use')
         }
@@ -742,15 +750,38 @@ export class PluginManager extends TypertRemoteService {
   }
 
   private protectsManager(name: string): boolean {
-    if (this.managementBundles.has(name)) return true
-    let rows: EntryOptions[]
-    try { rows = this.bundleRows(name) } catch (_error) {
+    // A person's own layer — the profile patch, the home patch, or a launch
+    // overlay (the featured set's duplicate-row disables land there) — may
+    // explicitly drop a protected row, releasing a lock taken before the rows
+    // existed, so a live veto outranks the sticky cache.
+    const vetoed = this.userDisabledIds()
+    if (this.managementBundles.has(name) && vetoed.size === 0) return true
+    let protectedBundle: boolean
+    try {
+      const rows = this.bundleRows(name)
+      // A declared protected module protects even while its own layer disables it.
+      protectedBundle = rows.some(row => (protectedModules.has(row.name) && !vetoed.has(row.id))
+        || `include:${row.id}` === this.ownerEntryId)
+    } catch (_error) {
       // Unreadable bundles contribute no new rows; listBundles reports their diagnostics.
       return false
     }
-    const protectedBundle = rows.some(row => protectedModules.has(row.name) || `include:${row.id}` === this.ownerEntryId)
     if (protectedBundle) this.managementBundles.add(name)
+    else this.managementBundles.delete(name)
     return protectedBundle
+  }
+
+  /** Row ids the person's own layers — profile patch, home patch, launch overlays — disable. */
+  private userDisabledIds(): Set<string> {
+    const disabled = new Set<string>()
+    for (const patch of [
+      ...(loadOptionalPatches('dsh', this.profile.patchPath) ?? []),
+      ...(loadOptionalPatches('dsh', join(this.profile.home, PROFILE_PATCH_FILENAME)) ?? []),
+      ...this.profile.overlays,
+    ]) {
+      if (patch.insert === undefined && patch.disabled === true && typeof patch.id === 'string') disabled.add(patch.id)
+    }
+    return disabled
   }
 
   private configure<T>(operation: () => Promise<T>): Promise<T> {

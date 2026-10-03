@@ -31,6 +31,7 @@
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "@deepseek-ai/dsh-baf-core": "workspace:*",
+    "@deepseek-ai/dsh-baf-featured": "workspace:*",
     "@deepseek-ai/dsh-baf-guard": "workspace:*",
     "@deepseek-ai/dsh-baf-openspec": "workspace:*",
     "@deepseek-ai/dsh-baf-quality": "workspace:*",

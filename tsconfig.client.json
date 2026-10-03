@@ -67,6 +67,7 @@
     // - ui-conversation/chat-apply: 'conversation.hero.brand.trailing' slot
     // - ui-deliverables: stubSettingsScope export gone, present-open.ts not listed
     // - ui-settings-updates: baf-only, not in master's build graph
+    // - ui-settings-featured-plugins: baf-only, same reason
     // - ui-agent-preset/locales.client: 'presetBafName' not in master's AgentPresetSettingsKey
     // - ui-open-in-app: 'deliverables.file.actions' slot added by baf
     // - ui-sidebar-files: src/client/definition.tsx not listed
@@ -74,6 +75,7 @@
     "packages/client/ui-conversation/tests/**",
     "packages/client/ui-deliverables/**",
     "packages/client/ui-settings-updates/**",
+    "packages/client/ui-settings-featured-plugins/**",
     "packages/client/ui-agent-preset/tests/locales.client.spec.ts",
     "packages/client/ui-settings-general/tests/components.client.spec.tsx",
     "packages/client/ui-settings-general/tests/desktop-close-prefs.client.spec.tsx",

@@ -19,6 +19,12 @@ extraResources:
       - "**/*"
       - "!node_modules"
       - "!node_modules/**"
+  - from: node_modules/pnpm
+    to: runtime/pnpm
+    filter:
+      - "**/*"
+      - "!node_modules"
+      - "!node_modules/**"
   - from: ../.cache/node-v22.19.0-x64.msi
     to: node-installer/node-v22.19.0-x64.msi
   - from: ../installer/check-node.ps1

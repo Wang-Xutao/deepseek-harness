@@ -39,6 +39,9 @@
       "path": "../../baf/baf-workflow"
     },
     {
+      "path": "../../baf/baf-featured"
+    },
+    {
       "path": "../../schedule/schedule"
     },
     {

@@ -713,6 +713,22 @@ it.each([
   expect(readFileSync(profile.patchPath, 'utf8')).toBe(patch)
 })
 
+it('releases a bundle protected only by a row the profile patch disables', async () => {
+  const { ctx, manager, bundle, profile } = await fixture('startup')
+  bundle('extra', [{ id: 'dependency', name: '@deepseek-ai/dsh-client-connection' }])
+  // Observed while nothing disables the row, so the protection is already
+  // cached when the person's own layer drops it — exactly the ordering an
+  // install-then-repair sequence produces.
+  const protectedRow = (await manager.listBundles()).find(row => row.name === 'extra')!
+  expect(protectedRow.removable).toBe(false)
+  writeFileSync(profile.patchPath, JSON.stringify([{ id: 'dependency', disabled: true }]))
+  await reconcileProfilePatches(ctx, readProfilePatches('test', profile), 'test')
+  const released = (await manager.listBundles()).find(row => row.name === 'extra')!
+  expect(released.removable).toBe(true)
+  expect(released.readOnlyReason).toBeUndefined()
+  expect(await manager.setBundleEnabled('extra', false)).toMatchObject({ application: 'restart-required' })
+})
+
 it('addresses children inside profile groups and marks ambiguous ids read-only', async () => {
   const { manager, bundle, profile } = await fixture('live', false, (ctx) => { ctx.loader.builtins.group = Group })
   bundle('grouped', [{ id: 'group', name: 'cordis:group', group: true,

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "revision": 1,
+  "plugins": [
+    {
+      "id": "dsh-feishu",
+      "package": "@dsh-feishu/dsh-feishu",
+      "version": "^0.3.5",
+      "nameZh": "飞书",
+      "nameEn": "Feishu",
+      "descriptionZh": "把 DSH 接入飞书：斜杠命令变成控制面板卡片按钮，卡内审批与提问、流式回复，扫码即可完成配置。",
+      "descriptionEn": "Run DSH inside Feishu (Lark): every slash command becomes a control-panel card button, with in-card approvals and questions, streaming replies, and one-QR setup.",
+      "homepage": "https://github.com/PGZXB/dsh-feishu",
+      "registryFirst": "https://registry.npmmirror.com",
+      "autoUpdateDefault": true,
+      "peerExemptionExpected": true,
+      "verified": true
+    }
+  ]
+}

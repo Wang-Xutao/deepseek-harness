@@ -508,6 +508,7 @@
     { "path": "./apps/desktop-host" },
     { "path": "./apps/desktop/tsconfig.host.json" },
     { "path": "./packages/baf/baf-core" },
+    { "path": "./packages/baf/baf-featured" },
     { "path": "./packages/baf/baf-guard" },
     { "path": "./packages/baf/baf-openspec" },
     { "path": "./packages/baf/baf-quality" },

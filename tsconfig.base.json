@@ -230,6 +230,8 @@
       "@deepseek-ai/dsh-client-ui-baf-workflow/types": ["./packages/client/ui-baf-workflow/src/types.ts"],
       "@deepseek-ai/dsh-baf-core": ["./packages/baf/baf-core/src"],
       "@deepseek-ai/dsh-baf-core/types": ["./packages/baf/baf-core/src/types.ts"],
+      "@deepseek-ai/dsh-baf-featured": ["./packages/baf/baf-featured/src"],
+      "@deepseek-ai/dsh-baf-featured/types": ["./packages/baf/baf-featured/src/types.ts"],
       "@deepseek-ai/dsh-baf-guard": ["./packages/baf/baf-guard/src"],
       "@deepseek-ai/dsh-baf-guard/install": ["./packages/baf/baf-guard/src/install.ts"],
       "@deepseek-ai/dsh-baf-openspec": ["./packages/baf/baf-openspec/src"],

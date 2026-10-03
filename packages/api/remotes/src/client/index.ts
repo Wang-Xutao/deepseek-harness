@@ -28,6 +28,7 @@ import workspaceRemote from '@deepseek-ai/dsh-api-workspace-controller/remote'
 import terminalRemote from '@deepseek-ai/dsh-api-terminal-controller/remote'
 import workspaceFilesRemote from '@deepseek-ai/dsh-api-workspace-files/remote'
 import bafWorkflowRemote from '@deepseek-ai/dsh-client-ui-baf-workflow/remote'
+import featuredPluginsRemote from '@deepseek-ai/dsh-baf-featured/remote'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 
 export type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
@@ -37,7 +38,12 @@ export type {
   PluginChange, PluginEntryId, PluginInfo, PluginInspectProblem, PluginInstallCancellation, PluginInstallFailureKind,
   PluginInstallLogChunk, PluginInstallProgress, PluginInstallRequestId, PluginRegistries, PluginSpecInspection, ReadOnlyReason, Registry,
 } from '@deepseek-ai/dsh-plugin-manager/types'
+export type {
+  FeaturedBulkOutcome, FeaturedBulkResult, FeaturedInstallOptions, FeaturedListResult,
+  FeaturedManifest, FeaturedManifestPlugin, FeaturedPluginCard, FeaturedPluginState, FeaturedResult,
+} from '@deepseek-ai/dsh-baf-featured/types'
 export type {} from '@deepseek-ai/dsh-plugin-manager/remote'
+export type {} from '@deepseek-ai/dsh-baf-featured/remote'
 export type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/remote'
 export type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 export type {} from '@deepseek-ai/dsh-agent-preset-registry/remote'
@@ -185,7 +191,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       pluginInventoryRemote, pluginManagerRemote, pluginRegistryProbeRemote, messageFeedbackRemote, sessionFeedbackRemote,
       fileUploadsRemote, sessionReferencesRemote,
       permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
-      officeToPdfRemote, userQuestionsRemote, bafWorkflowRemote,
+      officeToPdfRemote, userQuestionsRemote, bafWorkflowRemote, featuredPluginsRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

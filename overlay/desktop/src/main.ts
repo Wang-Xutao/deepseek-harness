@@ -27,6 +27,7 @@ import {
 import { ensureDshModulesExpanded } from './ensure-dsh-modules.ts'
 import { findSupportedNode, isSupportedNodeBinary } from './find-node.ts'
 import { enableWrites as enableLaunchTimings, mark as markLaunch } from './launch-timings.ts'
+import { bundledPnpmEntry, featuredManifestPath, packageManagerEnvJson } from './package-manager.ts'
 import { syncSkillTree } from './plugin-sync.ts'
 import { mergePrefs, parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './prefs.ts'
 import { readyTimeoutMs } from './ready-timeout.ts'
@@ -587,6 +588,15 @@ async function startDshProcess(): Promise<string> {
   if (!existsSync(bin)) throw new Error(`未找到 dsh 入口：${bin}`)
   mkdirSync(pluginDir(), { recursive: true })
   syncPluginIntoDshHome()
+  // Featured-plugins install capability: run the bundled pnpm under the same
+  // Node as the child; the child's profile plugin-manager layers this fact
+  // over its base environment, so only the PATH delta rides along.
+  const pnpmEntry = bundledPnpmEntry(app.isPackaged, process.resourcesPath, desktopRoot())
+  // Curated manifest: hot-updated userData copy first, packaged seed fallback.
+  const featuredManifest = featuredManifestPath(
+    join(pluginDir(), 'featured-plugins.json'),
+    join(packagedPluginRoot(), 'featured-plugins.json'),
+  )
   markLaunch('dsh-spawn')
   child = spawn(node, [bin, 'web', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
     cwd: homedir(),
@@ -597,6 +607,8 @@ async function startDshProcess(): Promise<string> {
       // §11.8/9.6: in-child `baf update status` reads this state file
       // (read-only) — the only child→main channel is env + files.
       BAF_DSH_UPDATE_STATE: updateStatePath(app.getPath('userData')),
+      ...(pnpmEntry === undefined ? {} : { DSH_PACKAGE_MANAGER: packageManagerEnvJson(node, pnpmEntry, process.env.PATH) }),
+      ...(featuredManifest === undefined ? {} : { BAF_DSH_FEATURED_MANIFEST: featuredManifest }),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
