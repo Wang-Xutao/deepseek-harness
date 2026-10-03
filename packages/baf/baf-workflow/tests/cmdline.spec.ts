@@ -37,6 +37,8 @@ describe('baf-cli Commander tree', () => {
       'list',
       'scaffold',
       'status',
+      'update',
+      'update-rollback',
       'version',
       'welcome',
       'workflow-abandon',

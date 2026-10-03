@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { isNewer } from './update/semver.ts'
 
 /**
  * Local product versions persisted under Electron userData.
@@ -91,77 +92,282 @@ export function versionsPath(userData: string): string {
   return join(userData, 'versions.json')
 }
 
+// ---------------------------------------------------------------------------
+// InstalledVersions schema 2（§11.6 / enterprise-inputs.md §7 冻结映射）
+// ---------------------------------------------------------------------------
+
+/** Placeholder for fields no authority has written yet (baseline on migration, runtime before probe). */
+export const UNKNOWN_VERSION = 'unknown'
+
+/**
+ * Schema-2 persisted shape — one version identity per update scope.
+ *
+ * Frozen field mapping (enterprise-inputs.md §7): legacy `bafDsh` →
+ * `harness.desktop`; legacy `dsh` → `harness.dsh`; `harness.runtime` is
+ * `unknown` until a seed/probe writes it; legacy `bafPlugin` maps ONLY to
+ * `plugin.baf` — never guessed into baseline/tool versions; `plugin.
+ * presetSchema` starts at 0; every `baseline.*` field is `unknown` on
+ * migration.
+ */
+export interface InstalledVersions {
+  readonly schema: 2
+  readonly harness: {
+    readonly desktop: string
+    readonly dsh: string
+    readonly runtime: string
+  }
+  readonly plugin: {
+    readonly baf: string
+    readonly presetSchema: number
+  }
+  readonly baseline: {
+    readonly id: string
+    readonly version: string
+    readonly openspec: string
+    readonly matt: string
+    readonly stack: string
+  }
+}
+
+/**
+ * Strict schema-2 parser — every field must be present and well-typed.
+ * Unlike {@link parseVersions} (lenient, for the flat build embed) this
+ * returns `undefined` on ANY missing or bad field so the caller falls back
+ * to legacy migration or re-seeding; a half-trusted schema-2 file must not
+ * be read partially.
+ * @param raw - unknown JSON value.
+ * @returns the installed versions, or undefined when not schema 2.
+ */
+export function parseInstalledVersions(raw: unknown): InstalledVersions | undefined {
+  if (raw === null || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  if (o.schema !== 2) return undefined
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 ? v : undefined)
+  const harness = o.harness as Record<string, unknown> | undefined
+  const plugin = o.plugin as Record<string, unknown> | undefined
+  const baseline = o.baseline as Record<string, unknown> | undefined
+  if (harness === null || typeof harness !== 'object'
+    || plugin === null || typeof plugin !== 'object'
+    || baseline === null || typeof baseline !== 'object') return undefined
+  const desktop = str(harness.desktop)
+  const dsh = str(harness.dsh)
+  const runtime = str(harness.runtime)
+  const baf = str(plugin.baf)
+  if (desktop === undefined || dsh === undefined || runtime === undefined || baf === undefined) return undefined
+  if (typeof plugin.presetSchema !== 'number' || !Number.isInteger(plugin.presetSchema) || plugin.presetSchema < 0) {
+    return undefined
+  }
+  const baselineValues = [str(baseline.id), str(baseline.version), str(baseline.openspec), str(baseline.matt), str(baseline.stack)]
+  if (baselineValues.some(v => v === undefined)) return undefined
+  const [id, version, openspec, matt, stack] = baselineValues as string[]
+  return {
+    schema: 2,
+    harness: { desktop, dsh, runtime },
+    plugin: { baf, presetSchema: plugin.presetSchema },
+    baseline: { id, version, openspec, matt, stack },
+  }
+}
+
+/**
+ * Explicit legacy → schema 2 migration (§11.6): old three-field flat shape
+ * becomes the scoped structure. `bafPlugin` maps only to `plugin.baf`;
+ * baseline fields are `unknown` (never guessed); `runtime` is `unknown`
+ * until a probe writes it. Idempotent by construction — feeding an
+ * already-migrated flat projection through it yields the same values.
+ * @param legacy - sanitized flat versions (from {@link parseVersions}).
+ * @returns the schema-2 shape.
+ */
+export function migrateVersions(legacy: AppVersions): InstalledVersions {
+  return {
+    schema: 2,
+    harness: {
+      desktop: legacy.bafDsh,
+      dsh: legacy.dsh,
+      runtime: UNKNOWN_VERSION,
+    },
+    plugin: {
+      baf: legacy.bafPlugin,
+      presetSchema: 0,
+    },
+    baseline: {
+      id: UNKNOWN_VERSION,
+      version: UNKNOWN_VERSION,
+      openspec: UNKNOWN_VERSION,
+      matt: UNKNOWN_VERSION,
+      stack: UNKNOWN_VERSION,
+    },
+  }
+}
+
+/**
+ * Seed authority over the persisted snapshot (§11.6: "dsh 版本始终从
+ * packaged/source seed 读取"). `harness.desktop` ships inside the running
+ * exe — the embed ALWAYS wins (a stale file once made Setup 0.0.15 report
+ * 0.0.11). `harness.dsh` (the hot-swappable runtime): the seed is the floor
+ * for the exe's lineage, but a PERSISTED NEWER value is a real runtime
+ * hot-update record (apply writes the dir and versions.json together) and
+ * must survive relaunch — otherwise every launch would re-detect and
+ * re-apply the same runtime update forever. Non-semver garbage on disk
+ * falls back to the seed. `plugin.baf` keeps its persisted identity
+ * (independent update channel); `runtime`/`baseline` are probe-owned — the
+ * embed has no such fields, so the persisted values survive untouched.
+ * @param installed - the persisted schema-2 shape.
+ * @param seed - build-embedded flat versions.
+ * @returns the authoritative schema-2 shape.
+ */
+function applySeedAuthority(installed: InstalledVersions, seed: AppVersions): InstalledVersions {
+  return {
+    schema: 2,
+    harness: {
+      desktop: seed.bafDsh,
+      dsh: isNewer(installed.harness.dsh, seed.dsh) ? installed.harness.dsh : seed.dsh,
+      runtime: installed.harness.runtime,
+    },
+    plugin: installed.plugin,
+    baseline: installed.baseline,
+  }
+}
+
+/**
+ * Flat view over schema 2 — Settings and `/baf-version` keep reading
+ * {@link AppVersions}. The 7 BAF packages and notes live only in the embed
+ * (seed-first policy), so they come from the seed directly.
+ * @param installed - authoritative schema-2 shape.
+ * @param seed - build-embedded flat versions.
+ * @returns the flat projection.
+ */
+function installedToFlat(installed: InstalledVersions, seed: AppVersions): AppVersions {
+  return {
+    ...seed,
+    bafDsh: installed.harness.desktop,
+    dsh: installed.harness.dsh,
+    bafPlugin: installed.plugin.baf,
+  }
+}
+
+/** Sibling backup of the legacy file, written once at migration (备份标记). */
+function legacyBackupPath(userData: string): string {
+  return join(userData, 'versions.legacy.bak')
+}
+
+/**
+ * Read versions.json as schema 2, migrating legacy flat files on first
+ * touch. Migration is explicit and one-way: the legacy bytes are preserved
+ * in `versions.legacy.bak`, the schema-2 rewrite lands via temp + rename,
+ * and re-reading a migrated file is a plain schema-2 load (idempotent).
+ * A corrupt file is NOT overwritten (evidence preserved) — the seed-derived
+ * shape is returned unsaved, matching the legacy loader's behavior.
+ * @param userData - userData directory.
+ * @param seed - build-embedded flat versions.
+ * @returns the authoritative schema-2 shape.
+ */
+export function loadInstalledVersions(userData: string, seed: AppVersions = DEFAULT_VERSIONS): InstalledVersions {
+  const path = versionsPath(userData)
+  let text: string | undefined
+  if (existsSync(path)) {
+    try {
+      text = readFileSync(path, 'utf8')
+    } catch {
+      text = undefined
+    }
+  }
+  if (text !== undefined) {
+    let raw: unknown
+    try {
+      raw = JSON.parse(text)
+    } catch {
+      raw = undefined
+    }
+    if (raw !== undefined) {
+      const installed = parseInstalledVersions(raw)
+      if (installed !== undefined) {
+        // Already schema 2 — seed authority only; no rewrite needed.
+        return applySeedAuthority(installed, seed)
+      }
+      // Legacy flat file → explicit one-time migration with backup marker.
+      const migrated = applySeedAuthority(migrateVersions(parseVersions(raw)), seed)
+      try {
+        mkdirSync(dirname(path), { recursive: true })
+        copyFileSync(path, legacyBackupPath(userData))
+      } catch {
+        // Backup is best-effort; migration itself must proceed.
+      }
+      saveInstalledVersions(userData, migrated)
+      return migrated
+    }
+    // Unparseable JSON — return seed-derived shape WITHOUT saving so the
+    // corrupt bytes stay on disk for inspection.
+    return applySeedAuthority(migrateVersions(seed), seed)
+  }
+  // First launch — seed everything.
+  const fresh = applySeedAuthority(migrateVersions(seed), seed)
+  saveInstalledVersions(userData, fresh)
+  return fresh
+}
+
+/**
+ * Persist schema-2 versions.json atomically (temp file + rename) so a crash
+ * mid-write can never leave a truncated file behind.
+ * @param userData - userData directory.
+ * @param next - versions to write.
+ */
+export function saveInstalledVersions(userData: string, next: InstalledVersions): void {
+  const path = versionsPath(userData)
+  mkdirSync(dirname(path), { recursive: true })
+  const tmp = `${path}.tmp`
+  writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  renameSync(tmp, path)
+}
+
 /**
  * Load versions from disk, or seed from packaged defaults when missing.
  *
- * Re-seeding policy (single source of truth for `baf-dsh` desktop bump):
- * - `bafDsh` (desktop shell) — **always** taken from the package embed. The
- *   version the user sees in Settings must be the binary they are running;
- *   persisting a stale value across upgrades was the root cause of
- *   `baf-dsh-Setup-0.0.15.exe` reporting `0.0.11` after upgrade.
- * - `dsh` and the 7 BAF package versions — also taken from the embed
- *   whenever it provides the field: they all ship inside THIS exe
- *   (`baf-product-versions.json` is written by pack-dsh from the workspace),
- *   so the running binary is the only authority. A persisted snapshot must
- *   never mask them — a 0.0.11-era file once outranked the embed via
- *   semver-max (pinning `bafCore` at `0.1.3-alpha.1`) and left the five
- *   sub-package rows blank in Settings.
- * - `bafPlugin` — preserved as-is: the plugin zip updates on its own channel
- *   without an exe bump, so the persisted identity stays authoritative.
+ * Thin adapter over {@link loadInstalledVersions}: the on-disk shape is
+ * schema 2 (legacy files migrate in place), the caller keeps the flat
+ * {@link AppVersions} projection. Re-seeding policy is unchanged:
+ * - `bafDsh`/`dsh` and the 7 BAF packages — always from the running
+ *   binary's embed (seed authority, §11.6);
+ * - `bafPlugin` — persisted identity wins (independent update channel);
  * - `*Notes` — seed-first; notes only ship with bumps.
  * @param userData - userData directory.
  * @param seed - values written on first launch (from package embeds).
  */
 export function loadVersions(userData: string, seed: AppVersions = DEFAULT_VERSIONS): AppVersions {
-  const path = versionsPath(userData)
-  if (!existsSync(path)) {
-    saveVersions(userData, seed)
-    return { ...seed }
-  }
-  let parsed: AppVersions
-  try {
-    parsed = parseVersions(JSON.parse(readFileSync(path, 'utf8')) as unknown)
-  } catch {
-    return { ...seed }
-  }
-  // `bafDsh` is the desktop shell — always reflect the running binary.
-  const bafDsh = seed.bafDsh
-  // Build-embedded facts win over the persisted snapshot (see doc comment):
-  // `dsh` + the 7 BAF packages ship inside this exe, so the embed overrides;
-  // only `bafPlugin` keeps its persisted identity.
-  return {
-    ...parsed,
-    bafDsh,
-    dsh: seed.dsh ?? parsed.dsh,
-    bafPlugin: parsed.bafPlugin,
-    bafCore: seed.bafCore ?? parsed.bafCore,
-    bafWorkflow: seed.bafWorkflow ?? parsed.bafWorkflow,
-    bafOpenspec: seed.bafOpenspec ?? parsed.bafOpenspec,
-    bafStandard: seed.bafStandard ?? parsed.bafStandard,
-    bafQuality: seed.bafQuality ?? parsed.bafQuality,
-    bafGuard: seed.bafGuard ?? parsed.bafGuard,
-    bafScaffold: seed.bafScaffold ?? parsed.bafScaffold,
-    bafDshNotes: seed.bafDshNotes ?? parsed.bafDshNotes,
-    dshNotes: seed.dshNotes ?? parsed.dshNotes,
-    bafCoreNotes: seed.bafCoreNotes ?? parsed.bafCoreNotes,
-    bafWorkflowNotes: seed.bafWorkflowNotes ?? parsed.bafWorkflowNotes,
-    bafOpenspecNotes: seed.bafOpenspecNotes ?? parsed.bafOpenspecNotes,
-    bafStandardNotes: seed.bafStandardNotes ?? parsed.bafStandardNotes,
-    bafQualityNotes: seed.bafQualityNotes ?? parsed.bafQualityNotes,
-    bafGuardNotes: seed.bafGuardNotes ?? parsed.bafGuardNotes,
-    bafScaffoldNotes: seed.bafScaffoldNotes ?? parsed.bafScaffoldNotes,
-  }
+  return installedToFlat(loadInstalledVersions(userData, seed), seed)
 }
 
 /**
- * Persist versions.json.
+ * Persist versions.json (schema 2, atomic). The flat shape carries no
+ * runtime/baseline state, so those scopes are merged from the current file
+ * rather than clobbered to `unknown` on every plugin-channel save.
  * @param userData - userData directory.
  * @param next - versions to write.
  */
 export function saveVersions(userData: string, next: AppVersions): void {
   const path = versionsPath(userData)
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  let base: InstalledVersions | undefined
+  if (existsSync(path)) {
+    try {
+      base = parseInstalledVersions(JSON.parse(readFileSync(path, 'utf8')) as unknown)
+    } catch {
+      base = undefined
+    }
+  }
+  const fallback = migrateVersions(DEFAULT_VERSIONS)
+  const current = base ?? fallback
+  saveInstalledVersions(userData, {
+    schema: 2,
+    harness: {
+      desktop: next.bafDsh,
+      dsh: next.dsh,
+      runtime: current.harness.runtime,
+    },
+    plugin: {
+      baf: next.bafPlugin,
+      presetSchema: current.plugin.presetSchema,
+    },
+    baseline: current.baseline,
+  })
 }
 
 /**

@@ -6,7 +6,8 @@
  * `version`, `status`, `list`, `go`, `doctor`, `workflow-open`,
  * `workflow-classify`, `workflow-clarify`, `workflow-design`, `workflow-plan`,
  * `workflow-implement`, `workflow-verify`, `workflow-archive`,
- * `workflow-abandon`, `check-quality`, `check-guard`)
+ * `workflow-abandon`, `check-quality`, `check-guard`,
+ * `update`, `update-rollback`)
  * and the output goes through the same `formatCommandReport` formatter the
  * slash handlers use, so the Terminal card and the slash card read
  * identically.
@@ -51,6 +52,7 @@ import { focusFor } from './session-focus.ts'
 import { probeMountFlags, probeToolchain, renderProbeLines, renderWelcomeCard, resolveScaffoldService, resolveStartupBinding } from './session-gate.ts'
 import { ProjectionStore, resolveActiveChange } from './projection.ts'
 import { resolveBafProductVersions } from './product-versions.ts'
+import { runUpdate, runUpdateRollback } from './update-surface.ts'
 
 export const name = 'baf-cli'
 export const inject = ['cmdlineArgs']
@@ -89,6 +91,8 @@ const SLASH_DESC: Record<string, string> = {
   '/baf-workflow-resume': '流程有偏差时，退回到指定阶段 · ★★★',
   '/baf-check-quality': '基线 C 栈质量检查 · ★★',
   '/baf-check-guard': '安全检查（verify + 密钥扫描） · ★★',
+  '/baf-update': '检查并升级桌面（有更新时弹窗选择） · ★',
+  '/baf-update-rollback': '回滚上次升级（plugin/runtime，默认 plugin） · ★',
   '/baf-scaffold': '初始化工作区（缺配置时用它） · ★★',
 }
 
@@ -138,6 +142,11 @@ const HELP_FLOW = [
 const HELP_CHECK = [
   'baf check-quality    基线 C 栈质量检查 · ★★',
   'baf check-guard      安全检查（verify + 密钥扫描） · ★★',
+] as const
+
+const HELP_UPDATE = [
+  'baf update           检查并升级桌面（CLI 无弹窗通道，配 --apply 直接升级） · ★',
+  'baf update-rollback  回滚上次升级（plugin/runtime，默认 plugin） · ★',
 ] as const
 
 const USAGE = [
@@ -222,6 +231,7 @@ export function buildBafProgram(): Command {
       { title: '核心', lines: HELP_CORE },
       { title: '流程', lines: HELP_FLOW },
       { title: '检查', lines: HELP_CHECK },
+      { title: '更新', lines: HELP_UPDATE },
       { title: '怎么用', lines: USAGE },
       { title: '模式说明', lines: MODE_LINES },
     ]) + '\n', 0))
@@ -595,6 +605,27 @@ export function buildBafProgram(): Command {
       const ctx = getCtx()
       const { guard } = ctx === undefined ? {} : resolveAdapters(ctx, cwd)
       const r = toCli(await driveGuard(cwd, { ...(guard === undefined ? {} : { guard }) }))
+      emit(r.ok, r.text, r.ok ? 0 : 1)
+    })
+
+  // §11.8/9.6: same update-surface module the slash handler uses — outside
+  // the desktop host these emit the explanation card (exit 1), never throw.
+  // The CLI has no userQuestions channel, so `update` reports-only unless
+  // `--apply` opts into the upgrade directly.
+  program.command('update')
+    .description(slashDesc('/baf-update'))
+    .option('--apply', '有可用更新时跳过确认直接升级（CLI 无弹窗通道）', false)
+    .action(async () => {
+      const opts = program.opts<{ apply?: boolean } & Record<string, unknown>>()
+      const r = await runUpdate(undefined, { ...(opts.apply === true ? { autoApply: true } : {}) })
+      emit(r.ok, r.text, r.ok ? 0 : 1)
+    })
+
+  program.command('update-rollback')
+    .description(slashDesc('/baf-update-rollback'))
+    .argument('[scope]', 'plugin（默认）或 runtime')
+    .action(async (scope: string | undefined) => {
+      const r = await runUpdateRollback(scope)
       emit(r.ok, r.text, r.ok ? 0 : 1)
     })
 

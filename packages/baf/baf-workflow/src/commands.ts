@@ -18,6 +18,11 @@
  *     archive / abandon).
  *   - **Check** (`baf-check-*`): baseline machine gates (`quality`,
  *     `guard`).
+ *   - **Update** (`baf-update` / `baf-update-rollback`, 2026-10-03 简化为两
+ *     条): `/baf-update` shows 当前状态 + 最新可升级状态 and, when something
+ *     is available, pops ONE 升级/取消 dialog on the `userQuestions` channel;
+ *     `/baf-update-rollback` restores a hot scope's last-applied bits.
+ *     Outside the desktop host every command answers with an explanation card.
  *
  * Descriptions drop the leading "BAF" prefix and end with a usage-frequency
  * mark (★★★ 常用 / ★★ 偶尔 / ★ 极少). Card titles mirror the description,
@@ -63,6 +68,11 @@ import { renderGate } from './gate-cards.ts'
 import { artifactLine, changeArtifactStatus } from './stages/gates.ts'
 import { focusFor } from './session-focus.ts'
 import { homeSessionFor } from './session-home.ts'
+import {
+  makeUpdateAsk,
+  runUpdate,
+  runUpdateRollback,
+} from './update-surface.ts'
 import {
   probeMountFlags,
   probeToolchain,
@@ -156,6 +166,11 @@ const HELP_CHECK = [
   '/baf-check-guard      安全检查（verify + 密钥扫描） · ★★',
 ] as const
 
+const HELP_UPDATE = [
+  '/baf-update           检查并升级桌面（有更新时弹窗选择） · ★',
+  '/baf-update-rollback  回滚上次升级（plugin/runtime，默认 plugin） · ★',
+] as const
+
 const USAGE = [
   '1. 新建会话，选「BAF 模式」',
   '2. 打开「工作流」页签 →「新建变更」，或直接描述需求',
@@ -187,6 +202,7 @@ export function apply(ctx: Context): void {
           { title: '核心', lines: HELP_CORE },
           { title: '流程', lines: HELP_FLOW },
           { title: '检查', lines: HELP_CHECK },
+          { title: '更新', lines: HELP_UPDATE },
           { title: '怎么用', lines: USAGE },
           { title: '模式说明', lines: MODE_LINES },
         ]),
@@ -355,6 +371,26 @@ export function apply(ctx: Context): void {
             },
           ]),
         }
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-update',
+      description: '检查并升级桌面（有更新时弹窗选择） · ★',
+      handler: async ({ agent }: SlashHandlerArgs): Promise<CommandResult> => {
+        // The popup rides the same userQuestions single-flight queue the
+        // workflow gates use — an update pop can never cover a gate dialog.
+        const ask = makeUpdateAsk(ctx, agent)
+        const r = await runUpdate(ask)
+        return { kind: r.ok ? 'success' : 'error', text: r.text }
+      },
+    }),
+    ctx.commands.register({
+      name: 'baf-update-rollback',
+      description: '回滚上次升级（plugin/runtime，默认 plugin） · ★',
+      handler: async ({ rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
+        const scope = rawInput.trim() === '' ? undefined : rawInput.trim()
+        const r = await runUpdateRollback(scope)
+        return { kind: r.ok ? 'success' : 'error', text: r.text }
       },
     }),
     ctx.commands.register({

@@ -4,7 +4,7 @@
 > **目标**：把旧版「Claude Code + Comet + Superpowers + vibe + marketplace + hooks」的工作流指南，重构为 dsh 原生、可随桌面应用分发、可签名升级回滚的企业级 Agent 实施方案；工程师按本文档落地，不再做关键架构决策。
 > **用法**：第 0 章是导航；**文首「实现进度」是仓库实况（已完成 / 未完成）**；第 1–11 章是设计与 contract（what/why）；**第 12 章是从零到一的逐步实施计划（how，每一步列出文件、做法和验收）**；第 13–16 章是清单、测试、企业输入和完成定义；**第 17 章是评审结论（遗漏、风险、可落地性、MVP 裁剪）**。
 > **对照基准**：仓库现状 2026-10-03（分支 `baf`；桌面 **baf-dsh 0.0.23**）。**Phase 0–8 与 §22 确认门标准卡体系（Phase 8.11–8.15）已落地**（见下表）；`overlay/desktop` 更新链路已有 manifest/plan/apply/service 骨架且**公开仓默认不验签**；`packages/client/ui-baf-desktop` 为品牌/IDE/帮助；`packages/client/ui-baf-workflow` 为 BAF 会话「工作流」Tab（与「轨迹图」无关）；官方 BAF **仅**以 shipped preset（`trust: system`）交付，桌面**不再**把 `agent-presets` 同步到 `~/.dsh/.agent-presets`，且官方 `baf` **不可复制、不可由用户修改**；`baf-core` 已提供 baseline loader、adapter stub、`NODE_CATALOG`/`WORKFLOW_GRAPH`；`baf-workflow` 已提供 route、projection、transition、intake 与 `WorkflowTabView` Web Remote；`baf-openspec` 提供本地文件模式 OpenSpec adapter；`baf-workflow` `stages/` 提供 full-go-path 七阶段 handler 与 `StagePipeline` 编排；Phase 8 把 slash 全集、`baf-cli` standalone CLI、`listChanges` Remote + Dashboard 入口接通（0.0.14 起）；此后 §22 落地确认门标准卡体系——`GATE_REGISTRY`、`baf_gate_ask`/`baf_question_ask` 工具、弹窗通道 `gate-dialog.ts`、ask 单飞队列、harness 编排器 `orchestrator.ts` 与 `session-home.ts` 会话亲和锚——并经 demo1→demo33 走查批次持续硬化（0.0.16–0.0.23 逐版出包；§22.24 会话亲和三修复已验证、待出包）。
-> **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）已随 `baf-dsh 0.0.14` 出包；签名三 scope 更新（Phase 9，**baseline scope 暂缓——baseline 当前随 plugin zip 以 `overlay/plugin/standards/baf-baseline-c/baseline.yml` 静态 fixture 形式发布，无独立版本号/独立 hot-update 路径，Phase 9 先交 harness + plugin 两 scope**）与 release 门禁（Phase 10）仍属后续硬化工作。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，签名两 scope 更新（Phase 9）可并行但不应挡主链。
+> **评审结论（摘要）**：架构方向可落地；按第 12 章 Phase 0→10 可逐步实现。MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）已随 `baf-dsh 0.0.14` 出包；签名 scope 更新（Phase 9，**已于 2026-10-03 实现落地 harness + plugin 两 scope——baseline 暂缓：随 plugin zip 以 `overlay/plugin/standards/baf-baseline-c/baseline.yml` 静态 fixture 形式发布，无独立版本号/独立 hot-update 路径**，明细见文首「Phase 9 — 已完成明细」与 §12.9 落地状态）；release 门禁（Phase 10）仍属后续硬化工作。必须先纠正「dsh workflow 工具 ≠ BAF go 状态机」「独立 `baf` bin 违规」「plugin 写 user root」三处概念/现状错误，签名两 scope 更新（Phase 9）可并行但不应挡主链。
 > **本文档完全取代**旧版面向 Claude Code 的建设指南：Comet、Superpowers、vibe workflow、Claude Code marketplace、`enabledPlugins`、Claude Code hooks 不再是新架构的组成部分。
 
 ---
@@ -102,6 +102,19 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 | 桌面分发                                                                                                                        | 已完成 | `baf-dsh 0.0.14` 已构建：`overlay/desktop/dist/win-unpacked/baf-dsh.exe`（≈ 205 MB），含 `cmdline.js`（140.58 kB）、`listChanges` Remote、7 个 `dsh-baf-*` 包版本 `0.1.5-alpha.1`                                                                                                                                                                                         |
 | 配套修复                                                                                                                        | 已完成 | commit`cb814b7be2`：`scripts/release/tarball.ts` + `apps/desktop/scripts/prepare-package-set.ts` 给 tar 调用加 `--force-local`（Windows 上 GNU tar 把 `D:\...` 解析为 `user@host:path`）；5 个 dsh client 包（`ui-baf-desktop / ui-baf-tracegraph / ui-baf-workflow / ui-settings-general / ui-settings-updates`）从 `0.1.3` bump 到 `0.1.5-alpha.1` 对齐 dsh family |
 
+### Phase 9 — 已完成明细（2026-10-03，harness + plugin 两 scope；baseline 暂缓）
+
+| 项 | 状态 | 落点 |
+| --- | --- | --- |
+| InstalledVersions schema 2 + 迁移（9.1）                       | 已完成 | `overlay/desktop/src/versions.ts`：严格 parser（任一字段坏→整体拒绝）、`migrateVersions()`（§7 冻结映射，backup `versions.legacy.bak` + temp/rename 原子写）、`applySeedAuthority()`（desktop=seed 恒权威；dsh=semver-max——见 §12.9 偏差登记）、损坏文件不覆写；`tests/versions-migrate.spec.ts` 9 用例绿 |
+| manifest schema 2 + 签名字段策略（9.2）                        | 已完成 | `update/manifest.ts`：ISO 时间窗、`releaseEpoch≥1`、`signature` 块必填、`maxDsh/minimumVersion` 允许 `*`；`checkManifestPolicy()` 在**验签之后**才解释策略（未生效/过期/epoch 回退/clock 不可信各拒）；`tests/manifest-sign.spec.ts` 9 用例绿 |
+| 签名链（9.3）                                                   | 已完成 | `public-key.ts` keyId→PEM 注册表 + `setSignaturePackaged()`（打包即 fail-closed：缺签名/未注册 keyId/测试 key 全拒；dev 跳过须 `BAF_UPDATE_ALLOW_UNSIGNED=1`）；`generate-manifest.mjs` schema 2 + 签**逐字节**（pretty-print 即 canonical）+ epoch 单调拒绝回退；测试 key `baf-test-2026q4`（testOnly，不进生产） |
+| scoped plan（9.4）                                              | 已完成 | `update/plan.ts` `buildScopedUpdatePlans()`（§11.6 顺序：policy 阻断优先→installer 主导→compatibility 区间门→baseline 冻结 `none`）；`apply.ts` per-scope 独立事务（下载→`.next`→原子交换；失败仅回滚本 scope）+ 单次 restart 服务全部已应用 scope + restart 失败逆序回滚本趟并救活旧 bits；installer handoff 记录 `updates/installer-handoff.json`；`rollbackScope()`（`.bak` 版本恢复）；`tests/apply-scoped.spec.ts` 9 用例绿 |
+| splash/提示按 scope（9.5）                                     | 已完成 | `main.ts` `promptUpdateAfterReady()`：仅 harness installer 且 required 时阻断（立即更新/退出），其余提供稍后；设置页三区（baseline 状态区）留待 Phase 9 UI 打磨（登记 §12.9 剩余项） |
+| `baf update` 命令面（9.6，2026-10-03 简化为两指令）          | 已完成 | 子端 `packages/baf/baf-workflow/src/update-surface.ts`（读 env `BAF_DSH_UPDATE_STATE`；check/apply/rollback 走 `update-request.json`/`update-response.json` id 匹配轮询）；桌面端 `service.ts` `dispatchUpdateRequest()` + `main.ts` `watchUpdateRequests()`（watchFile 500ms，tmp+rename 响应）；`/baf-update` 一条指令覆盖 当前状态+最新检查+有更新时弹窗（立即升级/暂不升级，走 userQuestions 单飞队列）+升级，`/baf-update-rollback` 热回滚；CLI 镜像 `baf update`（`--apply` 跳过确认）+ `baf update-rollback`；`tests/update-surface.spec.ts` 11 用例绿 + `update.spec.ts` dispatch 4 用例绿 |
+| 打包与 zip 安全（9.7）                                         | 已完成 | `pack-plugin.mjs`：meta 增 `schema/payload/bafVersion/presetSchema/baseline/systemResources/files[]`（逐文件 sha256）；`update/extract.ts`：解压前条目名单预检（拒 `..`/绝对路径/盘符/反斜杠/ADS，fail-closed 无法列出即拒绝）+ 解压后符号链接扫描（发现即删整树拒绝）；`tests/extract.spec.ts` 5 用例绿（含 stored-zip 构造器投毒 `../evil.txt`） |
+| 桌面全套验证 | 已完成 | `tsc --noEmit` 0 错误；`overlay/desktop` 14 文件 / 91 用例全绿；`packages/baf` baf-integration 全绿（含新 update-surface / cmdline / surface-parity 快照）；`ui-baf-workflow` 17 用例绿；`pnpm build:lib` 通过 |
+
 ### Phase 7 — 已完成明细（2026-09-13）
 
 | 项                                                        | 状态   | 落点                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -156,7 +169,7 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 | fixture baseline                        | 已完成 | `overlay/plugin/standards/baf-baseline-c/` + `packages/baf/baf-core/tests/fixtures/baseline/` |
 | projection / change id 规则冻结         | 已完成 | 记入`enterprise-inputs.md` §8                                                                  |
 | 包落点冻结`packages/baf/`             | 已完成 | 同上                                                                                              |
-| InstalledVersions schema 2 字段映射登记 | 已完成 | `enterprise-inputs.md` §7（**实现代码仍属 Phase 9**）                                    |
+| InstalledVersions schema 2 字段映射登记 | 已完成 | `enterprise-inputs.md` §7（**实现代码已随 Phase 9 落地**）                                    |
 | fixture 校验脚本                        | 已完成 | `overlay/scripts/verify-baf-baseline-fixture.mjs`（`npm run verify-baf-baseline`）            |
 
 ### Phase 1 — 已完成明细
@@ -186,7 +199,7 @@ MVP 完成线（Phase 0–8 + Phase 7 的 ToolGuard）**已落地**并随桌面 
 | ToolGuard / quality / OpenSpec adapter                   | **全部已完成**：OpenSpec `baf-openspec`（本地文件模式）；quality `baf-quality`；ToolGuard `baf-guard`（Phase 7，含 per-agent 非隔离 install row）     |
 | slash /`baf` CLI profile / desktop bridge              | 只读 slash 子集已先行（`/baf-help` `/baf-status` `/baf-version` `/baf-doctor`，`baf-workflow/commands`）；slash 全集 + `baf-cli` standalone CLI + desktop bridge + `listChanges` Remote **Phase 8 已完成**（明细见上表） |
 | `overlay/plugin` → `~/.dsh/.agent-presets` 官方同步 | **已关闭**（桌面不同步 `agent-presets`；官方 BAF 仅 shipped）                                                                                             |
-| 更新签名强制 / InstalledVersions schema 2 代码           | 未实现（Phase 9）                                                                                                                                                 |
+| 更新签名强制 / InstalledVersions schema 2 代码           | **Phase 9 已完成**（2026-10-03，harness + plugin 两 scope；见文首「Phase 9 — 已完成明细」与 §12.9 落地状态）。遗留：生产签名公钥仍为测试 key `baf-test-2026q4`（正式 key 由企业另发）；设置页 baseline 状态区与 `pack-dsh` roster 复检脚本化未做 |
 | 企业输入真值（模型清单/公钥等）                          | 部分已填：OpenSpec=`latest`、编译器=`gcc`、覆盖率=`project-config`；其余仍 `unavailable`                                                                  |
 
 ### Phase 0/1 确认结论（2026-09-05）
@@ -1603,6 +1616,24 @@ export function resolveRoute(
 - `pack-plugin.mjs`：plugin zip manifest 增加 schema、payload scope、逐文件 hash、preset schema、BAF version、systemResources 声明；system/user payload 目标分离；zip 路径校验（拒 `..`/绝对路径/symlink 逃逸）。
 - `pack-dsh.mjs`/`build-release.mjs`：canonical BAF 进 shipped root；打包后 roster 复检脚本化。
 - **验收**：11.6 全部事务边界测试绿；离线/超时/强制更新/installer 退出/plugin 回滚各有确定行为。
+
+#### 9.x Phase 9 落地状态（2026-10-03，harness + plugin 两 scope）
+
+> 落地范围：9.1–9.7 代码全落地（明细见文首「Phase 9 — 已完成明细」）。桌面 `tsc` 0 错误，`overlay/desktop` 14 文件 / 91 用例、`packages/baf` baf-integration 全量、`ui-baf-workflow` 全绿，`pnpm build:lib` 通过。本块只登记**偏差与剩余项**。
+
+**与设计的偏差（均已注明理由）**：
+
+1. **dsh seed 权威改为 semver-max**（§11.6「dsh 版本始终从 packaged/source seed 读取」）：embed 恒权威会让 runtime 热更陷入死循环——apply 写入的 0.1.10 每次启动都被 embed 0.1.9 盖回去、再检测、再应用。现规则：`desktop` 恒取 seed（exe 内嵌，stale 文件曾让 0.0.15 报 0.0.11）；`dsh` 取 `max(persisted, seed)`（持久化更新记录只在确实更新时才成立——apply 同时写目录与 versions.json）；非 semver 脏数据回落 seed。理由注明在 `versions.ts` `applySeedAuthority` 注释。
+2. **`baf update download` 并入 `apply`**：下载即「应用事务的第一步」（下载→解压→原子交换一个事务内），单独 download 会在失败恢复上多出一个中间态。`§12 9.6` 的五个动词收敛为**两个**（2026-10-03 客户指令面简化）：`/baf-update`（当前状态 + 最新检查 + 有更新时弹窗 立即升级/暂不升级 + 升级）与 `/baf-update-rollback`（热回滚）；CLI 镜像 `baf update [--apply]` / `baf update-rollback`。弹窗走 `userQuestions` 单飞队列（§22.19），不覆盖工作流门对话框。
+3. **baseline scope 冻结为 `none`**：随 plugin zip 静态 fixture 发布（前述评审结论），plan 恒输出 `baseline: none, reason=Phase 10 之前冻结`；InstalledVersions 的 `baseline.*` 字段迁移时全部置 `unknown`，不猜值。
+
+**剩余项（Phase 9 尾巴，不挡验收）**：
+
+1. **生产签名公钥未换**：注册表里只有测试 key `baf-test-2026q4`（`testOnly: true`）；正式 key 由企业另发后注册一行即启用（fail-closed 已就位：打包产物缺签名/未注册 keyId/测试 key 一律拒绝）。
+2. **设置页三区（§11.8 baseline 状态区）未做**：`update:lastScoped` IPC 已暴露分 scope 计划，UI 侧渲染留到 Phase 9 UI 打磨（当前设置页仍是 Phase 4 版式）。
+3. **`pack-dsh.mjs` 打包后 roster 复检未脚本化**：手动复检注释存在，脚本化随 Phase 10 release 门禁一起做更合适。
+4. **逐文件 hash 校验未接 apply**：meta 已记录逐文件 sha256（审计/将来增量校验用），当前 apply 只验整包 sha256（下载时）——zip 内条目路径安全已由 extract 预检兜底。
+5. **splash 十条（§11.7）只落了按 scope+required 的提示分支**：splash 期间的分 scope 进度展示与超时放行细节随设置页三区一起补。
 
 ### Phase 10：发布门禁和后续扩展
 

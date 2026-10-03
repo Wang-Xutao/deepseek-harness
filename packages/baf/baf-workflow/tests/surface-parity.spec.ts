@@ -74,6 +74,13 @@ const SLASH_NAMES = [
   'baf-workflow-resume',
   'baf-check-quality',
   'baf-check-guard',
+  // §11.8/9.6: desktop update loop — not drive-backed; the handlers talk to
+  // the desktop host through the env-named state + request/response files
+  // (`update-surface.ts`), so they are CLI-/slash-direct surfaces.
+  // 2026-10-03 简化指令面: status/check/apply merged into ONE `baf-update`
+  // (check + popup 升级/取消 + apply), rollback stays its own verb.
+  'baf-update',
+  'baf-update-rollback',
 ]
 
 // Slash names ↔ drive exports. Drives are organised by domain so the slash
@@ -138,9 +145,10 @@ describe('BAF surface parity (Phase 8.5)', () => {
   it('CLI subcommands map back to drive exports (no orphan subcommands)', () => {
     // `list`, `help`, `version`, `doctor`, `status`, `welcome`, `gate`, `go`,
     // `go-confirm` are CLI-/slash-only surfaces that read the projection
-    // store directly; drives handle the mutating operations. Both sets are
-    // listed here so a future addition to either side must update this
-    // snapshot.
+    // store directly; drives handle the mutating operations. The two
+    // `update*` subcommands are the same kind — they round-trip the desktop
+    // update channel instead of dispatching a drive. Both sets are listed
+    // here so a future addition to either side must update this snapshot.
     //
     // `go` and `go-confirm` are the third kind and the reason this test lists
     // them explicitly: the §18 / §22.17 coordinators live in
@@ -149,7 +157,7 @@ describe('BAF surface parity (Phase 8.5)', () => {
     // the coordinator's chaining never looks like a transition of its own.
     // It composes drives; it owns none.
     const cliSubcommandSet = new Set(CLI_NAMES)
-    const direct = new Set(['list', 'help', 'version', 'doctor', 'status', 'welcome', 'gate', 'go', 'go-confirm'])
+    const direct = new Set(['list', 'help', 'version', 'doctor', 'status', 'welcome', 'gate', 'go', 'go-confirm', 'update', 'update-rollback'])
     for (const sub of CLI_NAMES) {
       const slash = `baf-${sub}`
       const isDirect = direct.has(sub)

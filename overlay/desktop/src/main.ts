@@ -6,6 +6,9 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
+  rmSync,
+  watchFile,
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
@@ -29,7 +32,8 @@ import { mergePrefs, parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS 
 import { readyTimeoutMs } from './ready-timeout.ts'
 import { parseWebReadyUrl } from './ready-url.ts'
 import { DEFAULT_CHANNEL_TAG, DEFAULT_UPDATE_OWNER, DEFAULT_UPDATE_REPO } from './update/defaults.ts'
-import { UpdateService, type CheckUpdateResult } from './update/service.ts'
+import { setSignaturePackaged } from './update/public-key.ts'
+import { UpdateService, updateRequestPath, updateResponsePath, updateStatePath, type CheckUpdateResult } from './update/service.ts'
 import { userFacingLaunchError } from './user-errors.ts'
 import { DEFAULT_VERSIONS, parseVersions, readDesktopVersionFile, type AppVersions } from './versions.ts'
 
@@ -493,6 +497,9 @@ function githubConfig(): { owner: string, repo: string, channelTag: string } {
 
 function createUpdateService(): UpdateService {
   const userData = app.getPath('userData')
+  // §11.3: packaged builds enforce signatures (test keys refused); dev builds
+  // may skip only via BAF_UPDATE_ALLOW_UNSIGNED=1.
+  setSignaturePackaged(app.isPackaged)
   return new UpdateService({
     userData,
     seedVersions: seedVersions(),
@@ -510,6 +517,11 @@ function createUpdateService(): UpdateService {
         return false
       }
     },
+    // Electron seam injected into the update engine (apply.ts stays testable).
+    openInstaller: (setupPath) => {
+      shell.openPath(setupPath)
+    },
+    clockSkewMs: 5 * 60 * 1000,
     onProgress: (p) => {
       mainWindow?.webContents.send('update:progress', p)
     },
@@ -582,6 +594,9 @@ async function startDshProcess(): Promise<string> {
       ...process.env,
       DSH_TELEMETRY_DISABLED: process.env.DSH_TELEMETRY_DISABLED ?? '1',
       BAF_DSH_PLUGIN: pluginDir(),
+      // §11.8/9.6: in-child `baf update status` reads this state file
+      // (read-only) — the only child→main channel is env + files.
+      BAF_DSH_UPDATE_STATE: updateStatePath(app.getPath('userData')),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -602,8 +617,56 @@ async function startDshAndShow(): Promise<void> {
 }
 
 /**
+ * §11.8/9.6 child→main update-command channel: the in-child
+ * `baf update check|apply|rollback` commands write `update-request.json`
+ * next to the state file (the child only knows that dir via env); this
+ * watcher consumes it, dispatches through the UpdateService, and answers in
+ * `update-response.json` matched by request id. The child polls that file —
+ * no IPC surface is added for the child.
+ */
+function watchUpdateRequests(): void {
+  const userData = app.getPath('userData')
+  const requestPath = updateRequestPath(userData)
+  const responsePath = updateResponsePath(userData)
+  let handling = false
+  watchFile(requestPath, { interval: 500 }, (cur) => {
+    if (handling || cur.mtimeMs === 0 || cur.size === 0) return
+    handling = true
+    void (async () => {
+      let raw: unknown
+      try {
+        raw = JSON.parse(readFileSync(requestPath, 'utf8'))
+      } catch {
+        raw = undefined
+      }
+      try {
+        rmSync(requestPath, { force: true })
+      } catch {
+        // Best effort — a stale request is ignored by id mismatch anyway.
+      }
+      if (updateService === undefined) updateService = createUpdateService()
+      const response = raw === undefined
+        ? { id: 'unknown', command: 'check', ok: false, error: '请求文件不可解析' }
+        : await updateService.dispatchUpdateRequest(raw)
+      try {
+        const tmp = `${responsePath}.tmp`
+        writeFileSync(tmp, `${JSON.stringify(response)}\n`, 'utf8')
+        renameSync(tmp, responsePath)
+      } catch (err) {
+        logLaunchFailure(`update-request 响应写入失败：${err instanceof Error ? err.message : String(err)}`)
+      }
+    })().finally(() => {
+      handling = false
+    })
+  })
+}
+
+/**
  * After the main window is up, prompt if a background check found an update.
  * Failures / up-to-date are ignored here (settings page can re-check).
+ * §11.7: the prompt decision is per scope — a REQUIRED harness installer
+ * (forced security / minimum shell) blocks (立即更新/退出); anything else
+ * (optional desktop installer, plugin/runtime hot update) offers 稍后.
  * @param checkPromise - in-flight check started during splash.
  */
 async function promptUpdateAfterReady(
@@ -618,12 +681,14 @@ async function promptUpdateAfterReady(
   }
   if (result.status !== 'available') return
 
-  const force = result.plan.force
-  const buttons = force ? ['立即更新', '退出'] : ['立即更新', '稍后更新']
+  const scoped = updateService.getLastScoped()
+  const harness = scoped?.plans.find(p => p.scope === 'harness')
+  const required = harness !== undefined && harness.action === 'installer' && harness.required
+  const buttons = required ? ['立即更新', '退出'] : ['立即更新', '稍后更新']
   const { response } = await dialog.showMessageBox(mainWindow!, {
     type: 'info',
     title: APP_NAME,
-    message: force ? '必须更新后才能继续使用' : '发现新版本',
+    message: required ? '必须更新后才能继续使用' : '发现新版本',
     detail: result.plan.summaryZh + (result.plan.manifest.notesZh ? `\n\n${result.plan.manifest.notesZh}` : ''),
     buttons,
     defaultId: 0,
@@ -632,7 +697,7 @@ async function promptUpdateAfterReady(
   })
 
   if (response === 1) {
-    if (force) {
+    if (required) {
       quitting = true
       app.quit()
     }
@@ -642,7 +707,7 @@ async function promptUpdateAfterReady(
   const applied = await updateService.startUpdate()
   if (!applied.ok) {
     dialog.showErrorBox(APP_NAME, applied.error ?? '更新失败')
-    if (force) {
+    if (required) {
       quitting = true
       app.quit()
     }
@@ -672,6 +737,7 @@ ipcMain.handle('update:start', async () => {
   return updateService.startUpdate()
 })
 ipcMain.handle('update:lastCheck', () => updateService?.getLastCheck() ?? null)
+ipcMain.handle('update:lastScoped', () => updateService?.getLastScoped() ?? null)
 
 ipcMain.handle('shell:openExternal', async (_event, raw: unknown) => {
   if (typeof raw !== 'string' || raw.trim() === '') return { ok: false, error: '无效 URL' }
@@ -727,6 +793,7 @@ app.whenReady().then(async () => {
 
   // Background check during splash; never block startup on network/UI.
   const checkPromise = updateService.checkForUpdate()
+  watchUpdateRequests()
 
   try {
     await startDshAndShow()

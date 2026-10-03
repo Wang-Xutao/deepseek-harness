@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
 import type { ManifestArtifact } from './manifest.ts'
 import { parseManifest, type UpdateManifest } from './manifest.ts'
-import { BAF_UPDATE_PUBLIC_KEY_PEM, signatureVerificationEnabled } from './public-key.ts'
+import { findSigningKey, signaturePolicy, type UpdateSigningKey } from './public-key.ts'
 
 export type GithubUpdateConfig = {
   owner: string
@@ -62,11 +62,21 @@ export async function fetchChannelManifest(config: GithubUpdateConfig): Promise<
   const parsed = parseManifest(JSON.parse(manifestBuf.toString('utf8')) as unknown)
   if (!parsed.ok) throw new Error(parsed.error)
 
-  const sigAsset = release.assets.find(a => a.name === 'manifest.sig')
-  if (signatureVerificationEnabled()) {
-    if (sigAsset === undefined) throw new Error('更新通道缺少 manifest.sig')
+  // §11.3: 验签后才解释 signed 字段（issuedAt/expiresAt/releaseEpoch 的
+  // policy 检查在 plan 阶段跑）。生产缺签名/错 key/签名不匹配直接拒绝。
+  const policy = signaturePolicy()
+  const sigAsset = release.assets.find(a => a.name === parsed.value.signature.asset)
+  if (policy.required) {
+    if (sigAsset === undefined) throw new Error(`更新通道缺少 ${parsed.value.signature.asset}`)
+    const key = findSigningKey(parsed.value.signature.keyId)
+    if (key === undefined) {
+      throw new Error(`manifest 签名 keyId「${parsed.value.signature.keyId}」未注册（拒绝）`)
+    }
+    if (key.testOnly && !policy.allowTestKeys) {
+      throw new Error('manifest 使用测试签名 key（生产构建拒绝）')
+    }
     const sig = await downloadAssetBuffer(config, sigAsset)
-    if (!verifyManifestSignature(manifestBuf, sig)) {
+    if (!verifyManifestSignature(manifestBuf, sig, key)) {
       throw new Error('manifest 签名校验失败')
     }
   }
@@ -138,10 +148,11 @@ async function downloadAssetBuffer(config: GithubUpdateConfig, asset: GhAsset): 
  * Verify an ed25519 detached signature over the raw manifest bytes.
  * @param manifestBytes - raw manifest.json.
  * @param signature - raw signature bytes (binary) or base64 text.
+ * @param signingKey - the registered key the descriptor named (keyId-bound).
  */
-export function verifyManifestSignature(manifestBytes: Buffer, signature: Buffer): boolean {
+export function verifyManifestSignature(manifestBytes: Buffer, signature: Buffer, signingKey: UpdateSigningKey): boolean {
   try {
-    const key = createPublicKey(BAF_UPDATE_PUBLIC_KEY_PEM)
+    const key = createPublicKey(signingKey.publicKeyPem)
     const sig = decodeSignature(signature)
     return verify(null, manifestBytes, key, sig)
   } catch {

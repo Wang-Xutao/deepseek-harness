@@ -69,3 +69,6 @@ apps/**/src/**/*.js.map
 # Chunked host build scratch list (regenerated per machine)
 rebuild-list.tmp.json
 vitest-client.tmp.json
+
+# Phase 9 update signing — local test private key (public half lives in desktop/src/update/public-key.ts)
+overlay/scripts/.baf-update-test-private.pem
