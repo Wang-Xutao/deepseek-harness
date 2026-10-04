@@ -218,7 +218,9 @@ export default defineConfig({
           name: 'baf-integration',
           execArgv: vitestExecArgv,
           pool: 'forks',
-          setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
+          // master 已删除 invariant 体系（f028f25667），baf 合并残留的
+          // ./scripts/test-invariants.ts 引用会让整条泳道加载即红。
+          setupFiles: ['./scripts/test-proxy-environment.ts'],
           include: bafIntegrationTests,
           exclude: [
             ...platformUnsupportedTests,

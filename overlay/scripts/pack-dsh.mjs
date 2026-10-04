@@ -408,11 +408,11 @@ for (const pkg of mustResolve) {
   }
 }
 
-// Manual roster check after pack (Phase 1+): from the packed tree, confirm
-// `presets/baf` exists under `@deepseek-ai/dsh-agent-presets`, lists with
-// `trust: system`, and `standard` remains the default. Example:
-//   node -e "import('@deepseek-ai/dsh-agent-presets').then(async m => { /* boot minimal roster */ })"
-// Automated coverage lives in packages/preset/agent-presets/tests/baf-roster.spec.ts.
+// Roster recheck after pack (Phase 1+; scripted 2026-10-04, Phase 10):
+// release-gate.mjs gate 2 boots the PACKED @deepseek-ai/dsh-agent-presets
+// (baf-roster.spec.ts minimal boot) and fails the release unless baf lists
+// system-trust after standard with a healthy composition. Unit-level coverage
+// lives in packages/preset/agent-presets/tests/baf-roster.spec.ts.
 
 writeFileSync(join(dest, '.baf-dsh-pack-ok'), new Date().toISOString())
 

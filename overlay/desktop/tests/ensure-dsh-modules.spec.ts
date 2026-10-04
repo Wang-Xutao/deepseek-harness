@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,5 +28,29 @@ describe('ensureDshModulesExpanded', () => {
     const root = mkdtempSync(join(tmpdir(), 'baf-dsh-mod-'))
     temps.push(root)
     expect(() => ensureDshModulesExpanded(root)).toThrow(/modules\.zip/)
+  })
+
+  // Regression (2026-10-04): the expand call missed tar's --force-local, so on
+  // PATHs where tar is GNU tar every drive-letter path failed with
+  // `Cannot connect to D: resolve failed` — first launch of a dir-mode build
+  // was bricked. Seeding uses --force-local too; the call UNDER TEST must
+  // expand a drive-letter zip without any seed-side help.
+  it('expands a real modules.zip at a drive-letter path (tar --force-local)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'baf-dsh-mod-'))
+    temps.push(root)
+    const payload = join(root, 'payload')
+    const markerDir = join(payload, 'node_modules', '@deepseek-ai', 'dsh', 'lib')
+    mkdirSync(markerDir, { recursive: true })
+    writeFileSync(join(markerDir, 'bin.js'), 'export {}\n')
+    const zipPath = join(root, 'modules.zip')
+    const seed = spawnSync(
+      'tar',
+      ['-a', '--force-local', '-cf', zipPath, '-C', payload, '.'],
+      { encoding: 'utf8', windowsHide: true },
+    )
+    expect(seed.status).toBe(0)
+
+    ensureDshModulesExpanded(root)
+    expect(dshModulesReady(root)).toBe(true)
   })
 })

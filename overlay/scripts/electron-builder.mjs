@@ -57,7 +57,7 @@ function topEntryNames(dir) {
  * @param {string} staging staging node_modules (pack-dsh output)
  * @param {string} destDir exploded node_modules inside appOutDir
  */
-function copyNodeModulesVerified(staging, destDir) {
+async function copyNodeModulesVerified(staging, destDir) {
   const tmp = `${destDir}.tmp`
   if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true })
   cpSync(staging, tmp, { recursive: true })
@@ -75,7 +75,26 @@ function copyNodeModulesVerified(staging, destDir) {
   }
 
   if (existsSync(destDir)) rmSync(destDir, { recursive: true, force: true })
-  renameSync(tmp, destDir)
+  // rename 紧跟 ~1GB cpSync 之后，Defender 实时扫描还握着新树里的目录句柄，
+  // Windows 直接 EPERM（2026-10-04 连续三次复现，手动延时 rename 即成功）。
+  // 同款竞态先例：§22.17 J5 writeAtomic —— 短退避重试到扫描放行。
+  let lastErr
+  for (const delayMs of [0, 500, 1000, 2000, 4000, 8000, 16000, 32000]) {
+    if (delayMs > 0) await sleep(delayMs)
+    try {
+      renameSync(tmp, destDir)
+      lastErr = undefined
+      break
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  if (lastErr) throw lastErr
+}
+
+/** @param {number} ms */
+function sleep(ms) {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
 }
 
 /**
@@ -96,7 +115,7 @@ async function afterPack(context) {
   if (dirOnly) {
     if (existsSync(zipOut)) rmSync(zipOut, { force: true })
     console.log(`afterPack: copying dsh node_modules -> ${exploded}`)
-    copyNodeModulesVerified(dshNodeModules, exploded)
+    await copyNodeModulesVerified(dshNodeModules, exploded)
     console.log('afterPack: dir build ready (run dist/win-unpacked/baf-dsh.exe)')
     return
   }
@@ -117,7 +136,7 @@ async function afterPack(context) {
   if (tar.status !== 0 || !existsSync(zipOut)) {
     console.warn('tar 打包失败，回退为直接复制 node_modules（安装进度可能停顿）')
     console.warn(tar.stderr || tar.stdout)
-    copyNodeModulesVerified(dshNodeModules, exploded)
+    await copyNodeModulesVerified(dshNodeModules, exploded)
     return
   }
   console.log('afterPack: modules.zip ready (install-time expand)')

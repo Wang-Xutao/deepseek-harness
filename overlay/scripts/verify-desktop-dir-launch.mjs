@@ -20,7 +20,11 @@ const overlayRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const desktop = join(overlayRoot, 'desktop')
 const unpacked = join(desktop, 'dist', 'win-unpacked')
 const exe = join(unpacked, 'baf-dsh.exe')
-const dshRoot = join(unpacked, 'resources', 'dsh')
+// dshRoot = pack-dsh staging tree (electron-builder's INPUT, never archived).
+// win-unpacked ships node_modules as modules.zip (install-time expand, see
+// ensure-dsh-modules.ts), so its node_modules only exists after a first run —
+// static checks must read the staging tree.
+const dshRoot = join(desktop, 'resources', 'dsh')
 const smokeMarker = join(desktop, '.smoke-launch-ok')
 const launchLog = join(
   process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'),

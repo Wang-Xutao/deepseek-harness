@@ -85,6 +85,35 @@ jobs:
           npm --prefix desktop run dist
           node scripts/generate-manifest.mjs
 
+      # ── Phase 10 release gates (§12 Phase 10 / §14.7) — publish only after
+      # every gate passes: composition health + rollback smoke (fixtures),
+      # static artifact checks (BAF 存在 / system trust / standard default /
+      # 版本一致 / manifest schema / hash 签名 / artifact 完整性), and the
+      # packaged real-launch smoke (packed dsh web + win-unpacked shell).
+      - name: Release gates — domain & desktop suites
+        shell: bash
+        run: |
+          pnpm exec vitest run --project baf-integration
+          pnpm exec vitest run --project thread-safe packages/preset/agent-presets/tests/baf-roster.spec.ts
+          npm --prefix overlay/desktop test
+
+      - name: Release gates — artifact checks
+        working-directory: overlay
+        shell: bash
+        env:
+          BAF_UPDATE_PRIVATE_KEY_PEM: ${{ secrets.BAF_UPDATE_PRIVATE_KEY_PEM }}
+          # TODO(Phase 9 剩余项 1): remove once the production Ed25519 key is
+          # registered in overlay/desktop/src/update/public-key.ts — packaged
+          # updaters refuse the testOnly key, so test-key releases are rehearsal
+          # only and the gate must start failing on them.
+          BAF_RELEASE_ALLOW_TEST_KEY: '1'
+        run: node scripts/release-gate.mjs
+
+      - name: Release gates — packaged real-launch smoke (web + desktop shell)
+        working-directory: overlay
+        shell: bash
+        run: node scripts/verify-desktop-dir-launch.mjs
+
       - name: Publish version release
         shell: bash
         env:

@@ -34,11 +34,28 @@ export function ensureDshModulesExpanded(dshRoot: string): void {
     )
   }
 
-  const tar = spawnSync(
+  // Two tar binaries meet this call in the wild, with opposite needs:
+  // - Git-for-Windows ships GNU tar — `D:\...` reads as user@host without
+  //   --force-local (the packaging side hit this first, cb814b7be2), AND its
+  //   argument unescaping eats backslash+digit runs (`\124` → `T`), so pass
+  //   forward-slash paths;
+  // - Windows ships bsdtar (System32) — handles drive letters natively but
+  //   rejects --force-local outright.
+  // Forward slashes + --force-local-when-supported covers both.
+  const zipArg = zipPath.split('\\').join('/')
+  const rootArg = dshRoot.split('\\').join('/')
+  let tar = spawnSync(
     'tar',
-    ['-xf', zipPath, '-C', dshRoot],
+    ['--force-local', '-xf', zipArg, '-C', rootArg],
     { encoding: 'utf8', windowsHide: true },
   )
+  if (tar.status !== 0 && /force-local/.test(tar.stderr ?? '')) {
+    tar = spawnSync(
+      'tar',
+      ['-xf', zipArg, '-C', rootArg],
+      { encoding: 'utf8', windowsHide: true },
+    )
+  }
   if (tar.status !== 0) {
     const detail = (tar.stderr || tar.stdout || '').trim()
     throw new Error(
