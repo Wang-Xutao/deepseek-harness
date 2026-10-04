@@ -46,6 +46,9 @@ const kit = {
   useSessions: unusedHook,
   useSessionPendingInteraction: unusedHook,
   useWorkspaces: unusedHook,
+  usePanelInfo: unusedHook,
+  useSessionStatus: unusedHook,
+  useSessionRetainInfo: unusedHook,
   close: vi.fn(),
 }
 
@@ -151,7 +154,8 @@ describe('RouteSectionController', () => {
   })
 
   it('save() persists the draft and folds the host verdict into error/dirty', async () => {
-    const save = vi.fn(async () => ({ ok: true, value: { ok: false, error: 'bad tiers' } }) as const)
+    const save = vi.fn(async (_config: RouteTierConfig): Promise<{ ok: true; value: { ok: boolean; error?: string } }> =>
+      ({ ok: true, value: { ok: false, error: 'bad tiers' } }))
     const controller = new RouteSectionController(fakeCtx({ save }))
     const store = controller.inject().hooks.routeSection
     await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
@@ -244,7 +248,8 @@ describe('ModelRoutingRow', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'master' }))
     expect(face.setEnabled).toHaveBeenCalledWith(false)
     const high = within(screen.getByTestId('route-tier-high'))
-    fireEvent.change(high.getAllByRole('combobox')[1], { target: { value: 'bigger' } })
+    const modelInput = high.getAllByRole('combobox')[1] as HTMLInputElement
+    fireEvent.change(modelInput, { target: { value: 'bigger' } })
     expect(face.setTierModel).toHaveBeenCalledWith('high', { model: 'bigger' })
   })
 
