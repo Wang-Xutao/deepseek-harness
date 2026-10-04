@@ -41,11 +41,19 @@ export function RouteStatusRow({ status, t }: RouteStatusRowProps): React.ReactE
             <span key={row.phase} className={css.chip} data-testid="route-chip">
               <span className={css.phase}>{t(`node.${row.phase}` as WorkflowTabKey)}</span>
               <span className={css.model}>
-                {actual.tier === undefined ? actual.model : `${t(tierKey(actual.tier))}·${actual.model}`}
+                {/* The tier label names the PREFERENCE; after a fallback move
+                    the served model belongs to another tier, so the label
+                    would misname it — show the model alone + the badge. */}
+                {actual.tier === undefined || actual.fallbackActive
+                  ? actual.model
+                  : `${t(tierKey(actual.tier))}·${actual.model}`}
               </span>
               {actual.source === 'failed' ? <span className={css.badge}>{t('route.failed')}</span> : undefined}
               {actual.fallbackActive ? <span className={css.badge}>{t('route.fallback')}</span> : undefined}
               {actual.tierReason === 'keyword' ? <span className={css.badge}>{t('route.keyword')}</span> : undefined}
+              {actual.tierReason === 'verify-escalation'
+                ? <span className={css.badge}>{t('route.escalation')}</span>
+                : undefined}
             </span>
           )
         })}

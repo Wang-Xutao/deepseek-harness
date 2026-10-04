@@ -76,4 +76,27 @@ describe('RouteStatusRow (M3 批次C 当前路由行)', () => {
     expect(row.textContent).toContain('route.none')
     expect(screen.queryAllByTestId('route-chip')).toEqual([])
   })
+
+  it('M4: badges a verify-escalated turn (tierReason verify-escalation)', () => {
+    render(<RouteStatusRow status={statusOf([
+      { phase: 'implement', preferredTier: 'low', preferred: { provider: 'p2', model: 'cheap-fast' }, actual: {
+        provider: 'p1', model: 'middle', source: 'phase', tier: 'mid', tierReason: 'verify-escalation',
+        fallbackActive: false, at: '2026-10-05T00:03:00.000Z',
+      } },
+    ])} t={t as never} />)
+    expect(screen.getByTestId('route-chip').textContent).toBe('node.implementroute.tierMid·middleroute.escalation')
+  })
+
+  it('drops the tier label when fallback moved the turn (the label named the preference, not the served model)', () => {
+    render(<RouteStatusRow status={statusOf([
+      { phase: 'implement', preferredTier: 'low', preferred: { provider: 'p2', model: 'cheap-fast' }, actual: {
+        provider: 'p1', model: 'big-brain', source: 'phase', tier: 'mid', tierReason: 'verify-escalation',
+        fallbackActive: true, at: '2026-10-05T00:04:00.000Z',
+      } },
+    ])} t={t as never} />)
+    // fallback moved mid→high: the chip shows the SERVED model + both badges,
+    // never "mid·big-brain" (the tier label would misname the model's tier).
+    expect(screen.getByTestId('route-chip').textContent)
+      .toBe('node.implementbig-brainroute.fallbackroute.escalation')
+  })
 })

@@ -33,8 +33,8 @@ export interface WorkflowTabRoutePhaseRow {
     readonly source: string
     /** Effective tier when the turn was tier-routed (pre-M2 audits omit it). */
     readonly tier?: RouteTier
-    /** Whether the frozen keyword tier decided the turn. */
-    readonly tierReason?: 'keyword' | 'phase'
+    /** Whether the frozen keyword tier decided the turn, or the M4 verify-escalation floor raised it. */
+    readonly tierReason?: 'keyword' | 'phase' | 'verify-escalation'
     readonly fallbackActive: boolean
     readonly at: string
   }

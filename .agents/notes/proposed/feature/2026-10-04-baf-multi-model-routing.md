@@ -114,30 +114,30 @@ compileTierRouteProfile(config, opts?): RouteProfile   // tiers+phaseTier → ph
 
 ### M1 配置 + 服务 + Remote（约 0.5–1 天）
 
-- [ ] `packages/baf/baf-core/src/route-tier.ts`：schema、`resolveTaskTier`、`effectiveTier`、`compileTierRouteProfile` + `tests/route-tier.spec.ts`；
-- [ ] `BafWorkflow` 增配置装载：启动读 `~/.dsh/baf-route-config.json`，`enabled && 三档齐` 时 `freezeRouteContext(enterprise ?? 内置宽松策略, compileTierRouteProfile(config))`；无企业策略文件时内置一份「allowed=三档」的本地策略（个人版默认无 ceiling）；
-- [ ] Remote `bafRouteConfig`（get/save/reset + `baf-route-config/changed` 事件），完全照 `dsh-baf-featured` 的 registry/service/client 三件套模板（`packages/baf/baf-featured/src/registry.ts`）。
+- [x] `packages/baf/baf-core/src/route-tier.ts`：schema、`resolveTaskTier`、`effectiveTier`、`compileTierRouteProfile` + `tests/route-tier.spec.ts`（另含 `synthesizeTierPolicy`、文件 IO 走 baf-workflow `route-config-io`）；
+- [x] `BafWorkflow` 增配置装载：启动读 `~/.dsh/baf-route-config.json`，`enabled && 三档齐` 时 `freezeRouteContext(enterprise ?? 内置宽松策略, compileTierRouteProfile(config))`；无企业策略文件时内置一份「allowed=三档」的本地策略（个人版默认无 ceiling）；
+- [x] Remote `bafRouteConfig`（get/save/reset/preview/defaults + `baf-route-config/changed` 事件）— M3 批次A 迁入双面包 `packages/client/ui-settings-baf-route`（浏览器端需要生成的 TYPERT_REMOTE，纯 host 库包拿不到）。
 
 ### M2 派单接线（约 1 天）
 
-- [ ] `go-dispatch.ts`：`makeGoDispatcher` 增可选参数 `route?: (signal: DispatchSignal) => ModelSelection | undefined`，在 `followup(workOrder)` 前调用并暂存——**纯工厂保持可测**；
-- [ ] `commands.ts` 三处派单构造点（`/baf-go`、`/baf-go-confirm`、门卡/Tab 复用点）：用 `ctx.bafWorkflow.resolveAndAudit(session, node, availability, undefined, changeId)` + `selectionForTurn` 接成 `route` 回调，经 `ctx.sessionController.selectForNextRequest(agent, selection)` 生效；
-- [ ] intake 冻结：`begin-intake.ts` 分类确认时评估 `resolveTaskTier` 并写入 change projection；
-- [ ] 审计：既有 `appendRouteResolved`（`route-audit.ts`）已写 `baf/route-resolved`，补 `tier`/`reason` 字段。
+- [x] `go-dispatch.ts`：`makeGoDispatcher` 增可选参数 `route?: (signal: DispatchSignal) => ModelSelection | undefined`，在 `followup(workOrder)` 前调用并暂存——**纯工厂保持可测**；
+- [x] `commands.ts` 三处派单构造点（`/baf-go`、`/baf-go-confirm`、门卡/Tab 复用点）：用 `ctx.bafWorkflow.resolveAndAudit(session, node, availability, undefined, changeId)` + `selectionForTurn` 接成 `route` 回调，经 `ctx.sessionController.selectForNextRequest(agent, selection)` 生效；
+- [x] intake 冻结：`begin-intake.ts` 分类确认时评估 `resolveTaskTier` 并写入 change projection；
+- [x] 审计：既有 `appendRouteResolved`（`route-audit.ts`）已写 `baf/route-resolved`，补 `tier`/`reason` 字段。
 
 ### M3 设置 UI（约 1–1.5 天）
 
-- [ ] 新包 `packages/client/ui-settings-baf-route`：注册 `settings.workflow.item` 行 `id: model-routing`（「多模型路由」）：
-  - 总开关 + 三档卡片（provider/model 下拉，选项来自 `session/modelCatalog`，支持手输）；
-  - 阶段映射表：9 行（8 阶段 + drift）× 档位分段控件；
-  - 关键词列表：增删行（词组 + 档位 + 备注）；
-  - 「预演」输入框：一段任务描述 → 显示 `resolveTaskTier` 将命中的档位与规则（纯函数本地跑，不发请求）；
-  - 保存走 Remote；校验错误行内提示；`changed` 事件刷新。
-- [ ] 工作流 Tab「当前路由」行：读 `RouteStatusView`（`buildRouteStatusView` 已有），显示各阶段 preferred/actual 与 fallback 状态。
+- [x] 新包 `packages/client/ui-settings-baf-route`：注册 `settings.workflow.item` 行 `id: model-routing`（「多模型路由」）：
+  - 总开关 + 三档卡片（provider/model 下拉，选项来自 `session/modelCatalog`，支持手输 — datalist 建议项）；
+  - 阶段映射表：9 行（8 阶段 + drift）× 档位分段控件 — done；
+  - 关键词列表：增删行（词组 + 档位 + 备注）— done；
+  - 「预演」输入框：一段任务描述 → 显示 `resolveTaskTier` 将命中的档位与规则（host Remote 跑纯函数 — 浏览器端不得 value-import baf-core）；
+  - 保存走 Remote；校验错误行内提示；`changed` 事件刷新 — done。
+- [x] 工作流 Tab「当前路由」行：显示各阶段 preferred/actual 与 fallback 状态 — 档位路由不走冻结链，fold 直接由 config + 会话审计组成（`buildTierRouteStatus`），随 `getTabView` 载荷下发。
 
 ### M4 可选增强（0.5 天）
 
-- [ ] verify 失败升级：T15 升级通道触发时用 `max(tier, mid)` 重试（「审核不过 → 换更强模型再审」的状态路由延伸）。
+- [x] verify 失败升级：`cause: 'verify-failed'` 的派单回合以 `max(tier, mid)` 为下限（T11 修复环/T15 升级通道共用标记）；能力不足时 approved-only 回落可再上称（implement 需 coding → 实跑 high）；审计 `tierReason: 'verify-escalation'`，Tab 芯片升档徽标。
 
 ## 风险与边界
 

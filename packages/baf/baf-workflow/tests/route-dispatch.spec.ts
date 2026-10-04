@@ -86,6 +86,41 @@ describe('tierRouteSelection (多模型路由 M2 纯核)', () => {
     })
     expect(outcome?.resolution.fallbackFrom).toMatchObject({ provider: 'p2', model: 'cheap-fast' })
   })
+
+  it('M4: escalates a verify-failed retry to at least mid (审核不过 → 换更强模型再审)', () => {
+    // implement maps low; the T11/T15 retry loop's cause floors the turn at
+    // mid. implement requires coding, which mid lacks — the approved-only
+    // fallback then lands the retry on high (the STRONGEST model: exactly the
+    // M4 intent), with the floor + fallback both on the audit record.
+    const signal = { ...signalOf('implement'), cause: 'verify-failed' as const }
+    const outcome = tierRouteSelection(signal, makeConfig(), undefined)
+    expect(outcome).toMatchObject({
+      tier: 'mid',
+      reason: 'verify-escalation',
+      selection: { provider: 'p1', model: 'big-brain', reasoningEffort: 'deep' },
+    })
+    expect(outcome?.resolution.fallbackFrom).toMatchObject({ provider: 'p1', model: 'middle' })
+  })
+
+  it('M4: keeps a keyword tier above the mid floor (floor never demotes)', () => {
+    const signal = { ...signalOf('implement'), cause: 'verify-failed' as const }
+    const outcome = tierRouteSelection(signal, makeConfig(), 'high')
+    expect(outcome).toMatchObject({
+      tier: 'high',
+      reason: 'keyword',
+      selection: { provider: 'p1', model: 'big-brain', reasoningEffort: 'deep' },
+    })
+  })
+
+  it('M4: an already-mid verify retry keeps the phase reason (floor is silent at parity)', () => {
+    const signal = { ...signalOf('verify'), cause: 'verify-failed' as const }
+    const outcome = tierRouteSelection(signal, makeConfig(), undefined)
+    expect(outcome).toMatchObject({
+      tier: 'mid',
+      reason: 'phase',
+      selection: { provider: 'p1', model: 'middle' },
+    })
+  })
 })
 
 describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {

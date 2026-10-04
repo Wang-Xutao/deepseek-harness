@@ -25,8 +25,9 @@ export interface RouteAuditEntry {
    * on tier-routed dispatches (other resolvers and failures omit it).
    */
   readonly tier?: RouteTier
-  /** Whether the frozen keyword tier decided it (`keyword`) or the phase mapping (`phase`). */
-  readonly tierReason?: 'keyword' | 'phase'
+  /** Whether the frozen keyword tier decided it (`keyword`), the phase mapping
+   * (`phase`), or the M4 verify-escalation floor (`verify-escalation`). */
+  readonly tierReason?: 'keyword' | 'phase' | 'verify-escalation'
   readonly at: string
   readonly sessionId: string
   readonly changeId?: string
@@ -60,7 +61,7 @@ export interface RouteAuditSuccessInput {
   readonly changeId?: string
   /** 多模型路由 M2 — tier decision, when the turn was tier-routed. */
   readonly tier?: RouteTier
-  readonly tierReason?: 'keyword' | 'phase'
+  readonly tierReason?: 'keyword' | 'phase' | 'verify-escalation'
   readonly at?: string
 }
 

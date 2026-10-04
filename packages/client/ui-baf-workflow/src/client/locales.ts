@@ -28,6 +28,7 @@ export type WorkflowTabKey =
   | 'route.fallback'
   | 'route.keyword'
   | 'route.failed'
+  | 'route.escalation'
   | 'route.tierHigh'
   | 'route.tierMid'
   | 'route.tierLow'
@@ -283,6 +284,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'route.fallback': 'fallback',
   'route.keyword': 'keyword',
   'route.failed': 'failed',
+  'route.escalation': 'escalated',
   'route.tierHigh': 'high',
   'route.tierMid': 'mid',
   'route.tierLow': 'low',
@@ -517,6 +519,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'route.fallback': '回落',
   'route.keyword': '词',
   'route.failed': '失败',
+  'route.escalation': '升档',
   'route.tierHigh': '高档',
   'route.tierMid': '中档',
   'route.tierLow': '低档',

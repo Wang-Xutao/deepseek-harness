@@ -22,6 +22,7 @@
  */
 
 import {
+  ROUTE_TIERS,
   compileTierRouteProfile,
   effectiveTier,
   findTierByRef,
@@ -53,8 +54,8 @@ export interface RouteModelSelection {
 export interface TierRouteOutcome {
   /** The tier the routing logic preferred (before any fallback move). */
   readonly tier: RouteTier
-  /** Whether the frozen keyword tier decided it, or the phase mapping alone. */
-  readonly reason: 'keyword' | 'phase'
+  /** Whether the frozen keyword tier decided it, the phase mapping alone, or the M4 verify-escalation floor. */
+  readonly reason: 'keyword' | 'phase' | 'verify-escalation'
   /** Full resolver result (carries `fallbackFrom` when a move happened). */
   readonly resolution: RouteResolution
   /** What the session controller should pin for the next request. */
@@ -85,10 +86,19 @@ export function tierRouteSelection(
 ): TierRouteOutcome | undefined {
   if (config === undefined || !isTierRoutingActive(config)) return undefined
   const effective = effectiveTier(signal.node, taskTier, config)
-  const preferred = config.tiers[effective.tier]
+  // 多模型路由 M4 — a verify-failed retry (the T11 fix loop / the T15
+  // escalation channel) runs at least mid: 审核不过 → 换更强模型再审. The
+  // floor only raises — a keyword or phase tier already at/above mid keeps
+  // its own reason (the floor is silent at parity).
+  const escalate = signal.cause === 'verify-failed'
+    && ROUTE_TIERS.indexOf(effective.tier) < ROUTE_TIERS.indexOf('mid')
+  const tier: RouteTier = escalate ? 'mid' : effective.tier
+  const reason: TierRouteOutcome['reason'] = escalate ? 'verify-escalation' : effective.reason
+  const preferred = config.tiers[tier]
   // Per-dispatch compile: the phase mapping from the config, with the
   // DISPATCHED node's entry overridden to the effective tier — the keyword
-  // escalation (max(taskTier, phaseTier)) lands exactly on this turn.
+  // escalation (max(taskTier, phaseTier)) and the M4 verify floor land
+  // exactly on this turn.
   const profile = {
     ...compileTierRouteProfile(config),
     phases: {
@@ -110,8 +120,8 @@ export function tierRouteSelection(
     const resolvedTier = findTierByRef(config, { provider: resolution.provider, model: resolution.model })
     const spec = resolvedTier !== undefined ? config.tiers[resolvedTier] : preferred
     return {
-      tier: effective.tier,
-      reason: effective.reason,
+      tier,
+      reason,
       resolution,
       selection: {
         provider: resolution.provider,
