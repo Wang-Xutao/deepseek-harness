@@ -21,18 +21,15 @@ const identity = <T,>(value: T): T => value
 /** The tiers in display order. */
 const TIERS: readonly RouteTier[] = ['high', 'mid', 'low']
 
-/** The stage nodes the mapping rows show (drift is housekeeping, never planned for). */
-type StageNode = Exclude<WorkflowNode, 'drift'>
-
 /** One phase-mapping row: the node and its locale key. */
-type PhaseRow = { readonly node: StageNode; readonly key: `phase${Capitalize<StageNode>}` }
+type PhaseRow = { readonly node: WorkflowNode; readonly key: `phase${Capitalize<WorkflowNode>}` }
 
 /** Locale key for one tier's display label. */
 function tierKey(tier: RouteTier): 'tierHigh' | 'tierMid' | 'tierLow' {
   return tier === 'high' ? 'tierHigh' : tier === 'mid' ? 'tierMid' : 'tierLow'
 }
 
-/** The eight stage nodes in presentation order; tier values come from the Host. */
+/** All nine nodes in presentation order (8 stages + drift); tiers come from the Host. */
 const PHASES: readonly PhaseRow[] = [
   { node: 'design', key: 'phaseDesign' },
   { node: 'plan', key: 'phasePlan' },
@@ -42,6 +39,7 @@ const PHASES: readonly PhaseRow[] = [
   { node: 'intake', key: 'phaseIntake' },
   { node: 'open', key: 'phaseOpen' },
   { node: 'archive', key: 'phaseArchive' },
+  { node: 'drift', key: 'phaseDrift' },
 ]
 
 /** Full component props for the 多模型路由 settings row. */
@@ -89,11 +87,13 @@ export function ModelRoutingRow({
             <div className={css.tierTitle}>{t(tierKey(tier))}</div>
             <Input
               aria-label={t('provider')}
+              list="route-provider-options"
               value={draft.tiers[tier].provider}
               onChange={event => setTierModel(tier, { provider: event.currentTarget.value })}
             />
             <Input
               aria-label={t('model')}
+              list="route-model-options"
               value={draft.tiers[tier].model}
               onChange={event => setTierModel(tier, { model: event.currentTarget.value })}
             />
@@ -175,6 +175,16 @@ export function ModelRoutingRow({
 
       {state.error === undefined ? undefined : (
         <div className={css.error} data-testid="route-error">{state.error}</div>
+      )}
+      {state.catalog === undefined ? undefined : (
+        <>
+          <datalist id="route-provider-options" data-testid="route-provider-options">
+            {state.catalog.providers.map(provider => <option key={provider} value={provider} />)}
+          </datalist>
+          <datalist id="route-model-options" data-testid="route-model-options">
+            {state.catalog.models.map(model => <option key={model} value={model} />)}
+          </datalist>
+        </>
       )}
       <div className={css.actions}>
         <button

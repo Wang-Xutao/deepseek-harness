@@ -14,6 +14,12 @@ import type {
 } from '@deepseek-ai/dsh-baf-core'
 import type { RouteTier } from '../types.ts'
 
+/** Provider/model id suggestions from the session catalog, for the tier inputs. */
+export interface RouteCatalogSuggestions {
+  readonly providers: readonly string[]
+  readonly models: readonly string[]
+}
+
 /** What the row renders; `update` mutates an immer draft of this shape. */
 export interface RouteSectionState {
   status: 'loading' | 'ready' | 'failed'
@@ -27,7 +33,12 @@ export interface RouteSectionState {
   error: string | undefined
   /** The last 预演 verdict, from the Host's keyword dry-run. */
   preview: { tier: RouteTier | null; matched?: string } | undefined
+  /** Catalog suggestions for the tier inputs; undefined when the catalog is unreachable. */
+  catalog: RouteCatalogSuggestions | undefined
 }
+
+/** The session model-catalog Remote result shape, fetched once per load. */
+type CatalogLookup = Awaited<ReturnType<ClientContext['remote']['session']['modelCatalog']>>
 
 /** The registration-side face the row's slot entry injects. */
 export interface RouteSectionFace {
@@ -73,6 +84,7 @@ export class RouteSectionController {
       saving: false,
       error: undefined,
       preview: undefined,
+      catalog: undefined,
     })
     void this.load()
   }
@@ -141,12 +153,14 @@ export class RouteSectionController {
   /** @inheritdoc */
   async reset(): Promise<void> {
     await this.ctx.remote.bafRouteConfig.reset()
-    const fresh = await this.freshDraft()
+    const catalog = await this.ctx.remote.session.modelCatalog()
+    const fresh = await this.freshDraft(catalog)
     this.store.update((state) => {
       state.draft = fresh
       state.dirty = false
       state.error = undefined
       state.preview = undefined
+      state.catalog = this.suggestionsOf(catalog)
     })
   }
 
@@ -183,9 +197,16 @@ export class RouteSectionController {
   }
 
   private async load(): Promise<void> {
-    const response = await this.ctx.remote.bafRouteConfig.get()
+    const [response, catalog] = await Promise.all([
+      this.ctx.remote.bafRouteConfig.get(),
+      this.ctx.remote.session.modelCatalog(),
+    ])
+    const suggestions = this.suggestionsOf(catalog)
     if (!response.ok) {
-      this.store.update((state) => { state.status = 'failed' })
+      this.store.update((state) => {
+        state.status = 'failed'
+        state.catalog = suggestions
+      })
       return
     }
     if (response.value !== null) {
@@ -194,25 +215,32 @@ export class RouteSectionController {
       this.store.update((state) => {
         state.draft = config
         state.status = 'ready'
+        state.catalog = suggestions
       })
       return
     }
-    const fresh = await this.freshDraft()
+    const fresh = await this.freshDraft(catalog)
     this.store.update((state) => {
       state.draft = fresh
       state.status = 'ready'
+      state.catalog = suggestions
     })
+  }
+
+  /** Distill the catalog into the tier inputs' suggestion lists. */
+  private suggestionsOf(catalog: CatalogLookup): RouteCatalogSuggestions | undefined {
+    if (!catalog.ok) return undefined
+    const providers = [...new Set(catalog.value.groups.map(group => group.id))]
+    const models = catalog.value.groups.flatMap(group => group.models.map(model => model.id))
+    return { providers, models }
   }
 
   /**
    * A first-run draft: disabled, every tier on the session's default model,
    * phase mapping from the Host's built-in defaults, no keyword rules.
    */
-  private async freshDraft(): Promise<RouteTierConfig> {
-    const [catalog, defaults] = await Promise.all([
-      this.ctx.remote.session.modelCatalog(),
-      this.ctx.remote.bafRouteConfig.defaults(),
-    ])
+  private async freshDraft(catalog: CatalogLookup): Promise<RouteTierConfig> {
+    const defaults = await this.ctx.remote.bafRouteConfig.defaults()
     const base = catalog.ok
       ? { provider: catalog.value.default.provider, model: catalog.value.default.model }
       : { provider: '', model: '' }

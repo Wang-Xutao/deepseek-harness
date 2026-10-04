@@ -19,6 +19,7 @@ export type BafRouteKey =
   | 'phaseIntake'
   | 'phaseOpen'
   | 'phaseArchive'
+  | 'phaseDrift'
   | 'keywordsTitle'
   | 'keywordWords'
   | 'keywordTier'
@@ -54,6 +55,7 @@ export const en: Record<BafRouteKey, string> = {
   phaseIntake: 'Intake',
   phaseOpen: 'Open',
   phaseArchive: 'Archive',
+  phaseDrift: 'Drift',
   keywordsTitle: 'Keyword rules',
   keywordWords: 'Keywords (| separated)',
   keywordTier: 'Tier',
@@ -90,6 +92,7 @@ export const zh: Record<BafRouteKey, string> = {
   phaseIntake: '受理',
   phaseOpen: '开放',
   phaseArchive: '归档',
+  phaseDrift: '漂移',
   keywordsTitle: '关键词规则',
   keywordWords: '关键词（| 分隔）',
   keywordTier: '档位',

@@ -69,7 +69,10 @@ function fakeCtx(overrides: {
       },
       session: {
         modelCatalog: overrides.catalog
-          ?? (async () => ({ ok: true, value: { default: { provider: 'p', model: 'm' } } }) as const),
+          ?? (async () => ({
+            ok: true,
+            value: { default: { provider: 'p', model: 'm' }, routableProviders: [], groups: [], failures: [] },
+          }) as const),
       },
       $on: () => () => undefined,
     },
@@ -116,6 +119,7 @@ const READY: RouteSectionState = {
   saving: false,
   error: undefined,
   preview: undefined,
+  catalog: { providers: ['p', 'q'], models: ['big', 'mid', 'cheap'] },
 }
 
 describe('RouteSectionController', () => {
@@ -171,6 +175,25 @@ describe('RouteSectionController', () => {
     expect(store.getSnapshot().dirty).toBe(false)
   })
 
+  it('loads provider/model suggestions from the catalog even with a saved config', async () => {
+    const catalog = vi.fn(async () => ({
+      ok: true,
+      value: {
+        default: { provider: 'p', model: 'm' },
+        routableProviders: [],
+        groups: [
+          { id: 'p', name: 'P', models: [{ id: 'm1', name: 'M1' }, { id: 'm2', name: 'M2' }] },
+          { id: 'q', name: 'Q', models: [{ id: 'cheap', name: 'C' }] },
+        ],
+        failures: [],
+      },
+    }) as const)
+    const controller = new RouteSectionController(fakeCtx({ catalog }))
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    expect(store.getSnapshot().catalog).toEqual({ providers: ['p', 'q'], models: ['m1', 'm2', 'cheap'] })
+  })
+
   it('runPreview() carries the host verdict into the preview slot', async () => {
     const controller = new RouteSectionController(fakeCtx({
       preview: async () => ({ ok: true, value: { tier: 'high', matched: '架构' } }) as const,
@@ -196,14 +219,21 @@ describe('ModelRoutingRow', () => {
     render(<ModelRoutingRow {...props} />)
     expect(screen.getByRole('switch', { name: 'master' })).toBeTruthy()
     // Three tier cards (testids on the card containers — the repo convention
-    // keeps testids on intrinsics this component owns, never primitives).
+    // keeps testids on intrinsics this component owns, never primitives). The
+    // provider/model inputs carry list= suggestions, so they surface as
+    // comboboxes (dropdown + 手输), not plain textboxes.
     const high = within(screen.getByTestId('route-tier-high'))
-    expect((high.getAllByRole('textbox')[0] as HTMLInputElement).value).toBe('p')
-    expect((high.getAllByRole('textbox')[1] as HTMLInputElement).value).toBe('big')
+    expect((high.getAllByRole('combobox')[0] as HTMLInputElement).value).toBe('p')
+    expect((high.getAllByRole('combobox')[1] as HTMLInputElement).value).toBe('big')
     const low = within(screen.getByTestId('route-tier-low'))
-    expect((low.getAllByRole('textbox')[1] as HTMLInputElement).value).toBe('cheap')
-    // Phase mapping rows for the eight stage nodes.
-    expect(screen.getAllByTestId('route-phase-row')).toHaveLength(8)
+    expect((low.getAllByRole('combobox')[1] as HTMLInputElement).value).toBe('cheap')
+    // Phase mapping rows for all nine nodes (8 stages + drift).
+    expect(screen.getAllByTestId('route-phase-row')).toHaveLength(9)
+    // Provider/model inputs carry catalog suggestions (datalist: dropdown + 手输).
+    // jsdom hides datalists from the accessibility tree, so count the option
+    // elements directly instead of by role.
+    expect(screen.getByTestId('route-provider-options').querySelectorAll('option')).toHaveLength(2)
+    expect(screen.getByTestId('route-model-options').querySelectorAll('option')).toHaveLength(3)
     // The keyword rule row shows its pattern.
     expect(screen.getByDisplayValue('架构|refactor')).toBeTruthy()
   })
@@ -214,7 +244,7 @@ describe('ModelRoutingRow', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'master' }))
     expect(face.setEnabled).toHaveBeenCalledWith(false)
     const high = within(screen.getByTestId('route-tier-high'))
-    fireEvent.change(high.getAllByRole('textbox')[1], { target: { value: 'bigger' } })
+    fireEvent.change(high.getAllByRole('combobox')[1], { target: { value: 'bigger' } })
     expect(face.setTierModel).toHaveBeenCalledWith('high', { model: 'bigger' })
   })
 
