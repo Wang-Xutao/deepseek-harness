@@ -40,4 +40,15 @@ contextBridge.exposeInMainWorld('bafDesktop', {
       ipcRenderer.off('update:progress', listener)
     }
   },
+  // 【变更】2026-10-04 (用户问题 3): push channel for fresh check results —
+  // the shell fires it after the splash background check and every manual check.
+  onCheckResult: (cb: (payload: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      cb(payload)
+    }
+    ipcRenderer.on('update:checked', listener)
+    return () => {
+      ipcRenderer.off('update:checked', listener)
+    }
+  },
 })

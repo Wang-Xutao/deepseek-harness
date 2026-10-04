@@ -49,7 +49,10 @@ describe('DesktopClosePrefs', () => {
     expect(await screen.findByTestId('desktop-close-prefs')).toBeTruthy()
     await waitFor(() => expect(getPrefs).toHaveBeenCalled())
 
-    fireEvent.click(screen.getByRole('button', { name: 'When closing the window' }))
+    // 【变更】2026-10-04: read the aria name from the live dictionary — a master
+    // merge reworded this copy ('When closing the window' → 'On close') and the
+    // hardcoded expectation went stale.
+    fireEvent.click(screen.getByRole('button', { name: en['desktopClose.title'] }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Minimize to tray' }))
     expect(setPrefs).toHaveBeenCalledWith({ closeAction: 'tray' })
   })

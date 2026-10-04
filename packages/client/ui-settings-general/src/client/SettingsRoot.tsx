@@ -16,13 +16,14 @@ import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconBranchOutlineMedium, IconCloseOutlineRegular,
-  IconDataOutlineMedium, IconDownloadOutlineMedium, IconPersonalizationOutlineMedium, IconSettingsOutlineMedium,
-  IconUserOutlineMedium,
+  IconDataOutlineMedium, IconDownloadOutlineMedium, IconPersonalizationOutlineMedium, IconPluginPinwheelOutlineMedium,
+  IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
 import css from './SettingsRoot.module.css'
 import { DesktopUpdateIndicator } from './DesktopUpdateIndicator.tsx'
+import { useBafUpdateAvailable } from './baf-update-dot.ts'
 
 const RECOVERY_CONFIRMATION_MS = 2_000
 
@@ -40,6 +41,10 @@ function navIcon(id: string) {
   // made three sections read as one generic "settings" bucket.
   if (id === 'workflow') return <IconBranchOutlineMedium className={css.navIcon} size={16} />
   if (id === 'version-updates') return <IconDownloadOutlineMedium className={css.navIcon} size={16} />
+  // 【变更】2026-10-04 (用户问题 2): 精选插件 gets the plugin pinwheel — the
+  // same plugin glyph the Plugins panel carries — instead of the generic
+  // settings gear, so the curated-plugins page reads as plugins, not settings.
+  if (id === 'featured-plugins') return <IconPluginPinwheelOutlineMedium className={css.navIcon} size={16} />
   return <IconSettingsOutlineMedium className={css.navIcon} size={16} />
 }
 
@@ -61,6 +66,9 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
   // projection falls back to the first row when the id is gone.
   const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
   const titleId = useId()
+  // 【变更】2026-10-04 (用户问题 3): red dot on the 版本与更新 nav row while
+  // the baf-dsh shell reports an available update (retained check + push).
+  const updateAvailable = useBafUpdateAvailable()
 
   const panel = useRef<HTMLDivElement>(null)
   useModalLayer(panel, true, onClose)
@@ -88,6 +96,9 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
               >
                 {navIcon(row.id)}
                 <span className={css.navLabel}>{row.label}</span>
+                {row.id === 'version-updates' && updateAvailable
+                  ? <span className={css.navDot} aria-hidden="true" />
+                  : null}
               </button>
             ))}
           </div>

@@ -60,6 +60,12 @@ export type BafDesktopBridge = {
   startUpdate: () => Promise<ApplyUpdateResult>
   getLastCheckResult: () => Promise<CheckUpdateResult | null>
   onUpdateProgress: (cb: (payload: { message: string }) => void) => () => void
+  /**
+   * 【变更】2026-10-04 (用户问题 3): push channel fired by the shell after
+   * every check (splash background check, manual checks, this page's own
+   * auto-check). Optional so older injected bridges keep working.
+   */
+  onCheckResult?: (cb: (result: CheckUpdateResult) => void) => () => void
 }
 
 declare global {

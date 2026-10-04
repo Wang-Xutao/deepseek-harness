@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "demo33 四问题批次：① bug-fix-path 裁剪后不再生成 plan.json/tasks.md——实现账本双命名（bug-fix-path 模式落盘 bug-fix-path-ledger.json，全消费者双候选探测），rail 按模式裁剪而非按磁盘裁剪。② checklist.md 每项中文明确检查项（「**检查项名称**：检查内容与判定标准」格式）。③ verify.md 升级为完整正式测试报告（CHECK_CATALOG_ZH 五项注册表 + 报告信息/验证结论/总览表/逐项明细四段式）。④ 变更总览新增「在浏览器中打开」按钮与独立深色看板页（6 汇总磁贴、模式分布甜甜圈、耗时 Top8、变更卡，内联 CSS+SVG 零外部资源）。详见 .agents/notes/implemented/bug-fix/2026-09-30-demo33-four-issue-batch.md。",
-    "notesEn": "Demo33 four-issue round: (1) bug-fix-path no longer emits plan.json/tasks.md after pruning — dual-named implementation ledger (bug-fix-path-ledger.json for the bug path, dual-candidate probing in every consumer); the rail prunes by mode, not by disk. (2) checklist.md items are now named in Chinese with explicit criteria. (3) verify.md is now a full formal test report (five-entry CHECK_CATALOG_ZH registry + report info / verdict / overview table / per-check sections). (4) the change overview gains an open-in-browser button and a standalone dark dashboard page (six stat tiles, mode donut, top-8 duration bars, change cards, inline CSS+SVG with no external assets). See .agents/notes/implemented/bug-fix/2026-09-30-demo33-four-issue-batch.md."
+    "notesZh": "demo33 四问题批次\n① 账本双命名：bug-fix-path 模式独立落盘 bug-fix-path-ledger.json，rail 按模式裁剪\n② checklist.md 每项中文明确检查项与判定标准\n③ verify.md 升级为正式测试报告（检查项注册表 + 四段式结构）\n④ 变更总览新增「在浏览器中打开」与独立深色看板页",
+    "notesEn": "Demo33 four-issue round\n(1) dual-named implementation ledger: bug-fix-path writes bug-fix-path-ledger.json; the rail prunes by mode\n(2) checklist.md items carry named Chinese checks with explicit criteria\n(3) verify.md is now a formal test report (check registry + four-section layout)\n(4) change overview gains open-in-browser plus a standalone dark dashboard"
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",

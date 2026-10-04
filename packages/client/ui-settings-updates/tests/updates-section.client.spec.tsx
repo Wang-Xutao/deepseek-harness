@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { UpdatesSection } from '../src/client/UpdatesSection.tsx'
-import type { BafDesktopBridge } from '../src/client/bridge.ts'
+import type { BafDesktopBridge, CheckUpdateResult } from '../src/client/bridge.ts'
 import { readBridge } from '../src/client/bridge.ts'
 
 function t(key: string): string {
@@ -17,6 +17,30 @@ const kit = {
   useWorkspaces: unusedHook,
   close: vi.fn(),
 }
+
+const VERSIONS = {
+  bafDsh: '0.0.8',
+  dsh: '0.1.3-alpha.1',
+  bafCore: '0.1.0',
+  bafWorkflow: '0.1.0',
+} as const
+
+const AVAILABLE: CheckUpdateResult = {
+  status: 'available',
+  versions: { ...VERSIONS },
+  plan: {
+    summaryZh: '壳 0.0.8 → 0.0.9',
+    force: false,
+    targetBafDsh: '0.0.9',
+    notesZh: 'bug fixes',
+  },
+  checkedAt: '2026-01-01T00:00:00.000Z',
+}
+
+afterEach(() => {
+  cleanup()
+  delete (window as { bafDesktop?: unknown }).bafDesktop
+})
 
 describe('readBridge', () => {
   it('returns undefined without desktop bridge', () => {
@@ -33,47 +57,78 @@ describe('UpdatesSection', () => {
     expect(screen.getByText('desktopOnly')).toBeTruthy()
   })
 
-  it('hides Update until a check finds an available plan', async () => {
+  it('renders multi-line notes as one paragraph per line', async () => {
     const bridge: BafDesktopBridge = {
       isDesktop: true,
       getPrefs: async () => ({ closeAction: 'ask' }),
       setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
       getVersions: async () => ({
-        bafDsh: '0.0.8',
-        dsh: '0.1.3-alpha.1',
-        bafCore: '0.1.0',
-        bafWorkflow: '0.1.0',
+        ...VERSIONS,
+        bafDshNotes: 'demo33 四问题批次\n① 账本双命名\n② checklist 中文检查项',
+      }),
+      checkForUpdate: async () => AVAILABLE,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      // A fresh retained result keeps the auto-check quiet for this test.
+      getLastCheckResult: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+      onUpdateProgress: () => () => {},
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      expect(screen.getByText('demo33 四问题批次')).toBeTruthy()
+    })
+    expect(screen.getByText('① 账本双命名')).toBeTruthy()
+    expect(screen.getByText('② checklist 中文检查项')).toBeTruthy()
+  })
+
+  it('auto-checks silently when no retained result exists', async () => {
+    const checkForUpdate = vi.fn(async () => AVAILABLE)
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS }),
+      checkForUpdate,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => null,
+      onUpdateProgress: () => () => {},
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    // 【变更】2026-10-04 (用户问题 3): the available card arrives without any
+    // click — the silent auto-check feeds it.
+    await waitFor(() => {
+      expect(screen.getByTestId('update-available-card')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'update' })).toBeTruthy()
+      expect(screen.getByText('0.0.9')).toBeTruthy()
+    })
+    expect(checkForUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a fresh retained result and only checks on demand', async () => {
+    const checkForUpdate = vi.fn(async () => AVAILABLE)
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({
+        ...VERSIONS,
         bafDshNotes: 'desktop notes',
         dshNotes: 'dsh notes',
         bafCoreNotes: 'core notes',
         bafWorkflowNotes: 'workflow notes',
       }),
-      checkForUpdate: async () => ({
-        status: 'available',
-        versions: {
-          bafDsh: '0.0.8',
-          dsh: '0.1.3-alpha.1',
-          bafCore: '0.1.0',
-          bafWorkflow: '0.1.0',
-        },
-        plan: {
-          summaryZh: '壳 0.0.8 → 0.0.9',
-          force: false,
-          targetBafDsh: '0.0.9',
-          notesZh: 'bug fixes',
-        },
-        checkedAt: '2026-01-01T00:00:00.000Z',
+      checkForUpdate,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
       }),
-      startUpdate: async () => ({
-        ok: true,
-        versions: {
-          bafDsh: '0.0.9',
-          dsh: '0.1.3-alpha.1',
-          bafCore: '0.1.0',
-          bafWorkflow: '0.1.0',
-        },
-      }),
-      getLastCheckResult: async () => null,
       onUpdateProgress: () => () => {},
     }
     window.bafDesktop = bridge
@@ -83,6 +138,7 @@ describe('UpdatesSection', () => {
       expect(screen.getByText('desktop notes')).toBeTruthy()
       expect(screen.getByText('packagesHeading')).toBeTruthy()
     })
+    expect(checkForUpdate).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'update' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'check' }))
@@ -91,6 +147,72 @@ describe('UpdatesSection', () => {
       expect(screen.getByTestId('update-available-card')).toBeTruthy()
       expect(screen.getByText('0.0.9')).toBeTruthy()
       expect(screen.getByText('bug fixes')).toBeTruthy()
+    })
+  })
+
+  it('places the check action above the version rows', async () => {
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS }),
+      checkForUpdate: async () => AVAILABLE,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+      onUpdateProgress: () => () => {},
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'check' })).toBeTruthy()
+    })
+    const checkButton = screen.getByRole('button', { name: 'check' })
+    const firstVersionRow = screen.getByText('0.0.8').closest('li')
+    expect(firstVersionRow).toBeTruthy()
+    // 【变更】2026-10-04 (用户问题 3): the actions block leads the page.
+    expect(
+      checkButton.compareDocumentPosition(firstVersionRow!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('refreshes from the onCheckResult push channel', async () => {
+    let push: ((result: CheckUpdateResult) => void) | undefined
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS }),
+      checkForUpdate: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+      onUpdateProgress: () => () => {},
+      onCheckResult: (cb) => {
+        push = cb
+        return () => { push = undefined }
+      },
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      expect(screen.getByText('0.0.8')).toBeTruthy()
+    })
+    expect(screen.queryByTestId('update-available-card')).toBeNull()
+    push?.(AVAILABLE)
+    await waitFor(() => {
+      expect(screen.getByTestId('update-available-card')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'update' })).toBeTruthy()
     })
   })
 })

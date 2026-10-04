@@ -273,6 +273,62 @@ describe('SettingsRoot trigger', () => {
   })
 })
 
+// 【变更】2026-10-04 (用户问题 3): nav red dot — the 版本与更新 cell lights a
+// dot when the baf-dsh shell bridge reports an available update, and stays
+// dark without the bridge (web) or with a non-available retained result.
+describe('SettingsPanel update dot', () => {
+  const rowsWithUpdates: Row[] = [
+    { id: 'general', order: 0, label: 'General' },
+    { id: 'version-updates', order: 10, label: 'Version and updates' },
+  ]
+
+  afterEach(() => { delete (window as { bafDesktop?: unknown }).bafDesktop })
+
+  function stubBridge(result: { status: string } | null) {
+    ;(window as { bafDesktop?: unknown }).bafDesktop = {
+      isDesktop: true,
+      getLastCheckResult: async () => result,
+      onCheckResult: () => () => {},
+    }
+  }
+
+  it('lights the dot on the version-updates cell when the retained check is available', async () => {
+    stubBridge({ status: 'available' })
+    mount({ rows: rowsWithUpdates })
+    openPanel()
+    await vi.waitFor(() => {
+      const dot = document.querySelector('[class*=navDot]')
+      expect(dot).toBeTruthy()
+      expect(dot!.closest('button')!.textContent).toContain('Version and updates')
+    })
+  })
+
+  it('keeps the nav dark without the bridge and after a push clears availability', async () => {
+    stubBridge({ status: 'available' })
+    let push: ((r: { status: string } | null) => void) | undefined
+    ;(window as { bafDesktop?: unknown }).bafDesktop = {
+      isDesktop: true,
+      getLastCheckResult: async () => ({ status: 'available' }),
+      onCheckResult: (cb: (r: { status: string } | null) => void) => {
+        push = cb
+        return () => {}
+      },
+    }
+    mount({ rows: rowsWithUpdates })
+    openPanel()
+    await vi.waitFor(() => { expect(document.querySelector('[class*=navDot]')).toBeTruthy() })
+    act(() => { push!({ status: 'up-to-date' }) })
+    await vi.waitFor(() => { expect(document.querySelector('[class*=navDot]')).toBeNull() })
+
+    delete (window as { bafDesktop?: unknown }).bafDesktop
+    cleanup()
+    mount({ rows: rowsWithUpdates })
+    openPanel()
+    await vi.waitFor(() => { expect(screen.getByRole('dialog')).toBeTruthy() })
+    expect(document.querySelector('[class*=navDot]')).toBeNull()
+  })
+})
+
 describe('SettingsPanel chrome seats', () => {
   it('names the dialog via aria-labelledby pointing at the header seat node', () => {
     mount()

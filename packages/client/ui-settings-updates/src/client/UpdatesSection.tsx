@@ -21,21 +21,43 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
+/**
+ * 【变更】2026-10-04 (用户问题 3): a silent re-check runs when the last result
+ * is missing, failed, or older than this. The host already checks once during
+ * splash, so fresh sessions do not refetch — only stale ones do.
+ */
+const AUTO_RECHECK_STALE_MS = 30 * 60_000
+
+/** Whether a retained check result is too old (or failed) to trust silently. */
+function isStale(result: CheckUpdateResult | null): boolean {
+  if (result === null || result.status === 'error') return true
+  const checkedAt = Date.parse(result.checkedAt)
+  return !Number.isFinite(checkedAt) || Date.now() - checkedAt > AUTO_RECHECK_STALE_MS
+}
+
+/** Split a notes blob into display paragraphs (one per non-empty line). */
+function noteParagraphs(notes: string | undefined): readonly string[] {
+  if (notes === undefined) return []
+  return notes.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+}
+
 function VersionRow(props: {
   label: string
   version: string | undefined
   notes: string | undefined
 }): ReactElement {
   const { label, version, notes } = props
+  // 【变更】2026-10-04 (用户问题 1): notes render one paragraph per line —
+  // version-notes.json now carries concise multi-line copy instead of one
+  // wall of text.
+  const paragraphs = noteParagraphs(notes)
   return (
     <li className={css.row}>
       <div className={css.rowMain}>
         <span className={css.label}>{label}</span>
         <span className={css.value}>{version ?? '—'}</span>
       </div>
-      {notes !== undefined && notes.length > 0 ? (
-        <p className={css.notes}>{notes}</p>
-      ) : null}
+      {paragraphs.map(line => <p key={line} className={css.notes}>{line}</p>)}
     </li>
   )
 }
@@ -61,13 +83,32 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
       if (!cancelled) setVersions(v)
     })
     void live.getLastCheckResult().then((r) => {
-      if (!cancelled) setCheck(r)
+      if (cancelled) return
+      setCheck(r)
+      // 【变更】2026-10-04 (用户问题 3): 自动获取最新版本 — silently refetch
+      // when the retained result is missing/failed/stale. Errors stay silent;
+      // the manual button remains the loud path.
+      if (isStale(r)) {
+        void live.checkForUpdate().then((result) => {
+          if (cancelled) return
+          setCheck(result)
+          setVersions(result.versions)
+        }).catch(() => { /* silent auto-check */ })
+      }
+    })
+    // Host push after every check (splash, manual, this page's own auto-check):
+    // keeps the card and the nav red dot fresh without polling.
+    const offChecked = live.onCheckResult?.((result) => {
+      if (cancelled) return
+      setCheck(result)
+      setVersions(result.versions)
     })
     const off = live.onUpdateProgress((p) => {
       setProgress(p.message)
     })
     return () => {
       cancelled = true
+      offChecked?.()
       off()
     }
   }, [])
@@ -135,6 +176,43 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
     <div className={css.section} data-testid="updates-section">
       <h2 className={css.title}>{t('title')}</h2>
       <p className={css.intro}>{t('intro')}</p>
+      {/* 【变更】2026-10-04 (用户问题 3): the check/update actions lead the page
+          instead of trailing the package list — checking is the page's primary
+          action, and an available update must be visible without scrolling. */}
+      <div className={css.actions}>
+        <button
+          type="button"
+          className={css.btn}
+          disabled={busy !== null}
+          onClick={() => { void onCheck() }}
+        >
+          {busy === 'check' ? t('checking') : t('check')}
+        </button>
+        {updateAvailable ? (
+          <button
+            type="button"
+            className={css.btnPrimary}
+            disabled={!canUpdate}
+            onClick={() => { void onUpdate() }}
+          >
+            {busy === 'update' ? t('updating') : t('update')}
+          </button>
+        ) : null}
+      </div>
+      {updateAvailable ? (
+        <div className={css.updateCard} data-testid="update-available-card">
+          <p className={css.updateLine}>
+            <span className={css.updateLabel}>{t('updateTarget')}</span>
+            <span className={css.updateValue}>{targetVersion}</span>
+          </p>
+          {updateNotes !== undefined && updateNotes.length > 0 ? (
+            <p className={css.updateLine}>
+              <span className={css.updateLabel}>{t('updateNotes')}</span>
+              <span className={css.updateValue}>{updateNotes}</span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <ul className={css.rows}>
         <VersionRow
           label={t('labelBaf')}
@@ -185,40 +263,6 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
           notes={versions?.bafScaffoldNotes}
         />
       </ul>
-      <div className={css.actions}>
-        <button
-          type="button"
-          className={css.btn}
-          disabled={busy !== null}
-          onClick={() => { void onCheck() }}
-        >
-          {busy === 'check' ? t('checking') : t('check')}
-        </button>
-        {updateAvailable ? (
-          <button
-            type="button"
-            className={css.btnPrimary}
-            disabled={!canUpdate}
-            onClick={() => { void onUpdate() }}
-          >
-            {busy === 'update' ? t('updating') : t('update')}
-          </button>
-        ) : null}
-      </div>
-      {updateAvailable ? (
-        <div className={css.updateCard} data-testid="update-available-card">
-          <p className={css.updateLine}>
-            <span className={css.updateLabel}>{t('updateTarget')}</span>
-            <span className={css.updateValue}>{targetVersion}</span>
-          </p>
-          {updateNotes !== undefined && updateNotes.length > 0 ? (
-            <p className={css.updateLine}>
-              <span className={css.updateLabel}>{t('updateNotes')}</span>
-              <span className={css.updateValue}>{updateNotes}</span>
-            </p>
-          ) : null}
-        </div>
-      ) : null}
       {progress ? <p className={css.status}>{t('progress')}：{progress}</p> : null}
       {message ? (
         <p className={check?.status === 'error' ? css.statusError : css.status}>{message}</p>

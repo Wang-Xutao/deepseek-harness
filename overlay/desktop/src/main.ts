@@ -691,6 +691,10 @@ async function promptUpdateAfterReady(
   } catch {
     return
   }
+  // 【变更】2026-10-04 (用户问题 3): the splash-time background check lands
+  // here after the window is up — push it so the renderer (nav red dot,
+  // 版本与更新 card) reflects it without waiting for a manual check.
+  mainWindow?.webContents.send('update:checked', result)
   if (result.status !== 'available') return
 
   const scoped = updateService.getLastScoped()
@@ -742,7 +746,11 @@ ipcMain.handle('prefs:set', (_event, raw: unknown) => {
 ipcMain.handle('update:getVersions', () => updateService?.getVersions() ?? seedVersions())
 ipcMain.handle('update:check', async () => {
   if (updateService === undefined) updateService = createUpdateService()
-  return updateService.checkForUpdate()
+  const result = await updateService.checkForUpdate()
+  // 【变更】2026-10-04 (用户问题 3): push every check result to the renderer —
+  // the Settings nav red dot and the 版本与更新 page stay fresh without polling.
+  mainWindow?.webContents.send('update:checked', result)
+  return result
 })
 ipcMain.handle('update:start', async () => {
   if (updateService === undefined) updateService = createUpdateService()
