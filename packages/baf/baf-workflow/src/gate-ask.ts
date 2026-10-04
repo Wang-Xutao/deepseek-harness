@@ -40,6 +40,7 @@ import {
 } from './gate-dialog.ts'
 import { driveGateResolve, loadWorkspaceBaseline } from './command-drives.ts'
 import { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
+import { tierRouteSelectorFor } from './route-dispatch.ts'
 import { beginIntake } from './begin-intake.ts'
 import { bindSessionChange } from './session-change.ts'
 import { clearParkedRequirementFor } from './requirement-park.ts'
@@ -408,7 +409,11 @@ export function apply(ctx: Context): void {
                 // change's authoring rest.
                 const conflictSessionId = agentSessionId(agent)
                 if (conflictSessionId !== undefined) bindSessionChange(cwd, conflictSessionId, focus.changeId)
-                const conflictDispatch = makeGoDispatcher(cwd, agent as unknown as DispatchAgent)
+                const conflictDispatch = makeGoDispatcher(
+                  cwd,
+                  agent as unknown as DispatchAgent,
+                  tierRouteSelectorFor(cwd, ctx, agent as unknown as DispatchAgent),
+                )
                 const result = await driveGateResolve(
                   cwd,
                   'active-conflict',
@@ -539,7 +544,11 @@ export function apply(ctx: Context): void {
           const extra = bugPlanExtraArgs(input.bugPlan)
           // 2026-09-23 issue #1: the dialog answer is a customer click — the
           // resolved drive may dispatch at the rest it lands on.
-          const askDispatch = makeGoDispatcher(cwd, agent as unknown as DispatchAgent)
+          const askDispatch = makeGoDispatcher(
+            cwd,
+            agent as unknown as DispatchAgent,
+            tierRouteSelectorFor(cwd, ctx, agent as unknown as DispatchAgent),
+          )
           let result: CommandResult
           try {
             result = await driveGateResolve(

@@ -48,6 +48,7 @@ import { askGateDialogQueued, judgmentOf, reAskGateAfterRefusal, resolveUserQues
 import { driveGateResolve, loadWorkspaceBaseline } from './command-drives.ts'
 import { beginIntake } from './begin-intake.ts'
 import { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
+import { tierRouteSelectorFor } from './route-dispatch.ts'
 import { parkRequirement, clearParkedRequirement } from './requirement-park.ts'
 import { enqueueAsk, hasPendingAsk, type AskOutcome } from './ask-queue.ts'
 import { isActiveChange, ProjectionStore } from './projection.ts'
@@ -187,7 +188,11 @@ async function offerAutoPop(
     if (outcome.kind === 'answered') {
       // 2026-09-23 issue #1: the classify confirm click is a customer
       // action — the chained open drive may dispatch at its authoring rest.
-      const classifyDispatch = makeGoDispatcher(cwd, agent as unknown as DispatchAgent)
+      const classifyDispatch = makeGoDispatcher(
+        cwd,
+        agent as unknown as DispatchAgent,
+        tierRouteSelectorFor(cwd, ctx, agent as unknown as DispatchAgent),
+      )
       const result = await driveGateResolve(
         cwd,
         'intake-classify',
@@ -228,7 +233,11 @@ async function offerAutoPop(
         })
         ctx.logger.info(`[baf] ${new Date().toISOString()} - session baf:auto-pop reAsked change=${minted} outcome=${reAsked.kind}${reAsked.kind === 'answered' ? ` option=${reAsked.optionId}` : ''}`)
         if (reAsked.kind === 'answered') {
-          const retryDispatch = makeGoDispatcher(cwd, agent as unknown as DispatchAgent)
+          const retryDispatch = makeGoDispatcher(
+            cwd,
+            agent as unknown as DispatchAgent,
+            tierRouteSelectorFor(cwd, ctx, agent as unknown as DispatchAgent),
+          )
           const retry = await driveGateResolve(
             cwd,
             'intake-classify',

@@ -62,6 +62,7 @@ import {
 } from './command-drives.ts'
 import { driveGo } from './go-coordinator.ts'
 import { makeGoDispatcher } from './go-dispatch.ts'
+import { tierRouteSelectorFor } from './route-dispatch.ts'
 import { continueParkedRequirement } from './requirement-park.ts'
 import { makeGateAsk, type GateDialogAgent } from './gate-dialog.ts'
 import { renderGate } from './gate-cards.ts'
@@ -273,7 +274,7 @@ export function apply(ctx: Context): void {
         // the origin marker together authorize the work order (2026-09-23
         // issue #1 widened the surface: gate-dialog and Tab clicks build the
         // same pair where they have a live agent).
-        const dispatch = makeGoDispatcher(cwd, agent)
+        const dispatch = makeGoDispatcher(cwd, agent, tierRouteSelectorFor(cwd, ctx, agent))
         const adapters = resolveDriveAdapters(ctx, agent, cwd)
         const result = await driveGo({
           cwd,
@@ -310,7 +311,7 @@ export function apply(ctx: Context): void {
         // 【变更】2026-09-23 (user issue #1): the customer typed this command,
         // so its confirm path dispatches too — a confirm that advances into a
         // template rest must wake the model exactly like /baf-go would.
-        const dispatch = makeGoDispatcher(cwd, agent)
+        const dispatch = makeGoDispatcher(cwd, agent, tierRouteSelectorFor(cwd, ctx, agent))
         const adapters = resolveDriveAdapters(ctx, agent, cwd)
         const result = await driveGo({
           cwd,

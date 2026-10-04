@@ -3,7 +3,7 @@
  * @module @deepseek-ai/dsh-baf-workflow/route-audit
  */
 
-import type { RouteResolution, WorkflowNode } from '@deepseek-ai/dsh-baf-core'
+import type { RouteResolution, RouteTier, WorkflowNode } from '@deepseek-ai/dsh-baf-core'
 import type { Session } from '@deepseek-ai/dsh-session'
 
 /**
@@ -20,6 +20,13 @@ export interface RouteAuditEntry {
     readonly model: string
     readonly reason: string
   }
+  /**
+   * 多模型路由 M2 — the effective tier that routed this turn, present only
+   * on tier-routed dispatches (other resolvers and failures omit it).
+   */
+  readonly tier?: RouteTier
+  /** Whether the frozen keyword tier decided it (`keyword`) or the phase mapping (`phase`). */
+  readonly tierReason?: 'keyword' | 'phase'
   readonly at: string
   readonly sessionId: string
   readonly changeId?: string
@@ -51,6 +58,9 @@ export interface RouteAuditSuccessInput {
   readonly resolution: RouteResolution
   readonly sessionId: string
   readonly changeId?: string
+  /** 多模型路由 M2 — tier decision, when the turn was tier-routed. */
+  readonly tier?: RouteTier
+  readonly tierReason?: 'keyword' | 'phase'
   readonly at?: string
 }
 
@@ -78,6 +88,8 @@ export function routeAuditFromResolution(input: RouteAuditSuccessInput): RouteAu
     source: resolution.source,
     phase: resolution.phase,
     ...resolution.fallbackFrom === undefined ? {} : { fallbackFrom: resolution.fallbackFrom },
+    ...input.tier === undefined ? {} : { tier: input.tier },
+    ...input.tierReason === undefined ? {} : { tierReason: input.tierReason },
     at: input.at ?? new Date().toISOString(),
     sessionId: input.sessionId,
     ...input.changeId === undefined ? {} : { changeId: input.changeId },

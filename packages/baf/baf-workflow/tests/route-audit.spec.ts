@@ -60,4 +60,25 @@ describe('route audit', () => {
       failureReason: 'model_fallback_blocked: none',
     })
   })
+
+  it('carries the tier decision on tier-routed dispatches and omits it otherwise (多模型路由 M2)', () => {
+    const resolution: RouteResolution = {
+      provider: 'p1',
+      model: 'big-brain',
+      source: 'phase',
+      phase: 'implement',
+    }
+    const tiered = routeAuditFromResolution({
+      resolution,
+      sessionId: 's-1',
+      changeId: 'chg-2',
+      tier: 'high',
+      tierReason: 'keyword',
+    })
+    expect(tiered).toMatchObject({ tier: 'high', tierReason: 'keyword' })
+
+    const untiered = routeAuditFromResolution({ resolution, sessionId: 's-1' })
+    expect(untiered.tier).toBeUndefined()
+    expect(untiered.tierReason).toBeUndefined()
+  })
 })

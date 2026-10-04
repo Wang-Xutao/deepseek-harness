@@ -47,6 +47,7 @@ import {
 import { driveGateResolve, loadWorkspaceBaseline, pipelineFor } from './command-drives.ts'
 import { dispatchGateRevisionFromTab, dueGateFor } from './go-coordinator.ts'
 import { expireDispatchLedger, makeGoDispatcher, artifactPathFor } from './go-dispatch.ts'
+import { tierRouteSelectorFor } from './route-dispatch.ts'
 import { continueParkedRequirement } from './requirement-park.ts'
 import { resetScaffoldOffer, scaffoldDialogOffered } from './scaffold-offer.ts'
 import type { GateId } from './gate-cards.ts'
@@ -240,7 +241,7 @@ async function popGate(
   // the artifact edit re-arms this pop's fingerprint and the gate re-pops
   // after the model reworks the document.
   if (outcome.kind === 'revise') {
-    const revisionDispatch = makeGoDispatcher(cwd, agent)
+    const revisionDispatch = makeGoDispatcher(cwd, agent, tierRouteSelectorFor(cwd, ctx, agent))
     const revisionCard = dispatchGateRevisionFromTab(cwd, revisionDispatch, gate.gateId, gate.changeId, outcome.text)
     ctx.logger.info(
       `${stamp()} - session baf:orchestrate gate=${gate.gateId} change=${gate.changeId ?? '-'} outcome=revise dispatched=${revisionCard !== undefined} textLen=${outcome.text.length}`,
@@ -259,7 +260,7 @@ async function popGate(
   // carries this session's work-order channel — a confirm that advances into
   // a template rest now dispatches the order that wakes the model, instead of
   // leaving the freshly-installed template in silence.
-  const gateDispatch = makeGoDispatcher(cwd, agent)
+  const gateDispatch = makeGoDispatcher(cwd, agent, tierRouteSelectorFor(cwd, ctx, agent))
   const result = await driveGateResolve(
     cwd,
     gate.gateId,
@@ -294,7 +295,7 @@ async function popGate(
     })
     ctx.logger.info(`${stamp()} - session baf:orchestrate gate=${gate.gateId} change=${gate.changeId ?? '-'} reAsked=${reAsked.kind}${reAsked.kind === 'answered' ? ` option=${reAsked.optionId}` : ''}`)
     if (reAsked.kind === 'answered') {
-      const reDispatch = makeGoDispatcher(cwd, agent)
+      const reDispatch = makeGoDispatcher(cwd, agent, tierRouteSelectorFor(cwd, ctx, agent))
       const retry = await driveGateResolve(
         cwd,
         gate.gateId,
@@ -312,7 +313,7 @@ async function popGate(
     } else if (reAsked.kind === 'revise') {
       // Same treatment as the original pop's revise answer — the custom text
       // is a customer action and gets the revision dispatch.
-      const revisionDispatch = makeGoDispatcher(cwd, agent)
+      const revisionDispatch = makeGoDispatcher(cwd, agent, tierRouteSelectorFor(cwd, ctx, agent))
       const revisionCard = dispatchGateRevisionFromTab(cwd, revisionDispatch, gate.gateId, gate.changeId, reAsked.text)
       ctx.logger.info(`${stamp()} - session baf:orchestrate gate=${gate.gateId} change=${gate.changeId ?? '-'} reAsked=revise dispatched=${revisionCard !== undefined} textLen=${reAsked.text.length}`)
     }
@@ -592,7 +593,7 @@ async function dispatchRestingGap(
   if (missing === undefined || missing.length === 0) return
   const agent = ctx.agents.get(sessionId as Parameters<typeof ctx.agents.get>[0])
   if (agent === undefined) return
-  const dispatch = makeGoDispatcher(cwd, agent)
+  const dispatch = makeGoDispatcher(cwd, agent, tierRouteSelectorFor(cwd, ctx, agent))
   if (dispatch === undefined) return
   const outcome = dispatch({
     changeId,
@@ -698,7 +699,7 @@ async function popBind(
   focusFor(cwd).set(picked)
   // 2026-09-23 issue #1: the bind pick is a customer click — the inner
   // /baf-go may dispatch at the picked change's authoring rest.
-  const bindDispatch = makeGoDispatcher(cwd, agent)
+  const bindDispatch = makeGoDispatcher(cwd, agent, tierRouteSelectorFor(cwd, ctx, agent))
   const result = await driveGateResolve(
     cwd,
     'bind-workflow',

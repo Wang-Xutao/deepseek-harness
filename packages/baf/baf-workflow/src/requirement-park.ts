@@ -43,6 +43,7 @@ import { beginIntake } from './begin-intake.ts'
 import { driveGateResolve, type DriveAdapters } from './command-drives.ts'
 import { askGateDialogQueued, judgmentOf, resolveUserQuestions, type GateDialogAgent } from './gate-dialog.ts'
 import { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
+import { tierRouteSelectorFor } from './route-dispatch.ts'
 import { isActiveChange, pickActiveChange, ProjectionStore } from './projection.ts'
 import { sharedHostMap } from './host-memory.ts'
 
@@ -134,6 +135,7 @@ function sessionKeyOf(agent: unknown): string {
  */
 async function continueCreateLeg(
   service: NonNullable<ReturnType<typeof resolveUserQuestions>>,
+  ctx: Context,
   agent: unknown,
   cwd: string,
   sessionKey: string,
@@ -200,7 +202,7 @@ async function continueCreateLeg(
       ]),
     }
   }
-  const dispatch = makeGoDispatcher(cwd, agent as DispatchAgent)
+  const dispatch = makeGoDispatcher(cwd, agent as DispatchAgent, tierRouteSelectorFor(cwd, ctx, agent as DispatchAgent))
   return driveGateResolve(
     cwd,
     'intake-classify',
@@ -276,7 +278,7 @@ export async function continueParkedRequirement(
   const store = new ProjectionStore({ workspaceRoot: cwd })
   const actives = (await store.readIndex()).changes.filter(isActiveChange)
   if (actives.length === 0) {
-    return await continueCreateLeg(service, agent, cwd, sessionKey, requirement, adapters)
+    return await continueCreateLeg(service, ctx, agent, cwd, sessionKey, requirement, adapters)
   }
 
   // 【变更】2026-09-23 (demo1 issue #1 follow-up): the parked statement may
@@ -327,7 +329,7 @@ export async function continueParkedRequirement(
       ]),
     }
   }
-  const dispatch = makeGoDispatcher(cwd, agent as DispatchAgent)
+  const dispatch = makeGoDispatcher(cwd, agent as DispatchAgent, tierRouteSelectorFor(cwd, ctx, agent as DispatchAgent))
   const resolved = await driveGateResolve(
     cwd,
     'active-conflict',
@@ -344,7 +346,7 @@ export async function continueParkedRequirement(
   // The abandon option frees the workspace — the parked requirement continues
   // from the create leg in the same /baf-go (the gate-ask bootstrap's dance).
   if (conflict.optionId === 'abandon') {
-    const after = await continueCreateLeg(service, agent, cwd, sessionKey, requirement, adapters)
+    const after = await continueCreateLeg(service, ctx, agent, cwd, sessionKey, requirement, adapters)
     if (after !== undefined) {
       return { kind: after.kind, text: `${resolved.text}\n\n${after.text}` }
     }

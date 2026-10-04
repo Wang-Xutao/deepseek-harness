@@ -4,6 +4,7 @@
  */
 
 import type { ChangeIntake } from './intake.ts'
+import type { RouteTier } from './route-tier.ts'
 import type { BaselineLock } from './workflow.ts'
 import type { TerminalState, WorkflowNode } from './workflow.ts'
 import type { TransitionSource } from './adapters.ts'
@@ -41,6 +42,18 @@ export interface AwaitingConfirmSnapshot {
 export type ProjectionEvent =
   | (ProjectionEventBase & { type: 'intake-classified'; intake: ChangeIntake })
   | (ProjectionEventBase & { type: 'intake-confirmed'; by: 'user' | 'rule' })
+  | (ProjectionEventBase & {
+    /**
+     * 【变更】2026-10-05 (多模型路由 M2): the keyword complexity tier, evaluated
+     * ONCE at intake classification confirm and frozen into the change — later
+     * config edits never re-tier an in-flight change (the same freeze semantics
+     * as `freezeRouteContext`). Only written on a keyword hit.
+     */
+    type: 'task-tier-frozen'
+    tier: RouteTier
+    /** The lowercase keyword that matched. */
+    matched?: string
+  })
   | (ProjectionEventBase & {
     /**
      * §22.17 J — the customer overrode the classifier's path choice at the

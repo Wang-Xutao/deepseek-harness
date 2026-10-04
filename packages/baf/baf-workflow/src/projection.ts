@@ -18,6 +18,7 @@ import {
   type NodeAnnotation,
   type NodeStatus,
   type ProjectionEvent,
+  type RouteTier,
   type TerminalState,
   type WorkflowMode,
   type WorkflowNode,
@@ -160,6 +161,8 @@ interface FoldState {
   nodes: Partial<Record<WorkflowNode, NodeStatus>>
   annotations: Partial<Record<WorkflowNode, NodeAnnotation>>
   intake?: ChangeIntake
+  /** 多模型路由 M2 — keyword tier frozen at intake confirm; absent when no rule hit. */
+  taskTier?: { tier: RouteTier; matched?: string }
   terminal?: TerminalState
   updatedAt?: string
   openspecSkipped?: { skipped: boolean; reasonCodes: readonly string[] }
@@ -202,6 +205,7 @@ export function replay(changeId: string, events: readonly ProjectionEvent[]): Wo
     nodes: { ...state.nodes },
     ...(Object.keys(state.annotations).length > 0 ? { annotations: { ...state.annotations } } : {}),
     ...(state.intake === undefined ? {} : { intake: state.intake }),
+    ...(state.taskTier === undefined ? {} : { taskTier: state.taskTier }),
     projectionVersion: events.at(-1)?.seq ?? 0,
     ...(state.terminal === undefined ? {} : { terminal: state.terminal }),
     ...(state.updatedAt === undefined ? {} : { updatedAt: state.updatedAt }),
@@ -265,6 +269,17 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
         state.intake = { ...state.intake, confirmation: 'confirmed', requiresUserConfirmation: false }
       }
       state.nodes.intake = 'completed'
+      break
+    case 'task-tier-frozen':
+      // 多模型路由 M2 — the frozen keyword tier. First freeze wins: a stray
+      // later event (a replayed double confirm) never re-tiers an in-flight
+      // change, matching the freeze-once semantics of the confirm path.
+      if (state.taskTier === undefined) {
+        state.taskTier = {
+          tier: event.tier,
+          ...(event.matched === undefined ? {} : { matched: event.matched }),
+        }
+      }
       break
     case 'intake-mode-set': {
       // §22.17 J — customer path override at the classify gate. Legal while

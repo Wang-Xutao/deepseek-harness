@@ -73,7 +73,10 @@ export const DEFAULT_PHASE_TIER: Readonly<Record<WorkflowNode, RouteTier>> = {
 
 /** Default capability tags per tier (PHASE_REQUIRED_CAPABILITIES coverage). */
 export const TIER_CAPABILITIES: Readonly<Record<RouteTier, readonly RouteCapability[]>> = {
-  high: ['reasoning', 'long-context', 'tool-use', 'structured-output'],
+  // 多模型路由 M2: high carries coding too — implement requires it, and a
+  // reasoning-grade model without the tag could never receive an escalated
+  // implement turn (the capability floor would veto the keyword escalation).
+  high: ['reasoning', 'long-context', 'tool-use', 'structured-output', 'coding'],
   mid: ['structured-output', 'tool-use', 'long-context'],
   low: ['coding', 'tool-use', 'low-latency'],
 }
@@ -253,6 +256,21 @@ function tierAllowed(config: RouteTierConfig): {
 function tierRef(config: RouteTierConfig, tier: RouteTier): ModelRef {
   const spec = config.tiers[tier]
   return { provider: spec.provider, model: spec.model }
+}
+
+/**
+ * Which tier a resolved provider/model landed on — the reasoning-effort
+ * lookup after a fallback moved a turn to a different tier's model.
+ * @param config - normalized config.
+ * @param ref - resolved route.
+ * @returns the strongest tier naming this ref, or undefined.
+ */
+export function findTierByRef(config: RouteTierConfig, ref: ModelRef): RouteTier | undefined {
+  for (const tier of TIERS_FALLDOWN) {
+    const candidate = tierRef(config, tier)
+    if (candidate.provider === ref.provider && candidate.model === ref.model) return tier
+  }
+  return undefined
 }
 
 /**

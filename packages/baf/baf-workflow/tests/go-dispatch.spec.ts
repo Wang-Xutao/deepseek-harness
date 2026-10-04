@@ -277,3 +277,42 @@ describe('makeGoDispatcher', () => {
     expect(sent).toHaveLength(1)
   })
 })
+
+describe('makeGoDispatcher route hook (多模型路由 M2)', () => {
+  const SIGNAL: DispatchSignal = { ...CLARIFY_GAP, changeId: 'change-route-1' }
+
+  it('calls route after the busy/dedupe gates and before followup', () => {
+    resetDispatchLedger()
+    const order: string[] = []
+    // The dispatcher binds followup at construction, so the ordered recorder
+    // must exist before makeGoDispatcher runs.
+    const agent = {
+      status: 'idle' as const,
+      followup: vi.fn(() => { order.push('followup') }),
+    }
+    const dispatch = makeGoDispatcher('/ws', agent, () => { order.push('route') })
+    expect(dispatch?.(SIGNAL)).toBe('sent')
+    expect(order).toEqual(['route', 'followup'])
+  })
+
+  it('never lets a routing failure block the work order', () => {
+    resetDispatchLedger()
+    const { sent, agent } = recorder()
+    const dispatch = makeGoDispatcher('/ws', agent, () => { throw new Error('route exploded') })
+    expect(dispatch?.({ ...SIGNAL, changeId: 'change-route-2' })).toBe('sent')
+    expect(sent).toHaveLength(1)
+  })
+
+  it('skips routing for deduped and busy dispatches', () => {
+    resetDispatchLedger()
+    const routed: number[] = []
+    const route = () => { routed.push(routed.length) }
+    const idle = makeGoDispatcher('/ws', recorder().agent, route)
+    expect(idle?.(SIGNAL)).toBe('sent')
+    expect(idle?.(SIGNAL)).toBe('deduped')
+    expect(routed).toHaveLength(1)
+    const busyDispatch = makeGoDispatcher('/ws', recorder('running').agent, route)
+    expect(busyDispatch?.(SIGNAL)).toBe('busy')
+    expect(routed).toHaveLength(1)
+  })
+})

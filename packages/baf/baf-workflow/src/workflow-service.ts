@@ -5,6 +5,8 @@
 
 import {
   BafError,
+  isTierRoutingActive,
+  resolveTaskTier,
   type IntakeInput,
   type IntakeResult,
   type ResumeResult,
@@ -19,6 +21,8 @@ import {
 } from '@deepseek-ai/dsh-baf-core'
 import { classifyIntake } from './intake.ts'
 import { ProjectionStore } from './projection.ts'
+import { readRouteTierConfigSync } from './route-config-io.ts'
+import { rememberTaskTier } from './task-tier-memory.ts'
 import { assertTransitionAccepted, decideTransition } from './transition.ts'
 
 /** Options for {@link createWorkflowService}. */
@@ -182,15 +186,34 @@ export async function confirmIntake(
     by,
     ...meta,
   }))
+  let current = next
+  // 【变更】2026-10-05 (多模型路由 M2): freeze the keyword tier ONCE at
+  // confirm — the dispatch-time routing reads this frozen value, so a later
+  // config edit never re-tiers an in-flight change. No config / disabled /
+  // no keyword hit freezes nothing (the phase mapping alone routes).
+  const tierConfig = readRouteTierConfigSync()
+  if (tierConfig !== undefined && isTierRoutingActive(tierConfig)) {
+    const hit = resolveTaskTier(next.intake?.summary ?? '', tierConfig.keywords ?? [])
+    if (hit !== undefined) {
+      const { status: frozen } = await store.append(next.changeId, next.projectionVersion, meta => ({
+        type: 'task-tier-frozen' as const,
+        tier: hit.tier,
+        matched: hit.matched,
+        ...meta,
+      }))
+      rememberTaskTier(store.workspaceRoot(), next.changeId, hit)
+      current = frozen
+    }
+  }
   // 【变更】2026-09-24 (demo6 问题 6): settle the pre-judgment KIND at the
   // moment the path is settled — the customer just picked 完整流程 /
   // 缺陷修复路径, so an unknown keyword kind derives from that pick
   // (bug-fix→bug, full-go→new-requirement) instead of reading
   // 「待分类/归档确定」 for the whole flow. Scope stays 待定 until the plan
   // freezes the allowlist (its own settle at plan completion).
-  if (next.intake?.kind === 'unknown') {
-    const kind = next.mode === 'bug-fix-path' ? 'bug' : 'new-requirement'
-    const { status: settled } = await store.append(next.changeId, next.projectionVersion, meta => ({
+  if (current.intake?.kind === 'unknown') {
+    const kind = current.mode === 'bug-fix-path' ? 'bug' : 'new-requirement'
+    const { status: settled } = await store.append(current.changeId, current.projectionVersion, meta => ({
       type: 'intake-settled' as const,
       kind,
       reasonCodes: ['settled-at-confirm'] as const,
@@ -198,7 +221,7 @@ export async function confirmIntake(
     }))
     return settled
   }
-  return next
+  return current
 }
 
 /**

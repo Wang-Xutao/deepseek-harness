@@ -156,6 +156,27 @@ function currentSelection(ctx: Context, sessionId: SessionId) {
     ?? ctx.agentDefaultModel.currentSelection()
 }
 
+describe('host-plane dispatch selection passthrough (多模型路由 M2)', () => {
+  it('exposes selectForNextRequest on the facade so dispatch surfaces can pin the next request model', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    const controller = createSessionTestController(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    controller.selectForNextRequest(agent, {
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: ReasoningEffortId('high'),
+    })
+    expect(currentSelection(ctx, sessionId)).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'high',
+    })
+    await ctx.fiber.dispose()
+  })
+})
+
 describe('Web session model selection', () => {
   it('validates an ordered image batch before persisting any member', async () => {
     const { ctx, agent, sessionId } = await harness()

@@ -2,7 +2,7 @@
 
 import { hostname } from 'node:os'
 import { resolve } from 'node:path'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-fs'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -203,6 +203,21 @@ export class SessionController extends TypertRemoteService {
       if (event.type !== 'user/message' || event.data.source.kind !== 'user') return
       ctx.emit('api-session/activity', session.id, event.time)
     })
+  }
+
+  /**
+   * 【变更】2026-10-05 (多模型路由 M2): pin the model for the addressed
+   * agent's NEXT request. Public facade passthrough over the agents
+   * controller (whose instance is private): host-plane dispatch surfaces —
+   * baf-workflow's route hook reaches this service through the scope chain —
+   * must not need a second model-selection waterfall of their own; this is
+   * the same durable path the `selectModel` remote walks (event + pending
+   * selection consumed by the next prompt assembly).
+   * @param agent - live Agent the upcoming request belongs to.
+   * @param selection - validated selection to pin.
+   */
+  selectForNextRequest(agent: Agent, selection: AgentModelSelection): void {
+    this.agents.selectForNextRequest(agent, selection)
   }
 
   private promote(observation: SessionObservation): void {

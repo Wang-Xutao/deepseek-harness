@@ -5,7 +5,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, afterEach } from 'vitest'
 import { BafError } from '@deepseek-ai/dsh-baf-core'
 import { classifyIntake } from '../src/intake.ts'
 import { ProjectionStore, replay } from '../src/projection.ts'
@@ -13,6 +13,15 @@ import { decideTransition } from '../src/transition.ts'
 import { confirmIntake, createWorkflowService } from '../src/workflow-service.ts'
 import { buildEmptyTabView, statusToTabView } from '@deepseek-ai/dsh-baf-core'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
+import { writeRouteTierConfigSync } from '../src/route-config-io.ts'
+import { resetTaskTierMemory, taskTierFor } from '../src/task-tier-memory.ts'
+
+const savedDshHome = process.env.DSH_HOME
+afterEach(() => {
+  if (savedDshHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = savedDshHome
+  resetTaskTierMemory()
+})
 
 describe('projection store', () => {
   it('appends, replays, and rejects stale expectedSeq', async () => {
@@ -48,6 +57,81 @@ describe('projection store', () => {
       expect(confirmed.nodes.intake).toBe('completed')
     } finally {
       await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('freezes the keyword task tier into the projection at intake confirm (多模型路由 M2)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-proj-tier-'))
+    const home = await mkdtemp(join(tmpdir(), 'baf-proj-tier-home-'))
+    try {
+      process.env.DSH_HOME = home
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), {
+        schema: 1,
+        enabled: true,
+        tiers: {
+          high: { provider: 'p', model: 'big' },
+          mid: { provider: 'p', model: 'mid' },
+          low: { provider: 'p', model: 'cheap' },
+        },
+        keywords: [{ words: '架构', tier: 'high' }],
+      })
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const service = createWorkflowService({ store })
+      const { intake } = await service.intake({
+        description: '梳理整体架构并重构模块边界',
+        workspace: { root },
+      })
+      const confirmed = await confirmIntake(store, intake.changeId)
+      expect(confirmed.taskTier).toEqual({ tier: 'high', matched: '架构' })
+      const types = (await store.readEvents(intake.changeId)).events.map(event => event.type)
+      expect(types).toContain('task-tier-frozen')
+      // The dispatch-time sync cache holds the frozen tier for this workspace.
+      expect(taskTierFor(root, intake.changeId)).toEqual({ tier: 'high', matched: '架构' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('freezes nothing when tier routing is inactive or no keyword hits', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-proj-tier-off-'))
+    const home = await mkdtemp(join(tmpdir(), 'baf-proj-tier-home2-'))
+    try {
+      // No config file at all.
+      process.env.DSH_HOME = home
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const service = createWorkflowService({ store })
+      const { intake } = await service.intake({
+        description: '梳理整体架构并重构模块边界',
+        workspace: { root },
+      })
+      const confirmed = await confirmIntake(store, intake.changeId)
+      expect(confirmed.taskTier).toBeUndefined()
+      expect((await store.readEvents(intake.changeId)).events.map(event => event.type))
+        .not.toContain('task-tier-frozen')
+
+      // Enabled config whose keywords do not hit: still no freeze.
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), {
+        schema: 1,
+        enabled: true,
+        tiers: {
+          high: { provider: 'p', model: 'big' },
+          mid: { provider: 'p', model: 'mid' },
+          low: { provider: 'p', model: 'cheap' },
+        },
+        keywords: [{ words: '性能优化', tier: 'high' }],
+      })
+      const second = await service.intake({
+        description: '补充 README 的安装说明',
+        workspace: { root },
+      })
+      const secondConfirmed = await confirmIntake(store, second.intake.changeId)
+      expect(secondConfirmed.taskTier).toBeUndefined()
+      expect((await store.readEvents(second.changeId)).events.map(event => event.type))
+        .not.toContain('task-tier-frozen')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
     }
   })
 

@@ -18,6 +18,7 @@ import {
   isTierRoutingActive,
   parseRouteTierConfig,
   resolveTaskTier,
+  findTierByRef,
   synthesizeTierPolicy,
   type RouteTierConfig,
 } from '../src/route-tier.ts'
@@ -217,5 +218,25 @@ describe('tier vocabulary', () => {
     expect(TIER_CAPABILITIES.high).toContain('reasoning')
     expect(TIER_CAPABILITIES.mid).toContain('structured-output')
     expect(TIER_CAPABILITIES.low).toContain('coding')
+    // 多模型路由 M2: high also codes — without the coding tag, an escalated
+    // implement turn (phase requires coding) could never run on the high
+    // model; the capability floor would veto the keyword escalation and the
+    // approved-only fallback would undo it.
+    expect(TIER_CAPABILITIES.high).toContain('coding')
+  })
+})
+
+describe('findTierByRef', () => {
+  it('finds the tier a resolved ref landed on (fallback effort lookup)', () => {
+    const config = makeConfig()
+    expect(findTierByRef(config, HIGH)).toBe('high')
+    expect(findTierByRef(config, LOW)).toBe('low')
+    expect(findTierByRef(config, { provider: 'other', model: 'x' })).toBeUndefined()
+  })
+
+  it('prefers the stronger tier when two tiers share one model', () => {
+    const config = makeConfig()
+    config.tiers.mid = { ...HIGH }
+    expect(findTierByRef(config, HIGH)).toBe('high')
   })
 })

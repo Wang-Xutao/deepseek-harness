@@ -95,6 +95,13 @@ export type DispatchOrigin = 'customer'
 /** One dispatch attempt against the addressed session. */
 export type GoDispatch = (signal: DispatchSignal) => GoDispatchOutcome
 
+/**
+ * 【变更】2026-10-05 (多模型路由 M2): per-turn model routing hook, called after
+ * the busy/dedupe gates and immediately before the order is queued. Routing
+ * must never block a dispatch: the dispatcher isolates hook failures.
+ */
+export type DispatchRoute = (signal: DispatchSignal) => void
+
 /** The host agent face a dispatcher needs — `Agent.followup` + `Agent.status`. */
 export interface DispatchAgent {
   /** Queue a user-role message into the next-turn inbox and wake the driver. */
@@ -320,7 +327,11 @@ function sessionKeyOf(agent: DispatchAgent): string {
  * @param agent - the addressed session's runtime agent.
  * @returns the dispatcher, or undefined.
  */
-export function makeGoDispatcher(cwd: string, agent: DispatchAgent | undefined): GoDispatch | undefined {
+export function makeGoDispatcher(
+  cwd: string,
+  agent: DispatchAgent | undefined,
+  route?: DispatchRoute,
+): GoDispatch | undefined {
   if (agent === undefined || agent.followup === undefined) return undefined
   const followup = agent.followup.bind(agent)
   const sessionKey = sessionKeyOf(agent)
@@ -331,6 +342,14 @@ export function makeGoDispatcher(cwd: string, agent: DispatchAgent | undefined):
     if (agent.status === 'running') return 'busy'
     const key = ledgerKey(sessionKey, cwd, signal)
     if (SENT.has(key)) return 'deduped'
+    // 多模型路由 M2: the model this order's turn runs on is chosen here.
+    // A routing failure never blocks the order — the turn simply runs on the
+    // session's current model, same as an unrouted dispatch.
+    try {
+      route?.(signal)
+    } catch {
+      /* routing is best-effort by contract */
+    }
     followup(workOrderMessage(signal))
     SENT.add(key)
     return 'sent'

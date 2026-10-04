@@ -118,6 +118,14 @@ export interface WorkflowStatus {
   readonly annotations?: Readonly<Partial<Record<WorkflowNode, NodeAnnotation>>>
   readonly intake?: ChangeIntake
   readonly route?: RouteSummary
+  /**
+   * 【变更】2026-10-05 (多模型路由 M2): the keyword tier frozen at intake
+   * confirm, when one matched. Present only for changes with a hit.
+   */
+  readonly taskTier?: {
+    readonly tier: import('./route-tier.ts').RouteTier
+    readonly matched?: string
+  }
   readonly baseline?: BaselineLock
   readonly sourceRevision?: string
   readonly projectionVersion: number
