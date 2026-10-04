@@ -1,0 +1,89 @@
+/**
+ * Host Remote for the BAF multi-model route-tier config
+ * (`~/.dsh/baf-route-config.json`): get/save/reset plus the
+ * `baf-route-config/changed` announcement every surface re-reads on. The
+ * settings UI (M3) is the primary client; dispatch-time routing re-reads the
+ * file per turn, so a save applies to the very next work order without a
+ * restart.
+ * @module @deepseek-ai/dsh-baf-workflow/route-config-service
+ */
+
+import { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { parseRouteTierConfig, type RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
+import {
+  readRouteTierConfigSync,
+  resetRouteTierConfigSync,
+  writeRouteTierConfigSync,
+} from './route-config-io.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** BAF route-tier config Remote (host plane, process-global file). */
+    bafRouteConfig: BafRouteConfigService
+  }
+  interface Events {
+    /**
+     * The route-tier config changed (save or reset, from any surface).
+     * Clients re-read `get`.
+     * @mode emit
+     */
+    'baf-route-config/changed'(): void
+  }
+}
+
+/** Folded save outcome; `error` carries a field summary for inline UI hints. */
+export interface BafRouteConfigSaveResult {
+  readonly ok: boolean
+  readonly error?: string
+}
+
+/**
+ * The route-tier config Remote. File-backed and synchronous under the hood —
+ * the file is tiny, and the dispatch path deliberately re-reads it per turn.
+ */
+export class BafRouteConfigService extends TypertRemoteService {
+  static Config = z.object({})
+
+  constructor(ctx: Context, _config: Record<string, never>) {
+    super(ctx, 'bafRouteConfig')
+  }
+
+  /**
+   * Read the persisted config.
+   * @returns normalized config, or null when absent/invalid (routing bypasses).
+   */
+  @Remote
+  async get(): Promise<RouteTierConfig | null> {
+    return readRouteTierConfigSync() ?? null
+  }
+
+  /**
+   * Validate and persist a config document (normalized), then announce.
+   * @param config - candidate config from the settings UI.
+   * @returns ok:false + error summary when validation fails; file untouched.
+   */
+  @Remote
+  async save(config: RouteTierConfig): Promise<BafRouteConfigSaveResult> {
+    const normalized = parseRouteTierConfig(config)
+    if (normalized === undefined) {
+      return { ok: false, error: 'config failed schema validation (tiers/keywords/phaseTier)' }
+    }
+    writeRouteTierConfigSync(undefined, normalized)
+    this.ctx.emit('baf-route-config/changed')
+    return { ok: true }
+  }
+
+  /**
+   * Remove the config file (routing returns to today's behavior), then announce.
+   */
+  @Remote
+  async reset(): Promise<void> {
+    resetRouteTierConfigSync()
+    this.ctx.emit('baf-route-config/changed')
+  }
+}
+
+export const name = 'baf-route-config-service'
+export default BafRouteConfigService

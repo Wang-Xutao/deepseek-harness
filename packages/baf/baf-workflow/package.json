@@ -52,6 +52,10 @@
       "types": "./lib/types/projection-events.d.ts",
       "default": "./lib/projection-events.js"
     },
+    "./route-config-service": {
+      "types": "./lib/types/route-config-service.d.ts",
+      "default": "./lib/route-config-service.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -65,6 +69,7 @@
     "lib/auto-pop.js",
     "lib/orchestrator.js",
     "lib/projection-events.js",
+    "lib/route-config-service.js",
     "lib/types/**/*.d.ts",
     "skills"
   ],
@@ -83,7 +88,9 @@
     "@deepseek-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
-    "commander": "^15.0.0"
+    "commander": "^15.0.0",
+    "@deepseek-ai/dsh-home-paths": "workspace:^",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

@@ -26,6 +26,7 @@ export * from './intake.ts'
 export * from './result.ts'
 export * from './route-policy.ts'
 export * from './route-policy-loader.ts'
+export * from './route-tier.ts'
 export * from './tab-view.ts'
 export * from './workflow.ts'
 // Pull the Remote-boundary re-export hub into every importing program so the

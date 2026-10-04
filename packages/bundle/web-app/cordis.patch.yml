@@ -50,6 +50,13 @@
     - id: featured-plugins
       name: '@deepseek-ai/dsh-baf-featured'
 
+    # baf-dsh 多模型路由 host service: the route-tier config Remote
+    # (get/save/reset over ~/.dsh/baf-route-config.json + changed events).
+    # App-level, not per-agent — the config file is process-global; the
+    # settings UI section (M3) is its browser face.
+    - id: baf-route-config
+      name: '@deepseek-ai/dsh-baf-workflow/route-config-service'
+
     - id: desktop-product-telemetry
       name: '@deepseek-ai/dsh-host-product-telemetry-otel'
       disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"

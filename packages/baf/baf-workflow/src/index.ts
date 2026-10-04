@@ -43,6 +43,8 @@ import { toModelSelection, toWorkflowAgentOptions } from './phase-route.ts'
 import { ProjectionStore } from './projection.ts'
 import { createWorkflowService, confirmIntake, rejectIntake } from './workflow-service.ts'
 import { StagePipeline } from './stages/pipeline.ts'
+import { readRouteTierConfigSync } from './route-config-io.ts'
+import { tierRouteDecision } from './tier-route-context.ts'
 import type { BaselineManifest } from '@deepseek-ai/dsh-baf-core'
 
 export * from './route.ts'
@@ -227,6 +229,8 @@ export class BafWorkflow extends Service {
   private lastByPhase: Partial<Record<WorkflowNode, RouteResolution>> = {}
   private store: ProjectionStore | undefined
   private workflow: WorkflowService | undefined
+  private explicitRouteFrozen = false
+  private tierFrozenJson: string | undefined
 
   constructor(ctx: Context, _config: Record<string, never>) {
     super(ctx, 'bafWorkflow')
@@ -312,6 +316,8 @@ export class BafWorkflow extends Service {
     this.routeProfile = profile
     this.dshDefault = dshDefault
     this.lastByPhase = {}
+    this.explicitRouteFrozen = true
+    this.tierFrozenJson = undefined
   }
 
   /**
@@ -449,6 +455,7 @@ export class BafWorkflow extends Service {
   }
 
   private requireFrozen(): { policy: EnterpriseRoutePolicy; profile: RouteProfile } {
+    this.ensureTierRoute()
     if (this.enterprisePolicy === undefined || this.routeProfile === undefined) {
       throw new BafError('policy_missing', 'enterprise route context is not frozen', {
         field: 'EnterpriseRoutePolicy',
@@ -456,6 +463,34 @@ export class BafWorkflow extends Service {
       })
     }
     return { policy: this.enterprisePolicy, profile: this.routeProfile }
+  }
+
+  /**
+   * 【变更】2026-10-05 (多模型路由 M1): lazily apply/clear the tier-route
+   * freeze from `~/.dsh/baf-route-config.json` when no enterprise policy was
+   * frozen explicitly — keeps `routeStatus()` in step with settings saves
+   * without host→isolate events. Dispatch-time routing recompiles per turn
+   * and never reads this freeze.
+   */
+  private ensureTierRoute(): void {
+    const decision = tierRouteDecision(
+      this.explicitRouteFrozen,
+      readRouteTierConfigSync(),
+      this.tierFrozenJson,
+    )
+    if (decision.kind === 'keep') return
+    if (decision.kind === 'clear') {
+      this.enterprisePolicy = undefined
+      this.routeProfile = undefined
+      this.dshDefault = undefined
+      this.lastByPhase = {}
+      this.tierFrozenJson = undefined
+      return
+    }
+    this.enterprisePolicy = decision.policy
+    this.routeProfile = decision.profile
+    this.lastByPhase = {}
+    this.tierFrozenJson = decision.json
   }
 
   private requireStore(): ProjectionStore {

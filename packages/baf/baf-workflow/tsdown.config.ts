@@ -92,4 +92,14 @@ export default defineConfig([
     dts: false,
     clean: false,
   },
+  {
+    entry: { 'route-config-service': 'lib/types/route-config-service.js' },
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'node',
+    target: 'es2024',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+  },
 ])
