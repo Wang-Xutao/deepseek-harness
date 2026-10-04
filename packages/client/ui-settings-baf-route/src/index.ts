@@ -15,26 +15,22 @@
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { parseRouteTierConfig, type RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
+import {
+  DEFAULT_PHASE_TIER, parseRouteTierConfig, resolveTaskTier, type RouteTierConfig,
+} from '@deepseek-ai/dsh-baf-core'
 import {
   readRouteTierConfigSync,
   resetRouteTierConfigSync,
   writeRouteTierConfigSync,
 } from '@deepseek-ai/dsh-baf-workflow/route-config-io'
-import type { BafRouteConfigSaveResult } from './types.ts'
+import type {
+  BafRouteConfigDefaults, BafRouteConfigSaveResult, BafRoutePreviewResult,
+} from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** BAF route-tier config Remote (host plane, process-global file). */
     bafRouteConfig: BafRouteConfigRemote
-  }
-  interface Events {
-    /**
-     * The route-tier config changed (save or reset, from any surface).
-     * Clients re-read `get`.
-     * @mode emit
-     */
-    'baf-route-config/changed'(): void
   }
 }
 
@@ -50,12 +46,18 @@ export class BafRouteConfigRemote extends TypertRemoteService {
   }
 
   /**
-   * Read the persisted config.
+   * Read the persisted config with the phase→tier defaults materialized: an
+   * absent `phaseTier` entry means the built-in default, and the settings row
+   * shows the EFFECTIVE mapping rather than a sparse one. The materialized
+   * document is exactly what a no-edit save would persist (same effective
+   * values, just explicit).
    * @returns normalized config, or null when absent/invalid (routing bypasses).
    */
   @Remote
   async get(): Promise<RouteTierConfig | null> {
-    return readRouteTierConfigSync() ?? null
+    const config = readRouteTierConfigSync()
+    if (config === undefined) return null
+    return { ...config, phaseTier: { ...DEFAULT_PHASE_TIER, ...config.phaseTier } }
   }
 
   /**
@@ -81,6 +83,36 @@ export class BafRouteConfigRemote extends TypertRemoteService {
   async reset(): Promise<void> {
     resetRouteTierConfigSync()
     this.ctx.emit('baf-route-config/changed')
+  }
+
+  /**
+   * 多模型路由 M3 预演: dry-run the intake keyword match host-side. The
+   * browser cannot value-import baf-core (client bundle purity), so the
+   * settings row ships the summary here and renders the tier a confirm would
+   * freeze — the same `resolveTaskTier` the freeze chain runs, one source of
+   * truth. Reads the SAVED config: an unsaved edit previews stale, which the
+   * row communicates with its own dirty marker.
+   * @param summary - a task summary as it would be intaken.
+   * @returns the tier (and the word that hit), or tier null when no keyword
+   * would freeze anything.
+   */
+  @Remote
+  async preview(summary: string): Promise<BafRoutePreviewResult> {
+    const config = readRouteTierConfigSync()
+    if (config === undefined || !config.enabled) return { tier: null }
+    const hit = resolveTaskTier(summary, config.keywords ?? [])
+    if (hit === undefined) return { tier: null }
+    return { tier: hit.tier, matched: hit.matched }
+  }
+
+  /**
+   * The built-in phase→tier map for a fresh draft (no config saved yet). The
+   * client cannot import baf-core, so this is the one source the settings row
+   * seeds its phase rows from.
+   */
+  @Remote
+  async defaults(): Promise<BafRouteConfigDefaults> {
+    return { phaseTier: DEFAULT_PHASE_TIER }
   }
 }
 

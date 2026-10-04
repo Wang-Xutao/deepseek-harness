@@ -1,0 +1,153 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.description {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dirty {
+  font-size: 12px;
+  color: var(--dsw-alias-attention, #d19a66);
+}
+
+.tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tier {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 180px;
+  padding: 10px;
+  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 8px;
+}
+
+.tierTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blockTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.phaseRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.phaseName {
+  font-size: 13px;
+}
+
+.select,
+.input {
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--dsh-alias-label-primary, inherit);
+  background: transparent;
+  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 6px;
+}
+
+.keywordRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.keywordInputWrap {
+  flex: 1 1 auto;
+}
+
+.keywordTier {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.previewBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.previewBar .input {
+  flex: 1 1 auto;
+}
+
+.preview {
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.error {
+  font-size: 13px;
+  color: var(--dsw-alias-danger, #cc6666);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.primary {
+  padding: 4px 14px;
+  font-size: 13px;
+  color: var(--dsw-alias-accent-contrast, #fff);
+  background: var(--dsw-alias-accent, #4a78d2);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.link {
+  padding: 4px 2px;
+  font-size: 13px;
+  color: var(--dsw-alias-accent, #4a78d2);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

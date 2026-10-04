@@ -94,4 +94,34 @@ describe('bafRouteConfig Remote', () => {
     // Every mutation announces, even the no-op second reset (clients re-read).
     expect(events).toHaveLength(3)
   })
+
+  it('preview() dry-runs the keyword match host-side (多模型路由 M3 预演)', async () => {
+    const { service } = await fixture()
+    // No config: nothing would freeze.
+    expect(await service.preview('梳理整体架构')).toEqual({ tier: null })
+
+    expect((await service.save(VALID)).ok).toBe(true)
+    // VALID's keywords hit 架构 → high; a summary without hits freezes nothing.
+    expect(await service.preview('梳理整体架构')).toEqual({ tier: 'high', matched: '架构' })
+    expect(await service.preview('补充 README 安装说明')).toEqual({ tier: null })
+  })
+
+  it('get() materializes the default phase mapping for omitted nodes (多模型路由 M3)', async () => {
+    const { service } = await fixture()
+    expect((await service.save(VALID)).ok).toBe(true)
+    const loaded = await service.get()
+    // The saved doc only pinned design=high; the read path fills the rest with
+    // the built-in defaults so the settings row shows the EFFECTIVE mapping.
+    expect(loaded?.phaseTier?.design).toBe('high')
+    expect(loaded?.phaseTier?.implement).toBe('low')
+    expect(loaded?.phaseTier?.verify).toBe('mid')
+  })
+
+  it('defaults() exposes the built-in phase tier map for fresh drafts', async () => {
+    const { service } = await fixture()
+    const defaults = await service.defaults()
+    expect(defaults.phaseTier.design).toBe('high')
+    expect(defaults.phaseTier.implement).toBe('low')
+    expect(Object.keys(defaults.phaseTier)).toHaveLength(9)
+  })
 })

@@ -8,7 +8,12 @@
   },
   "files": [
     "src/types.ts",
-    "src/client/index.ts"
+    "src/css-modules.d.ts",
+    "src/client/index.ts",
+    "src/client/locales.ts",
+    "src/client/remote-types.ts",
+    "src/client/route-store.ts",
+    "src/client/ModelRoutingRow.tsx"
   ],
   "references": [
     { "path": "../../../vendor/cordis" },

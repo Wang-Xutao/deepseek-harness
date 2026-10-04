@@ -74,11 +74,16 @@
     "@deepseek-ai/dsh-baf-core": "workspace:^",
     "@deepseek-ai/dsh-baf-workflow": "workspace:^",
     "@deepseek-ai/dsh-client-locale": "workspace:^",
+    "@deepseek-ai/dsh-client-store": "workspace:*",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
+    "@testing-library/react": "^16.0.0",
     "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "jsdom": "^26.0.0",
     "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "vitest": "^3.2.4"
   },
   "files": [

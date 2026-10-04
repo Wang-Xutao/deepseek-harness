@@ -13,6 +13,7 @@ export type {
   RouteTierConfig,
   TierModelSpec,
   TierKeywordRule,
+  WorkflowNode,
 } from '@deepseek-ai/dsh-baf-core'
 
 /** Folded save outcome; `error` carries a field summary for inline UI hints. */
@@ -28,4 +29,25 @@ export interface BafRouteConfigSaveResult {
 export interface BafRoutePreviewResult {
   readonly tier: RouteTier | null
   readonly matched?: string
+}
+
+/**
+ * 多模型路由 M3 — built-in starting values for a fresh settings draft. The
+ * client bundle cannot value-import baf-core (purity gate), so the Host hands
+ * the default phase→tier map over the wire; the settings row never duplicates
+ * it.
+ */
+export interface BafRouteConfigDefaults {
+  readonly phaseTier: Readonly<Record<string, RouteTier>>
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * The route-tier config changed (save or reset, from any surface).
+     * Clients re-read `get`.
+     * @mode emit
+     */
+    'baf-route-config/changed'(): void
+  }
 }
