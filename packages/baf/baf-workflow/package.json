@@ -52,9 +52,9 @@
       "types": "./lib/types/projection-events.d.ts",
       "default": "./lib/projection-events.js"
     },
-    "./route-config-service": {
-      "types": "./lib/types/route-config-service.d.ts",
-      "default": "./lib/route-config-service.js"
+    "./route-config-io": {
+      "types": "./lib/types/route-config-io.d.ts",
+      "default": "./lib/route-config-io.js"
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
@@ -69,7 +69,7 @@
     "lib/auto-pop.js",
     "lib/orchestrator.js",
     "lib/projection-events.js",
-    "lib/route-config-service.js",
+    "lib/route-config-io.js",
     "lib/types/**/*.d.ts",
     "skills"
   ],

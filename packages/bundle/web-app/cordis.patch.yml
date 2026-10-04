@@ -50,13 +50,6 @@
     - id: featured-plugins
       name: '@deepseek-ai/dsh-baf-featured'
 
-    # baf-dsh 多模型路由 host service: the route-tier config Remote
-    # (get/save/reset over ~/.dsh/baf-route-config.json + changed events).
-    # App-level, not per-agent — the config file is process-global; the
-    # settings UI section (M3) is its browser face.
-    - id: baf-route-config
-      name: '@deepseek-ai/dsh-baf-workflow/route-config-service'
-
     - id: desktop-product-telemetry
       name: '@deepseek-ai/dsh-host-product-telemetry-otel'
       disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"
@@ -459,6 +452,15 @@
     # `featuredPlugins` Remote the featured-plugins host row serves.
     - id: ui-settings-featured-plugins
       name: '@deepseek-ai/dsh-client-ui-settings-featured-plugins'
+
+    # baf-dsh 多模型路由 (M3): settings section + Host Typert Remote in one
+    # dual package (the modules row is simultaneously a host row). The Remote
+    # (get/save/reset over ~/.dsh/baf-route-config.json + changed events) is
+    # process-global, not per-agent; the browser half registers the settings
+    # row. IO stays in baf-workflow/route-config-io so dispatch-time routing
+    # (same process) re-reads the file every turn.
+    - id: ui-settings-baf-route
+      name: '@deepseek-ai/dsh-client-ui-settings-baf-route'
 
     # baf-dsh desktop chrome: hero trailing mark, IDE open, help placeholder.
     - id: ui-baf-desktop

@@ -144,6 +144,7 @@
     { "path": "./packages/client/ui-baf-desktop" },
     { "path": "./packages/client/ui-baf-tracegraph" },
     { "path": "./packages/client/ui-baf-workflow/tsconfig.client.json" },
+    { "path": "./packages/client/ui-settings-baf-route/tsconfig.client.json" },
     { "path": "./packages/client/ui-approval" },
     { "path": "./packages/client/ui-chat/tsconfig.client.json" },
     { "path": "./packages/client/ui-conversation/tsconfig.client.json" },

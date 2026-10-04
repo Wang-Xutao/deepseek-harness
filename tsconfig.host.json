@@ -251,6 +251,7 @@
     { "path": "./packages/client/ui-chat/tsconfig.host.json" },
     { "path": "./packages/client/ui-conversation/tsconfig.host.json" },
     { "path": "./packages/client/ui-baf-workflow/tsconfig.host.json" },
+    { "path": "./packages/client/ui-settings-baf-route/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings-general/tsconfig.host.json" },
 

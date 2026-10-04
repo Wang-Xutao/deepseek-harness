@@ -1,6 +1,11 @@
 /**
  * bafRouteConfig host Remote: get/save/reset over the DSH-home config file,
  * validation on save, and `baf-route-config/changed` announcements.
+ *
+ * 多模型路由 M3: the service moved here from baf-workflow — a browser-reachable
+ * Remote needs the generated TYPERT_REMOTE contribution only a dual client
+ * package produces. The default import IS the loader contract (the host mounts
+ * the package's default export).
  */
 
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
@@ -9,8 +14,8 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import type { RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
-import BafRouteConfigService from '../src/route-config-service.ts'
-import { routeTierConfigPath } from '../src/route-config-io.ts'
+import BafRouteConfigService from '../src/index.ts'
+import { routeTierConfigPath } from '@deepseek-ai/dsh-baf-workflow/route-config-io'
 
 const VALID: RouteTierConfig = {
   schema: 1,

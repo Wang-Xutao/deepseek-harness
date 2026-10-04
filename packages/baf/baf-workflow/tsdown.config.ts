@@ -93,7 +93,7 @@ export default defineConfig([
     clean: false,
   },
   {
-    entry: { 'route-config-service': 'lib/types/route-config-service.js' },
+    entry: { 'route-config-io': 'lib/types/route-config-io.js' },
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',

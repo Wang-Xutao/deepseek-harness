@@ -1,11 +1,15 @@
 /**
  * Host Remote for the BAF multi-model route-tier config
  * (`~/.dsh/baf-route-config.json`): get/save/reset plus the
- * `baf-route-config/changed` announcement every surface re-reads on. The
- * settings UI (M3) is the primary client; dispatch-time routing re-reads the
- * file per turn, so a save applies to the very next work order without a
- * restart.
- * @module @deepseek-ai/dsh-baf-workflow/route-config-service
+ * `baf-route-config/changed` announcement every surface re-reads on.
+ *
+ * 多模型路由 M3: this service lives in a dual client package because the
+ * browser settings section needs the generated TYPERT_REMOTE contribution
+ * (`./remote`) only such packages produce. The file IO itself stays in
+ * baf-workflow (`./route-config-io`) — dispatch-time routing re-reads the
+ * file per turn in the same process, so a save applies to the very next
+ * work order without a restart.
+ * @module @deepseek-ai/dsh-client-ui-settings-baf-route
  */
 
 import { Context } from '@deepseek-ai/cordis'
@@ -16,12 +20,13 @@ import {
   readRouteTierConfigSync,
   resetRouteTierConfigSync,
   writeRouteTierConfigSync,
-} from './route-config-io.ts'
+} from '@deepseek-ai/dsh-baf-workflow/route-config-io'
+import type { BafRouteConfigSaveResult } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** BAF route-tier config Remote (host plane, process-global file). */
-    bafRouteConfig: BafRouteConfigService
+    bafRouteConfig: BafRouteConfigRemote
   }
   interface Events {
     /**
@@ -33,17 +38,11 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Folded save outcome; `error` carries a field summary for inline UI hints. */
-export interface BafRouteConfigSaveResult {
-  readonly ok: boolean
-  readonly error?: string
-}
-
 /**
  * The route-tier config Remote. File-backed and synchronous under the hood —
  * the file is tiny, and the dispatch path deliberately re-reads it per turn.
  */
-export class BafRouteConfigService extends TypertRemoteService {
+export class BafRouteConfigRemote extends TypertRemoteService {
   static Config = z.object({})
 
   constructor(ctx: Context, _config: Record<string, never>) {
@@ -86,4 +85,4 @@ export class BafRouteConfigService extends TypertRemoteService {
 }
 
 export const name = 'baf-route-config-service'
-export default BafRouteConfigService
+export default BafRouteConfigRemote
