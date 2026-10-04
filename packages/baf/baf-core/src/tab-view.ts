@@ -15,6 +15,7 @@ import type {
   WorkflowNode,
   WorkflowStatus,
 } from './workflow.ts'
+import type { WorkflowTabRouteStatus } from './route-tier.ts'
 
 /** One allowed / disabled Tab action. */
 export interface WorkflowTabAction {
@@ -194,6 +195,13 @@ export interface WorkflowTabView {
   readonly sourceRevision?: string
   readonly baselineId?: string
   readonly route?: WorkflowStatus['route']
+  /**
+   * 多模型路由 M3 批次C — the「当前路由」fold: preferred tiers from the config
+   * file, actual/fallback from the driving session's `baf/route-resolved`
+   * audits. Absent on views built before the fold existed; `off` when tier
+   * routing is disabled (the Tab row then renders nothing).
+   */
+  readonly routeStatus?: WorkflowTabRouteStatus
   readonly openspecSkipped?: WorkflowStatus['openspecSkipped']
   readonly changes: readonly { changeId: string; mode: WorkflowMode; current: WorkflowNode | TerminalState }[]
   readonly selectedChangeId: string | null

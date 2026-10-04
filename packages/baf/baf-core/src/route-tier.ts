@@ -196,9 +196,49 @@ export function resolveTaskTier(
  * @param config - normalized config.
  * @param node - workflow node.
  */
-function resolvePhaseTier(config: RouteTierConfig, node: WorkflowNode): RouteTier {
+export function resolvePhaseTier(config: RouteTierConfig, node: WorkflowNode): RouteTier {
   return config.phaseTier?.[node] ?? DEFAULT_PHASE_TIER[node]
 }
+
+/**
+ * One phase row of the 工作流 Tab「当前路由」fold (M3 批次C): the tier the
+ * config maps the phase to, plus the last `baf/route-resolved` audit when the
+ * driving session produced one for that phase.
+ */
+export interface TierRoutePhaseRow {
+  readonly phase: WorkflowNode
+  /** Tier the config maps this phase to; a frozen keyword tier may override at turn time (`actual.tier`). */
+  readonly preferredTier: RouteTier
+  /** The mapped tier's model the resolver prefers for this phase. */
+  readonly preferred: { readonly provider: string; readonly model: string }
+  /** Last audit for this phase, when the session logged one. */
+  readonly actual?: {
+    readonly provider: string
+    readonly model: string
+    readonly source: string
+    /** Effective tier when the turn was tier-routed (pre-M2 audits omit it). */
+    readonly tier?: RouteTier
+    /** Whether the frozen keyword tier decided the turn. */
+    readonly tierReason?: 'keyword' | 'phase'
+    readonly fallbackActive: boolean
+    readonly at: string
+  }
+}
+
+/** Routed payload of {@link WorkflowTabRouteStatus}. */
+export interface TierRouteStatusView {
+  readonly state: 'routed'
+  /** The three tier models (reasoningEffort stays a dispatch concern). */
+  readonly tiers: Readonly<Record<RouteTier, { readonly provider: string; readonly model: string }>>
+  /** Nine rows (8 stages + drift) in workflow order. */
+  readonly phases: readonly TierRoutePhaseRow[]
+}
+
+/**
+ * 「当前路由」 fold for the 工作流 Tab: `off` until the tier config enables
+ * routing — an off row renders nothing (M3 验收: enabled=false 与今天一致).
+ */
+export type WorkflowTabRouteStatus = { readonly state: 'off' } | TierRouteStatusView
 
 /**
  * The tier a dispatch turn actually uses. With escalateOnly (default) the

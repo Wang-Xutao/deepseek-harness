@@ -19,7 +19,10 @@ import {
   type UsagePoint,
   beginIntake,
   bindSessionChange,
+  buildTierRouteStatus,
   deriveSessionChangeFromEvents,
+  lastRouteAuditByPhase,
+  type RouteAuditEntry,
   sessionChangeFor,
   homeSessionFor,
   clearParkedRequirementFor,
@@ -49,7 +52,14 @@ import {
   type DriveAdapters,
   type ScaffoldAdapter,
 } from '@deepseek-ai/dsh-baf-workflow'
-import type { WorkflowDashboardView, WorkflowTabResume, WorkflowTabView } from '@deepseek-ai/dsh-baf-core'
+import { readRouteTierConfigSync } from '@deepseek-ai/dsh-baf-workflow/route-config-io'
+import type {
+  WorkflowDashboardView,
+  WorkflowNode,
+  WorkflowTabResume,
+  WorkflowTabRouteStatus,
+  WorkflowTabView,
+} from '@deepseek-ai/dsh-baf-core'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-agent'
@@ -209,6 +219,38 @@ async function readSessionUsagePoints(ctx: Context, sessionId: SessionId): Promi
 }
 
 /**
+ * 多模型路由 M3 批次C — read one session's `baf/route-resolved` audits from
+ * the cold log (the same `sessionQuery.observeSession` read
+ * {@link readSessionUsagePoints} uses — no agent wake, no repair). The
+ * Tab's「当前路由」row folds these into its last-per-phase view; exported for
+ * the host spec.
+ * @param ctx - host context.
+ * @param sessionId - the session whose log to scan.
+ * @returns the audit payloads in log order (empty when sessionQuery is absent).
+ */
+export async function readSessionRouteAudits(ctx: Context, sessionId: SessionId): Promise<readonly RouteAuditEntry[]> {
+  interface AuditEvent { readonly type: string; readonly data?: unknown }
+  interface Observation {
+    readonly events: Iterable<AuditEvent>
+    [Symbol.dispose]?: () => void
+  }
+  type SessionQuery = { observeSession: (id: SessionId, options?: { projectionMode?: string }) => Promise<Observation> }
+  const query = (ctx as { sessionQuery?: SessionQuery }).sessionQuery
+  if (query === undefined) return []
+  const observation = await query.observeSession(sessionId, { projectionMode: 'none' })
+  try {
+    const entries: RouteAuditEntry[] = []
+    for (const event of observation.events) {
+      if (event.type !== 'baf/route-resolved') continue
+      entries.push(event.data as RouteAuditEntry)
+    }
+    return entries
+  } finally {
+    observation[Symbol.dispose]?.()
+  }
+}
+
+/**
  * Host Remote: assembles {@link WorkflowTabView} and applies semi-interactive mutations.
  */
 export class BafWorkflowTabRemote extends TypertRemoteService {
@@ -286,10 +328,49 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     const bound = changeId
       ?? sessionChangeFor(store.workspaceRoot(), sessionId)
       ?? await this.deriveSessionChange(sessionId, store.workspaceRoot())
-    return buildWorkflowTabView(store, bound ?? undefined, {
+    const view = await buildWorkflowTabView(store, bound ?? undefined, {
       ...options,
       usagePoints: await this.usagePointsFor(sessionId),
     })
+    // 多模型路由 M3 批次C — the「当前路由」row rides the same payload the Tab
+    // already polls; `off` (config absent/disabled) costs no log scan at all.
+    return { ...view, routeStatus: await this.routeStatusFor(sessionId) }
+  }
+
+  /** Cached `(sessionId → last-per-phase audits)` with the revision the fold was made at. */
+  private readonly routeAuditCache = new Map<SessionId, {
+    revision: string
+    byPhase: Readonly<Partial<Record<WorkflowNode, RouteAuditEntry>>>
+  }>()
+
+  /**
+   * 多模型路由 M3 批次C — the Tab「当前路由」payload: preferred tiers from the
+   * config file (re-read every call, so a settings save shows on the next
+   * poll), actual/fallback from the driving session's LAST `baf/route-resolved`
+   * audit per phase — revision-cached like {@link usagePointsFor} so the 2 s
+   * poll never rescans an unchanged log. Failures degrade to the
+   * preferred-only fold: the row is informational, never blocking.
+   * @param sessionId - the driving session.
+   * @returns the wire payload for `WorkflowTabView.routeStatus`.
+   */
+  private async routeStatusFor(sessionId: SessionId): Promise<WorkflowTabRouteStatus> {
+    const config = readRouteTierConfigSync()
+    if (config === undefined || !config.enabled) return { state: 'off' }
+    try {
+      const stat = await this.ctx.sessionPersistence.stat(sessionId)
+      const revision = stat === undefined
+        ? 'none'
+        : `${String(stat.revision)}:${String(stat.eventCount ?? '?')}:${String(stat.sizeBytes ?? '?')}`
+      const cached = this.routeAuditCache.get(sessionId)
+      if (cached !== undefined && cached.revision === revision) {
+        return buildTierRouteStatus(config, cached.byPhase)
+      }
+      const byPhase = lastRouteAuditByPhase(await readSessionRouteAudits(this.ctx, sessionId))
+      this.routeAuditCache.set(sessionId, { revision, byPhase })
+      return buildTierRouteStatus(config, byPhase)
+    } catch {
+      return buildTierRouteStatus(config, {})
+    }
   }
 
   /** Sessions whose cold log was already scanned (negative cache — no signal). */

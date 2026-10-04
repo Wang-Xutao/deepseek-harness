@@ -30,6 +30,7 @@ import { CATALOG_ZH } from './catalog-i18n.ts'
 import { buildClientTemplateTabView, withRenderableGraph } from './graph-template.ts'
 import { NodeIcon } from './icons.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
+import { RouteStatusRow } from './RouteStatusRow.tsx'
 import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel } from './gate-ask.ts'
 import { setWorkflowTabActive } from './tab-activity.ts'
 import { buildDashboardHtml, type DashboardHtmlLabels } from './dashboard-html.ts'
@@ -1093,6 +1094,13 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
             the strip no longer carries a permanent decision the customer
             would otherwise see on every paint. */}
       </div>
+
+      {/* 多模型路由 M3 批次C —「当前路由」chips row. Absent when the fold says
+          off or the payload predates it: enabled=false renders exactly like
+          today (M3 验收), so the row mounts only on a routed fold. */}
+      {view.routeStatus !== undefined && (
+        <RouteStatusRow status={view.routeStatus} t={t} />
+      )}
 
       {view.openspecSkipped?.skipped === true && (
         <div className={css.banner}>

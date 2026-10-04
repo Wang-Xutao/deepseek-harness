@@ -1,0 +1,36 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary, inherit);
+}
+
+.label {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, inherit);
+}
+
+.muted {
+  color: var(--dsw-alias-label-tertiary, inherit);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 8px;
+}
+
+.phase {
+  color: var(--dsw-alias-label-primary, inherit);
+}
+
+.badge {
+  font-size: 11px;
+  color: var(--dsw-alias-attention, #d19a66);
+}

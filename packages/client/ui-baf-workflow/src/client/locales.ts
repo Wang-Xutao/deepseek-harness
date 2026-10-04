@@ -23,6 +23,14 @@ export type WorkflowTabKey =
   | 'card.todo'
   | 'card.current'
   | 'metrics.pending'
+  | 'route.title'
+  | 'route.none'
+  | 'route.fallback'
+  | 'route.keyword'
+  | 'route.failed'
+  | 'route.tierHigh'
+  | 'route.tierMid'
+  | 'route.tierLow'
   | 'intake.title'
   | 'intake.help'
   | 'intake.kind'
@@ -270,6 +278,14 @@ export const en: Record<WorkflowTabKey, string> = {
   'card.todo': 'Todo',
   'card.current': 'Current',
   'metrics.pending': 'Model tokens used during this stage',
+  'route.title': 'Current routing',
+  'route.none': 'No routed dispatch yet',
+  'route.fallback': 'fallback',
+  'route.keyword': 'keyword',
+  'route.failed': 'failed',
+  'route.tierHigh': 'high',
+  'route.tierMid': 'mid',
+  'route.tierLow': 'low',
   'intake.title': 'Change classification',
   'intake.help': 'Intake decides kind/mode/scope before writes. Trigger: chat or New change. Confirm → projection; reject → abandon; supplement → keep chatting.',
   'intake.heuristicNote': 'Kind / scope / confidence are the system\'s keyword pre-judgment (unmatched shows To be determined; confirming does not rewrite them). Mode is the path YOU picked on the classification card; the bug-fix pick settles kind = Bug.',
@@ -496,6 +512,14 @@ export const zh: Record<WorkflowTabKey, string> = {
   'card.todo': '未作',
   'card.current': '当前',
   'metrics.pending': '本阶段消耗的模型用量',
+  'route.title': '当前路由',
+  'route.none': '暂无派单路由',
+  'route.fallback': '回落',
+  'route.keyword': '词',
+  'route.failed': '失败',
+  'route.tierHigh': '高档',
+  'route.tierMid': '中档',
+  'route.tierLow': '低档',
   'intake.title': '变更分类',
   'intake.help': '写源码前判定类型/模式/范围。触发：对话或「新建变更」。确认→投影；拒绝→放弃；补充→继续对话。',
   'intake.heuristicNote': '类型 / 影响范围 / 置信度是系统关键词初判（没匹配上就显示「待定」，确认分类不会改写它们）；模式是你在分类卡上点的路径；选「缺陷修复路径」会把类型定为「缺陷」。',

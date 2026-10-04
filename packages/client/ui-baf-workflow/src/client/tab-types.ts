@@ -15,6 +15,40 @@ export type WorkflowNodeId =
 
 export type TerminalStateId = 'completed' | 'abandoned'
 
+/** 多模型路由 tier (mirror of baf-core `RouteTier`; M3 批次C). */
+export type RouteTier = 'high' | 'mid' | 'low'
+
+/**
+ * One phase row of the「当前路由」fold (mirror of baf-core
+ * `TierRoutePhaseRow`; M3 批次C): preferred tier from the config, actual from
+ * the session's last `baf/route-resolved` audit.
+ */
+export interface WorkflowTabRoutePhaseRow {
+  readonly phase: WorkflowNodeId
+  readonly preferredTier: RouteTier
+  readonly preferred: { readonly provider: string; readonly model: string }
+  readonly actual?: {
+    readonly provider: string
+    readonly model: string
+    readonly source: string
+    /** Effective tier when the turn was tier-routed (pre-M2 audits omit it). */
+    readonly tier?: RouteTier
+    /** Whether the frozen keyword tier decided the turn. */
+    readonly tierReason?: 'keyword' | 'phase'
+    readonly fallbackActive: boolean
+    readonly at: string
+  }
+}
+
+/** Mirror of baf-core `WorkflowTabRouteStatus` (M3 批次C). */
+export type WorkflowTabRouteStatus =
+  | { readonly state: 'off' }
+  | {
+    readonly state: 'routed'
+    readonly tiers: Readonly<Record<RouteTier, { readonly provider: string; readonly model: string }>>
+    readonly phases: readonly WorkflowTabRoutePhaseRow[]
+  }
+
 /** Mandatory customer-confirmation gate the change is parked on (§18.5). */
 export type ConfirmGateId = 'design-to-plan' | 'verify-to-archive'
 
@@ -154,6 +188,12 @@ export interface WorkflowTabView {
      * the live timer freezes (wait time is not workflow time). */
     readonly running?: boolean
   }
+  /**
+   * 多模型路由 M3 批次C — the「当前路由」fold: preferred tiers from the config,
+   * actual/fallback from the driving session's route audits. `off` renders
+   * nothing (M3 验收: enabled=false 与今天一致).
+   */
+  readonly routeStatus?: WorkflowTabRouteStatus
   /** Set while the change is parked on gate A/B (§18.5). */
   readonly gate?: {
     readonly id: ConfirmGateId

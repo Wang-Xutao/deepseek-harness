@@ -22,6 +22,7 @@
     "src/client/BafGateComposer.tsx",
     "src/client/WorkflowView.tsx",
     "src/client/WorkflowTabRow.tsx",
+    "src/client/RouteStatusRow.tsx",
     "src/workflow-tab-settings.ts",
     "src/css-modules.d.ts"
   ],

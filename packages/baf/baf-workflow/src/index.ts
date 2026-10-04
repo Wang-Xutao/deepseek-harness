@@ -49,6 +49,7 @@ import type { BaselineManifest } from '@deepseek-ai/dsh-baf-core'
 
 export * from './route.ts'
 export * from './route-audit.ts'
+export * from './route-status.ts'
 export * from './phase-route.ts'
 export * from './projection.ts'
 export type { BafWorkflowProjectionAppended } from './projection-events.ts'
