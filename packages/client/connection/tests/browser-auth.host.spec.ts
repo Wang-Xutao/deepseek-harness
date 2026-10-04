@@ -140,6 +140,22 @@ describe('BrowserAuth', () => {
     })
   })
 
+  it('mints one fixed cookie name across authorities so a browser jar cannot accumulate', async () => {
+    const auth = await createAuth(new RecordCredentials())
+    const names = ['127.0.0.1:3080', '127.0.0.1:3081', 'localhost:3080', 'gateway.example']
+      .map(authority => exchange(auth, authority).cookie.split('=', 1)[0]!)
+    expect([...new Set(names)]).toEqual(['dsh-auth'])
+    // Cookies are host-scoped and port-agnostic, so a per-authority name would
+    // leave one unreplaced cookie per distinct port (desktop children bind
+    // --port 0) until the request header exceeds maxHeaderSize and every
+    // request fails as 431. The authority binding stays in the signed payload:
+    // under the fixed name a foreign authority is still refused.
+    const minted = exchange(auth)
+    expect(auth.isAuthenticated(request('/', '127.0.0.1:3080', { cookie: minted.cookie }))).toBe(true)
+    expect(auth.isAuthenticated(request('/', '127.0.0.1:3081', { cookie: minted.cookie }))).toBe(false)
+    expect(auth.isAuthenticated(request('/', 'localhost:3080', { cookie: minted.cookie }))).toBe(false)
+  })
+
   it('preserves the caller authority and mount while adding only this process token', async () => {
     const auth = await createAuth(new RecordCredentials())
     const mounted = new URL(auth.authenticatedUrl('https://gateway.example/tools/dsh/'))
