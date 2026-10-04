@@ -16,8 +16,8 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentPresets, {
   COMPOSITION_FILE, leakedServices, livePresetMounts, mountPreset, serviceForAgent,
-} from '@deepseek-ai/dsh-agent-presets'
-import type { Config } from '@deepseek-ai/dsh-agent-presets'
+} from '../src/index.ts'
+import type { Config } from '../src/index.ts'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import { bindScopeParent, createScope, scopeOf } from '@deepseek-ai/dsh-scope'
 
@@ -263,12 +263,11 @@ describe('rejecting a composition that cannot be used', () => {
   })
 
   it('names the rows inside a failed group, not the group alone', async () => {
-    // The Loader's per-row wrapper keeps only `cause.message`, so a group's
-    // own AggregateError arrives with its `errors` reachable through `cause`
-    // alone. Reading the message stops at "loader entries failed to apply"
-    // and names neither row that actually refused.
+    // Rows report individually now: each entry's own fiber carries its error,
+    // so the diagnostic names the rows that refused rather than the Loader's
+    // old group aggregate ("loader entries failed to apply").
     await expect(agentOn(ctx, 'sess-nested-broken', 'nested-broken'))
-      .rejects.toThrow(/outer[\s\S]*inner-first[\s\S]*inner-second/)
+      .rejects.toThrow(/inner-first[\s\S]*inner-second/)
   })
 
   it('names the unresolved service when a row never activates', async () => {

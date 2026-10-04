@@ -3710,9 +3710,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:^
         version: link:../ui-slots
-      '@deepseek-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -11279,9 +11276,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
@@ -11297,9 +11291,6 @@ importers:
       '@deepseek-ai/dsh-settings':
         specifier: workspace:^
         version: link:../../settings/settings
-      '@deepseek-ai/dsh-settings-file':
-        specifier: workspace:^
-        version: link:../../settings/settings-file
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt
@@ -12469,34 +12460,6 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
-
-  packages/settings/settings-file:
-    dependencies:
-      '@deepseek-ai/dsh-util-values':
-        specifier: workspace:^
-        version: link:../../util/values
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
-      chokidar:
-        specifier: ^4.0.3
-        version: 4.0.3
-      yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:^
-        version: link:../../../vendor/cordis
-      '@deepseek-ai/dsh-atomic-write':
-        specifier: workspace:^
-        version: link:../../util/atomic-write
-      '@deepseek-ai/dsh-home-paths':
-        specifier: workspace:^
-        version: link:../../util/home-paths
-      '@deepseek-ai/dsh-settings':
-        specifier: workspace:^
-        version: link:../settings
 
   packages/shell/bash-local:
     dependencies:
@@ -15137,9 +15100,6 @@ importers:
       '@deepseek-ai/dsh-http-proxy':
         specifier: workspace:^
         version: link:../../util/http-proxy
-      '@deepseek-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm

@@ -35,7 +35,6 @@ import type {} from '@deepseek-ai/dsh-session-projection'
 // Type-only: resolves the registry notification emitted after scope reparenting.
 import type {} from '@deepseek-ai/dsh-tools'
 import type SettingsService from '@deepseek-ai/dsh-settings'
-import type { SettingsScope } from '@deepseek-ai/dsh-settings'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { discoverPresets, SHIPPED_PRESET_ROOT, USER_PRESET_DIR } from './discovery.ts'
 import { copyComposition, deleteComposition, isPresetCopyable, presetExists, readComposition } from './authoring.ts'
@@ -71,6 +70,15 @@ export interface AgentPresetSettings {
 export const AgentPresetSettingsSchema: z<AgentPresetSettings> = z.object({
   default: z.string(),
 })
+
+/**
+ * Live reader over the 'agent-presets' settings overlay. Shape of the scope
+ * handle the old dsh-settings `register()` API returned; reads go through
+ * `SettingsForms.describe()` now (see the injection site).
+ */
+interface SettingsOverlayReader {
+  get(): AgentPresetSettings
+}
 
 export { COMPOSITION_FILE, discoverPresets, scanRoot, SHIPPED_PRESET_ROOT } from './discovery.ts'
 export {
@@ -142,7 +150,7 @@ export class AgentPresets extends TypertRemoteService {
    * provider is composed. Held rather than snapshotted so a hot-reloaded
    * document takes effect without a restart.
    */
-  private settings: SettingsScope<AgentPresetSettings> | undefined
+  private settings: SettingsOverlayReader | undefined
 
   /**
    * The settings service behind {@link settings}, held for the one write this
@@ -180,17 +188,18 @@ export class AgentPresets extends TypertRemoteService {
       ...config.roots,
       ...config.includeUserRoot ? [{ path: dshHomePath(USER_PRESET_DIR), trust: 'user' } satisfies PresetRoot] : [],
     ]
-    // Deliberately not `settings.installSection`: that method exists to re-judge
-    // what a consumer DERIVED from the source — memoized resolutions,
-    // registration-level facts — across attach, detach, and change. Nothing
-    // here is derived. `defaultId` reads through on every call, so both of its
-    // hooks would be no-ops and the source thunk would restate this field.
+    // 【变更】2026-10-04 (master merge): dsh-settings removed the section
+    // `register()` API — user-writable sections are now plugin config entries
+    // surfaced through `describe()`. The overlay is read per call from the live
+    // descriptors of the 'agent-presets' entry; `mutate()` below still targets
+    // the same namespace and is unchanged.
     ctx.inject(['settings'], (settingsCtx) => {
-      this.settings = settingsCtx.settings.register(
-        SETTINGS_NAMESPACE,
-        AgentPresetSettingsSchema,
-        { base: { default: config.default } },
-      )
+      this.settings = {
+        get: () => {
+          const row = settingsCtx.settings.describe().find(d => d.ns === SETTINGS_NAMESPACE)
+          return (row?.value ?? {}) as AgentPresetSettings
+        },
+      }
       this.settingsService = settingsCtx.settings
       settingsCtx.effect(() => () => {
         this.settings = undefined

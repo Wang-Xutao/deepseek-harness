@@ -20,8 +20,8 @@ import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { remoteErrorOf, type RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import AgentPresets, { COMPOSITION_FILE, METADATA_FILE } from '@deepseek-ai/dsh-agent-presets'
-import type { Config } from '@deepseek-ai/dsh-agent-presets'
+import AgentPresets, { COMPOSITION_FILE, METADATA_FILE } from '../src/index.ts'
+import type { Config } from '../src/index.ts'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')

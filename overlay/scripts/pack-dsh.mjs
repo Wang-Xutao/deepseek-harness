@@ -364,7 +364,6 @@ const FORCE_PACKAGES = [
   'packages/baf/baf-scaffold',
   'packages/boot/app-boot',
   'packages/boot/cmdline',
-  'packages/runtime-diagnostics/invariants',
   'packages/util/home-paths',
   'packages/util/launch-environment',
   'packages/core/system-prompt',

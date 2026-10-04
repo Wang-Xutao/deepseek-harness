@@ -218,7 +218,7 @@
     "packages/baf/*/tests/**",
     "packages/client/ui-baf-*/tests/**",
     "packages/e2b/**",
-    "packages/preset/agent-presets/**",
+    "packages/preset/agent-presets/tests/**",
     // Baf-only orphan files in apps/desktop: src/preload.ts and
     // src/seed-store.ts plus their corresponding scripts/tests. They
     // depend on baf-only DESKTOP_IPC events (pluginsUpdate/updatesCheck
@@ -524,6 +524,7 @@
     { "path": "./packages/baf/baf-quality" },
     { "path": "./packages/baf/baf-scaffold" },
     { "path": "./packages/baf/baf-standard" },
-    { "path": "./packages/baf/baf-workflow" }
+    { "path": "./packages/baf/baf-workflow" },
+    { "path": "./packages/preset/agent-presets" }
   ]
 }

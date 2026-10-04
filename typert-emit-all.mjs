@@ -44,7 +44,13 @@ function emitArtifacts(packageDir, artifacts) {
 }
 
 const generator = new WorkspaceTypertGenerator(root, { checkDiagnostics: false })
+// The baf fork packages/preset/agent-presets reuses the 'agentPresets' Remote
+// namespace that master's dsh-agent-preset-registry now owns; its workspace
+// emit always failed (the tsdown plugin silently skipped it, keeping stale
+// artifacts) and nothing imports the fork's typert surface at runtime.
+const SKIP_PACKAGES = new Set(['packages/preset/agent-presets'])
 const packages = generator.discover(['host'])
+  .filter(candidate => !SKIP_PACKAGES.has(candidate.root.replaceAll(String.fromCharCode(92), '/')))
   .filter(candidate => hasTypertExport(readManifest(join(root, candidate.root)).exports))
   .map(candidate => candidate.package)
 console.log('emitting for', packages.length, 'packages')

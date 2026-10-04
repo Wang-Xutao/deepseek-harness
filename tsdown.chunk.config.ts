@@ -26,7 +26,7 @@ const real = typertPlugin({ mode: 'workspace', faces: ['host'] })
 
 export default defineConfig(() => ({
   workspace: slice,
-  entry: ['lib/types/{index,invariant,startup}.js'],
+  entry: ['lib/types/{index,startup}.js'],
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',

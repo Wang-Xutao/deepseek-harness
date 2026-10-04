@@ -19,7 +19,7 @@ import Include, { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as yaml from 'js-yaml'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import AgentPresets, { SHIPPED_PRESET_ROOT, type Config } from '@deepseek-ai/dsh-agent-presets'
+import AgentPresets, { SHIPPED_PRESET_ROOT, type Config } from '../src/index.ts'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const SYSTEM_ROOT = join(FIXTURES, 'system')

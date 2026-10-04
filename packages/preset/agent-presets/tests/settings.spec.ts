@@ -1,7 +1,15 @@
 /**
  * The default preset is a user setting. `config.default` is the deployment's
- * engineering default; the settings document overrides it and is hot-reloaded,
- * so a person can change which preset new sessions get without a restart.
+ * engineering default; a settings overlay owned by the host composition
+ * overrides it and is re-read on every use, so a person can change which
+ * preset new sessions get without a restart.
+ *
+ * 【变更】2026-10-04 (master merge): upstream removed
+ * `@deepseek-ai/dsh-settings-file` — settings sections are now plugin config
+ * entries projected from the active profile by `SettingsForms`. The roster
+ * only consumes the service surface (`describe` for reads, `mutate` for the
+ * one clearing write), so this file mounts an in-memory implementation with
+ * those exact semantics instead of the deleted file-backed provider.
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -18,9 +26,9 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
+import type SettingsService from '@deepseek-ai/dsh-settings'
 import { afterEach, describe, expect, it } from 'vitest'
-import AgentPresets, { COMPOSITION_FILE, SETTINGS_NAMESPACE } from '@deepseek-ai/dsh-agent-presets'
+import AgentPresets, { COMPOSITION_FILE, SETTINGS_NAMESPACE } from '../src/index.ts'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const ROOTS = [{ path: join(FIXTURES, 'system'), trust: 'system' as const }]
@@ -33,16 +41,52 @@ afterEach(async () => {
 })
 
 /**
- * A composition with a real file-backed settings provider. `settingsFiber` is
- * the provider's own handle, so a test can take it away the way a reload does.
+ * In-memory `settings` service. Sections live only as long as the fiber that
+ * published them, matching how unloading the owning composition withdraws a
+ * user layer in the real profile-backed service.
+ */
+function provideSettings(ctx: Context): { fiber: { dispose: () => unknown } } {
+  const sections = new Map<string, object>()
+  const fiber = ctx.plugin({
+    name: 'fake-settings',
+    apply(pluginCtx: Context) {
+      const service = {
+        describe: () => [...sections].map(([ns, value]) => ({ ns, value, revision: 0, applies: 'live' as const })),
+        update: async (ns: string, patch: object) => { sections.set(ns, { ...sections.get(ns) ?? {}, ...patch }) },
+        replace: async (ns: string, section: object) => { sections.set(ns, section) },
+        mutate: async (ns: string, ops: readonly { op: string; path: readonly string[]; value?: unknown }[]) => {
+          let section = { ...sections.get(ns) ?? {} }
+          for (const op of ops) {
+            const [head] = op.path
+            if (head === undefined) throw new Error('fake-settings: empty path')
+            if (op.op === 'unset') {
+              const { [head]: _unset, ...rest } = section
+              section = rest
+            } else if (op.op === 'set') {
+              section = { ...section, [head]: op.value }
+            } else {
+              throw new Error(`fake-settings: unsupported op ${op.op}`)
+            }
+          }
+          sections.set(ns, section)
+        },
+      } as unknown as SettingsService
+      pluginCtx.provide('settings', service)
+    },
+  })
+  return { fiber }
+}
+
+/**
+ * A composition with a settings service standing behind the roster.
+ * `settingsFiber` is the service's own handle, so a test can take it away the
+ * way an unload does.
  */
 async function harness(
   extraRoots: readonly { path: string; trust: 'system' | 'user' }[] = [],
-): Promise<{ ctx: Context; settingsFile: string; settingsFiber: { dispose: () => unknown } }> {
+): Promise<{ ctx: Context; settingsFiber: { dispose: () => unknown } }> {
   const home = await mkdtemp(join(tmpdir(), 'dsh-preset-settings-'))
   roots.push(home)
-  const settingsFile = join(home, 'settings.yaml')
-  await writeFile(settingsFile, '{}\n')
 
   const ctx = new Context()
   ctx.baseUrl = pathToFileURL(FIXTURES).href + '/'
@@ -55,10 +99,10 @@ async function harness(
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
-  const settingsFiber = ctx.plugin(FileSettingsProvider, { path: settingsFile, watch: false })
+  const { fiber: settingsFiber } = provideSettings(ctx)
   await settingsFiber
   await ctx.plugin(AgentPresets, { default: 'standard', roots: [...ROOTS, ...extraRoots], includeShippedRoot: false, includeUserRoot: false })
-  return { ctx, settingsFile, settingsFiber }
+  return { ctx, settingsFiber }
 }
 
 const toolNames = (ctx: Context, agent?: unknown): string[] =>
