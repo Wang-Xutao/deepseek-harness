@@ -421,6 +421,19 @@ export class BafWorkflow extends Service {
   }
 
   /**
+   * The explicitly frozen enterprise ceiling, if any (fix pass #2,
+   * acceptance item 7): the dispatch-time tier routing reads this and
+   * min-restricts its per-turn synthesis against it. A tier-auto-frozen
+   * policy is NOT a ceiling — it is that same synthesis — and no freeze at
+   * all means the permissive local default stands.
+   * @returns frozen policy after an explicit {@link freezeRouteContext},
+   * else undefined.
+   */
+  frozenEnterprisePolicy(): EnterpriseRoutePolicy | undefined {
+    return this.explicitRouteFrozen ? this.enterprisePolicy : undefined
+  }
+
+  /**
    * Last successful resolution for a phase, if any.
    * @param phase - workflow node.
    * @returns resolution or undefined.

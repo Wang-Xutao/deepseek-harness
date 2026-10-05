@@ -93,6 +93,42 @@ describe('projection store', () => {
     }
   })
 
+  it('freezes the tier hit evaluated over the FULL description (fix #3: summary is a 500-char slice)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-proj-tier-full-'))
+    const home = await mkdtemp(join(tmpdir(), 'baf-proj-tier-home3-'))
+    try {
+      process.env.DSH_HOME = home
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), {
+        schema: 1,
+        enabled: true,
+        tiers: {
+          high: { provider: 'p', model: 'big' },
+          mid: { provider: 'p', model: 'mid' },
+          low: { provider: 'p', model: 'cheap' },
+        },
+        keywords: [{ words: '架构', tier: 'high' }],
+      })
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const service = createWorkflowService({ store })
+      // The keyword sits beyond the 500-char summary window: 预演 (full
+      // text, host-side) says 高档, so the freeze must too. The sliced
+      // summary re-evaluation at confirm used to miss it entirely.
+      const { intake } = await service.intake({
+        description: `${'占'.repeat(600)} 最后重排整体架构边界`,
+        workspace: { root },
+      })
+      expect(intake.summary.length).toBe(500)
+      expect(intake.summary).not.toContain('架构')
+      expect(intake.taskTierHit).toEqual({ tier: 'high', matched: '架构' })
+      const confirmed = await confirmIntake(store, intake.changeId)
+      expect(confirmed.taskTier).toEqual({ tier: 'high', matched: '架构' })
+      expect(taskTierFor(root, intake.changeId)).toEqual({ tier: 'high', matched: '架构' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('freezes nothing when tier routing is inactive or no keyword hits', async () => {
     const root = await mkdtemp(join(tmpdir(), 'baf-proj-tier-off-'))
     const home = await mkdtemp(join(tmpdir(), 'baf-proj-tier-home2-'))

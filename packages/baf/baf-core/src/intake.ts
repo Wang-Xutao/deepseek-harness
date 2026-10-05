@@ -3,6 +3,8 @@
  * @module @deepseek-ai/dsh-baf-core/intake
  */
 
+import type { RouteTier } from './route-tier.ts'
+
 /** High-level change kind after intake. */
 export type ChangeKind =
   | 'new-requirement'
@@ -49,4 +51,11 @@ export interface ChangeIntake {
   readonly confirmation: IntakeConfirmation
   /** Free-form summary of the user request. */
   readonly summary: string
+  /**
+   * Keyword tier hit evaluated over the FULL description at classify time
+   * (fix pass #3): the durable summary is a 500-char slice, so a keyword
+   * beyond the window showed 高档 in 预演 but never froze at confirm. Old
+   * logs without it fall back to the summary re-evaluation.
+   */
+  readonly taskTierHit?: { readonly tier: RouteTier; readonly matched?: string }
 }

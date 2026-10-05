@@ -2,11 +2,11 @@
  * 多模型路由 M2 — dispatch-time tier routing: pure selection + shell.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it, afterEach } from 'vitest'
-import type { RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
+import { projectionLogPath, type EnterpriseRoutePolicy, type RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
 import { writeRouteTierConfigSync } from '../src/route-config-io.ts'
 import { rememberTaskTier, resetTaskTierMemory } from '../src/task-tier-memory.ts'
 import type { DispatchSignal } from '../src/go-dispatch.ts'
@@ -34,6 +34,37 @@ function makeConfig(overrides: Partial<RouteTierConfig> = {}): RouteTierConfig {
 
 function signalOf(node: DispatchSignal['node'], changeId = 'change-1'): DispatchSignal {
   return { changeId, node, artifactPath: `openspec/changes/${changeId}/x.md`, missing: [] }
+}
+
+/**
+ * Fix pass #2 fixture: a deployment ceiling that allows the mid and low tier
+ * models but NOT the high one — acceptance item 7 says the tier synthesis
+ * must min-restrict against it instead of escaping it.
+ */
+function ceilingForbiddingHigh(): EnterpriseRoutePolicy {
+  return {
+    schema: 1,
+    policyId: 'fixture-ceiling',
+    version: 'v1',
+    allowSessionOverride: true,
+    default: { provider: 'p1', model: 'middle' },
+    allowed: [
+      {
+        provider: 'p1', model: 'middle', fallbackGroup: 'ceiling',
+        capabilities: ['structured-output', 'tool-use', 'long-context'],
+      },
+      {
+        provider: 'p2', model: 'cheap-fast', fallbackGroup: 'ceiling',
+        capabilities: ['coding', 'tool-use', 'low-latency'],
+      },
+    ],
+    fallbackPolicy: {
+      mode: 'approved-only',
+      groups: {
+        ceiling: [{ provider: 'p1', model: 'middle' }, { provider: 'p2', model: 'cheap-fast' }],
+      },
+    },
+  }
 }
 
 describe('tierRouteSelection (多模型路由 M2 纯核)', () => {
@@ -121,6 +152,38 @@ describe('tierRouteSelection (多模型路由 M2 纯核)', () => {
       selection: { provider: 'p1', model: 'middle' },
     })
   })
+
+  it('fix #2: min-restricts the tier synthesis against a frozen enterprise ceiling', () => {
+    // Acceptance item 7: big-brain (high) is outside the ceiling, so a
+    // keyword-escalated implement turn must fall down the tiers group to
+    // the strongest ALLOWED model instead of escaping the ceiling. mid
+    // (middle) lacks coding, so the fall lands on low (cheap-fast), with
+    // the move on the audit record.
+    const outcome = tierRouteSelection(
+      signalOf('implement'), makeConfig(), 'high', ceilingForbiddingHigh(),
+    )
+    expect(outcome).toMatchObject({
+      tier: 'high',
+      reason: 'keyword',
+      selection: { provider: 'p2', model: 'cheap-fast' },
+    })
+    expect(outcome?.selection.reasoningEffort).toBeUndefined()
+    expect(outcome?.resolution.fallbackFrom).toMatchObject({ provider: 'p1', model: 'middle' })
+  })
+
+  it('fix #2: a ceiling that allows no tier model disables routing for the turn', () => {
+    // No escape hatch: when the ceiling forbids every tier model the
+    // resolver rejects and the order runs on the session's current model.
+    const ceiling: EnterpriseRoutePolicy = {
+      ...ceilingForbiddingHigh(),
+      allowed: [{
+        provider: 'p9', model: 'approved-elsewhere', fallbackGroup: 'ceiling',
+        capabilities: ['coding', 'reasoning'],
+      }],
+    }
+    const outcome = tierRouteSelection(signalOf('implement'), makeConfig(), 'high', ceiling)
+    expect(outcome).toBeUndefined()
+  })
 })
 
 describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
@@ -170,6 +233,86 @@ describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
         tier: 'high',
         tierReason: 'keyword',
       })
+    } finally {
+      await rm(home, { recursive: true, force: true })
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rehydrates the frozen tier from the projection log after a host restart', async () => {
+    // Fix pass #1 (review Important): the in-process task-tier map dies with
+    // the host, but the frozen tier lives in the change's projection JSONL —
+    // a cache-miss dispatch must re-read the log instead of silently
+    // dropping the change to the phase mapping (clarify=mid here, expected
+    // big-brain).
+    const home = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-home3-'))
+    const root = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-root3-'))
+    try {
+      process.env.DSH_HOME = home
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), makeConfig())
+      // Restart-equivalent log: intake confirmed, tier frozen at high — and
+      // NO rememberTaskTier (the in-process map is empty, as after restart).
+      const logPath = join(root, projectionLogPath('change-1'))
+      await mkdir(dirname(logPath), { recursive: true })
+      await writeFile(
+        logPath,
+        [
+          JSON.stringify({ seq: 1, type: 'intake-confirmed', by: 'user' }),
+          JSON.stringify({ seq: 2, type: 'task-tier-frozen', tier: 'high', matched: '架构' }),
+        ].join('\n') + '\n',
+        'utf8',
+      )
+
+      const selections: unknown[] = []
+      const controller = {
+        selectForNextRequest(_agent: unknown, selection: unknown): void {
+          selections.push(selection)
+        },
+      }
+      const ctx = {
+        get(name: string): unknown {
+          return name === 'sessionController' ? controller : undefined
+        },
+      }
+      const route = tierRouteSelectorFor(root, ctx, { session: { header: { id: 'sess-1' } } })
+      route?.(signalOf('clarify'))
+      expect(selections).toEqual([
+        { provider: 'p1', model: 'big-brain', reasoningEffort: 'deep' },
+      ])
+    } finally {
+      await rm(home, { recursive: true, force: true })
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('fix #2: reads the enterprise ceiling through the bafWorkflow service', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-home4-'))
+    const root = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-root4-'))
+    try {
+      process.env.DSH_HOME = home
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), makeConfig())
+      rememberTaskTier(root, 'change-7', { tier: 'high', matched: '架构' })
+
+      const selections: unknown[] = []
+      const controller = {
+        selectForNextRequest(_agent: unknown, selection: unknown): void {
+          selections.push(selection)
+        },
+      }
+      const ctx = {
+        get(name: string): unknown {
+          if (name === 'sessionController') return controller
+          // The structural BafWorkflow face the dispatch shell reads (fix
+          // pass #2): an explicitly frozen deployment ceiling.
+          if (name === 'bafWorkflow') return { frozenEnterprisePolicy: () => ceilingForbiddingHigh() }
+          return undefined
+        },
+      }
+      const route = tierRouteSelectorFor(root, ctx, { session: { header: { id: 'sess-1' } } })
+      route?.(signalOf('implement', 'change-7'))
+      // big-brain is outside the ceiling: the pin falls down the tiers
+      // group to cheap-fast (mid lacks coding), never escaping it.
+      expect(selections).toEqual([{ provider: 'p2', model: 'cheap-fast' }])
     } finally {
       await rm(home, { recursive: true, force: true })
       await rm(root, { recursive: true, force: true })

@@ -47,12 +47,24 @@ export function createWorkflowService(options: WorkflowServiceOptions): Workflow
           changeId: intake.changeId,
         })
       }
+      // 【变更】2026-10-05 (fix pass #3): evaluate the keyword tier over the
+      // FULL description at classify — the persisted summary is a 500-char
+      // slice, so a keyword beyond the window showed 高档 in 预演 (which
+      // reads the full text host-side) but never froze at confirm. The hit
+      // rides the intake event, so it is durable across restarts.
+      const tierConfig = readRouteTierConfigSync()
+      const taskTierHit = tierConfig !== undefined && isTierRoutingActive(tierConfig)
+        ? resolveTaskTier(input.description, tierConfig.keywords ?? [])
+        : undefined
+      const recorded = taskTierHit === undefined
+        ? intake
+        : { ...intake, taskTierHit }
       const { status } = await store.append(intake.changeId, 0, meta => ({
         type: 'intake-classified',
-        intake,
+        intake: recorded,
         ...meta,
       }))
-      return { intake: status.intake ?? intake }
+      return { intake: status.intake ?? recorded }
     },
 
     async status(input: WorkflowIdentity): Promise<WorkflowStatus> {
@@ -191,9 +203,13 @@ export async function confirmIntake(
   // confirm — the dispatch-time routing reads this frozen value, so a later
   // config edit never re-tiers an in-flight change. No config / disabled /
   // no keyword hit freezes nothing (the phase mapping alone routes).
+  // (fix pass #3) The durable classify-time hit — evaluated over the FULL
+  // description — is preferred; the summary re-evaluation stays as the
+  // fallback for old logs recorded before the hit existed.
   const tierConfig = readRouteTierConfigSync()
   if (tierConfig !== undefined && isTierRoutingActive(tierConfig)) {
-    const hit = resolveTaskTier(next.intake?.summary ?? '', tierConfig.keywords ?? [])
+    const hit = next.intake?.taskTierHit
+      ?? resolveTaskTier(next.intake?.summary ?? '', tierConfig.keywords ?? [])
     if (hit !== undefined) {
       const { status: frozen } = await store.append(next.changeId, next.projectionVersion, meta => ({
         type: 'task-tier-frozen' as const,

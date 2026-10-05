@@ -37,6 +37,19 @@ describe('BafWorkflow service', () => {
     expect(status.phases.intake?.fallbackActive).toBe(false)
   })
 
+  it('fix #2: frozenEnterprisePolicy exposes only an explicitly frozen ceiling', async () => {
+    // The dispatch-time tier routing min-restricts its per-turn synthesis
+    // against this accessor's result. A tier-auto-frozen policy is the tier
+    // routing's OWN synthesis — never a ceiling — and no freeze at all
+    // means no ceiling (permissive local default).
+    const ctx = new Context()
+    await ctx.plugin(BafWorkflow, {})
+    expect(ctx.bafWorkflow.frozenEnterprisePolicy()).toBeUndefined()
+
+    ctx.bafWorkflow.freezeRouteContext(ENTERPRISE, PROFILE)
+    expect(ctx.bafWorkflow.frozenEnterprisePolicy()).toBe(ENTERPRISE)
+  })
+
   it('resolveAndAudit writes success events and rethrows after failure audit', async () => {
     const ctx = new Context()
     await ctx.plugin(BafWorkflow, {})

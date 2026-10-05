@@ -344,16 +344,55 @@ export function compileTierRouteProfile(config: RouteTierConfig): RouteProfile {
  * deployment policy file: allowed = the three tier models, so the resolver
  * chain, capability checks, and approved-only fallback all run unchanged.
  * @param config - normalized config.
+ * @param ceiling - explicitly frozen deployment policy (fix pass #2,
+ * acceptance item 7): when present the synthesis min-restricts against it —
+ * a tier model outside the ceiling's allowed list is dropped and the
+ * fallback group keeps only ceiling-allowed refs, so a disallowed "high"
+ * falls down to the strongest ALLOWED tier instead of escaping the ceiling.
+ * An empty intersection yields empty `allowed` (the resolver then rejects
+ * and dispatch routing steps aside for the turn).
  */
-export function synthesizeTierPolicy(config: RouteTierConfig): EnterpriseRoutePolicy {
+export function synthesizeTierPolicy(
+  config: RouteTierConfig,
+  ceiling?: Pick<EnterpriseRoutePolicy, 'allowSessionOverride' | 'allowed'>,
+): EnterpriseRoutePolicy {
   const { allowed, groups } = tierAllowed(config)
+  if (ceiling === undefined) {
+    return {
+      schema: 1,
+      policyId: 'baf-tier-route',
+      version: 'local',
+      allowSessionOverride: true,
+      default: tierRef(config, 'mid'),
+      allowed,
+      fallbackPolicy: { mode: 'approved-only', groups },
+    }
+  }
+  const ceilingAllowed = new Map(ceiling.allowed.map(entry => [modelKey(entry), entry]))
+  const restricted = allowed.flatMap((entry) => {
+    const cap = ceilingAllowed.get(modelKey(entry))
+    if (cap === undefined) return []
+    return [{
+      ...entry,
+      // Tighten-only on capabilities too: a capability the ceiling does not
+      // grant is not granted here.
+      capabilities: entry.capabilities.filter(c => cap.capabilities.includes(c)),
+    }]
+  })
+  const allowedKeys = new Set(restricted.map(modelKey))
+  const midRef = tierRef(config, 'mid')
+  const defaultEntry = restricted.find(entry => entry.provider === midRef.provider && entry.model === midRef.model)
+    ?? restricted[0]
   return {
     schema: 1,
     policyId: 'baf-tier-route',
     version: 'local',
-    allowSessionOverride: true,
-    default: tierRef(config, 'mid'),
-    allowed,
-    fallbackPolicy: { mode: 'approved-only', groups },
+    allowSessionOverride: ceiling.allowSessionOverride,
+    default: defaultEntry === undefined ? midRef : { provider: defaultEntry.provider, model: defaultEntry.model },
+    allowed: restricted,
+    fallbackPolicy: {
+      mode: 'approved-only',
+      groups: { tiers: (groups.tiers ?? []).filter(ref => allowedKeys.has(modelKey(ref))) },
+    },
   }
 }

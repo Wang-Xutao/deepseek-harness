@@ -28,6 +28,7 @@ import {
   findTierByRef,
   isTierRoutingActive,
   synthesizeTierPolicy,
+  type EnterpriseRoutePolicy,
   type ProviderAvailability,
   type RouteResolution,
   type RouteTier,
@@ -76,6 +77,9 @@ const PERMISSIVE: ProviderAvailability = { isAvailable: () => true }
  * @param signal - the dispatch signal (node drives the phase mapping).
  * @param config - route tier config; undefined/disabled means no routing.
  * @param taskTier - the change's frozen keyword tier, if any.
+ * @param ceiling - explicitly frozen enterprise policy (fix pass #2,
+ * acceptance item 7): the per-turn synthesis min-restricts against it, so
+ * a tier model the deployment forbids never receives the turn.
  * @returns the outcome, or undefined when routing is off or the resolver
  * rejected every candidate (both mean "run on the session's current model").
  */
@@ -83,6 +87,7 @@ export function tierRouteSelection(
   signal: DispatchSignal,
   config: RouteTierConfig | undefined,
   taskTier: RouteTier | undefined,
+  ceiling?: EnterpriseRoutePolicy,
 ): TierRouteOutcome | undefined {
   if (config === undefined || !isTierRoutingActive(config)) return undefined
   const effective = effectiveTier(signal.node, taskTier, config)
@@ -108,7 +113,7 @@ export function tierRouteSelection(
   }
   try {
     const resolution = resolveRoute(
-      synthesizeTierPolicy(config),
+      synthesizeTierPolicy(config, ceiling),
       profile,
       signal.node,
       undefined,
@@ -139,6 +144,14 @@ export function tierRouteSelection(
 /** Structural session controller face: the public passthrough M2 adds. */
 interface SessionControllerLike {
   selectForNextRequest(agent: unknown, selection: RouteModelSelection): void
+}
+
+/**
+ * Structural BafWorkflow face for the dispatch-side ceiling read (fix pass
+ * #2): the explicitly frozen enterprise policy, when one exists.
+ */
+interface BafWorkflowLike {
+  frozenEnterprisePolicy(): EnterpriseRoutePolicy | undefined
 }
 
 /** Structural session face for the audit append. */
@@ -173,13 +186,27 @@ export function tierRouteSelectorFor(
     controller = undefined
   }
   if (controller === undefined) return undefined
+  // Fix pass #2 (acceptance item 7): the explicitly frozen enterprise
+  // ceiling. Structural read like the controller above, best-effort as
+  // ever — an unreachable workflow service means no ceiling is known and
+  // the permissive local synthesis stands.
+  let ceiling: EnterpriseRoutePolicy | undefined
+  try {
+    const resolved = ctx?.get('bafWorkflow')
+    if (resolved !== undefined && typeof (resolved as BafWorkflowLike).frozenEnterprisePolicy === 'function') {
+      const policy = (resolved as BafWorkflowLike).frozenEnterprisePolicy()
+      if (policy !== undefined && Array.isArray(policy.allowed)) ceiling = policy
+    }
+  } catch {
+    ceiling = undefined
+  }
   const rawSession = agent?.session as (DispatchAgent['session'] & { append?: unknown }) | undefined
   const append = typeof rawSession?.append === 'function' ? rawSession.append as SessionAppendLike['append'] : undefined
   const sessionId = typeof agent?.session?.header?.id === 'string' && agent.session.header.id !== ''
     ? agent.session.header.id
     : 'baf-unknown-session'
   return (signal: DispatchSignal) => {
-    const outcome = tierRouteSelection(signal, config, taskTierFor(cwd, signal.changeId)?.tier)
+    const outcome = tierRouteSelection(signal, config, taskTierFor(cwd, signal.changeId)?.tier, ceiling)
     if (outcome === undefined) return
     controller.selectForNextRequest(agent, outcome.selection)
     if (append !== undefined) {
