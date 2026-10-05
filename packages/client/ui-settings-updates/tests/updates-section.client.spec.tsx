@@ -57,6 +57,42 @@ describe('UpdatesSection', () => {
     expect(screen.getByText('desktopOnly')).toBeTruthy()
   })
 
+  it('explains each BAF package in plain language under its name', async () => {
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS, bafCore: '0.1.0', bafWorkflow: '0.1.0' }),
+      checkForUpdate: async () => AVAILABLE,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+      onUpdateProgress: () => () => {},
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    // 【变更】2026-10-05 (插件包说明): every package row carries a static
+    // plain-language description — what the package DOES — under its name,
+    // independent of the release notes the bridge may hand.
+    await waitFor(() => {
+      expect(screen.getByText('packagesHint')).toBeTruthy()
+    })
+    for (const key of [
+      'descBafCore', 'descBafWorkflow', 'descBafOpenspec', 'descBafStandard',
+      'descBafQuality', 'descBafGuard', 'descBafScaffold',
+    ]) {
+      const desc = screen.getByText(key)
+      // The description sits inside its package's row, under the name label
+      // (identity t renders the label key, not the literal package name).
+      const row = desc.closest('li')
+      expect(row).toBeTruthy()
+      expect(row?.textContent).toContain('labelBaf')
+    }
+  })
+
   it('renders multi-line notes as one paragraph per line', async () => {
     const bridge: BafDesktopBridge = {
       isDesktop: true,

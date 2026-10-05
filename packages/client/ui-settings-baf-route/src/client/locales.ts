@@ -17,6 +17,8 @@ export type BafRouteKey =
   | 'effortLabel'
   | 'effortDefault'
   | 'notInCatalog'
+  | 'tiersTitle'
+  | 'roleLabel'
   | 'phaseTitle'
   | 'flowHint'
   | 'phaseDesign'
@@ -29,9 +31,9 @@ export type BafRouteKey =
   | 'phaseArchive'
   | 'phaseDrift'
   | 'keywordsTitle'
-  | 'presetsTitle'
-  | 'presetsHint'
-  | 'presetTagHint'
+  | 'keywordsHint'
+  | 'presetBadge'
+  | 'presetAlwaysHint'
   | 'presetComplexEngineering'
   | 'presetCriticalRelease'
   | 'presetQualityAssurance'
@@ -79,8 +81,10 @@ export const en: Record<BafRouteKey, string> = {
   effortLabel: 'Effort',
   effortDefault: 'Default',
   notInCatalog: 'not in catalog',
-  phaseTitle: 'Phase → role flow',
-  flowHint: 'Click a node to cycle its role (Worker → Reviewer → Commander).',
+  tiersTitle: 'Model tiers',
+  roleLabel: 'Role',
+  phaseTitle: 'Workflow model binding',
+  flowHint: 'Bind one model role per workflow stage; click a node to cycle its role (Worker → Reviewer → Commander).',
   phaseDesign: 'Design',
   phasePlan: 'Plan',
   phaseClarify: 'Clarify',
@@ -91,9 +95,9 @@ export const en: Record<BafRouteKey, string> = {
   phaseArchive: 'Archive',
   phaseDrift: 'Drift',
   keywordsTitle: 'Keyword rules',
-  presetsTitle: 'Builtin presets',
-  presetsHint: 'Always in effect — every word is listed below, grouped by role. Click any tag to reference it in your own rules; add custom rules beneath.',
-  presetTagHint: 'Reference this word in your own rules',
+  keywordsHint: 'Builtin presets are already part of the rules and always in effect (read-only tags marked Preset, grouped by role then pack); plain tags are your own rules — add, edit, or remove them. Any keyword hit routes the task to that role.',
+  presetBadge: 'Preset',
+  presetAlwaysHint: 'builtin preset · always in effect',
   presetComplexEngineering: 'Complex engineering',
   presetCriticalRelease: 'Critical design & release',
   presetQualityAssurance: 'Test & debug',
@@ -142,8 +146,10 @@ export const zh: Record<BafRouteKey, string> = {
   effortLabel: '思考力度',
   effortDefault: '默认',
   notInCatalog: '未在目录',
-  phaseTitle: '阶段 → 角色 流程',
-  flowHint: '点击节点切换角色（Worker → Reviewer → Commander）。',
+  tiersTitle: '模型分级',
+  roleLabel: '角色',
+  phaseTitle: '工作流模型绑定',
+  flowHint: '为每个工作流阶段绑定角色模型；点击节点切换角色（Worker → Reviewer → Commander）。',
   phaseDesign: '设计',
   phasePlan: '规划',
   phaseClarify: '澄清',
@@ -154,9 +160,9 @@ export const zh: Record<BafRouteKey, string> = {
   phaseArchive: '归档',
   phaseDrift: '漂移',
   keywordsTitle: '关键词规则',
-  presetsTitle: '内置预设词库',
-  presetsHint: '默认启用、始终生效；全部关键词按角色分组完整列出，点击任意标签可引用到自定义规则，也可在下方新增自定义规则。',
-  presetTagHint: '引用该关键词到自定义规则',
+  keywordsHint: '内置预设词库已默认加入并始终生效（带「预设」徽标的只读标签，按角色再按词库分组）；普通标签为自定义规则，可增删改。命中任一关键词即切到对应角色。',
+  presetBadge: '预设',
+  presetAlwaysHint: '内置预设 · 始终生效',
   presetComplexEngineering: '复杂工程',
   presetCriticalRelease: '关键设计与发布',
   presetQualityAssurance: '测试与排查',

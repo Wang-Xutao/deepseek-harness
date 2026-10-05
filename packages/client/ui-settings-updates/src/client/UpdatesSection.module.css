@@ -59,6 +59,23 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* 【变更】2026-10-05 (插件包说明): the packages heading carries a one-line
+ * hint, and every package row a plain-language description — what the package
+ * IS, secondary-tone so release notes stay the tertiary voice. */
+.packagesHint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .updateCard {
   display: flex;
   flex-direction: column;

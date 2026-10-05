@@ -2,14 +2,15 @@
 /**
  * 多模型路由 M3 批次B — the settings row controller + component.
  *
- * 【变更】2026-10-05 (auto 批): the role cards carry model + PROVIDER + effort
- * pickers (provider alone, model kept; effort from the selected model's
- * reasoning ladder), out-of-catalog models show a 未在目录 chip, duplicate
- * catalog names disambiguate with a provider suffix, the preset packs render
- * as clickable keyword TAGS grouped by role (引用 adds one word to the user's
- * own rules), the user's rules are tags with inline edit/delete, 预演 reads
- * the unsaved DRAFT and can simulate the M4 verify-retry floor, and the flow
- * canvas renders full-view compact.
+ * 【变更】2026-10-05 (UI 三块批): the page is THREE titled blocks (模型分级 /
+ * 工作流模型绑定 / 关键词规则); the three roles render as ROWS in one
+ * column, each row one-line provider → model → effort (the model menu lists
+ * only the chosen provider's models); the flow block is titled 工作流模型
+ * 绑定 with the click-hint directly under the title and a canvas whose node
+ * rects never intersect (the 1.2 overlap bug); the builtin presets render
+ * INSIDE 关键词规则 as read-only 预设-badged tags (role-grouped, pack-labeled)
+ * — the 引用 click is gone, they are already rules; 预演 hot-reloads: draft
+ * edits re-run the dry-run on a debounce while text is present.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -337,38 +338,71 @@ describe('RouteSectionController', () => {
 })
 
 describe('ModelRoutingRow', () => {
-  it('renders three role cards whose pickers show catalog model NAMES, not ids', () => {
+  it('lays the page out as THREE titled blocks: 模型分级 → 工作流模型绑定 → 关键词规则 (1.3)', () => {
+    const { props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    const tiersTitle = screen.getByText('tiersTitle')
+    const phaseTitle = screen.getByText('phaseTitle')
+    const keywordsTitle = screen.getByText('keywordsTitle')
+    // Exactly the three blocks, in order, each hosting its content.
+    expect(tiersTitle.compareDocumentPosition(phaseTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(phaseTitle.compareDocumentPosition(keywordsTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(tiersTitle.compareDocumentPosition(screen.getByTestId('route-tier-high'))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(phaseTitle.compareDocumentPosition(screen.getByTestId('route-flow'))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(keywordsTitle.compareDocumentPosition(screen.getByTestId('route-keyword-tag'))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The standalone presets block is gone — presets live in 关键词规则 now.
+    expect(screen.queryByText('presetsTitle')).toBeNull()
+  })
+
+  it('renders the three roles as ROWS in one column, provider → model → effort per row (1.1)', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     expect(screen.getByRole('switch', { name: 'master' })).toBeTruthy()
-    // One model picker per tier card; the anchor reads the model's display name.
-    expect(within(screen.getByTestId('route-tier-high')).getByRole('button', { name: 'Big Brain' })).toBeTruthy()
-    expect(within(screen.getByTestId('route-tier-mid')).getByRole('button', { name: 'Middle' })).toBeTruthy()
-    expect(within(screen.getByTestId('route-tier-low')).getByRole('button', { name: 'Cheap' })).toBeTruthy()
-    // Provider rides its own picker (configurable independently, point 1).
-    expect(within(screen.getByTestId('route-tier-high')).getByRole('button', { name: /provider/ })).toBeTruthy()
-    // No free-text provider/model comboboxes remain — picking is menu-only.
-    expect(within(screen.getByTestId('route-tier-high')).queryByRole('combobox')).toBeNull()
-    // The keyword rule shows as a TAG now (editable), not a disabled input.
-    expect(screen.queryByDisplayValue('架构|refactor')).toBeNull()
-    expect(screen.getByTestId('route-keyword-tag').textContent).toContain('架构|refactor')
+    const high = screen.getByTestId('route-tier-high')
+    const mid = screen.getByTestId('route-tier-mid')
+    const low = screen.getByTestId('route-tier-low')
+    // One column: the rows stack in role order high → mid → low.
+    expect(high.compareDocumentPosition(mid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(mid.compareDocumentPosition(low) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // A header row labels the three selector columns.
+    expect(screen.getByText('roleLabel')).toBeTruthy()
+    expect(screen.getByText('provider')).toBeTruthy()
+    expect(screen.getByText('model')).toBeTruthy()
+    // Within one row the pickers read left→right: provider, model, effort.
+    const providerBtn = within(high).getByRole('button', { name: 'p' })
+    const modelBtn = within(high).getByRole('button', { name: 'Big Brain' })
+    const effortBtn = within(high).getByRole('button', { name: 'High' })
+    expect(providerBtn.compareDocumentPosition(modelBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(modelBtn.compareDocumentPosition(effortBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The anchors show names, not ids; no free-text comboboxes remain.
+    expect(within(mid).getByRole('button', { name: 'Middle' })).toBeTruthy()
+    expect(within(low).getByRole('button', { name: 'Cheap' })).toBeTruthy()
+    expect(within(high).queryByRole('combobox')).toBeNull()
   })
 
-  it('offers every catalog model in the picker; a pick sets provider AND model', () => {
+  it('the model menu lists only the chosen provider\'s models; a pick sets provider AND model (1.1)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
+    // high runs provider p — its model menu offers only p's models.
     fireEvent.click(within(screen.getByTestId('route-tier-high')).getByRole('button', { name: 'Big Brain' }))
-    // The generic dropdown lists all three catalog models by name.
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Cheap' }))
-    // Selecting derives the provider from the catalog group the model lives in.
-    expect(face.setTierModel).toHaveBeenCalledWith('high', { provider: 'q', model: 'cheap' })
+    expect(screen.getByRole('menuitem', { name: 'Middle' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Cheap' })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Middle' }))
+    expect(face.setTierModel).toHaveBeenCalledWith('high', { provider: 'p', model: 'mid' })
+    // low runs provider q — Cheap is there, the p models are not.
+    fireEvent.click(within(screen.getByTestId('route-tier-low')).getByRole('button', { name: 'Cheap' }))
+    expect(screen.getByRole('menuitem', { name: 'Cheap' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Big Brain' })).toBeNull()
   })
 
   it('re-points the provider alone from the provider menu (point 1)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
-    const card = screen.getByTestId('route-tier-high')
-    fireEvent.click(within(card).getByRole('button', { name: /provider/ }))
+    const row = screen.getByTestId('route-tier-high')
+    fireEvent.click(within(row).getByRole('button', { name: 'p' }))
     // Providers offered: every catalog provider, plus the configured one.
     fireEvent.click(screen.getByRole('menuitem', { name: 'q' }))
     expect(face.setTierProvider).toHaveBeenCalledWith('high', 'q')
@@ -377,22 +411,24 @@ describe('ModelRoutingRow', () => {
   it('edits the tier effort from the selected model\'s ladder; 默认 clears it', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
-    const card = screen.getByTestId('route-tier-high')
+    const row = screen.getByTestId('route-tier-high')
     // The fixture high tier runs big (reasoning ladder High/Max) at effort high.
-    fireEvent.click(within(card).getByRole('button', { name: /effortLabel/ }))
+    fireEvent.click(within(row).getByRole('button', { name: 'High' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Max' }))
     expect(face.setTierEffort).toHaveBeenCalledWith('high', 'max')
     // 默认 maps to undefined (follow the model default).
-    fireEvent.click(within(card).getByRole('button', { name: /effortLabel/ }))
+    fireEvent.click(within(row).getByRole('button', { name: 'High' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'effortDefault' }))
     expect(face.setTierEffort).toHaveBeenCalledWith('high', undefined)
   })
 
-  it('hides the effort menu when the selected model has no reasoning ladder', () => {
+  it('renders a disabled placeholder in the effort column when the model has no ladder', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
-    // mid runs Middle (no reasoning in the fixture) — no effort picker.
-    expect(within(screen.getByTestId('route-tier-mid')).queryByRole('button', { name: /effortLabel/ })).toBeNull()
+    // mid runs Middle (no reasoning in the fixture) — the column stays put
+    // with a disabled — placeholder instead of collapsing.
+    const placeholder = within(screen.getByTestId('route-tier-mid')).getByRole('button', { name: '—' })
+    expect((placeholder as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('shows a 未在目录 chip and the raw model id when the model left the catalog', () => {
@@ -401,14 +437,14 @@ describe('ModelRoutingRow', () => {
       draft: { ...CONFIG, tiers: { ...CONFIG.tiers, low: { provider: 'q', model: 'ghost' } } },
     })
     render(<ModelRoutingRow {...props} />)
-    const card = screen.getByTestId('route-tier-low')
-    expect(within(card).getByRole('button', { name: 'ghost' })).toBeTruthy()
-    expect(within(card).getByTestId('route-not-in-catalog').textContent).toContain('notInCatalog')
+    const row = screen.getByTestId('route-tier-low')
+    expect(within(row).getByRole('button', { name: 'ghost' })).toBeTruthy()
+    expect(within(row).getByTestId('route-not-in-catalog').textContent).toContain('notInCatalog')
     // A catalog model shows no chip.
     expect(within(screen.getByTestId('route-tier-high')).queryByTestId('route-not-in-catalog')).toBeNull()
   })
 
-  it('disambiguates duplicate catalog names with a provider suffix (点选仍按各自 id/provider 落值)', () => {
+  it('suffixed duplicate names resolve to their own id/provider per provider menu (批次B-E)', () => {
     const { face, props } = harness({
       ...READY,
       catalog: {
@@ -420,14 +456,17 @@ describe('ModelRoutingRow', () => {
       },
     })
     render(<ModelRoutingRow {...props} />)
-    fireEvent.click(within(screen.getByTestId('route-tier-high')).getByRole('button', { name: 'Big Brain' }))
-    expect(screen.getByRole('menuitem', { name: 'Same · p' })).toBeTruthy()
+    // low runs provider q (its model cheap is absent from this catalog, so the
+    // anchor reads the raw id) — the filtered menu shows the q duplicate with
+    // its provider suffix, never the p namesake; the pick carries q/m2.
+    fireEvent.click(within(screen.getByTestId('route-tier-low')).getByRole('button', { name: 'cheap' }))
     expect(screen.getByRole('menuitem', { name: 'Same · q' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Same · p' })).toBeNull()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Same · q' }))
-    expect(face.setTierModel).toHaveBeenCalledWith('high', { provider: 'q', model: 'm2' })
+    expect(face.setTierModel).toHaveBeenCalledWith('low', { provider: 'q', model: 'm2' })
   })
 
-  it('puts save/reset at the top, above the tier cards (2.1)', () => {
+  it('puts save/reset at the top, above the tier rows (2.1)', () => {
     const { props } = harness({ ...READY, dirty: true })
     render(<ModelRoutingRow {...props} />)
     const actions = screen.getByTestId('route-actions')
@@ -435,12 +474,12 @@ describe('ModelRoutingRow', () => {
     expect(actions.textContent).toContain('reset')
     expect(actions.textContent).toContain('dirty')
     const saveButton = within(actions).getByRole('button', { name: 'save' })
-    const card = screen.getByTestId('route-tier-high')
-    // The toolbar precedes the first tier card in document order.
-    expect(saveButton.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const row = screen.getByTestId('route-tier-high')
+    // The toolbar precedes the first tier row in document order.
+    expect(saveButton.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('draws the phase→tier flow compactly and fully visible, nodes in workflow order', () => {
+  it('draws the workflow binding flow compactly with NO overlapping nodes (1.2)', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     // Workflow execution order — intake first, archive last, drift as the
@@ -457,6 +496,26 @@ describe('ModelRoutingRow', () => {
     expect(names[0]).toContain('cheap')
     expect(names[3] ?? '').toContain('big')
     expect(names[6] ?? '').toContain('mid')
+    // 1.2 回归: no two node rects intersect (the drift column once sat 24px
+    // INTO the main column). Read the inline geometry the canvas positions.
+    const rects = nodes.map((node) => {
+      const style = (node as HTMLElement).style
+      return {
+        x: Number(style.left.replace('px', '')),
+        y: Number(style.top.replace('px', '')),
+        w: Number(style.width.replace('px', '')),
+        h: Number(style.height.replace('px', '')),
+      }
+    })
+    for (let a = 0; a < rects.length; a += 1) {
+      for (let b = a + 1; b < rects.length; b += 1) {
+        const r1 = rects[a]!
+        const r2 = rects[b]!
+        const overlaps = r1.x < r2.x + r2.w && r2.x < r1.x + r1.w
+          && r1.y < r2.y + r2.h && r2.y < r1.y + r1.h
+        expect(overlaps).toBe(false)
+      }
+    }
     // Session-tab-style canvas: bezier edges with an arrowhead marker, and
     // the full chain visible without an inner scroll viewport.
     const flow = screen.getByTestId('route-flow')
@@ -465,6 +524,17 @@ describe('ModelRoutingRow', () => {
     const canvas = flow.parentElement
     expect(canvas instanceof HTMLElement && canvas.style.maxHeight !== '').toBe(false)
     expect(canvas?.className).not.toContain('flowScroll')
+  })
+
+  it('titles the flow block 工作流模型绑定 with the click-hint directly under the title (1.2)', () => {
+    const { props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    const phaseTitle = screen.getByText('phaseTitle')
+    const hint = screen.getByText('flowHint')
+    const flow = screen.getByTestId('route-flow')
+    // hint sits between the title and the canvas — the old bottom hint is gone.
+    expect(phaseTitle.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(hint.compareDocumentPosition(flow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('cycles a node\'s tier on click (worker→reviewer→commander→worker)', () => {
@@ -479,30 +549,30 @@ describe('ModelRoutingRow', () => {
     expect(face.setPhaseTier).toHaveBeenCalledWith('design', 'low')
   })
 
-  it('shows the builtin packs as role-grouped keyword tags, every word fully visible', () => {
-    const { props } = harness(READY)
-    render(<ModelRoutingRow {...props} />)
-    const tags = screen.getAllByTestId('route-preset-tag')
-    // Every word of every pack renders as its own tag (3 per fixture pack).
-    expect(tags).toHaveLength(12)
-    expect(tags.map(tag => tag.textContent)).toContain('架构')
-    expect(tags.map(tag => tag.textContent)).toContain('README')
-    // Role-grouped: the first tier group hosts the two high packs.
-    const tierGroups = screen.getAllByTestId('route-preset-tier')
-    expect(tierGroups[0]?.textContent).toContain('presetComplexEngineering')
-    expect(tierGroups[0]?.textContent).toContain('presetCriticalRelease')
-    expect(tierGroups[0]?.textContent).toContain('tierHigh')
-  })
-
-  it('clicking a preset tag 引用 it into the user\'s rules once (deduped)', () => {
+  it('renders builtin presets INSIDE 关键词规则 as 预设-badged read-only tags, grouped by role (1.5)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
-    // The fixture draft already owns 架构|refactor at high — the 架构 tag is a
-    // dup and must not fire; 重构 is new and lands as a single-word rule.
-    fireEvent.click(screen.getAllByTestId('route-preset-tag').find(tag => tag.textContent === '架构')!)
+    const tags = screen.getAllByTestId('route-preset-tag')
+    // Every word of every pack renders as its own tag (3 per fixture pack),
+    // each carrying the 预设 badge and its pack name in the tooltip.
+    expect(tags).toHaveLength(12)
+    // Identity t concatenates word + badge key; match on the word prefix.
+    expect(tags.map(tag => tag.textContent).some(text => text?.startsWith('架构'))).toBe(true)
+    expect(tags.map(tag => tag.textContent).some(text => text?.startsWith('README'))).toBe(true)
+    expect(tags.every(tag => tag.textContent?.includes('presetBadge') === true)).toBe(true)
+    expect(tags.find(tag => tag.textContent?.includes('架构'))?.getAttribute('title')).toContain('presetComplexEngineering')
+    // Read-only: clicking a preset tag no longer 引用's anything.
+    fireEvent.click(tags.find(tag => tag.textContent?.includes('重构'))!)
     expect(face.addKeyword).not.toHaveBeenCalled()
-    fireEvent.click(screen.getAllByTestId('route-preset-tag').find(tag => tag.textContent === '重构')!)
-    expect(face.addKeyword).toHaveBeenCalledWith({ words: '重构', tier: 'high' })
+    // Role-grouped with the user's own rules: the high group hosts both high
+    // packs AND the fixture's own 架构|refactor rule; pack names subdivide.
+    const groups = screen.getAllByTestId('route-keyword-group')
+    expect(groups).toHaveLength(3)
+    expect(groups[0]?.textContent).toContain('tierHigh')
+    expect(groups[0]?.textContent).toContain('架构|refactor')
+    expect(groups[0]?.textContent).toContain('presetComplexEngineering')
+    expect(groups[0]?.textContent).toContain('presetCriticalRelease')
+    expect(groups[2]?.textContent).toContain('README')
   })
 
   it('user keyword tags edit inline and delete', () => {
@@ -525,6 +595,26 @@ describe('ModelRoutingRow', () => {
     render(<ModelRoutingRow {...props} />)
     fireEvent.click(screen.getByRole('switch', { name: 'master' }))
     expect(face.setEnabled).toHaveBeenCalledWith(false)
+  })
+
+  it('hot-reloads the preview: draft edits re-run the dry-run on a debounce (1.6)', async () => {
+    const { store, props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    // Type once — the debounce fires on its own, no run click.
+    fireEvent.change(screen.getByTestId('route-preview-input'), { target: { value: 'readme' } })
+    await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: false }) })
+    // A keyword edit to the DRAFT re-runs with the same text (热加载).
+    props.runPreview.mockClear()
+    store.set({
+      ...READY,
+      dirty: true,
+      draft: { ...CONFIG, keywords: [...CONFIG.keywords, { words: 'readme', tier: 'high' }] },
+    })
+    await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: false }) })
+    // The verify-retry switch rides every hot reload too.
+    props.runPreview.mockClear()
+    fireEvent.click(screen.getByTestId('route-preview-verify'))
+    await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: true }) })
   })
 
   it('shows the preview verdict, escalated flag, and passes the verify switch', () => {

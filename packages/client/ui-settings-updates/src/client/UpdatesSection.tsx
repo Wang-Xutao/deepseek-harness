@@ -45,8 +45,10 @@ function VersionRow(props: {
   label: string
   version: string | undefined
   notes: string | undefined
+  /** 【变更】2026-10-05 (插件包说明): static plain-language description of what the row's package DOES. */
+  desc?: string
 }): ReactElement {
-  const { label, version, notes } = props
+  const { label, version, notes, desc } = props
   // 【变更】2026-10-04 (用户问题 1): notes render one paragraph per line —
   // version-notes.json now carries concise multi-line copy instead of one
   // wall of text.
@@ -57,6 +59,7 @@ function VersionRow(props: {
         <span className={css.label}>{label}</span>
         <span className={css.value}>{version ?? '—'}</span>
       </div>
+      {desc === undefined ? undefined : <p className={css.desc}>{desc}</p>}
       {paragraphs.map(line => <p key={line} className={css.notes}>{line}</p>)}
     </li>
   )
@@ -226,41 +229,52 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
         />
       </ul>
       <h3 className={css.subtitle}>{t('packagesHeading')}</h3>
+      {/* 【变更】2026-10-05 (插件包说明): each package row carries a static
+          plain-language description under its name — the release notes say
+          what CHANGED, this says what the package IS. */}
+      <p className={css.packagesHint}>{t('packagesHint')}</p>
       <ul className={css.rows}>
         <VersionRow
           label={t('labelBafCore')}
           version={versions?.bafCore}
           notes={versions?.bafCoreNotes}
+          desc={t('descBafCore')}
         />
         <VersionRow
           label={t('labelBafWorkflow')}
           version={versions?.bafWorkflow}
           notes={versions?.bafWorkflowNotes}
+          desc={t('descBafWorkflow')}
         />
         <VersionRow
           label={t('labelBafOpenspec')}
           version={versions?.bafOpenspec}
           notes={versions?.bafOpenspecNotes}
+          desc={t('descBafOpenspec')}
         />
         <VersionRow
           label={t('labelBafStandard')}
           version={versions?.bafStandard}
           notes={versions?.bafStandardNotes}
+          desc={t('descBafStandard')}
         />
         <VersionRow
           label={t('labelBafQuality')}
           version={versions?.bafQuality}
           notes={versions?.bafQualityNotes}
+          desc={t('descBafQuality')}
         />
         <VersionRow
           label={t('labelBafGuard')}
           version={versions?.bafGuard}
           notes={versions?.bafGuardNotes}
+          desc={t('descBafGuard')}
         />
         <VersionRow
           label={t('labelBafScaffold')}
           version={versions?.bafScaffold}
           notes={versions?.bafScaffoldNotes}
+          desc={t('descBafScaffold')}
         />
       </ul>
       {progress ? <p className={css.status}>{t('progress')}：{progress}</p> : null}
