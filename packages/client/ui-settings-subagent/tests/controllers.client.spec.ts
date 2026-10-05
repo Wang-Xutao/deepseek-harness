@@ -91,6 +91,27 @@ describe('SubagentModelSelectionCardController', () => {
     ])
   })
 
+  // 【变更】2026-10-05 (多模型路由 auto 批): the baf-route pseudo group (the
+  // Auto model the route runtime injects into the session catalog) is a
+  // SESSION-level selector — a subagent pinned to it would carry an
+  // unresolvable pseudo route, so it never joins the candidate list.
+  it('drops the baf-route auto pseudo group from subagent candidates', () => {
+    const candidates = subagentModelCandidates(
+      [
+        { id: 'baf-route', name: '多模型路由', models: [{ id: 'auto', name: 'Auto' }] },
+        { id: 'alpha', name: 'Alpha API', models: [{ id: 'fast', name: 'Fast' }] },
+      ],
+      [],
+      new Set(),
+    )
+    expect(candidates).toEqual([
+      {
+        key: 'alpha\0fast', provider: 'alpha', model: 'fast', providerName: 'Alpha API',
+        modelName: 'Fast', available: true, selected: false,
+      },
+    ])
+  })
+
   it('loads adapter models and saves the switch and routes atomically', async () => {
     const host = stubConfigForm<SubagentModelSelectionSettings>()
     acceptWrites(host)

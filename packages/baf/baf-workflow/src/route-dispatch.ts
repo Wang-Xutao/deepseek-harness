@@ -3,21 +3,23 @@
  *
  * The `/baf-go` dispatcher calls the {@link DispatchRoute} hook just before
  * queueing a work order (see `go-dispatch.ts`). This module is that hook's
- * implementation: for one dispatch signal it decides which tier's model the
- * upcoming turn should run on, asks the host's session controller to pin that
- * selection for the agent's next request, and records the decision in the
- * session audit trail.
+ * implementation: for one dispatch signal on a session whose RAW model
+ * selection is the auto pseudo entry (`baf-route/auto`, see `route-auto.ts`)
+ * it decides which tier's model the upcoming turn should run on, pins that
+ * selection as the auto runtime's one-shot for the session's next request,
+ * and records the decision in the session audit trail. Sessions on any other
+ * selection are left on exactly that model (point 4: 否则使用选中的模型).
  *
  * Split in two, like the rest of the routing code:
  * - {@link tierRouteSelection} is PURE (config + frozen task tier in,
  *   selection out) — unit-tested without a host, and reusable by any future
  *   surface that wants the same decision (e.g. the settings UI's 预演 box).
  * - {@link tierRouteSelectorFor} is the host shell: reads the config file,
- *   looks up the frozen task tier, and applies the selection through the
- *   session controller's public passthrough. Everything is best-effort —
- *   the dispatcher isolates hook failures, and a routing that cannot run
- *   (inactive config, missing controller, resolver rejection) simply leaves
- *   the turn on the session's current model.
+ *   gates on the session's raw selection, looks up the frozen task tier, and
+ *   pins through the auto runtime. Everything is best-effort — the dispatcher
+ *   isolates hook failures, and a routing that cannot run (inactive config,
+ *   missing controller or auto runtime, non-auto selection, resolver
+ *   rejection) simply leaves the turn on the session's current model.
  * @module @deepseek-ai/dsh-baf-workflow/route-dispatch
  */
 
@@ -141,9 +143,24 @@ export function tierRouteSelection(
   }
 }
 
-/** Structural session controller face: the public passthrough M2 adds. */
+/**
+ * Structural session controller face: the RAW-selection passthrough the auto
+ * batch (2026-10-05) adds — what the session's customer actually picked,
+ * BEFORE any auto resolution. The dispatch gate reads it per signal.
+ */
 interface SessionControllerLike {
-  selectForNextRequest(agent: unknown, selection: RouteModelSelection): void
+  rawSelectionOf(agent: unknown): RouteModelSelection | undefined
+}
+
+/**
+ * Structural `bafRouteAuto` runtime face (see `route-auto.ts`): the one-shot
+ * pin the dispatch decision lands as. The session's NEXT request resolves
+ * auto through it, so the durable selection stays `baf-route/auto` — routing
+ * never overwrites what the customer picked.
+ */
+interface RouteAutoRuntimeLike {
+  accepts(provider: string, model: string): boolean
+  pinForNextRequest(sessionId: string, selection: RouteModelSelection): void
 }
 
 /**
@@ -161,8 +178,9 @@ interface SessionAppendLike {
 
 /**
  * Build the dispatch route hook for one session, or undefined when tier
- * routing cannot act (inactive config / no reachable session controller) —
- * installing nothing is cleaner than a hook that no-ops every signal.
+ * routing cannot act (inactive config / no reachable session controller /
+ * no auto runtime) — installing nothing is cleaner than a hook that no-ops
+ * every signal.
  * @param cwd - workspace root (frozen task-tier cache scope).
  * @param ctx - host context (or undefined in tests/CLI) — used to reach the
  * session controller through the scope chain.
@@ -179,13 +197,25 @@ export function tierRouteSelectorFor(
   let controller: SessionControllerLike | undefined
   try {
     const resolved = ctx?.get('sessionController')
-    if (resolved !== undefined && typeof (resolved as SessionControllerLike).selectForNextRequest === 'function') {
+    if (resolved !== undefined && typeof (resolved as SessionControllerLike).rawSelectionOf === 'function') {
       controller = resolved as SessionControllerLike
     }
   } catch {
     controller = undefined
   }
   if (controller === undefined) return undefined
+  let auto: RouteAutoRuntimeLike | undefined
+  try {
+    const resolved = ctx?.get('bafRouteAuto')
+    if (resolved !== undefined
+      && typeof (resolved as RouteAutoRuntimeLike).accepts === 'function'
+      && typeof (resolved as RouteAutoRuntimeLike).pinForNextRequest === 'function') {
+      auto = resolved as RouteAutoRuntimeLike
+    }
+  } catch {
+    auto = undefined
+  }
+  if (auto === undefined) return undefined
   // Fix pass #2 (acceptance item 7): the explicitly frozen enterprise
   // ceiling. Structural read like the controller above, best-effort as
   // ever — an unreachable workflow service means no ceiling is known and
@@ -206,9 +236,16 @@ export function tierRouteSelectorFor(
     ? agent.session.header.id
     : 'baf-unknown-session'
   return (signal: DispatchSignal) => {
+    // 【变更】2026-10-05 (points 4+5): auto-gated dispatch. A session whose
+    // RAW selection is NOT the auto pseudo model runs on exactly that model —
+    // no pin, no audit line, the customer's pick stands. (The pre-auto M2
+    // behavior — every dispatched session got the tier model pinned — is
+    // superseded: routing is now opt-in per session through the Auto entry.)
+    const raw = controller.rawSelectionOf(agent)
+    if (raw === undefined || !auto.accepts(raw.provider, raw.model)) return
     const outcome = tierRouteSelection(signal, config, taskTierFor(cwd, signal.changeId)?.tier, ceiling)
     if (outcome === undefined) return
-    controller.selectForNextRequest(agent, outcome.selection)
+    auto.pinForNextRequest(sessionId, outcome.selection)
     if (append !== undefined) {
       append('baf/route-resolved', routeAuditFromResolution({
         resolution: outcome.resolution,

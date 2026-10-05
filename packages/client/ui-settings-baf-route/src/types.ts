@@ -25,10 +25,21 @@ export interface BafRouteConfigSaveResult {
 /**
  * 多模型路由 M3 — the 预演 (dry-run) box outcome: which tier a task summary
  * would freeze to under the CURRENT config's keywords, and the word that hit.
+ * 【变更】2026-10-05 (auto 批): `escalated` marks the M4 verify-retry floor
+ * raising an otherwise-lower verdict to mid.
  */
 export interface BafRoutePreviewResult {
   readonly tier: RouteTier | null
   readonly matched?: string
+  readonly escalated?: boolean
+}
+
+/**
+ * 多模型路由 auto 批 (2026-10-05) — 预演 options: `verifyRetry` simulates the
+ * M4 verify-failed retry floor (a below-mid verdict runs at mid).
+ */
+export interface BafRoutePreviewOptions {
+  readonly verifyRetry?: boolean
 }
 
 /**

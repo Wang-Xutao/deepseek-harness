@@ -5,6 +5,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-settings'
 import type { LlmModelInfo } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
+import { autoCatalogGroups } from './route-auto-bridge.ts'
 import type {
   ModelCatalog,
   ModelReasoning,
@@ -61,8 +62,13 @@ export async function buildModelCatalog(
       }
     }
   }))
-  const groups = catalog.flatMap(item => item.kind === 'group' ? [item.group] : [])
+  const providerGroups = catalog.flatMap(item => item.kind === 'group' ? [item.group] : [])
     .filter(group => group.models.length > 0)
+  // 【变更】2026-10-05 (多模型路由 auto): the pseudo baf-route/auto group
+  // leads the catalog while routing is active — the composer's model picker
+  // offers Auto first. Without the runtime, or with routing off, nothing
+  // changes (没有使能则没有 auto).
+  const groups = [...autoCatalogGroups(ctx).filter(group => group.models.length > 0), ...providerGroups]
   return {
     default: { ...defaultSelection },
     routableProviders: groups.map(group => group.id),

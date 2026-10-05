@@ -14,6 +14,7 @@ import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
+import { routeAutoOf } from './route-auto-bridge.ts'
 import type { ModelSelection } from './types.ts'
 
 /** Cold Session identity absent from persistence. */
@@ -67,7 +68,33 @@ export type ApiSessionAgentResult =
 
 type InstalledSelection = ModelSelectionRef & {
   current: AgentModelSelection
+  /**
+   * 【变更】2026-10-05 (多模型路由 auto): the RAW, unresolved choice — the
+   * `baf-route/auto` pseudo pair stays itself here. The dispatch route gate
+   * reads this through the controller's `rawSelectionOf` passthrough.
+   */
+  readonly raw: AgentModelSelection | undefined
   consume(provider: string, model: string, reasoningEffort: string | undefined): boolean
+}
+
+/**
+ * The durable request header's selection, for getters that need the logged
+ * state rather than the live pick. An effort the adapter defaulted is not a
+ * conversation choice: restoring it as one would make an unchanged default
+ * read as a request change.
+ */
+function loggedSelectionOf(agent: Agent): AgentModelSelection | undefined {
+  const loggedHeader = agent.session.requestHeader()
+  if (loggedHeader === undefined) return undefined
+  const logged = loggedHeader.config
+  return {
+    provider: logged.provider,
+    model: logged.model,
+    ...(logged.reasoningEffort === undefined
+      || loggedHeader.adapterDefaults?.reasoningEffort === true
+      ? {}
+      : { reasoningEffort: logged.reasoningEffort }),
+  }
 }
 
 /**
@@ -291,22 +318,38 @@ export class ApiSessionAgentController {
       ? undefined
       : agentModelSelection(projectionState.pending)
     const defaultModel = this.ctx.agentDefaultModel
+    // 【变更】2026-10-05 (多模型路由 auto): the host-realm runtime, when its
+    // entry is mounted, resolves the pseudo baf-route/auto pick per step
+    // (dispatch pin → keyword scan of the last user message → Worker default).
+    const auto = routeAutoOf(this.ctx)
     const selection: InstalledSelection = {
       get current(): AgentModelSelection {
-        if (picked !== undefined) return picked
-        const loggedHeader = agent.session.requestHeader()
-        if (loggedHeader === undefined) return defaultModel.currentSelection()
-        const logged = loggedHeader.config
-        return {
-          provider: logged.provider,
-          model: logged.model,
-          // An effort the adapter defaulted is not a conversation choice: restoring
-          // it as one would make an unchanged default read as a request change.
-          ...(logged.reasoningEffort === undefined
-            || loggedHeader.adapterDefaults?.reasoningEffort === true
-            ? {}
-            : { reasoningEffort: logged.reasoningEffort }),
+        if (picked !== undefined) {
+          if (auto !== undefined && auto.accepts(picked.provider, picked.model)) {
+            const resolved = auto.resolveAuto(agent.session.header.id, picked)
+            if (resolved !== undefined) {
+              // The runtime's effort is a config-file string; brand it at this
+              // boundary the way request-header assembly does.
+              return {
+                provider: resolved.provider,
+                model: resolved.model,
+                ...(resolved.reasoningEffort === undefined
+                  ? {}
+                  : { reasoningEffort: ReasoningEffortId(resolved.reasoningEffort) }),
+              }
+            }
+            // Routing went away after the pick (没有使能则没有 auto): fall
+            // through to the durable header / deployment default — the pseudo
+            // pair must never reach a provider.
+          } else {
+            return picked
+          }
         }
+        const logged = loggedSelectionOf(agent)
+        return logged === undefined ? defaultModel.currentSelection() : logged
+      },
+      get raw(): AgentModelSelection | undefined {
+        return picked ?? loggedSelectionOf(agent)
       },
       set current(next: AgentModelSelection) {
         picked = next

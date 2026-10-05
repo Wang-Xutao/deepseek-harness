@@ -1,6 +1,7 @@
 /** Session commands whose activation policy is explicit at each Remote method. */
 
 import { modelAvailable } from './catalog.ts'
+import { routeAutoOf } from './route-auto-bridge.ts'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -151,6 +152,17 @@ export class SessionCommandController {
   async selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue> {
     const agent = await this.resolveAgent(request.sessionId)
     return this.agents.serializeImageAdmission(agent, async () => {
+      // 【变更】2026-10-05 (多模型路由 auto): the pseudo `baf-route/auto` pair
+      // installs VERBATIM — no registry availability check, no call-config
+      // resolution (no provider owns the pair), and no default-model
+      // persistence (auto is a per-session mode, never a deployment default).
+      // The per-step waterfall resolves it when the next request assembles.
+      const auto = routeAutoOf(this.ctx)
+      if (auto !== undefined && auto.accepts(request.provider, request.model)) {
+        const pseudo: AgentModelSelection = { provider: request.provider, model: request.model }
+        this.agents.selectForNextRequest(agent, pseudo)
+        return { selected: { ...pseudo } }
+      }
       try {
         await this.requireModel(request)
         const resolved = await this.ctx.llm.resolveCallConfig({

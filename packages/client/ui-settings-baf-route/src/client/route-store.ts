@@ -18,11 +18,20 @@ import type { RouteTier } from '../types.ts'
  * One catalog model the tier pickers offer: display name (the「模型」config's
  * name, falling back to the id) plus the provider group it lives in — a pick
  * derives both, so the user never types a provider by hand.
+ *
+ * 【变更】2026-10-05 (auto 批): `label` is the menu text (duplicate names
+ * disambiguate with a ` · provider` suffix), and `reasoning` carries the
+ * ladder the tier's effort menu offers (omitted when the model has none).
  */
 export interface RouteCatalogModel {
   readonly id: string
   readonly name: string
   readonly provider: string
+  readonly label: string
+  readonly reasoning?: {
+    readonly efforts: readonly { readonly id: string; readonly name: string }[]
+    readonly defaultEffort?: string
+  }
 }
 
 /** Every catalog model, for the tier pickers (2.3: name-labelled dropdown). */
@@ -49,7 +58,7 @@ export interface RouteSectionState {
   /** The Host's or transport's words for the last refused save. */
   error: string | undefined
   /** The last 预演 verdict, from the Host's keyword dry-run. */
-  preview: { tier: RouteTier | null; matched?: string } | undefined
+  preview: { tier: RouteTier | null; matched?: string; escalated?: boolean } | undefined
   /** Catalog models for the tier pickers; undefined when the catalog is unreachable. */
   catalog: RouteCatalogSuggestions | undefined
   /** Always-on builtin packs from the Host, for the read-only preset block (2.4). */
@@ -69,20 +78,30 @@ export interface RouteSectionFace {
   setEnabled(enabled: boolean): void
   /** Patch one tier's model spec (provider/model, kept in the draft). */
   setTierModel(tier: RouteTier, patch: Partial<TierModelSpec>): void
+  /** 【变更】2026-10-05 (point 1): re-point one tier's provider alone; model and effort stay. */
+  setTierProvider(tier: RouteTier, provider: string): void
+  /** 【变更】2026-10-05 (批次B-B): set one tier's reasoning effort; undefined follows the model default. */
+  setTierEffort(tier: RouteTier, effort: string | undefined): void
   /** Pin one workflow node's tier in the draft's phase mapping. */
   setPhaseTier(node: WorkflowNode, tier: RouteTier): void
   /** Append one keyword rule. */
   addKeyword(rule: TierKeywordRule): void
   /** Drop the keyword rule at `index`. */
   removeKeyword(index: number): void
+  /** 【变更】2026-10-05 (point 5): replace the keyword rule at `index` in place (inline tag edit). */
+  updateKeyword(index: number, rule: TierKeywordRule): void
   /** Flip the keyword-escalates-only flag. */
   setEscalateOnly(value: boolean): void
   /** Persist the draft; a refusal keeps it dirty with `error` set. */
   save(): Promise<void>
   /** Remove the config file and return to a freshly seeded draft. */
   reset(): Promise<void>
-  /** Run the Host-side keyword dry-run for `summary`. */
-  runPreview(summary: string): Promise<void>
+  /**
+   * Run the Host-side keyword dry-run for `summary`.
+   * 【变更】2026-10-05 (auto 批): previews the unsaved DRAFT (not the saved
+   * file) and forwards the M4 verify-retry simulation switch.
+   */
+  runPreview(summary: string, options?: { verifyRetry?: boolean }): Promise<void>
 }
 
 /**
@@ -125,6 +144,21 @@ export class RouteSectionController {
   }
 
   /** @inheritdoc */
+  setTierProvider(tier: RouteTier, provider: string): void {
+    this.edit((draft) => { draft.tiers[tier] = { ...draft.tiers[tier], provider } })
+  }
+
+  /** @inheritdoc */
+  setTierEffort(tier: RouteTier, effort: string | undefined): void {
+    this.edit((draft) => {
+      const spec = { ...draft.tiers[tier] }
+      if (effort === undefined) delete spec.reasoningEffort
+      else spec.reasoningEffort = effort
+      draft.tiers[tier] = spec
+    })
+  }
+
+  /** @inheritdoc */
   setPhaseTier(node: WorkflowNode, tier: RouteTier): void {
     this.edit((draft) => { draft.phaseTier = { ...draft.phaseTier, [node]: tier } })
   }
@@ -137,6 +171,13 @@ export class RouteSectionController {
   /** @inheritdoc */
   removeKeyword(index: number): void {
     this.edit((draft) => { draft.keywords = (draft.keywords ?? []).filter((_, at) => at !== index) })
+  }
+
+  /** @inheritdoc */
+  updateKeyword(index: number, rule: TierKeywordRule): void {
+    this.edit((draft) => {
+      draft.keywords = (draft.keywords ?? []).map((existing, at) => at === index ? rule : existing)
+    })
   }
 
   /** @inheritdoc */
@@ -186,9 +227,11 @@ export class RouteSectionController {
   }
 
   /** @inheritdoc */
-  async runPreview(summary: string): Promise<void> {
+  async runPreview(summary: string, options?: { verifyRetry?: boolean }): Promise<void> {
     if (summary === '') return
-    const response = await this.ctx.remote.bafRouteConfig.preview(summary)
+    // 未保存改动即时预演 (批次B-A): the draft the row is editing, not the file.
+    const draft = this.store.getSnapshot().draft
+    const response = await this.ctx.remote.bafRouteConfig.preview(summary, draft, options)
     this.store.update((state) => {
       if (!response.ok) {
         state.error = response.error.message
@@ -207,13 +250,16 @@ export class RouteSectionController {
       hooks: { routeSection: this.store },
       setEnabled: enabled => this.setEnabled(enabled),
       setTierModel: (tier, patch) => this.setTierModel(tier, patch),
+      setTierProvider: (tier, provider) => this.setTierProvider(tier, provider),
+      setTierEffort: (tier, effort) => this.setTierEffort(tier, effort),
       setPhaseTier: (node, tier) => this.setPhaseTier(node, tier),
       addKeyword: rule => this.addKeyword(rule),
       removeKeyword: index => this.removeKeyword(index),
+      updateKeyword: (index, rule) => this.updateKeyword(index, rule),
       setEscalateOnly: value => this.setEscalateOnly(value),
       save: () => this.save(),
       reset: () => this.reset(),
-      runPreview: summary => this.runPreview(summary),
+      runPreview: (summary, options) => this.runPreview(summary, options),
     }
   }
 
@@ -267,12 +313,37 @@ export class RouteSectionController {
    * Distill the catalog into the picker list: every model with its display
    * name (the「模型」config's name) and the provider group it lives in — the
    * tier pickers are name-labelled and a pick derives provider + model.
+   *
+   * 【变更】2026-10-05 (auto 批): the `baf-route` pseudo group (the Auto model)
+   * never reaches the tier pickers — a tier slot always holds a concrete
+   * model; duplicate display names disambiguate with a ` · provider` suffix
+   * so two same-named models stay distinguishable (批次B-E); each model
+   * carries its reasoning ladder for the effort menu.
    */
   private suggestionsOf(catalog: CatalogLookup): RouteCatalogSuggestions | undefined {
     if (!catalog.ok) return undefined
-    const models = catalog.value.groups.flatMap(group =>
-      group.models.map(model => ({ id: model.id, name: model.name, provider: group.id })))
-    return { models }
+    const models = catalog.value.groups
+      .filter(group => group.id !== 'baf-route')
+      .flatMap(group => group.models.map((model) => {
+        const name = model.name !== '' ? model.name : model.id
+        const base = { id: model.id, name, provider: group.id }
+        if (model.reasoning === undefined) return base
+        return {
+          ...base,
+          reasoning: {
+            efforts: model.reasoning.efforts.map(effort => ({ id: effort.id, name: effort.name })),
+            ...(model.reasoning.defaultEffort === undefined ? {} : { defaultEffort: model.reasoning.defaultEffort }),
+          },
+        }
+      }))
+    const counts = new Map<string, number>()
+    for (const model of models) counts.set(model.name, (counts.get(model.name) ?? 0) + 1)
+    return {
+      models: models.map(model => ({
+        ...model,
+        label: (counts.get(model.name) ?? 1) > 1 ? `${model.name} · ${model.provider}` : model.name,
+      })),
+    }
   }
 
   /**

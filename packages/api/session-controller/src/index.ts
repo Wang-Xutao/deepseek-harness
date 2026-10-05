@@ -220,6 +220,19 @@ export class SessionController extends TypertRemoteService {
     this.agents.selectForNextRequest(agent, selection)
   }
 
+  /**
+   * 【变更】2026-10-05 (多模型路由 auto): the RAW model selection — what the
+   * session's customer actually picked, BEFORE the per-step waterfall resolves
+   * a `baf-route/auto` pseudo pick to a tier model. The dispatch route gate
+   * (baf-workflow) reads this through the scope chain to decide whether the
+   * session opts into tier routing at all.
+   * @param agent - live Agent whose selection is read.
+   * @returns the raw pick, the durable logged header's selection, or undefined.
+   */
+  rawSelectionOf(agent: Agent): AgentModelSelection | undefined {
+    return this.agents.selectionFor(agent).raw
+  }
+
   private promote(observation: SessionObservation): void {
     const sessionId = observation.header.id
     const task = (async () => {

@@ -244,6 +244,7 @@
       "@deepseek-ai/dsh-baf-workflow/orchestrator": ["./packages/baf/baf-workflow/src/orchestrator.ts"],
       "@deepseek-ai/dsh-baf-workflow/projection-events": ["./packages/baf/baf-workflow/src/projection-events.ts"],
       "@deepseek-ai/dsh-baf-workflow/route-config-io": ["./packages/baf/baf-workflow/src/route-config-io.ts"],
+      "@deepseek-ai/dsh-baf-workflow/route-auto": ["./packages/baf/baf-workflow/src/route-auto.ts"],
       "@deepseek-ai/dsh-client-ui-sidebar-right": ["./packages/client/ui-sidebar-right/src"],
       "@deepseek-ai/dsh-client-ui-sidebar-right/client": ["./packages/client/ui-sidebar-right/src/client"],
       "@deepseek-ai/dsh-client-ui-sidebar-documentpreview": ["./packages/client/ui-sidebar-documentpreview/src"],

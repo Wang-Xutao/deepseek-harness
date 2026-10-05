@@ -79,6 +79,10 @@ export function subagentModelKey(route: AllowedSubagentModel): string {
 
 /**
  * Join live adapter metadata with stored routes that remain removable after disappearance.
+ * 【变更】2026-10-05 (多模型路由 auto 批): the `baf-route` pseudo group (the
+ * Auto model injected into the session catalog when 多模型路由 is active) is
+ * dropped — it is a session-level selector; a subagent pinned to it would
+ * carry an unresolvable pseudo route.
  * @param groups - Current model directory grouped by provider.
  * @param stored - Routes in the effective settings value.
  * @param selected - Opaque route keys selected in the current draft.
@@ -90,19 +94,21 @@ export function subagentModelCandidates(
   selected: ReadonlySet<string>,
 ): SubagentModelCandidate[] {
   const storedByKey = new Map(stored.map(route => [subagentModelKey(route), route]))
-  const candidates = groups.flatMap(group => group.models.map((model): SubagentModelCandidate => {
-    const route = { provider: group.id, model: model.id }
-    const key = subagentModelKey(route)
-    storedByKey.delete(key)
-    return {
-      ...route,
-      key,
-      providerName: group.name,
-      modelName: model.name,
-      available: true,
-      selected: selected.has(key),
-    }
-  }))
+  const candidates = groups
+    .filter(group => group.id !== 'baf-route')
+    .flatMap(group => group.models.map((model): SubagentModelCandidate => {
+      const route = { provider: group.id, model: model.id }
+      const key = subagentModelKey(route)
+      storedByKey.delete(key)
+      return {
+        ...route,
+        key,
+        providerName: group.name,
+        modelName: model.name,
+        available: true,
+        selected: selected.has(key),
+      }
+    }))
   for (const route of storedByKey.values()) {
     const key = subagentModelKey(route)
     candidates.push({

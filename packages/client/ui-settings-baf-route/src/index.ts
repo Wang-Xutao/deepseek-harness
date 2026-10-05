@@ -23,8 +23,10 @@ import {
   resetRouteTierConfigSync,
   writeRouteTierConfigSync,
 } from '@deepseek-ai/dsh-baf-workflow/route-config-io'
+import { BafRouteAutoRuntime } from '@deepseek-ai/dsh-baf-workflow/route-auto'
 import type {
-  BafRouteConfigDefaults, BafRouteConfigSaveResult, BafRoutePreviewResult,
+  BafRouteConfigDefaults, BafRouteConfigSaveResult, BafRoutePreviewOptions,
+  BafRoutePreviewResult,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -41,6 +43,11 @@ declare module '@deepseek-ai/cordis' {
 export class BafRouteConfigRemote extends TypertRemoteService {
   constructor(ctx: Context) {
     super(ctx, 'bafRouteConfig')
+    // 【变更】2026-10-05 (auto 批 points 4+5): mount the host-realm auto
+    // runtime alongside the config it reads — the session controller (catalog
+    // injection, per-step resolution) and the dispatch gate reach it through
+    // the scope chain by name, with no dependency on this package.
+    ctx.plugin(BafRouteAutoRuntime, {})
   }
 
   /**
@@ -89,19 +96,38 @@ export class BafRouteConfigRemote extends TypertRemoteService {
    * settings row ships the summary here and renders the tier a confirm would
    * freeze — the same `effectiveKeywordRules` list the freeze chain runs
    * (user rules first, then the always-on builtin packs), one source of truth.
-   * Reads the SAVED config: an unsaved edit previews stale, which the row
-   * communicates with its own dirty marker.
+   * 【变更】2026-10-05 (auto 批): a passed DRAFT previews live (未保存改动即时
+   * 预演 — an invalid draft falls back to the saved file), and
+   * `options.verifyRetry` simulates the M4 verify-failed floor: a below-mid
+   * verdict escalates to mid with `escalated` on the result.
    * @param summary - a task summary as it would be intaken.
+   * @param draft - the unsaved config the row is editing (optional).
+   * @param options - simulation switches.
    * @returns the tier (and the word that hit), or tier null when no keyword
    * would freeze anything.
    */
   @Remote
-  async preview(summary: string): Promise<BafRoutePreviewResult> {
-    const config = readRouteTierConfigSync()
+  async preview(
+    summary: string,
+    draft?: RouteTierConfig,
+    options?: BafRoutePreviewOptions,
+  ): Promise<BafRoutePreviewResult> {
+    const fromDraft = draft === undefined ? undefined : parseRouteTierConfig(draft)
+    const config = fromDraft ?? readRouteTierConfigSync()
     if (config === undefined || !config.enabled) return { tier: null }
     const hit = resolveTaskTier(summary, effectiveKeywordRules(config.keywords))
-    if (hit === undefined) return { tier: null }
-    return { tier: hit.tier, matched: hit.matched }
+    let tier = hit?.tier
+    let escalated = false
+    if (options?.verifyRetry === true && tier !== 'mid' && tier !== 'high') {
+      tier = 'mid'
+      escalated = true
+    }
+    if (tier === undefined) return { tier: null }
+    return {
+      tier,
+      ...(hit === undefined ? {} : { matched: hit.matched }),
+      ...(escalated ? { escalated } : {}),
+    }
   }
 
   /**

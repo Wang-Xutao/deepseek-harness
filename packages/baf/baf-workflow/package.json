@@ -56,6 +56,10 @@
       "types": "./lib/types/route-config-io.d.ts",
       "default": "./lib/route-config-io.js"
     },
+    "./route-auto": {
+      "types": "./lib/types/route-auto.d.ts",
+      "default": "./lib/route-auto.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -70,6 +74,7 @@
     "lib/orchestrator.js",
     "lib/projection-events.js",
     "lib/route-config-io.js",
+    "lib/route-auto.js",
     "lib/types/**/*.d.ts",
     "skills"
   ],

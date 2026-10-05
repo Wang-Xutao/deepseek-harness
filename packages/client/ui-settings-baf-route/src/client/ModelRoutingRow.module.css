@@ -145,9 +145,22 @@
   flex: none;
 }
 
-.tierProvider {
+/* 【变更】2026-10-05 (auto 批): the provider / effort pickers ride a slightly
+   shorter pill so three rows stack comfortably inside one role card. */
+.selectorSmall {
+  height: 28px;
+  font-size: 12px;
+}
+
+/* 批次B-D: an out-of-catalog model (hand-edited file / removed model) keeps
+   its raw id on the anchor; this chip explains why the name is missing. */
+.notInCatalog {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: 9px;
   font-size: 11px;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-attention, #d19a66);
+  background: color-mix(in srgb, var(--dsw-alias-attention, #d19a66) 12%, transparent);
 }
 
 .block {
@@ -183,11 +196,9 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* 2.6: the vertical flow canvas mirrors the 会话 Tab workflow graph —
-   scrollable, with absolutely positioned node cards over SVG bezier edges. */
-.flowScroll {
-  max-height: 420px;
-  overflow: auto;
+/* 【变更】2026-10-05 (point 3): the compact canvas shows the WHOLE chain at
+   once — the wrapper frames it, it no longer scrolls inside. */
+.flowWrap {
   border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
   border-radius: 12px;
   background: var(--dsw-alias-bg-elevated, transparent);
@@ -227,9 +238,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 1px;
   box-sizing: border-box;
-  padding: 10px 12px;
+  padding: 7px 10px;
   color: inherit;
   text-align: left;
   background: linear-gradient(
@@ -238,7 +249,7 @@
     var(--dsw-alias-bg-elevated, transparent)
   );
   border: 1px solid color-mix(in srgb, var(--tier-color) 45%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
-  border-radius: 12px;
+  border-radius: 10px;
   cursor: pointer;
   outline: none;
   transition: transform 160ms ease, border-color 160ms ease;
@@ -256,13 +267,13 @@
 }
 
 .nodeName {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--dsw-alias-label-primary);
 }
 
 .nodeTier {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--tier-color);
 }
@@ -270,68 +281,124 @@
 .nodeModel {
   max-width: 170px;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* 2.4: the builtin packs are ALWAYS in effect — this block explains them,
-   read-only; the user's own rules are added below it. */
-.builtinPresets {
+/* 【变更】2026-10-05 (point 5): the builtin packs render as role-grouped tag
+   clouds — every word fully visible, one tag per word, click 引用's it. */
+.presetTier {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.builtinPreset {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px;
-  border-left: 3px solid var(--tier-color);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--tier-color) 6%, transparent);
 }
 
-.builtinName {
+.presetTierLabel {
   flex: none;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-primary);
-}
-
-.builtinTier {
-  flex: none;
+  margin-top: 2px;
   font-size: 11px;
   font-weight: 600;
   color: var(--tier-color);
 }
 
-.builtinWords {
+.presetPacks {
+  display: flex;
   flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.presetPack {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.presetPackName {
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-alias-label-tertiary);
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.presetTag {
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--tier-color) 40%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
+  border-radius: 9px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--tier-color) 6%, transparent);
+  cursor: pointer;
+}
+
+.presetTag:hover {
+  background: color-mix(in srgb, var(--tier-color) 16%, transparent);
+}
+
+/* The user's own rules as tags (point 5): word chip + role + edit/delete. */
+.keywordTags {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.keywordTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--tier-color) 40%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
+  border-radius: 9px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--tier-color) 5%, transparent);
+}
+
+.keywordTagWords {
+  color: var(--dsw-alias-label-primary);
+}
+
+.keywordTagTier {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tier-color);
+}
+
+.tagBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.tagBtn:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.2));
+}
+
+/* The inline edit row a tag's ✎ opens (words + role + save/cancel). */
+.keywordEdit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
 }
 
 .keywordRow {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.keywordInputWrap {
-  flex: 1 1 auto;
-}
-
-.keywordTier {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--tier-color);
 }
 
 .select,
@@ -353,6 +420,16 @@
 
 .previewBar .input {
   flex: 1 1 auto;
+}
+
+/* 批次C: the verify-retry simulation switch rides under the run bar. */
+.previewOpt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
 }
 
 .preview {

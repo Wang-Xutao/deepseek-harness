@@ -187,7 +187,30 @@ describe('tierRouteSelection (多模型路由 M2 纯核)', () => {
 })
 
 describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
-  it('selects via the session controller and audits the route', async () => {
+  /**
+   * 【变更】2026-10-05 (points 4+5): the shell is auto-gated now — the fake
+   * controller exposes the RAW selection passthrough and the routing lands as
+   * a one-shot pin on the bafRouteAuto runtime (consumed by the next request's
+   * model-selection waterfall), never as a durable selectForNextRequest.
+   */
+  function fakeController(raw?: { provider: string; model: string }) {
+    return { rawSelectionOf: () => raw }
+  }
+
+  function fakeAuto() {
+    const pins: { sessionId: string; selection: { provider: string; model: string; reasoningEffort?: string } }[] = []
+    return {
+      pins,
+      service: {
+        accepts: (provider: string, model: string) => provider === 'baf-route' && model === 'auto',
+        pinForNextRequest: (sessionId: string, selection: { provider: string; model: string; reasoningEffort?: string }) => {
+          pins.push({ sessionId, selection })
+        },
+      },
+    }
+  }
+
+  it('pins the tier model through the auto runtime and audits the route', async () => {
     const home = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-home-'))
     const root = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-'))
     try {
@@ -195,16 +218,13 @@ describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
       writeRouteTierConfigSync(join(home, 'baf-route-config.json'), makeConfig())
       rememberTaskTier(root, 'change-9', { tier: 'high', matched: '架构' })
 
-      const selections: unknown[] = []
+      const auto = fakeAuto()
       const audits: { name: string; entry: unknown }[] = []
-      const controller = {
-        selectForNextRequest(_agent: unknown, selection: unknown): void {
-          selections.push(selection)
-        },
-      }
       const ctx = {
         get(name: string): unknown {
-          return name === 'sessionController' ? controller : undefined
+          if (name === 'sessionController') return fakeController({ provider: 'baf-route', model: 'auto' })
+          if (name === 'bafRouteAuto') return auto.service
+          return undefined
         },
       }
       const agent = {
@@ -219,8 +239,8 @@ describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
       expect(route).toBeTypeOf('function')
 
       route?.(signalOf('implement', 'change-9'))
-      expect(selections).toEqual([
-        { provider: 'p1', model: 'big-brain', reasoningEffort: 'deep' },
+      expect(auto.pins).toEqual([
+        { sessionId: 'sess-1', selection: { provider: 'p1', model: 'big-brain', reasoningEffort: 'deep' } },
       ])
       expect(audits).toHaveLength(1)
       expect(audits[0]?.name).toBe('baf/route-resolved')
@@ -233,6 +253,48 @@ describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
         tier: 'high',
         tierReason: 'keyword',
       })
+    } finally {
+      await rm(home, { recursive: true, force: true })
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('a session NOT on auto stays on its selected model: no pin, no audit (point 4)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-home5-'))
+    const root = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-root5-'))
+    try {
+      process.env.DSH_HOME = home
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), makeConfig())
+      rememberTaskTier(root, 'change-9', { tier: 'high', matched: '架构' })
+
+      for (const raw of [
+        { provider: 'deepseek-official', model: 'deepseek-v4' },
+        { provider: 'baf-route', model: 'deepseek-v4' },
+        { provider: 'deepseek-official', model: 'auto' },
+        undefined,
+      ] as [{ provider: string; model: string } | undefined]) {
+        const auto = fakeAuto()
+        const audits: { name: string; entry: unknown }[] = []
+        const ctx = {
+          get(name: string): unknown {
+            if (name === 'sessionController') return fakeController(raw)
+            if (name === 'bafRouteAuto') return auto.service
+            return undefined
+          },
+        }
+        const agent = {
+          session: {
+            header: { id: 'sess-1' },
+            append(name: string, entry: unknown): void {
+              audits.push({ name, entry })
+            },
+          },
+        }
+        const route = tierRouteSelectorFor(root, ctx, agent)
+        route?.(signalOf('implement', 'change-9'))
+        expect(auto.pins, `raw=${JSON.stringify(raw)}`).toEqual([])
+        expect(audits, `raw=${JSON.stringify(raw)}`).toEqual([])
+      }
     } finally {
       await rm(home, { recursive: true, force: true })
       await rm(root, { recursive: true, force: true })
@@ -263,21 +325,18 @@ describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
         'utf8',
       )
 
-      const selections: unknown[] = []
-      const controller = {
-        selectForNextRequest(_agent: unknown, selection: unknown): void {
-          selections.push(selection)
-        },
-      }
+      const auto = fakeAuto()
       const ctx = {
         get(name: string): unknown {
-          return name === 'sessionController' ? controller : undefined
+          if (name === 'sessionController') return fakeController({ provider: 'baf-route', model: 'auto' })
+          if (name === 'bafRouteAuto') return auto.service
+          return undefined
         },
       }
       const route = tierRouteSelectorFor(root, ctx, { session: { header: { id: 'sess-1' } } })
       route?.(signalOf('clarify'))
-      expect(selections).toEqual([
-        { provider: 'p1', model: 'big-brain', reasoningEffort: 'deep' },
+      expect(auto.pins).toEqual([
+        { sessionId: 'sess-1', selection: { provider: 'p1', model: 'big-brain', reasoningEffort: 'deep' } },
       ])
     } finally {
       await rm(home, { recursive: true, force: true })
@@ -293,15 +352,11 @@ describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
       writeRouteTierConfigSync(join(home, 'baf-route-config.json'), makeConfig())
       rememberTaskTier(root, 'change-7', { tier: 'high', matched: '架构' })
 
-      const selections: unknown[] = []
-      const controller = {
-        selectForNextRequest(_agent: unknown, selection: unknown): void {
-          selections.push(selection)
-        },
-      }
+      const auto = fakeAuto()
       const ctx = {
         get(name: string): unknown {
-          if (name === 'sessionController') return controller
+          if (name === 'sessionController') return fakeController({ provider: 'baf-route', model: 'auto' })
+          if (name === 'bafRouteAuto') return auto.service
           // The structural BafWorkflow face the dispatch shell reads (fix
           // pass #2): an explicitly frozen deployment ceiling.
           if (name === 'bafWorkflow') return { frozenEnterprisePolicy: () => ceilingForbiddingHigh() }
@@ -312,16 +367,19 @@ describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
       route?.(signalOf('implement', 'change-7'))
       // big-brain is outside the ceiling: the pin falls down the tiers
       // group to cheap-fast (mid lacks coding), never escaping it.
-      expect(selections).toEqual([{ provider: 'p2', model: 'cheap-fast' }])
+      expect(auto.pins).toEqual([
+        { sessionId: 'sess-1', selection: { provider: 'p2', model: 'cheap-fast' } },
+      ])
     } finally {
       await rm(home, { recursive: true, force: true })
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  it('returns undefined when routing is inactive or no controller is reachable', async () => {
+  it('returns undefined when routing is inactive or no controller/auto runtime is reachable', async () => {
     const home = await mkdtemp(join(tmpdir(), 'baf-route-dispatch-home2-'))
     try {
+      const auto = fakeAuto()
       // No config file: nothing to route by.
       process.env.DSH_HOME = home
       expect(tierRouteSelectorFor('/w', { get: () => undefined }, { session: { header: {} } })).toBeUndefined()
@@ -332,6 +390,16 @@ describe('tierRouteSelectorFor (多模型路由 M2 壳)', () => {
       writeRouteTierConfigSync(join(home, 'baf-route-config.json'), makeConfig())
       expect(tierRouteSelectorFor('/w', { get: () => undefined }, { session: { header: {} } })).toBeUndefined()
       expect(tierRouteSelectorFor('/w', undefined, { session: { header: {} } })).toBeUndefined()
+
+      // 【变更】2026-10-05: the auto runtime carries the pin now — without it
+      // there is nothing to route THROUGH, so no hook either.
+      const controllerOnly = {
+        get(name: string): unknown {
+          return name === 'sessionController' ? fakeController({ provider: 'baf-route', model: 'auto' }) : undefined
+        },
+      }
+      expect(tierRouteSelectorFor('/w', controllerOnly, { session: { header: { id: 'sess-1' } } })).toBeUndefined()
+      expect(auto.pins).toEqual([])
     } finally {
       await rm(home, { recursive: true, force: true })
     }

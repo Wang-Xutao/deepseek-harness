@@ -144,3 +144,51 @@ describe('bafRouteConfig Remote', () => {
     expect(presets?.[3]).toMatchObject({ tier: 'low' })
   })
 })
+
+describe('bafRouteConfig Remote — 多模型路由 auto 批 (2026-10-05)', () => {
+  it('mounts the bafRouteAuto runtime with the config service', async () => {
+    const { ctx } = await fixture()
+    const runtime = ctx.get('bafRouteAuto') as { accepts?: unknown; resolveAuto?: unknown }
+    expect(runtime).toBeTruthy()
+    expect(typeof runtime?.accepts).toBe('function')
+    expect(typeof runtime?.resolveAuto).toBe('function')
+  })
+
+  it('preview() reads the DRAFT when one is passed (未保存改动即时预演)', async () => {
+    const { service } = await fixture()
+    expect((await service.save({ ...VALID, keywords: [] })).ok).toBe(true)
+    // A keyword that exists only in the draft hits; without the draft the
+    // same summary previews nothing (灰度切流 is in no user rule nor pack).
+    const draft: RouteTierConfig = { ...VALID, keywords: [{ words: '灰度|canary', tier: 'mid' }] }
+    expect(await service.preview('帮我做一次灰度切流', draft)).toEqual({ tier: 'mid', matched: '灰度' })
+    expect(await service.preview('帮我做一次灰度切流')).toEqual({ tier: null })
+  })
+
+  it('preview() falls back to the SAVED config when the draft is invalid', async () => {
+    const { service } = await fixture()
+    expect((await service.save(VALID)).ok).toBe(true)
+    const badDraft: RouteTierConfig = {
+      ...VALID,
+      keywords: [{ words: '灰度', tier: 'mid' }],
+      tiers: { ...VALID.tiers, low: { provider: '', model: 'x' } },
+    }
+    // The draft cannot parse; the saved 架构 rule still drives the preview.
+    expect(await service.preview('梳理整体架构', badDraft)).toEqual({ tier: 'high', matched: '架构' })
+  })
+
+  it('preview() simulates the M4 verify-failed floor: below mid escalates and is flagged', async () => {
+    const { service } = await fixture()
+    expect((await service.save({ ...VALID, keywords: [] })).ok).toBe(true)
+    // README hits builtin low → the retry floor raises it to mid, flagged.
+    expect(await service.preview('补充 README 安装说明', undefined, { verifyRetry: true }))
+      .toEqual({ tier: 'mid', matched: 'readme', escalated: true })
+    // No keyword at all: a verify retry still runs at mid.
+    expect(await service.preview('帮我看看这个问题', undefined, { verifyRetry: true }))
+      .toEqual({ tier: 'mid', escalated: true })
+    // Already at/above mid: the floor is silent.
+    expect(await service.preview('梳理整体架构', undefined, { verifyRetry: true }))
+      .toEqual({ tier: 'high', matched: '架构' })
+    // Without the flag, the same README summary stays Worker.
+    expect(await service.preview('补充 README 安装说明')).toEqual({ tier: 'low', matched: 'readme' })
+  })
+})
