@@ -226,7 +226,7 @@ describe('RouteSectionController', () => {
       .toEqual([{ words: '架构|refactor', tier: 'high', category: '复杂任务', enabled: false }])
     expect(store.getSnapshot().dirty).toBe(true)
     controller.setKeywordEnabled(0, true)
-    expect(store.getSnapshot().draft?.keywords[0]?.enabled).toBe(true)
+    expect(store.getSnapshot().draft?.keywords?.[0]?.enabled).toBe(true)
   })
 
   it('setCategoryEnabled flips every rule in a category in one click (问题 3 类级开关)', async () => {
@@ -240,7 +240,7 @@ describe('RouteSectionController', () => {
     // A rule OUTSIDE the category keeps its default (live).
     expect(keywords[1]?.enabled).toBeUndefined()
     controller.setCategoryEnabled('复杂任务', true)
-    expect(store.getSnapshot().draft?.keywords[0]?.enabled).toBe(true)
+    expect(store.getSnapshot().draft?.keywords?.[0]?.enabled).toBe(true)
   })
 
   it('setPackEnabled parks a preset pack in draft.packs (问题 3 类级一键开关)', async () => {
@@ -740,15 +740,15 @@ describe('ModelRoutingRow', () => {
     fireEvent.change(screen.getByTestId('route-preview-input'), { target: { value: 'readme' } })
     await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: false }) })
     // A keyword edit to the DRAFT re-runs with the same text (热加载).
-    props.runPreview.mockClear()
+    vi.mocked(props.runPreview).mockClear()
     store.set({
       ...READY,
       dirty: true,
-      draft: { ...CONFIG, keywords: [...CONFIG.keywords, { words: 'readme', tier: 'high' }] },
+      draft: { ...CONFIG, keywords: [...(CONFIG.keywords ?? []), { words: 'readme', tier: 'high' }] },
     })
     await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: false }) })
     // The verify-retry switch rides every hot reload too.
-    props.runPreview.mockClear()
+    vi.mocked(props.runPreview).mockClear()
     fireEvent.click(screen.getByTestId('route-preview-verify'))
     await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: true }) })
   })
