@@ -2,7 +2,7 @@
 
 - 日期：2026-10-05
 - 范围：Tier 2（baf-core/baf-workflow 纯库 + 双面包 ui-settings-baf-route + ui-baf-workflow Tab 面；`build:lib` 见 §7；无 NSIS/打包面改动）
-- 验证：单测 M1 起累计全覆盖（本批最终五包 542/542 绿，tsc 四程序零错）；web 端 + 桌面端真机双端 CDP 探针（§8）
+- 验证：单测 M1 起累计全覆盖（fix pass 后六域 596/596 绿见 §11，tsc 零错）；web 端 + 桌面端真机双端 CDP 探针（§8）
 - 状态：M1–M4 全部落地（提案 15 项勾选全勾），M4 为可选项亦已交付
 - 提案：`proposed/feature/2026-10-04-baf-multi-model-routing.md`（偏差见各节括注与 §9 裁决）
 
@@ -20,11 +20,11 @@
 - `preview(summary)` host 跑 `resolveTaskTier` 返回 `{tier, matched}`——「预演」关键词试跑在 host 侧单一事实源。
 - 校验拒绝回 `{ok:false, error}` 行内提示；save/reset 成功后 emit `baf-route-config/changed`，多端设置行经 api-remotes 转发刷新。
 
-## 3. M2 派单选型 — `route-dispatch.ts` + 13 处接线 + 审计
+## 3. M2 派单选型 — `route-dispatch.ts` + 14 处接线 + 审计
 
 【变更】`tierRouteSelection`（纯核）：信号节点 → `effectiveTier` → per-dispatch 编译 profile（派单节点覆写为生效档）→ `resolveRoute`（PERMISSIVE 可用性；能力不满足按 approved-only 组回落 [high→mid→low]）；`reasoningEffort` 跟随**实际解析档**。`tierRouteSelectorFor`（壳）：读配置、查冻结 taskTier、`sessionController.selectForNextRequest` 钉选、追加 `baf/route-resolved` 审计（M2 补 `tier`/`tierReason` 字段）。钩子失败隔离——路由不可用就跑会话当前模型，工单照发。
 
-【变更】intake 冻结：分类确认时 `resolveTaskTier` 评估一次写进 change projection（`taskTier`+`taskTierMatched`），中途改配置不追溯已冻结变更（与会话冻结语义对齐，防同变更前后回合漂移）。
+【变更】intake 冻结：分类时 `resolveTaskTier` 按**全文**评估一次写进 intake（`taskTierHit`），确认时冻结进 change projection（嵌套 `taskTier:{tier,matched}`），中途改配置不追溯已冻结变更（与会话冻结语义对齐，防同变更前后回合漂移）。14 处接线 = commands 2 / orchestrator 6 / requirement-park 2 / gate-ask 2 / auto-pop 2（fix pass 复核计数，原记 13 处）。
 
 ## 4. M3B 设置行 — `ui-settings-baf-route/client`
 
@@ -78,3 +78,13 @@
 - reasoningEffort 暂不可在档位卡片编辑（保存往返原样保留）
 - 预演读的是**已保存**配置（未保存改动预演结果滞后——dirty 徽标提示）
 - M4 地板对设置「预演」框不可见（预演只试关键词匹配）
+
+## 11. 终评修复批（fix pass，2026-10-05）
+
+全分支评审（0 Critical / 3 Important / 7 Minor）的 ONE fix pass，三例均 RED→GREEN：
+
+1. **重启丢失冻结档（Important）**：冻结档原只存进程内 `sharedHostMap`——host 重启后 dispatch 缓存未命中即静默降回 phase 映射。修：`taskTierFor` 未命中时同步重读该 change 的 projection JSONL（`parseProjectionLog` 取首个 `task-tier-frozen`，与 fold 的 first-freeze-wins 一致）回种缓存并落 `rememberTaskTier`；读失败 best-effort 返 undefined。测试 `route-dispatch.spec`「rehydrates the frozen tier from the projection log after a host restart」。
+2. **派单不理会企业 ceiling（Important，验收项 7）**：`synthesizeTierPolicy` 恒产宽松本地策略，显式冻结的部署策略从进不了派单路径。修：`synthesizeTierPolicy(config, ceiling?)` 最紧限制——allowed 按 provider+model 求交、能力标签求交、回落组过滤至 ceiling 内（交集空 → resolver 拒绝 → 该回合旁路，绝不越 ceiling）；壳 `tierRouteSelectorFor` 经 `ctx.get('bafWorkflow')` 结构化读新公开的 `BafWorkflow.frozenEnterprisePolicy()`（仅显式冻结算 ceiling——tier 自动冻结即自身合成、不算）。测试：纯核两例（禁 high 回落至最强可用档 / 全禁则旁路）+ 壳一例（经 bafWorkflow 服务读 ceiling）+ `mount.spec` accessor 一例。
+3. **关键词只看前 500 字（Important）**：`summary` 是 `description.slice(0,500)`，500 字外的关键词「预演」显示高档、冻结却漏。修：`ChangeIntake` 增耐久 `taskTierHit?:{tier,matched}`，分类时（全文在手）评估随 `intake-classified` 事件落盘；确认冻结优先用它，旧日志无此字段回退 summary 重评。测试 `projection-intake.spec`「freezes the tier hit evaluated over the FULL description」。
+
+裁决：`taskTierHit` 取**分类时**配置（全文源只在分类时可得；分类后新增关键词不追溯——与「冻结不追溯」语义一致）。Minor 六项 + 既有遗留（§10 与 SDD ledger「minor (deferred)」）不进修复批。汇总：**六域 596/596 绿**（590 + 新 6 例）+ baf-core/baf-workflow tsc 零错。

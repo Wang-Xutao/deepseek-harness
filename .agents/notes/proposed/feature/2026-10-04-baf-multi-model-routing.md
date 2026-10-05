@@ -107,7 +107,7 @@ compileTierRouteProfile(config, opts?): RouteProfile   // tiers+phaseTier → ph
 ```
 
 - `resolveTaskTier`：按规则顺序首个命中者胜；无命中返回 undefined；
-- 关键词评估**只在 intake 分类确认时跑一次**，结果写进 change projection（`taskTier` + `taskTierMatched`），中途改配置不追溯已冻结的变更——与 `freezeRouteContext` 的会话冻结语义对齐，避免同一变更前后回合模型漂移；
+- 关键词评估**只在 intake 分类确认时跑一次**，结果写进 change projection（落地为嵌套 `taskTier:{tier,matched}` + `intake.taskTierHit`，fix pass 后 `taskTierHit` 在分类时按**全文**评估——summary 只是 500 字切片；见笔记 §11），中途改配置不追溯已冻结的变更——与 `freezeRouteContext` 的会话冻结语义对齐，避免同一变更前后回合模型漂移；
 - `compileTierRouteProfile`：`phases[node] = tiers[phaseTier[node]]`；`default = tiers.mid`；`allowed = 三档去重`（带上表能力标签）；`fallbackPolicy.groups['tiers'] = [high, mid, low]`（approved-only，首选失败按序回落）。
 
 ## 落地点（接线，逐文件）
@@ -121,7 +121,7 @@ compileTierRouteProfile(config, opts?): RouteProfile   // tiers+phaseTier → ph
 ### M2 派单接线（约 1 天）
 
 - [x] `go-dispatch.ts`：`makeGoDispatcher` 增可选参数 `route?: (signal: DispatchSignal) => ModelSelection | undefined`，在 `followup(workOrder)` 前调用并暂存——**纯工厂保持可测**；
-- [x] `commands.ts` 三处派单构造点（`/baf-go`、`/baf-go-confirm`、门卡/Tab 复用点）：用 `ctx.bafWorkflow.resolveAndAudit(session, node, availability, undefined, changeId)` + `selectionForTurn` 接成 `route` 回调，经 `ctx.sessionController.selectForNextRequest(agent, selection)` 生效；
+- [x] `commands.ts` 三处派单构造点（`/baf-go`、`/baf-go-confirm`、门卡/Tab 复用点）：**落地为** `tierRouteSelectorFor(cwd, ctx, agent)` 壳（读配置 + 冻结档 + `sessionController.selectForNextRequest` 钉选 + `baf/route-resolved` 审计），经 `makeGoDispatcher(cwd, agent, route)` 第三参接入——resolveAndAudit 冻结链方案弃用（档位路由每回合重编译、无冻结物），共 14 处接线（commands 2 / orchestrator 6 / requirement-park 2 / gate-ask 2 / auto-pop 2）；
 - [x] intake 冻结：`begin-intake.ts` 分类确认时评估 `resolveTaskTier` 并写入 change projection；
 - [x] 审计：既有 `appendRouteResolved`（`route-audit.ts`）已写 `baf/route-resolved`，补 `tier`/`reason` 字段。
 
@@ -152,10 +152,10 @@ compileTierRouteProfile(config, opts?): RouteProfile   // tiers+phaseTier → ph
 
 ## 验收清单
 
-- [ ] 三档各配不同模型后，design/plan 工单回合请求头是 high 档模型，implement 是 low 档，verify 是 mid 档（看 `baf/route-resolved` 审计 + 会话 request header）；
-- [ ] 需求文本含关键词「架构」时 intake 冻结 taskTier=high，后续 design 回合仍为 high（即使 phaseTier 被改成 mid）；
-- [ ] `escalateOnly=false` 时 implement 回合被关键词降到… 不降——`max()` 只升；改为 exact 模式（`escalateOnly` 关）时按 phaseTier 走；
-- [ ] 客户手聊回合模型不变（不产生 `model/selection` 事件）；
-- [ ] 设置页改动即存即生效（下一个工单用新配置），`changed` 事件多端同步；
-- [ ] `enabled=false` 时行为与今天完全一致（全链路旁路，无审计噪音）；
-- [ ] 企业策略存在且不含 high 档模型时：design 回落 mid 并在审计可见，工单不失败。
+- [x] 三档各配不同模型后，design/plan 工单回合请求头是 high 档模型，implement 是 low 档，verify 是 mid 档（看 `baf/route-resolved` 审计 + 会话 request header）；
+- [x] 需求文本含关键词「架构」时 intake 冻结 taskTier=high，后续 design 回合仍为 high（即使 phaseTier 被改成 mid）；
+- [x] `escalateOnly=false` 时 implement 回合被关键词降到… 不降——`max()` 只升；改为 exact 模式（`escalateOnly` 关）时按 phaseTier 走；
+- [x] 客户手聊回合模型不变（不产生 `model/selection` 事件）；
+- [x] 设置页改动即存即生效（下一个工单用新配置），`changed` 事件多端同步；
+- [x] `enabled=false` 时行为与今天完全一致（全链路旁路，无审计噪音）；
+- [x] 企业策略存在且不含 high 档模型时：design 回落 mid 并在审计可见，工单不失败。
