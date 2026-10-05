@@ -1,11 +1,16 @@
 /**
- * 工作流 settings row for 多模型路由: the master enable, one model card per
- * tier, the phase→tier mapping, keyword rules, and the 预演 dry-run box.
+ * 多模型路由 settings section: the master enable, one model card per tier,
+ * the phase→tier flow diagram, keyword rules with curated preset packs, and
+ * the 预演 dry-run box.
  *
- * Testids live on intrinsics this component renders (the repo convention);
- * primitives are queried through their roles. The effective phase mapping
- * always arrives materialized from the Host — `get` fills defaults on an
- * existing config and a fresh draft seeds from `defaults()`.
+ * 【变更】2026-10-05 (UI 批次): the editor moved out of the 工作流 section into
+ * its own settings section (id `model-routing`), the phase mapping renders as
+ * a workflow-order flow diagram (each node answers「谁在服务」with the mapped
+ * tier's model; click cycles the tier), and the keyword block offers curated
+ * preset packs. Testids live on intrinsics this component renders (the repo
+ * convention); primitives are queried through their roles. The effective
+ * phase mapping always arrives materialized from the Host — `get` fills
+ * defaults on an existing config and a fresh draft seeds from `defaults()`.
  */
 import { useId } from 'react'
 import { Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -14,6 +19,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RouteTier, TierKeywordRule, WorkflowNode } from '../types.ts'
 import type { RouteSectionFace } from './route-store.ts'
+import { KEYWORD_PRESETS, type KeywordPresetId } from './presets.ts'
 import css from './ModelRoutingRow.module.css'
 
 const identity = <T,>(value: T): T => value
@@ -21,37 +27,76 @@ const identity = <T,>(value: T): T => value
 /** The tiers in display order. */
 const TIERS: readonly RouteTier[] = ['high', 'mid', 'low']
 
-/** One phase-mapping row: the node and its locale key. */
-type PhaseRow = { readonly node: WorkflowNode; readonly key: `phase${Capitalize<WorkflowNode>}` }
+/** One phase-mapping node: the workflow node and its locale key. */
+type PhaseNode = { readonly node: WorkflowNode; readonly key: `phase${Capitalize<WorkflowNode>}` }
+
+/**
+ * The nine nodes in WORKFLOW EXECUTION ORDER (intake first, archive last,
+ * drift as the loop-back tail) — the flow diagram reads as the pipeline the
+ * work orders travel, not the tier vocabulary's declaration order.
+ */
+const FLOW: readonly PhaseNode[] = [
+  { node: 'intake', key: 'phaseIntake' },
+  { node: 'open', key: 'phaseOpen' },
+  { node: 'clarify', key: 'phaseClarify' },
+  { node: 'design', key: 'phaseDesign' },
+  { node: 'plan', key: 'phasePlan' },
+  { node: 'implement', key: 'phaseImplement' },
+  { node: 'verify', key: 'phaseVerify' },
+  { node: 'archive', key: 'phaseArchive' },
+  { node: 'drift', key: 'phaseDrift' },
+]
 
 /** Locale key for one tier's display label. */
 function tierKey(tier: RouteTier): 'tierHigh' | 'tierMid' | 'tierLow' {
   return tier === 'high' ? 'tierHigh' : tier === 'mid' ? 'tierMid' : 'tierLow'
 }
 
-/** All nine nodes in presentation order (8 stages + drift); tiers come from the Host. */
-const PHASES: readonly PhaseRow[] = [
-  { node: 'design', key: 'phaseDesign' },
-  { node: 'plan', key: 'phasePlan' },
-  { node: 'clarify', key: 'phaseClarify' },
-  { node: 'verify', key: 'phaseVerify' },
-  { node: 'implement', key: 'phaseImplement' },
-  { node: 'intake', key: 'phaseIntake' },
-  { node: 'open', key: 'phaseOpen' },
-  { node: 'archive', key: 'phaseArchive' },
-  { node: 'drift', key: 'phaseDrift' },
-]
+/**
+ * CSS-module accent class per tier (explicit keys — no string indexing). The
+ * ambient css-module type is `Record<string, string>`, which reads as
+ * `string | undefined` under noUncheckedIndexedAccess; the `?? ''` fallback
+ * only satisfies the type — this component's own stylesheet defines the keys.
+ */
+const TIER_CLASS: Record<RouteTier, string> = {
+  high: css.tierHigh ?? '',
+  mid: css.tierMid ?? '',
+  low: css.tierLow ?? '',
+}
 
-/** Full component props for the 多模型路由 settings row. */
+/** Locale key for one tier's one-line role description. */
+function tierDescKey(tier: RouteTier): 'tierHighDesc' | 'tierMidDesc' | 'tierLowDesc' {
+  return tier === 'high' ? 'tierHighDesc' : tier === 'mid' ? 'tierMidDesc' : 'tierLowDesc'
+}
+
+/** Locale key for one preset pack's display name. */
+function presetNameKey(id: KeywordPresetId): `preset${Capitalize<KeywordPresetId>}` {
+  return `preset${id.charAt(0).toUpperCase()}${id.slice(1)}` as `preset${Capitalize<KeywordPresetId>}`
+}
+
+/** The next tier in the low → mid → high → low cycle a node click walks. */
+function nextTier(tier: RouteTier): RouteTier {
+  return tier === 'low' ? 'mid' : tier === 'mid' ? 'high' : 'low'
+}
+
+/**
+ * Join CSS-module class names without a clsx dependency. The ambient
+ * css-module type reads as `string | undefined` under noUncheckedIndexedAccess,
+ * so dropped names (undefined and '') are filtered by a narrowing guard.
+ */
+const join = (...names: ReadonlyArray<string | undefined>): string =>
+  names.filter((name): name is string => name !== undefined && name !== '').join(' ')
+
+/** Full component props for the 多模型路由 settings section. */
 export type ModelRoutingRowProps =
-  PropsRuntime<'settings.workflow.item'>
+  PropsRuntime<'settings.section'>
   & PropsLocale<'baf.route'>
   & InjectFace<RouteSectionFace>
 
 /**
- * Render the 多模型路由 editor inside the 工作流 settings section.
+ * Render the 多模型路由 editor as its own settings section.
  * @param props - composed slot + inject props.
- * @returns the settings row.
+ * @returns the settings section.
  */
 export function ModelRoutingRow({
   useRouteSection, setEnabled, setTierModel, setPhaseTier, addKeyword, removeKeyword,
@@ -74,7 +119,7 @@ export function ModelRoutingRow({
     <div className={css.section} data-testid="route-section">
       <div className={css.head}>
         <div>
-          <div className={css.title}>{t('title')}</div>
+          <h2 className={css.title}>{t('title')}</h2>
           <div className={css.description}>{t('description')}</div>
         </div>
         <Switch checked={draft.enabled} label={t('master')} onChange={setEnabled} />
@@ -83,8 +128,12 @@ export function ModelRoutingRow({
 
       <div className={css.tiers}>
         {TIERS.map(tier => (
-          <div key={tier} className={css.tier} data-testid={`route-tier-${tier}`}>
-            <div className={css.tierTitle}>{t(tierKey(tier))}</div>
+          <div key={tier} className={join(css.tier, TIER_CLASS[tier])} data-testid={`route-tier-${tier}`}>
+            <div className={css.tierHead}>
+              <span className={join(css.dot, TIER_CLASS[tier])} aria-hidden="true" />
+              <span className={css.tierTitle}>{t(tierKey(tier))}</span>
+            </div>
+            <div className={css.tierDesc}>{t(tierDescKey(tier))}</div>
             <Input
               aria-label={t('provider')}
               list="route-provider-options"
@@ -102,22 +151,66 @@ export function ModelRoutingRow({
       </div>
 
       <div className={css.block}>
-        <div className={css.blockTitle}>{t('phaseTitle')}</div>
-        {PHASES.map(({ node, key }) => (
-          <div key={node} className={css.phaseRow} data-testid="route-phase-row">
-            <span className={css.phaseName}>{t(key)}</span>
-            <select
-              className={css.select}
-              aria-label={t(key)}
-              value={draft.phaseTier?.[node] ?? ''}
-              onChange={event => setPhaseTier(node, event.currentTarget.value as RouteTier)}
-            >
-              {TIERS.map(option => (
-                <option key={option} value={option}>{t(tierKey(option))}</option>
-              ))}
-            </select>
+        <div className={css.flowHead}>
+          <div className={css.blockTitle}>{t('phaseTitle')}</div>
+          <div className={css.legend}>
+            {TIERS.map(tier => (
+              <span key={tier} className={css.legendItem}>
+                <span className={join(css.dot, TIER_CLASS[tier])} aria-hidden="true" />
+                {t(tierKey(tier))}
+              </span>
+            ))}
           </div>
-        ))}
+        </div>
+        <div className={css.flow} data-testid="route-flow">
+          {FLOW.map(({ node, key }, at) => {
+            const tier = draft.phaseTier?.[node] ?? 'mid'
+            return (
+              <span key={node} className={css.flowItem}>
+                {at > 0 && (
+                  <span className={css.flowArrow} aria-hidden="true">{node === 'drift' ? '↻' : '→'}</span>
+                )}
+                <button
+                  type="button"
+                  className={join(css.node, TIER_CLASS[tier])}
+                  data-testid="route-phase-row"
+                  aria-label={`${t(key)} · ${t(tierKey(tier))}`}
+                  title={`${t(key)} → ${t(tierKey(tier))} · ${draft.tiers[tier].model}`}
+                  onClick={() => { setPhaseTier(node, nextTier(tier)) }}
+                >
+                  <span className={css.nodeName}>{t(key)}</span>
+                  <span className={css.nodeTier}>{t(tierKey(tier))}</span>
+                  <span className={css.nodeModel}>{draft.tiers[tier].model}</span>
+                </button>
+              </span>
+            )
+          })}
+        </div>
+        <div className={css.description}>{t('flowHint')}</div>
+      </div>
+
+      <div className={css.block}>
+        <div className={css.blockTitle}>{t('presetsTitle')}</div>
+        <div className={css.description}>{t('presetsHint')}</div>
+        <div className={css.presets}>
+          {KEYWORD_PRESETS.map((preset) => {
+            const added = (draft.keywords ?? []).some(rule => rule.words === preset.words)
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                className={join(css.preset, TIER_CLASS[preset.tier], added ? css.presetAdded : '')}
+                data-testid="route-preset"
+                disabled={added}
+                title={preset.words}
+                onClick={() => { addKeyword({ words: preset.words, tier: preset.tier }) }}
+              >
+                <span className={css.presetName}>{t(presetNameKey(preset.id))}</span>
+                <span className={css.presetTier}>{added ? `✓ ${t('presetAdded')}` : `+ ${t(tierKey(preset.tier))}`}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div className={css.block}>
@@ -127,8 +220,8 @@ export function ModelRoutingRow({
             <div className={css.keywordInputWrap}>
               <Input aria-label={t('keywordWords')} value={rule.words} disabled />
             </div>
-            <span className={css.keywordTier}>{t(tierKey(rule.tier))}</span>
-            <button type="button" className={css.link} onClick={() => removeKeyword(index)}>
+            <span className={join(css.keywordTier, TIER_CLASS[rule.tier])}>{t(tierKey(rule.tier))}</span>
+            <button type="button" className={css.link} onClick={() => { removeKeyword(index) }}>
               {t('keywordRemove')}
             </button>
           </div>

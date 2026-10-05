@@ -1,6 +1,7 @@
-/** Locale keys for the 多模型路由 settings row. */
+/** Locale keys for the 多模型路由 settings section. */
 
 export type BafRouteKey =
+  | 'nav'
   | 'title'
   | 'description'
   | 'master'
@@ -8,9 +9,13 @@ export type BafRouteKey =
   | 'tierHigh'
   | 'tierMid'
   | 'tierLow'
+  | 'tierHighDesc'
+  | 'tierMidDesc'
+  | 'tierLowDesc'
   | 'provider'
   | 'model'
   | 'phaseTitle'
+  | 'flowHint'
   | 'phaseDesign'
   | 'phasePlan'
   | 'phaseClarify'
@@ -21,6 +26,13 @@ export type BafRouteKey =
   | 'phaseArchive'
   | 'phaseDrift'
   | 'keywordsTitle'
+  | 'presetsTitle'
+  | 'presetsHint'
+  | 'presetAdded'
+  | 'presetComplexEngineering'
+  | 'presetCriticalRelease'
+  | 'presetQualityAssurance'
+  | 'presetRoutineEdits'
   | 'keywordWords'
   | 'keywordTier'
   | 'keywordAdd'
@@ -37,6 +49,7 @@ export type BafRouteKey =
   | 'loadFailed'
 
 export const en: Record<BafRouteKey, string> = {
+  nav: 'Multi-model routing',
   title: 'Multi-model routing',
   description: 'Route work orders by phase and keyword to high/mid/low model tiers (~/.dsh/baf-route-config.json).',
   master: 'Enable multi-model routing',
@@ -44,9 +57,13 @@ export const en: Record<BafRouteKey, string> = {
   tierHigh: 'High tier',
   tierMid: 'Mid tier',
   tierLow: 'Low tier',
+  tierHighDesc: 'Complex: architecture, refactor, performance, security',
+  tierMidDesc: 'Balanced: tests, review, debugging',
+  tierLowDesc: 'Light: docs, formatting, routine turns',
   provider: 'Provider',
   model: 'Model',
-  phaseTitle: 'Phase → tier mapping',
+  phaseTitle: 'Phase → tier flow',
+  flowHint: 'Click a node to cycle its tier (low → mid → high).',
   phaseDesign: 'Design',
   phasePlan: 'Plan',
   phaseClarify: 'Clarify',
@@ -57,6 +74,13 @@ export const en: Record<BafRouteKey, string> = {
   phaseArchive: 'Archive',
   phaseDrift: 'Drift',
   keywordsTitle: 'Keyword rules',
+  presetsTitle: 'Preset packs',
+  presetsHint: 'Curated by mainstream routing practice — one click adds the pack; fine-tune below.',
+  presetAdded: 'Added',
+  presetComplexEngineering: 'Complex engineering',
+  presetCriticalRelease: 'Critical design & release',
+  presetQualityAssurance: 'Test & debug',
+  presetRoutineEdits: 'Light edits',
   keywordWords: 'Keywords (| separated)',
   keywordTier: 'Tier',
   keywordAdd: 'Add',
@@ -74,6 +98,7 @@ export const en: Record<BafRouteKey, string> = {
 }
 
 export const zh: Record<BafRouteKey, string> = {
+  nav: '多模型路由',
   title: '多模型路由',
   description: '按阶段与关键词把工单派给 高/中/低 三档模型（~/.dsh/baf-route-config.json）。',
   master: '启用多模型路由',
@@ -81,9 +106,13 @@ export const zh: Record<BafRouteKey, string> = {
   tierHigh: '高档',
   tierMid: '中档',
   tierLow: '低档',
+  tierHighDesc: '复杂任务：架构、重构、性能、安全',
+  tierMidDesc: '均衡任务：测试、评审、排查',
+  tierLowDesc: '轻量任务：文案、格式、日常问答',
   provider: '服务商',
   model: '模型',
-  phaseTitle: '阶段 → 档位',
+  phaseTitle: '阶段 → 档位 流程',
+  flowHint: '点击节点切换档位（低 → 中 → 高）。',
   phaseDesign: '设计',
   phasePlan: '规划',
   phaseClarify: '澄清',
@@ -94,6 +123,13 @@ export const zh: Record<BafRouteKey, string> = {
   phaseArchive: '归档',
   phaseDrift: '漂移',
   keywordsTitle: '关键词规则',
+  presetsTitle: '预设词库',
+  presetsHint: '按主流路由实践整理，一键添加整包；可在下方继续增删微调。',
+  presetAdded: '已添加',
+  presetComplexEngineering: '复杂工程',
+  presetCriticalRelease: '关键设计与发布',
+  presetQualityAssurance: '测试与排查',
+  presetRoutineEdits: '轻量改动',
   keywordWords: '关键词（| 分隔）',
   keywordTier: '档位',
   keywordAdd: '添加',

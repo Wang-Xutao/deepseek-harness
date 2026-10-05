@@ -154,7 +154,8 @@ export class RouteSectionController {
   async reset(): Promise<void> {
     await this.ctx.remote.bafRouteConfig.reset()
     const catalog = await this.ctx.remote.session.modelCatalog()
-    const fresh = await this.freshDraft(catalog)
+    // No defaults fetched here — freshDraft pulls its own when none is handed in.
+    const fresh = await this.freshDraft(catalog, undefined)
     this.store.update((state) => {
       state.draft = fresh
       state.dirty = false
@@ -197,9 +198,10 @@ export class RouteSectionController {
   }
 
   private async load(): Promise<void> {
-    const [response, catalog] = await Promise.all([
+    const [response, catalog, defaults] = await Promise.all([
       this.ctx.remote.bafRouteConfig.get(),
       this.ctx.remote.session.modelCatalog(),
+      this.ctx.remote.bafRouteConfig.defaults(),
     ])
     const suggestions = this.suggestionsOf(catalog)
     if (!response.ok) {
@@ -210,8 +212,18 @@ export class RouteSectionController {
       return
     }
     if (response.value !== null) {
-      // The Host materializes the phase→tier defaults before sending.
-      const config: RouteTierConfig = response.value
+      // 【变更】2026-10-05 (UI 批次问题 3): a hand-edited or legacy file may pin
+      // only some phase nodes — the flow diagram renders every node's tier and
+      // model, so fill the gaps from the Host's default map (user overrides
+      // win; the node list itself stays Host-owned, never a client copy). A
+      // new object, never a mutation: snapshot stores deep-freeze their state,
+      // and the Remote's value may be shared.
+      const config: RouteTierConfig = defaults.ok
+        ? {
+          ...response.value,
+          phaseTier: { ...defaults.value.phaseTier, ...(response.value.phaseTier ?? {}) },
+        }
+        : response.value
       this.store.update((state) => {
         state.draft = config
         state.status = 'ready'
@@ -219,7 +231,7 @@ export class RouteSectionController {
       })
       return
     }
-    const fresh = await this.freshDraft(catalog)
+    const fresh = await this.freshDraft(catalog, defaults)
     this.store.update((state) => {
       state.draft = fresh
       state.status = 'ready'
@@ -239,8 +251,11 @@ export class RouteSectionController {
    * A first-run draft: disabled, every tier on the session's default model,
    * phase mapping from the Host's built-in defaults, no keyword rules.
    */
-  private async freshDraft(catalog: CatalogLookup): Promise<RouteTierConfig> {
-    const defaults = await this.ctx.remote.bafRouteConfig.defaults()
+  private async freshDraft(
+    catalog: CatalogLookup,
+    loaded: Awaited<ReturnType<ClientContext['remote']['bafRouteConfig']['defaults']>> | undefined,
+  ): Promise<RouteTierConfig> {
+    const defaults = loaded ?? await this.ctx.remote.bafRouteConfig.defaults()
     const base = catalog.ok
       ? { provider: catalog.value.default.provider, model: catalog.value.default.model }
       : { provider: '', model: '' }

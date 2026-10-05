@@ -26,6 +26,17 @@ export const remoteDefaultResponses: RemoteTable = {
     }),
     // ui-agent-preset hero chip and header label on first mount.
     'agentPresets/list': ok({ presets: [] }),
+    // ui-settings-baf-route `RouteSectionController` first read at apply — no
+    // saved config seeds a fresh draft, and the flow diagram fills every node
+    // from the Host-owned default phase→tier map (values mirror baf-core
+    // DEFAULT_PHASE_TIER, which the host-side specs pin).
+    'bafRouteConfig/get': ok(null),
+    'bafRouteConfig/defaults': ok({
+      phaseTier: {
+        design: 'high', plan: 'high', clarify: 'mid', verify: 'mid', implement: 'low',
+        intake: 'low', open: 'low', archive: 'low', drift: 'low',
+      },
+    }),
     // ui-settings-featured-plugins `FeaturedSectionController` first read at apply.
     'featuredPlugins/list': ok({ plugins: [] }),
     // cordis-client-runner `ClientCordisInspectRegistry.sync` at apply and on `connection/reset`.

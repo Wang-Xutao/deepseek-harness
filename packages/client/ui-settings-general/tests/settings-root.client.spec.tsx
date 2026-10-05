@@ -432,19 +432,24 @@ describe('SettingsPanel navigation', () => {
         { id: 'agent-presets', order: 20, label: 'Agent presets' },
         { id: 'plugins', order: 30, label: 'Plugins' },
         { id: 'archived-sessions', order: 40, label: 'Archived sessions' },
+        // 【变更】2026-10-05 (多模型路由独立设置区): the routing section gets
+        // the tier-dial glyph — 档位调度 semantics, not the generic gear.
+        { id: 'model-routing', order: 45, label: 'Multi-model routing' },
         { id: 'contributed', order: 50, label: 'Contributed' },
       ],
     })
     openPanel()
     // Glyphs carry no id of their own, so the drawn paths are what tells them apart.
-    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Archived sessions', 'Contributed']
-      .map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
+    const glyphs = [
+      'General', 'Models', 'Agent presets', 'Plugins', 'Archived sessions',
+      'Multi-model routing', 'Contributed',
+    ].map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
-    // The four ids the shell names get their own glyph; every other section —
+    // The ids the shell names get their own glyph; every other section —
     // including one this package never heard of — shares the gear.
-    expect(new Set(glyphs.slice(0, 5)).size).toBe(5)
-    expect(glyphs[5]).toBe(glyphs[0])
+    expect(new Set(glyphs.slice(0, 6)).size).toBe(6)
+    expect(glyphs[6]).toBe(glyphs[0])
   })
 
   it('switches the rendered section on nav click', () => {

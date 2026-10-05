@@ -16,8 +16,8 @@ import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconBranchOutlineMedium, IconCloseOutlineRegular,
-  IconDataOutlineMedium, IconDownloadOutlineMedium, IconPersonalizationOutlineMedium, IconPluginPinwheelOutlineMedium,
-  IconSettingsOutlineMedium, IconUserOutlineMedium,
+  IconDataOutlineMedium, IconDownloadOutlineMedium, IconGaugeOutlineMedium, IconPersonalizationOutlineMedium,
+  IconPluginPinwheelOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
@@ -45,6 +45,10 @@ function navIcon(id: string) {
   // same plugin glyph the Plugins panel carries — instead of the generic
   // settings gear, so the curated-plugins page reads as plugins, not settings.
   if (id === 'featured-plugins') return <IconPluginPinwheelOutlineMedium className={css.navIcon} size={16} />
+  // 【变更】2026-10-05 (UI 批次问题 5): 多模型路由 gets the tier dial — 档位
+  // semantics (where the needle points = which of 高/中/低 serves the turn),
+  // matching the word's 换挡 sense instead of the generic gear.
+  if (id === 'model-routing') return <IconGaugeOutlineMedium className={css.navIcon} size={16} />
   return <IconSettingsOutlineMedium className={css.navIcon} size={16} />
 }
 

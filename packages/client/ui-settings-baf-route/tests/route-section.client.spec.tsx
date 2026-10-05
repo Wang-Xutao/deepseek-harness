@@ -10,13 +10,17 @@ afterEach(cleanup)
 import { useSyncExternalStore } from 'react'
 import type { RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
 import type { RouteTier } from '../src/types.ts'
+import { apply } from '../src/client/index.ts'
 import { ModelRoutingRow } from '../src/client/ModelRoutingRow.tsx'
 import {
   RouteSectionController, type RouteSectionFace, type RouteSectionState,
 } from '../src/client/route-store.ts'
+import { KEYWORD_PRESETS } from '../src/client/presets.ts'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 
+// The Host materializes every phase node before sending `get` (the settings
+// flow diagram renders all nine nodes) — the fixture mirrors that wire shape.
 const CONFIG: RouteTierConfig = {
   schema: 1,
   enabled: true,
@@ -25,7 +29,10 @@ const CONFIG: RouteTierConfig = {
     mid: { provider: 'p', model: 'mid' },
     low: { provider: 'q', model: 'cheap' },
   },
-  phaseTier: { design: 'high', verify: 'mid' },
+  phaseTier: {
+    design: 'high', plan: 'high', clarify: 'mid', verify: 'mid', implement: 'low',
+    intake: 'low', open: 'low', archive: 'low', drift: 'low',
+  },
   keywords: [{ words: '架构|refactor', tier: 'high' }],
   escalateOnly: true,
 }
@@ -198,6 +205,24 @@ describe('RouteSectionController', () => {
     expect(store.getSnapshot().catalog).toEqual({ providers: ['p', 'q'], models: ['m1', 'm2', 'cheap'] })
   })
 
+  it('materializes phase nodes the saved file omits from the host default map', async () => {
+    const controller = new RouteSectionController(fakeCtx({
+      // A hand-edited / legacy file that pins only two nodes.
+      get: async () => ({
+        ok: true,
+        value: { ...CONFIG, phaseTier: { design: 'high' } },
+      }) as const,
+    }))
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    // The user's override survives; every other node fills from defaults().
+    const phaseTier = store.getSnapshot().draft?.phaseTier
+    expect(phaseTier?.design).toBe('high')
+    expect(phaseTier?.verify).toBe('mid')
+    expect(phaseTier?.implement).toBe('low')
+    expect(phaseTier?.drift).toBe('low')
+  })
+
   it('runPreview() carries the host verdict into the preview slot', async () => {
     const controller = new RouteSectionController(fakeCtx({
       preview: async () => ({ ok: true, value: { tier: 'high', matched: '架构' } }) as const,
@@ -231,7 +256,7 @@ describe('ModelRoutingRow', () => {
     expect((high.getAllByRole('combobox')[1] as HTMLInputElement).value).toBe('big')
     const low = within(screen.getByTestId('route-tier-low'))
     expect((low.getAllByRole('combobox')[1] as HTMLInputElement).value).toBe('cheap')
-    // Phase mapping rows for all nine nodes (8 stages + drift).
+    // Phase mapping nodes for all nine workflow stages (8 stages + drift).
     expect(screen.getAllByTestId('route-phase-row')).toHaveLength(9)
     // Provider/model inputs carry catalog suggestions (datalist: dropdown + 手输).
     // jsdom hides datalists from the accessibility tree, so count the option
@@ -240,6 +265,62 @@ describe('ModelRoutingRow', () => {
     expect(screen.getByTestId('route-model-options').querySelectorAll('option')).toHaveLength(3)
     // The keyword rule row shows its pattern.
     expect(screen.getByDisplayValue('架构|refactor')).toBeTruthy()
+  })
+
+  it('draws the phase→tier flow in workflow order, each node showing its tier model', () => {
+    const { props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    // Workflow execution order — intake first, archive last, drift as the
+    // loop-back tail — not the declaration order of the tier vocabulary.
+    const nodes = screen.getAllByTestId('route-phase-row')
+    const names = nodes.map(node => node.textContent ?? '')
+    expect(names[0]).toContain('phaseIntake')
+    expect(names[2]).toContain('phaseClarify')
+    expect(names[3]).toContain('phaseDesign')
+    expect(names[5]).toContain('phaseImplement')
+    expect(names[7]).toContain('phaseArchive')
+    expect(names[8] ?? '').toContain('phaseDrift')
+    // Each node answers「谁在服务」: the mapped tier's model rides the node.
+    expect(names[0]).toContain('cheap')
+    expect(names[3] ?? '').toContain('big')
+    expect(names[6] ?? '').toContain('mid')
+  })
+
+  it('cycles a node\'s tier on click (low→mid→high→low)', () => {
+    const { face, props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    const nodes = screen.getAllByTestId('route-phase-row')
+    // implement maps to low in the fixture; one click lifts it to mid.
+    fireEvent.click(nodes[5]!)
+    expect(face.setPhaseTier).toHaveBeenCalledWith('implement', 'mid')
+    // design is high; cycling wraps back to low.
+    fireEvent.click(nodes[3]!)
+    expect(face.setPhaseTier).toHaveBeenCalledWith('design', 'low')
+  })
+
+  it('offers curated keyword presets: one click adds the pack; an added pack disables', () => {
+    const { face, props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    const chips = screen.getAllByTestId('route-preset')
+    expect(chips).toHaveLength(KEYWORD_PRESETS.length)
+    fireEvent.click(chips[0]!)
+    expect(face.addKeyword).toHaveBeenCalledWith({
+      words: KEYWORD_PRESETS[0]!.words,
+      tier: KEYWORD_PRESETS[0]!.tier,
+    })
+
+    // A pack whose exact words already sit in the draft reads as added and
+    // refuses a duplicate click.
+    const preset = KEYWORD_PRESETS[1]!
+    cleanup()
+    const added = harness({
+      ...READY,
+      draft: { ...CONFIG, keywords: [{ words: preset.words, tier: preset.tier }] },
+    })
+    render(<ModelRoutingRow {...added.props} />)
+    const chip = screen.getAllByTestId('route-preset')[1] as HTMLButtonElement
+    expect(chip.textContent).toContain('presetAdded')
+    expect(chip.disabled).toBe(true)
   })
 
   it('forwards the master switch and tier edits to the face', () => {
@@ -266,5 +347,30 @@ describe('ModelRoutingRow', () => {
     fireEvent.change(screen.getByTestId('route-preview-input'), { target: { value: '重构模块' } })
     fireEvent.click(screen.getByTestId('route-preview-run'))
     expect(props.runPreview).toHaveBeenCalledWith('重构模块')
+  })
+})
+
+describe('apply (settings section registration)', () => {
+  it('registers 多模型路由 as its own settings section, not a 工作流 row', () => {
+    const injected: string[] = []
+    const registered: Array<Record<string, unknown>> = []
+    const ctx = {
+      ...fakeCtx(),
+      effect: (fn: () => void) => { fn(); return () => undefined },
+      locale: {
+        register: vi.fn(),
+        bind: () => (key: string) => key,
+      },
+      slots: {
+        inject: (name: string, install: () => void) => { injected.push(name); install() },
+        register: (options: Record<string, unknown>) => { registered.push(options) },
+      },
+    }
+    apply(ctx as unknown as ClientContext)
+
+    expect(injected).toEqual(['settings.section'])
+    const section = registered.find(options => options.name === 'settings.section')
+    expect(section).toMatchObject({ id: 'model-routing', order: 21 })
+    expect((section?.label as () => string)()).toBe('nav')
   })
 })
