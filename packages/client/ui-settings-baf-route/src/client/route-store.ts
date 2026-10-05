@@ -14,10 +14,27 @@ import type {
 } from '@deepseek-ai/dsh-baf-core'
 import type { RouteTier } from '../types.ts'
 
-/** Provider/model id suggestions from the session catalog, for the tier inputs. */
+/**
+ * One catalog model the tier pickers offer: display name (the「模型」config's
+ * name, falling back to the id) plus the provider group it lives in — a pick
+ * derives both, so the user never types a provider by hand.
+ */
+export interface RouteCatalogModel {
+  readonly id: string
+  readonly name: string
+  readonly provider: string
+}
+
+/** Every catalog model, for the tier pickers (2.3: name-labelled dropdown). */
 export interface RouteCatalogSuggestions {
-  readonly providers: readonly string[]
-  readonly models: readonly string[]
+  readonly models: readonly RouteCatalogModel[]
+}
+
+/** One builtin preset pack as the Host's `defaults()` Remote hands it (2.4). */
+export interface RouteBuiltinPreset {
+  readonly id: string
+  readonly tier: RouteTier
+  readonly words: string
 }
 
 /** What the row renders; `update` mutates an immer draft of this shape. */
@@ -33,8 +50,10 @@ export interface RouteSectionState {
   error: string | undefined
   /** The last 预演 verdict, from the Host's keyword dry-run. */
   preview: { tier: RouteTier | null; matched?: string } | undefined
-  /** Catalog suggestions for the tier inputs; undefined when the catalog is unreachable. */
+  /** Catalog models for the tier pickers; undefined when the catalog is unreachable. */
   catalog: RouteCatalogSuggestions | undefined
+  /** Always-on builtin packs from the Host, for the read-only preset block (2.4). */
+  presets: readonly RouteBuiltinPreset[] | undefined
 }
 
 /** The session model-catalog Remote result shape, fetched once per load. */
@@ -85,6 +104,7 @@ export class RouteSectionController {
       error: undefined,
       preview: undefined,
       catalog: undefined,
+      presets: undefined,
     })
     void this.load()
   }
@@ -204,10 +224,12 @@ export class RouteSectionController {
       this.ctx.remote.bafRouteConfig.defaults(),
     ])
     const suggestions = this.suggestionsOf(catalog)
+    const presets = defaults.ok ? defaults.value.presets : undefined
     if (!response.ok) {
       this.store.update((state) => {
         state.status = 'failed'
         state.catalog = suggestions
+        state.presets = presets
       })
       return
     }
@@ -228,6 +250,7 @@ export class RouteSectionController {
         state.draft = config
         state.status = 'ready'
         state.catalog = suggestions
+        state.presets = presets
       })
       return
     }
@@ -236,15 +259,20 @@ export class RouteSectionController {
       state.draft = fresh
       state.status = 'ready'
       state.catalog = suggestions
+      state.presets = presets
     })
   }
 
-  /** Distill the catalog into the tier inputs' suggestion lists. */
+  /**
+   * Distill the catalog into the picker list: every model with its display
+   * name (the「模型」config's name) and the provider group it lives in — the
+   * tier pickers are name-labelled and a pick derives provider + model.
+   */
   private suggestionsOf(catalog: CatalogLookup): RouteCatalogSuggestions | undefined {
     if (!catalog.ok) return undefined
-    const providers = [...new Set(catalog.value.groups.map(group => group.id))]
-    const models = catalog.value.groups.flatMap(group => group.models.map(model => model.id))
-    return { providers, models }
+    const models = catalog.value.groups.flatMap(group =>
+      group.models.map(model => ({ id: model.id, name: model.name, provider: group.id })))
+    return { models }
   }
 
   /**

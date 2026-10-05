@@ -15,7 +15,8 @@
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
-  DEFAULT_PHASE_TIER, parseRouteTierConfig, resolveTaskTier, type RouteTierConfig,
+  BUILTIN_KEYWORD_PRESETS, DEFAULT_PHASE_TIER, effectiveKeywordRules, parseRouteTierConfig,
+  resolveTaskTier, type RouteTierConfig,
 } from '@deepseek-ai/dsh-baf-core'
 import {
   readRouteTierConfigSync,
@@ -86,9 +87,10 @@ export class BafRouteConfigRemote extends TypertRemoteService {
    * 多模型路由 M3 预演: dry-run the intake keyword match host-side. The
    * browser cannot value-import baf-core (client bundle purity), so the
    * settings row ships the summary here and renders the tier a confirm would
-   * freeze — the same `resolveTaskTier` the freeze chain runs, one source of
-   * truth. Reads the SAVED config: an unsaved edit previews stale, which the
-   * row communicates with its own dirty marker.
+   * freeze — the same `effectiveKeywordRules` list the freeze chain runs
+   * (user rules first, then the always-on builtin packs), one source of truth.
+   * Reads the SAVED config: an unsaved edit previews stale, which the row
+   * communicates with its own dirty marker.
    * @param summary - a task summary as it would be intaken.
    * @returns the tier (and the word that hit), or tier null when no keyword
    * would freeze anything.
@@ -97,19 +99,20 @@ export class BafRouteConfigRemote extends TypertRemoteService {
   async preview(summary: string): Promise<BafRoutePreviewResult> {
     const config = readRouteTierConfigSync()
     if (config === undefined || !config.enabled) return { tier: null }
-    const hit = resolveTaskTier(summary, config.keywords ?? [])
+    const hit = resolveTaskTier(summary, effectiveKeywordRules(config.keywords))
     if (hit === undefined) return { tier: null }
     return { tier: hit.tier, matched: hit.matched }
   }
 
   /**
-   * The built-in phase→tier map for a fresh draft (no config saved yet). The
-   * client cannot import baf-core, so this is the one source the settings row
-   * seeds its phase rows from.
+   * The built-in phase→tier map for a fresh draft (no config saved yet), plus
+   * the always-on builtin keyword packs for the read-only preset block (2.4
+   * 默认启用). The client cannot import baf-core, so this is the one source
+   * the settings row seeds its phase rows and preset display from.
    */
   @Remote
   async defaults(): Promise<BafRouteConfigDefaults> {
-    return { phaseTier: DEFAULT_PHASE_TIER }
+    return { phaseTier: DEFAULT_PHASE_TIER, presets: BUILTIN_KEYWORD_PRESETS }
   }
 }
 

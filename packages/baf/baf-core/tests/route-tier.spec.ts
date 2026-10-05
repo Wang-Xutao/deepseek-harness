@@ -11,9 +11,12 @@ import {
   type RouteCapability,
 } from '../src/route-policy.ts'
 import {
+  BUILTIN_KEYWORD_PRESETS,
   DEFAULT_PHASE_TIER,
+  ROUTE_TIERS,
   TIER_CAPABILITIES,
   compileTierRouteProfile,
+  effectiveKeywordRules,
   effectiveTier,
   isTierRoutingActive,
   parseRouteTierConfig,
@@ -238,5 +241,43 @@ describe('findTierByRef', () => {
     const config = makeConfig()
     config.tiers.mid = { ...HIGH }
     expect(findTierByRef(config, HIGH)).toBe('high')
+  })
+})
+
+describe('builtin keyword presets (2.4 默认启用)', () => {
+  it('ships the four curated packs with stable ids and non-empty word lists', () => {
+    expect(BUILTIN_KEYWORD_PRESETS.map(preset => preset.id)).toEqual([
+      'complexEngineering', 'criticalRelease', 'qualityAssurance', 'routineEdits',
+    ])
+    for (const preset of BUILTIN_KEYWORD_PRESETS) {
+      expect(preset.words.length).toBeGreaterThan(0)
+      expect(ROUTE_TIERS).toContain(preset.tier)
+    }
+    expect(BUILTIN_KEYWORD_PRESETS[0]?.tier).toBe('high')
+    expect(BUILTIN_KEYWORD_PRESETS[3]?.tier).toBe('low')
+  })
+
+  it('effectiveKeywordRules appends the builtins after the user rules', () => {
+    const rules = effectiveKeywordRules([{ words: '我的关键词', tier: 'mid' }])
+    expect(rules[0]).toEqual({ words: '我的关键词', tier: 'mid' })
+    expect(rules.length).toBe(1 + BUILTIN_KEYWORD_PRESETS.length)
+    expect(rules.at(-1)?.words).toBe(BUILTIN_KEYWORD_PRESETS.at(-1)?.words)
+  })
+
+  it('matches a builtin word with zero user rules (presets act by default)', () => {
+    // 「架构」 lives in the complexEngineering pack — no user keyword needed.
+    expect(resolveTaskTier('梳理整体架构并重构', effectiveKeywordRules([])))
+      .toEqual({ tier: 'high', matched: '架构' })
+    // 「typo」 lives in routineEdits.
+    expect(resolveTaskTier('fix a typo in the docs', effectiveKeywordRules([])))
+      .toEqual({ tier: 'low', matched: 'typo' })
+    // 「单元测试」 lives in qualityAssurance.
+    expect(resolveTaskTier('补充单元测试覆盖', effectiveKeywordRules([])))
+      .toEqual({ tier: 'mid', matched: '单元测试' })
+  })
+
+  it('user rules win over builtins on the same word (declared first)', () => {
+    expect(resolveTaskTier('架构', effectiveKeywordRules([{ words: '架构', tier: 'low' }])))
+      .toEqual({ tier: 'low', matched: '架构' })
   })
 })

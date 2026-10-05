@@ -93,6 +93,39 @@ describe('projection store', () => {
     }
   })
 
+  it('freezes the builtin preset tier with ZERO user keywords (2.4 默认启用)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-proj-tier-builtin-'))
+    const home = await mkdtemp(join(tmpdir(), 'baf-proj-tier-home-builtin-'))
+    try {
+      process.env.DSH_HOME = home
+      // keywords deliberately empty: 「架构」 lives in the always-on builtin
+      // complexEngineering pack, so the freeze chain must still fire.
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), {
+        schema: 1,
+        enabled: true,
+        tiers: {
+          high: { provider: 'p', model: 'big' },
+          mid: { provider: 'p', model: 'mid' },
+          low: { provider: 'p', model: 'cheap' },
+        },
+        keywords: [],
+      })
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const service = createWorkflowService({ store })
+      const { intake } = await service.intake({
+        description: '梳理整体架构并重构模块边界',
+        workspace: { root },
+      })
+      const confirmed = await confirmIntake(store, intake.changeId)
+      expect(confirmed.taskTier).toEqual({ tier: 'high', matched: '架构' })
+      expect((await store.readEvents(intake.changeId)).events.map(event => event.type))
+        .toContain('task-tier-frozen')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('freezes the tier hit evaluated over the FULL description (fix #3: summary is a 500-char slice)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'baf-proj-tier-full-'))
     const home = await mkdtemp(join(tmpdir(), 'baf-proj-tier-home3-'))
@@ -146,7 +179,9 @@ describe('projection store', () => {
       expect((await store.readEvents(intake.changeId)).events.map(event => event.type))
         .not.toContain('task-tier-frozen')
 
-      // Enabled config whose keywords do not hit: still no freeze.
+      // Enabled config whose keywords do not hit AND no builtin word occurs:
+      // still no freeze. (2.4 made builtin packs always-on, so 「README」 now
+      // freezes low — a doc-less summary is the honest no-hit case.)
       writeRouteTierConfigSync(join(home, 'baf-route-config.json'), {
         schema: 1,
         enabled: true,
@@ -158,7 +193,7 @@ describe('projection store', () => {
         keywords: [{ words: '性能优化', tier: 'high' }],
       })
       const second = await service.intake({
-        description: '补充 README 的安装说明',
+        description: '补充安装说明与注意事项',
         workspace: { root },
       })
       const secondConfirmed = await confirmIntake(store, second.intake.changeId)

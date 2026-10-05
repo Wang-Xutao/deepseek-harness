@@ -35,10 +35,13 @@ export interface BafRoutePreviewResult {
  * 多模型路由 M3 — built-in starting values for a fresh settings draft. The
  * client bundle cannot value-import baf-core (purity gate), so the Host hands
  * the default phase→tier map over the wire; the settings row never duplicates
- * it.
+ * it. 2.4 adds `presets`: the always-on builtin keyword packs, shipped for the
+ * read-only preset block (they match at dispatch regardless of what the UI
+ * shows — the display explains, it does not toggle).
  */
 export interface BafRouteConfigDefaults {
   readonly phaseTier: Readonly<Record<string, RouteTier>>
+  readonly presets: readonly { readonly id: string; readonly tier: RouteTier; readonly words: string }[]
 }
 
 declare module '@deepseek-ai/cordis' {

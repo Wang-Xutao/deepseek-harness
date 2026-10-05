@@ -440,16 +440,43 @@ describe('SettingsPanel navigation', () => {
     })
     openPanel()
     // Glyphs carry no id of their own, so the drawn paths are what tells them apart.
+    // (Multi-model routing matches by prefix: its baf sup-badge trails the name.)
     const glyphs = [
       'General', 'Models', 'Agent presets', 'Plugins', 'Archived sessions',
       'Multi-model routing', 'Contributed',
-    ].map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
+    ].map(name => screen.getByRole('button', {
+      name: name === 'Multi-model routing' ? /^Multi-model routing/ : name,
+    }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
     // The ids the shell names get their own glyph; every other section —
     // including one this package never heard of — shares the gear.
     expect(new Set(glyphs.slice(0, 6)).size).toBe(6)
     expect(glyphs[6]).toBe(glyphs[0])
+  })
+
+  it('tags the four BAF-only sections with a baf superscript badge, others none (baf 独占标识)', () => {
+    mount({
+      rows: [
+        { id: 'general', order: 0, label: 'General' },
+        { id: 'models', order: 10, label: 'Models' },
+        { id: 'workflow', order: 20, label: 'Workflow' },
+        { id: 'model-routing', order: 21, label: 'Multi-model routing' },
+        { id: 'version-updates', order: 25, label: 'Version & updates' },
+        { id: 'featured-plugins', order: 30, label: 'Featured plugins' },
+      ],
+    })
+    openPanel()
+    const badgeOf = (name: RegExp): Element | null =>
+      screen.getByRole('button', { name }).querySelector('sup')
+    // The four BAF-exclusive sections carry the sup-badge at the label's end…
+    expect(badgeOf(/^Workflow/)?.textContent).toBe('baf')
+    expect(badgeOf(/^Multi-model routing/)?.textContent).toBe('baf')
+    expect(badgeOf(/^Version & updates/)?.textContent).toBe('baf')
+    expect(badgeOf(/^Featured plugins/)?.textContent).toBe('baf')
+    // …shared sections never do.
+    expect(badgeOf(/^General/)).toBeNull()
+    expect(badgeOf(/^Models/)).toBeNull()
   })
 
   it('switches the rendered section on nav click', () => {

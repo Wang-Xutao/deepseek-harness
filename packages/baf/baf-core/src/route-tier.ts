@@ -43,6 +43,55 @@ export interface TierKeywordRule {
   note?: string
 }
 
+/** One curated builtin keyword pack (id doubles as the client's `preset${Id}` locale key). */
+export interface BuiltinKeywordPreset {
+  readonly id: string
+  readonly tier: RouteTier
+  readonly words: string
+}
+
+/**
+ * Curated keyword packs always in effect (2.4 默认启用): task classes whose
+ * wording stably predicts complexity — engineering/release terms escalate to
+ * the strong model, QA terms stay balanced, doc/wording edits stay light.
+ * Bilingual lists; matching is per-word so one library serves both locales.
+ * Lives in baf-core so intake freeze, frozen backfill, and the settings
+ * preview all evaluate the same effective rule list — the client gets it for
+ * display via the `bafRouteConfig/defaults` payload, never as its own copy.
+ */
+export const BUILTIN_KEYWORD_PRESETS: readonly BuiltinKeywordPreset[] = [
+  {
+    id: 'complexEngineering',
+    tier: 'high',
+    words: '架构|重构|性能优化|性能瓶颈|安全漏洞|并发|算法|数据迁移|兼容性|architecture|refactor|performance|security|concurrency|migration',
+  },
+  {
+    id: 'criticalRelease',
+    tier: 'high',
+    words: '技术选型|方案设计|设计评审|整体方案|上线|发布|部署|breaking',
+  },
+  {
+    id: 'qualityAssurance',
+    tier: 'mid',
+    words: '单元测试|集成测试|测试用例|代码评审|回归|排查|复现|日志|边界|test|review|debug|regression',
+  },
+  {
+    id: 'routineEdits',
+    tier: 'low',
+    words: '文案|注释|文档|README|格式化|拼写|错别字|翻译|改名|版本号|typo|wording|docs|rename',
+  },
+]
+
+/**
+ * The rules a task actually evaluates: the user's own rules first (explicit
+ * intent wins — a user downgrading 「架构」 to low overrides the builtin high),
+ * then the builtin packs, all in declaration order for first-match-wins.
+ * @param userKeywords - the user's saved keyword rules (may be empty/absent).
+ */
+export function effectiveKeywordRules(userKeywords: readonly TierKeywordRule[] | undefined): TierKeywordRule[] {
+  return [...(userKeywords ?? []), ...BUILTIN_KEYWORD_PRESETS]
+}
+
 /**
  * Mutable working config for `~/.dsh/baf-route-config.json`. Parsing fills
  * the optional fields; `enabled && parsed` implies all three tier models are

@@ -101,9 +101,17 @@ describe('bafRouteConfig Remote', () => {
     expect(await service.preview('梳理整体架构')).toEqual({ tier: null })
 
     expect((await service.save(VALID)).ok).toBe(true)
-    // VALID's keywords hit 架构 → high; a summary without hits freezes nothing.
+    // VALID's keywords hit 架构 → high; a summary nothing matches freezes nothing.
     expect(await service.preview('梳理整体架构')).toEqual({ tier: 'high', matched: '架构' })
-    expect(await service.preview('补充 README 安装说明')).toEqual({ tier: null })
+    expect(await service.preview('帮我看看这个问题')).toEqual({ tier: null })
+  })
+
+  it('preview() matches builtin presets even with zero user keywords (2.4 默认启用)', async () => {
+    const { service } = await fixture()
+    expect((await service.save({ ...VALID, keywords: [] })).ok).toBe(true)
+    // 架构 lives in the builtin complexEngineering pack; README in routineEdits.
+    expect(await service.preview('梳理整体架构')).toEqual({ tier: 'high', matched: '架构' })
+    expect(await service.preview('补充 README 安装说明')).toEqual({ tier: 'low', matched: 'readme' })
   })
 
   it('get() materializes the default phase mapping for omitted nodes (多模型路由 M3)', async () => {
@@ -123,5 +131,16 @@ describe('bafRouteConfig Remote', () => {
     expect(defaults.phaseTier.design).toBe('high')
     expect(defaults.phaseTier.implement).toBe('low')
     expect(Object.keys(defaults.phaseTier)).toHaveLength(9)
+  })
+
+  it('defaults() ships the builtin keyword presets for the read-only preset block (2.4)', async () => {
+    const { service } = await fixture()
+    const presets = (await service.defaults()).presets
+    expect(presets?.map(preset => preset.id)).toEqual([
+      'complexEngineering', 'criticalRelease', 'qualityAssurance', 'routineEdits',
+    ])
+    expect(presets?.[0]).toMatchObject({ tier: 'high' })
+    expect(presets?.[0]?.words).toContain('架构')
+    expect(presets?.[3]).toMatchObject({ tier: 'low' })
   })
 })

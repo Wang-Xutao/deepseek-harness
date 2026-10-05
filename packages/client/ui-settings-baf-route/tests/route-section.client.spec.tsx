@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 /**
  * 多模型路由 M3 批次B — the settings row controller + component.
+ *
+ * 【变更】2026-10-05 (角色三档批): tier names read Commander/Reviewer/Worker
+ * (presentation only — the wire stays high/mid/low), the three cards sit in a
+ * one-row three-column grid whose model pickers are the generic settings
+ * dropdown fed from the model catalog (names, not ids), save/reset live at the
+ * top, the phase mapping renders as the session-tab-style VERTICAL flow canvas
+ * (SVG bezier edges), and the builtin preset packs display read-only (always
+ * on — the user adds their own rules on top).
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +23,7 @@ import { ModelRoutingRow } from '../src/client/ModelRoutingRow.tsx'
 import {
   RouteSectionController, type RouteSectionFace, type RouteSectionState,
 } from '../src/client/route-store.ts'
-import { KEYWORD_PRESETS } from '../src/client/presets.ts'
+import { KEYWORD_PRESET_IDS } from '../src/client/presets.ts'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 
@@ -37,11 +45,18 @@ const CONFIG: RouteTierConfig = {
   escalateOnly: true,
 }
 
-/** What the Host's `defaults()` Remote hands a fresh draft. */
+/** What the Host's `defaults()` Remote hands a fresh draft (presets included, 2.4). */
 const PHASE_DEFAULTS: Record<string, RouteTier> = {
   design: 'high', plan: 'high', clarify: 'mid', verify: 'mid',
   implement: 'low', intake: 'low', open: 'low', archive: 'low', drift: 'low',
 }
+
+const BUILTIN_PRESETS: readonly { id: string; tier: RouteTier; words: string }[] = [
+  { id: 'complexEngineering', tier: 'high', words: '架构|重构|refactor' },
+  { id: 'criticalRelease', tier: 'high', words: '上线|发布|breaking' },
+  { id: 'qualityAssurance', tier: 'mid', words: '单元测试|review|debug' },
+  { id: 'routineEdits', tier: 'low', words: '文案|README|typo' },
+]
 
 function t(key: string): string {
   return key
@@ -64,7 +79,7 @@ function fakeCtx(overrides: {
   get?: () => Promise<{ ok: true; value: RouteTierConfig | null }>
   save?: (config: RouteTierConfig) => Promise<{ ok: true; value: { ok: boolean; error?: string } }>
   preview?: (summary: string) => Promise<{ ok: true; value: { tier: RouteTier | null; matched?: string } }>
-  defaults?: () => Promise<{ ok: true; value: { phaseTier: Record<string, RouteTier> } }>
+  defaults?: () => Promise<{ ok: true; value: { phaseTier: Record<string, RouteTier>; presets: typeof BUILTIN_PRESETS } }>
   catalog?: () => Promise<{ ok: true; value: { default: { provider: string; model: string } } }>
 } = {}) {
   const ctx = {
@@ -75,7 +90,7 @@ function fakeCtx(overrides: {
         reset: async () => ({ ok: true, value: undefined }) as const,
         preview: overrides.preview ?? (async () => ({ ok: true, value: { tier: null } }) as const),
         defaults: overrides.defaults
-          ?? (async () => ({ ok: true, value: { phaseTier: PHASE_DEFAULTS } }) as const),
+          ?? (async () => ({ ok: true, value: { phaseTier: PHASE_DEFAULTS, presets: BUILTIN_PRESETS } }) as const),
       },
       session: {
         modelCatalog: overrides.catalog
@@ -129,7 +144,16 @@ const READY: RouteSectionState = {
   saving: false,
   error: undefined,
   preview: undefined,
-  catalog: { providers: ['p', 'q'], models: ['big', 'mid', 'cheap'] },
+  // 2.3: the pickers offer every catalog model by NAME; provider derives from
+  // the group the model lives in.
+  catalog: {
+    models: [
+      { id: 'big', name: 'Big Brain', provider: 'p' },
+      { id: 'mid', name: 'Middle', provider: 'p' },
+      { id: 'cheap', name: 'Cheap', provider: 'q' },
+    ],
+  },
+  presets: BUILTIN_PRESETS,
 }
 
 describe('RouteSectionController', () => {
@@ -160,6 +184,13 @@ describe('RouteSectionController', () => {
     expect(draft?.keywords).toEqual([])
   })
 
+  it('captures the builtin preset packs the Host hands with the defaults (2.4)', async () => {
+    const controller = new RouteSectionController(fakeCtx())
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    expect(store.getSnapshot().presets).toEqual(BUILTIN_PRESETS)
+  })
+
   it('save() persists the draft and folds the host verdict into error/dirty', async () => {
     const save = vi.fn(async (_config: RouteTierConfig): Promise<{ ok: true; value: { ok: boolean; error?: string } }> =>
       ({ ok: true, value: { ok: false, error: 'bad tiers' } }))
@@ -186,7 +217,7 @@ describe('RouteSectionController', () => {
     expect(store.getSnapshot().dirty).toBe(false)
   })
 
-  it('loads provider/model suggestions from the catalog even with a saved config', async () => {
+  it('loads catalog models with names and their provider groups for the pickers', async () => {
     const catalog = vi.fn(async () => ({
       ok: true,
       value: {
@@ -202,7 +233,13 @@ describe('RouteSectionController', () => {
     const controller = new RouteSectionController(fakeCtx({ catalog }))
     const store = controller.inject().hooks.routeSection
     await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
-    expect(store.getSnapshot().catalog).toEqual({ providers: ['p', 'q'], models: ['m1', 'm2', 'cheap'] })
+    expect(store.getSnapshot().catalog).toEqual({
+      models: [
+        { id: 'm1', name: 'M1', provider: 'p' },
+        { id: 'm2', name: 'M2', provider: 'p' },
+        { id: 'cheap', name: 'C', provider: 'q' },
+      ],
+    })
   })
 
   it('materializes phase nodes the saved file omits from the host default map', async () => {
@@ -243,31 +280,47 @@ describe('RouteSectionController', () => {
 })
 
 describe('ModelRoutingRow', () => {
-  it('renders the master switch, three tier cards, phase rows, and keyword rows from the draft', () => {
+  it('renders three role cards whose pickers show catalog model NAMES, not ids', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     expect(screen.getByRole('switch', { name: 'master' })).toBeTruthy()
-    // Three tier cards (testids on the card containers — the repo convention
-    // keeps testids on intrinsics this component owns, never primitives). The
-    // provider/model inputs carry list= suggestions, so they surface as
-    // comboboxes (dropdown + 手输), not plain textboxes.
-    const high = within(screen.getByTestId('route-tier-high'))
-    expect((high.getAllByRole('combobox')[0] as HTMLInputElement).value).toBe('p')
-    expect((high.getAllByRole('combobox')[1] as HTMLInputElement).value).toBe('big')
-    const low = within(screen.getByTestId('route-tier-low'))
-    expect((low.getAllByRole('combobox')[1] as HTMLInputElement).value).toBe('cheap')
-    // Phase mapping nodes for all nine workflow stages (8 stages + drift).
-    expect(screen.getAllByTestId('route-phase-row')).toHaveLength(9)
-    // Provider/model inputs carry catalog suggestions (datalist: dropdown + 手输).
-    // jsdom hides datalists from the accessibility tree, so count the option
-    // elements directly instead of by role.
-    expect(screen.getByTestId('route-provider-options').querySelectorAll('option')).toHaveLength(2)
-    expect(screen.getByTestId('route-model-options').querySelectorAll('option')).toHaveLength(3)
-    // The keyword rule row shows its pattern.
+    // One picker per tier card; the anchor reads the model's display name.
+    expect(within(screen.getByTestId('route-tier-high')).getByRole('button', { name: 'Big Brain' })).toBeTruthy()
+    expect(within(screen.getByTestId('route-tier-mid')).getByRole('button', { name: 'Middle' })).toBeTruthy()
+    expect(within(screen.getByTestId('route-tier-low')).getByRole('button', { name: 'Cheap' })).toBeTruthy()
+    // The provider rides along as secondary text (derived, not hand-typed).
+    expect(screen.getByTestId('route-tier-high').textContent).toContain('provider')
+    // No free-text provider/model comboboxes remain — picking is menu-only
+    // (the keyword adder's own select is untouched).
+    expect(within(screen.getByTestId('route-tier-high')).queryByRole('combobox')).toBeNull()
+    // The keyword rule row still shows its pattern.
     expect(screen.getByDisplayValue('架构|refactor')).toBeTruthy()
   })
 
-  it('draws the phase→tier flow in workflow order, each node showing its tier model', () => {
+  it('offers every catalog model in the picker; a pick sets provider AND model', () => {
+    const { face, props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    fireEvent.click(within(screen.getByTestId('route-tier-high')).getByRole('button', { name: 'Big Brain' }))
+    // The generic dropdown lists all three catalog models by name.
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cheap' }))
+    // Selecting derives the provider from the catalog group the model lives in.
+    expect(face.setTierModel).toHaveBeenCalledWith('high', { provider: 'q', model: 'cheap' })
+  })
+
+  it('puts save/reset at the top, above the tier cards (2.1)', () => {
+    const { props } = harness({ ...READY, dirty: true })
+    render(<ModelRoutingRow {...props} />)
+    const actions = screen.getByTestId('route-actions')
+    expect(actions.textContent).toContain('save')
+    expect(actions.textContent).toContain('reset')
+    expect(actions.textContent).toContain('dirty')
+    const saveButton = within(actions).getByRole('button', { name: 'save' })
+    const card = screen.getByTestId('route-tier-high')
+    // The toolbar precedes the first tier card in document order.
+    expect(saveButton.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('draws the phase→tier flow vertically with SVG edges, nodes in workflow order', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     // Workflow execution order — intake first, archive last, drift as the
@@ -284,9 +337,13 @@ describe('ModelRoutingRow', () => {
     expect(names[0]).toContain('cheap')
     expect(names[3] ?? '').toContain('big')
     expect(names[6] ?? '').toContain('mid')
+    // Session-tab-style canvas: bezier edges with an arrowhead marker.
+    const flow = screen.getByTestId('route-flow')
+    expect(flow.querySelectorAll('path').length).toBeGreaterThanOrEqual(9)
+    expect(flow.querySelector('marker') !== null).toBe(true)
   })
 
-  it('cycles a node\'s tier on click (low→mid→high→low)', () => {
+  it('cycles a node\'s tier on click (worker→reviewer→commander→worker)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     const nodes = screen.getAllByTestId('route-phase-row')
@@ -298,40 +355,28 @@ describe('ModelRoutingRow', () => {
     expect(face.setPhaseTier).toHaveBeenCalledWith('design', 'low')
   })
 
-  it('offers curated keyword presets: one click adds the pack; an added pack disables', () => {
+  it('shows the builtin preset packs read-only (2.4) — no chips, no adding', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
-    const chips = screen.getAllByTestId('route-preset')
-    expect(chips).toHaveLength(KEYWORD_PRESETS.length)
-    fireEvent.click(chips[0]!)
-    expect(face.addKeyword).toHaveBeenCalledWith({
-      words: KEYWORD_PRESETS[0]!.words,
-      tier: KEYWORD_PRESETS[0]!.tier,
-    })
-
-    // A pack whose exact words already sit in the draft reads as added and
-    // refuses a duplicate click.
-    const preset = KEYWORD_PRESETS[1]!
-    cleanup()
-    const added = harness({
-      ...READY,
-      draft: { ...CONFIG, keywords: [{ words: preset.words, tier: preset.tier }] },
-    })
-    render(<ModelRoutingRow {...added.props} />)
-    const chip = screen.getAllByTestId('route-preset')[1] as HTMLButtonElement
-    expect(chip.textContent).toContain('presetAdded')
-    expect(chip.disabled).toBe(true)
+    const rows = screen.getAllByTestId('route-builtin-preset')
+    expect(rows).toHaveLength(BUILTIN_PRESETS.length)
+    // Each row names its pack and its tier; the words ride the title tooltip.
+    expect(rows[0]?.textContent).toContain('presetComplexEngineering')
+    expect(rows[0]?.textContent).toContain('tierHigh')
+    expect(rows[3]?.textContent).toContain('presetRoutineEdits')
+    expect(rows[3]?.textContent).toContain('tierLow')
+    // The one-click chips are gone entirely…
+    expect(screen.queryAllByTestId('route-preset')).toHaveLength(0)
+    // …and the rows are informative, not interactive — clicking adds nothing.
+    fireEvent.click(rows[0]!)
+    expect(face.addKeyword).not.toHaveBeenCalled()
   })
 
-  it('forwards the master switch and tier edits to the face', () => {
+  it('forwards the master switch to the face', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     fireEvent.click(screen.getByRole('switch', { name: 'master' }))
     expect(face.setEnabled).toHaveBeenCalledWith(false)
-    const high = within(screen.getByTestId('route-tier-high'))
-    const modelInput = high.getAllByRole('combobox')[1] as HTMLInputElement
-    fireEvent.change(modelInput, { target: { value: 'bigger' } })
-    expect(face.setTierModel).toHaveBeenCalledWith('high', { model: 'bigger' })
   })
 
   it('shows the preview verdict and the inline save error', () => {
@@ -347,6 +392,11 @@ describe('ModelRoutingRow', () => {
     fireEvent.change(screen.getByTestId('route-preview-input'), { target: { value: '重构模块' } })
     fireEvent.click(screen.getByTestId('route-preview-run'))
     expect(props.runPreview).toHaveBeenCalledWith('重构模块')
+  })
+
+  it('still lists every preset id the locale knows (display-name coverage)', () => {
+    // The Host owns the packs; the client only carries their ids for naming.
+    expect(KEYWORD_PRESET_IDS).toEqual(['complexEngineering', 'criticalRelease', 'qualityAssurance', 'routineEdits'])
   })
 })
 

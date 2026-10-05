@@ -176,6 +176,21 @@
   text-overflow: ellipsis;
 }
 
+/* 【变更】2026-10-05 (baf 独占标识): tiny superscript at the label's top-right
+   end marking BAF-only sections. Decorative — the cell's accessible name
+   carries it as trailing text, which reads fine alongside the label. */
+.bafBadge {
+  margin-left: 4px;
+  padding: 0 3px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 55%, transparent);
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 10px;
+  vertical-align: super;
+  color: var(--dsw-alias-brand-primary, #4a78d2);
+}
+
 /* 【变更】2026-10-04 (用户问题 3): red attention dot on the 版本与更新 nav
    cell while the baf-dsh shell reports an available update. Decorative —
    the cell's accessible name stays the section label. */

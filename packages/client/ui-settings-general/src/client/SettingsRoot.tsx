@@ -30,6 +30,13 @@ const RECOVERY_CONFIRMATION_MS = 2_000
 /** Minimum visible time for the connecting pill; shorter attempts read as flicker. */
 const CONNECTING_MIN_VISIBLE_MS = 800
 
+/**
+ * 【变更】2026-10-05 (baf 独占标识): the sections only the BAF build carries —
+ * their nav label ends with a tiny `baf` superscript so customers can tell
+ * BAF-exclusive surface from shared product surface at a glance.
+ */
+const BAF_EXCLUSIVE = new Set(['workflow', 'model-routing', 'version-updates', 'featured-plugins'])
+
 /** Nav glyph by section id; unknown ids fall back to the settings gear. */
 function navIcon(id: string) {
   if (id === 'account') return <IconUserOutlineMedium className={css.navIcon} size={16} />
@@ -99,7 +106,10 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
                 onClick={() => { onSelect(row.id) }}
               >
                 {navIcon(row.id)}
-                <span className={css.navLabel}>{row.label}</span>
+                <span className={css.navLabel}>
+                  {row.label}
+                  {BAF_EXCLUSIVE.has(row.id) ? <sup className={css.bafBadge}>baf</sup> : null}
+                </span>
                 {row.id === 'version-updates' && updateAvailable
                   ? <span className={css.navDot} aria-hidden="true" />
                   : null}

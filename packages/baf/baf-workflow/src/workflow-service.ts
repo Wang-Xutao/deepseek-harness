@@ -5,6 +5,7 @@
 
 import {
   BafError,
+  effectiveKeywordRules,
   isTierRoutingActive,
   resolveTaskTier,
   type IntakeInput,
@@ -54,7 +55,7 @@ export function createWorkflowService(options: WorkflowServiceOptions): Workflow
       // rides the intake event, so it is durable across restarts.
       const tierConfig = readRouteTierConfigSync()
       const taskTierHit = tierConfig !== undefined && isTierRoutingActive(tierConfig)
-        ? resolveTaskTier(input.description, tierConfig.keywords ?? [])
+        ? resolveTaskTier(input.description, effectiveKeywordRules(tierConfig.keywords))
         : undefined
       const recorded = taskTierHit === undefined
         ? intake
@@ -209,7 +210,7 @@ export async function confirmIntake(
   const tierConfig = readRouteTierConfigSync()
   if (tierConfig !== undefined && isTierRoutingActive(tierConfig)) {
     const hit = next.intake?.taskTierHit
-      ?? resolveTaskTier(next.intake?.summary ?? '', tierConfig.keywords ?? [])
+      ?? resolveTaskTier(next.intake?.summary ?? '', effectiveKeywordRules(tierConfig.keywords))
     if (hit !== undefined) {
       const { status: frozen } = await store.append(next.changeId, next.projectionVersion, meta => ({
         type: 'task-tier-frozen' as const,
