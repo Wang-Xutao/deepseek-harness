@@ -36,11 +36,19 @@ export interface TierModelSpec {
   reasoningEffort?: string
 }
 
-/** One keyword rule: `|`-separated words, first matching rule wins. */
+/**
+ * One keyword rule: `|`-separated words, first matching rule wins.
+ *
+ * 【变更】2026-10-06 (问题 3/4): `category` names the rule's 功能分类 (a
+ * user-defined group label the UI renders with a one-click master switch);
+ * `enabled: false` parks the rule without deleting it (the tag-level switch).
+ */
 export interface TierKeywordRule {
   words: string
   tier: RouteTier
   note?: string
+  category?: string
+  enabled?: boolean
 }
 
 /** One curated builtin keyword pack (id doubles as the client's `preset${Id}` locale key). */
@@ -48,6 +56,17 @@ export interface BuiltinKeywordPreset {
   readonly id: string
   readonly tier: RouteTier
   readonly words: string
+}
+
+/**
+ * The user-editable preset word library file
+ * (`~/.dsh/baf-route-presets.json`, 问题 4): the packs the host seeds on
+ * first read and the user freely adds/removes/edits. Same shape as the code
+ * builtins — a pack is `{ id, tier, words }`.
+ */
+export interface RouteKeywordPresetsFile {
+  schema: 1
+  packs: BuiltinKeywordPreset[]
 }
 
 /**
@@ -76,20 +95,51 @@ export const BUILTIN_KEYWORD_PRESETS: readonly BuiltinKeywordPreset[] = [
     words: '单元测试|集成测试|测试用例|代码评审|回归|排查|复现|日志|边界|test|review|debug|regression',
   },
   {
+    // 【变更】2026-10-06 (问题 3): Worker repositioned as 日常代码实现+文案 —
+    // plain coding vocabulary joins the copy vocabulary at the low tier
+    // (architecture/QA vocabulary still escalates above it, first-match-wins).
     id: 'routineEdits',
     tier: 'low',
-    words: '文案|注释|文档|README|格式化|拼写|错别字|翻译|改名|版本号|typo|wording|docs|rename',
+    words: '实现|编码|写代码|改代码|函数|脚本|bug修复|修bug|implement|coding|文案|注释|文档|README|格式化|拼写|错别字|翻译|改名|版本号|typo|wording|docs|rename',
   },
 ]
 
 /**
  * The rules a task actually evaluates: the user's own rules first (explicit
  * intent wins — a user downgrading 「架构」 to low overrides the builtin high),
- * then the builtin packs, all in declaration order for first-match-wins.
+ * then the preset packs, all in declaration order for first-match-wins.
+ *
+ * 【变更】2026-10-06 (问题 3/4): the pack list is caller-sourced (the host
+ * passes the `~/.dsh/baf-route-presets.json` packs; the code builtins remain
+ * the default), and every level carries an enable state the fold honors —
+ * `enabled: false` user rules drop out, `packs[id] === false` parks a whole
+ * pack (类级一键开关), `presetWords['id::word'] === false` parks one word
+ * (标签级开关). A pack whose every word is disabled drops out entirely.
  * @param userKeywords - the user's saved keyword rules (may be empty/absent).
+ * @param options - preset pack source + enable-state maps from the config.
  */
-export function effectiveKeywordRules(userKeywords: readonly TierKeywordRule[] | undefined): TierKeywordRule[] {
-  return [...(userKeywords ?? []), ...BUILTIN_KEYWORD_PRESETS]
+export function effectiveKeywordRules(
+  userKeywords: readonly TierKeywordRule[] | undefined,
+  options?: {
+    presets?: readonly BuiltinKeywordPreset[]
+    packs?: Record<string, boolean>
+    presetWords?: Record<string, boolean>
+  },
+): TierKeywordRule[] {
+  const presets = options?.presets ?? BUILTIN_KEYWORD_PRESETS
+  const userRules = (userKeywords ?? []).filter(rule => rule.enabled !== false)
+  const packRules = presets
+    .filter(preset => options?.packs?.[preset.id] !== false)
+    .map((preset) => {
+      const words = preset.words
+        .split('|')
+        .map(word => word.trim())
+        .filter(word => word !== '' && options?.presetWords?.[`${preset.id}::${word}`] !== false)
+      return { tier: preset.tier, words }
+    })
+    .filter(preset => preset.words.length > 0)
+    .map(preset => ({ words: preset.words.join('|'), tier: preset.tier }))
+  return [...userRules, ...packRules]
 }
 
 /**
@@ -105,6 +155,14 @@ export interface RouteTierConfig {
   keywords?: TierKeywordRule[]
   /** Keyword tier only ever escalates (default true); false = phase-only. */
   escalateOnly?: boolean
+  /**
+   * Preset pack enable states (问题 3 类级开关): pack id → enabled; absent or
+   * true = on. Lives in the config (runtime preference) — the pack vocabulary
+   * itself lives in the presets file.
+   */
+  packs?: Record<string, boolean>
+  /** Per-preset-word enable states (问题 4 标签级开关), keyed `${packId}::${word}`. */
+  presetWords?: Record<string, boolean>
 }
 
 /** Default phase→tier mapping; `phaseTier` overrides per node. */
@@ -140,6 +198,8 @@ const tierKeywordSchema = z.object({
   words: z.string().min(1),
   tier: z.enum(ROUTE_TIERS),
   note: z.string().min(1).optional(),
+  category: z.string().min(1).optional(),
+  enabled: z.boolean().optional(),
 })
 
 /** Zod schema for {@link RouteTierConfig}. */
@@ -150,7 +210,33 @@ export const routeTierConfigSchema = z.object({
   phaseTier: z.partialRecord(z.enum(WORKFLOW_NODES), z.enum(ROUTE_TIERS)).optional(),
   keywords: z.array(tierKeywordSchema).optional(),
   escalateOnly: z.boolean().optional(),
+  packs: z.record(z.string(), z.boolean()).optional(),
+  presetWords: z.record(z.string(), z.boolean()).optional(),
 })
+
+const builtinPresetSchema = z.object({
+  id: z.string().min(1),
+  tier: z.enum(ROUTE_TIERS),
+  words: z.string().min(1),
+})
+
+/** Zod schema for {@link RouteKeywordPresetsFile} (the preset word library). */
+export const routeKeywordPresetsSchema = z.object({
+  schema: z.literal(1),
+  packs: z.array(builtinPresetSchema),
+})
+
+/**
+ * Parse an unknown JSON document as a {@link RouteKeywordPresetsFile}.
+ * Invalid documents return undefined — callers fall back to the code
+ * builtins without touching the user's file.
+ * @param raw - parsed JSON document.
+ */
+export function parseRouteKeywordPresets(raw: unknown): RouteKeywordPresetsFile | undefined {
+  const parsed = routeKeywordPresetsSchema.safeParse(raw)
+  if (!parsed.success) return undefined
+  return { schema: 1, packs: parsed.data.packs }
+}
 
 /**
  * Parse an unknown JSON document into a normalized {@link RouteTierConfig}.
@@ -180,8 +266,12 @@ export function parseRouteTierConfig(raw: unknown): RouteTierConfig | undefined 
       words: rule.words,
       tier: rule.tier,
       ...(rule.note === undefined ? {} : { note: rule.note }),
+      ...(rule.category === undefined ? {} : { category: rule.category }),
+      ...(rule.enabled === undefined ? {} : { enabled: rule.enabled }),
     })),
     escalateOnly: parsed.data.escalateOnly ?? true,
+    ...(parsed.data.packs === undefined ? {} : { packs: parsed.data.packs }),
+    ...(parsed.data.presetWords === undefined ? {} : { presetWords: parsed.data.presetWords }),
   }
 }
 

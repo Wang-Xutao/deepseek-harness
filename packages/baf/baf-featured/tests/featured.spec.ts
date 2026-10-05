@@ -86,6 +86,29 @@ async function fixture(withManager = true) {
   return { ctx, manager, featured: ctx.featuredPlugins }
 }
 
+describe('the curated overlay manifest', () => {
+  // 【变更】2026-10-06 (问题 7): the real overlay/plugin/featured-plugins.json must
+  // parse clean and carry the dshmarket entry (dsh-market, already running in the
+  // customer's web profile but absent from this distribution) beside feishu.
+  const overlayPath = join(import.meta.dirname, '..', '..', '..', '..', 'overlay', 'plugin', 'featured-plugins.json')
+
+  it('parses clean and carries feishu plus dshmarket at revision 2', () => {
+    expect(existsSync(overlayPath)).toBe(true)
+    const parsed: unknown = JSON.parse(readFileSync(overlayPath, 'utf8'))
+    const { manifest, problems } = parseFeaturedManifest(parsed)
+    expect(problems).toEqual([])
+    expect(manifest?.revision).toBe(2)
+    expect(manifest?.plugins.map(plugin => plugin.id)).toEqual(['dsh-feishu', 'dshmarket'])
+    const market = manifest?.plugins.find(plugin => plugin.id === 'dshmarket')
+    expect(market).toMatchObject({
+      package: 'dshmarket',
+      homepage: 'https://dshmarket.com',
+      registryFirst: 'https://registry.npmmirror.com',
+      peerExemptionExpected: true,
+    })
+  })
+})
+
 describe('manifest parsing', () => {
   it('accepts the curated manifest and reports its revision', () => {
     const { manifest, problems } = parseFeaturedManifest(MANIFEST)

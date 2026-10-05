@@ -32,6 +32,9 @@ export type UpdatesSettingsKey =
   | 'progress'
   | 'updateTarget'
   | 'updateNotes'
+  | 'currentVersion'
+  | 'latestVersion'
+  | 'hotUpgradeHint'
 
 export const en: Record<UpdatesSettingsKey, string> = {
   nav: 'Version & updates',
@@ -66,6 +69,9 @@ export const en: Record<UpdatesSettingsKey, string> = {
   progress: 'Progress',
   updateTarget: 'Target version',
   updateNotes: 'What is new',
+  currentVersion: 'Current version',
+  latestVersion: 'Latest available version',
+  hotUpgradeHint: 'BAF packages also hot-upgrade: run /baf-update in a session to check and update them without restarting the app; /baf-update-rollback rolls a hot scope back to its last applied bits.',
 }
 
 export const zh: Record<UpdatesSettingsKey, string> = {
@@ -101,4 +107,7 @@ export const zh: Record<UpdatesSettingsKey, string> = {
   progress: '进度',
   updateTarget: '目标版本',
   updateNotes: '更新内容',
+  currentVersion: '当前版本',
+  latestVersion: '最新可升级版本',
+  hotUpgradeHint: 'BAF 插件包还支持热升级：在会话里执行 /baf-update，无需重启应用即可检查并更新插件包；/baf-update-rollback 可把热升级回滚到上一版。',
 }

@@ -13,7 +13,7 @@ import { decideTransition } from '../src/transition.ts'
 import { confirmIntake, createWorkflowService } from '../src/workflow-service.ts'
 import { buildEmptyTabView, statusToTabView } from '@deepseek-ai/dsh-baf-core'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
-import { writeRouteTierConfigSync } from '../src/route-config-io.ts'
+import { writeRoutePresetsSync, writeRouteTierConfigSync } from '../src/route-config-io.ts'
 import { resetTaskTierMemory, taskTierFor } from '../src/task-tier-memory.ts'
 
 const savedDshHome = process.env.DSH_HOME
@@ -122,6 +122,52 @@ describe('projection store', () => {
         .toContain('task-tier-frozen')
     } finally {
       await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('freezes from the FILE preset packs and honors the pack park (2026-10-06 问题 3/4)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'baf-proj-tier-home-file-'))
+    try {
+      process.env.DSH_HOME = home
+      // The user's own pack file REPLACES the code builtins: 对账 (high) is
+      // the only pack, so 架构 must NOT freeze anything.
+      writeRoutePresetsSync(join(home, 'baf-route-presets.json'), {
+        schema: 1,
+        packs: [{ id: 'reconPack', tier: 'high', words: '对账|reconciliation' }],
+      })
+      const config = {
+        schema: 1 as const,
+        enabled: true,
+        tiers: {
+          high: { provider: 'p', model: 'big' },
+          mid: { provider: 'p', model: 'mid' },
+          low: { provider: 'p', model: 'cheap' },
+        },
+        keywords: [],
+      }
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), config)
+      // One workspace per intake (the suite's one-change-per-root convention).
+      const taskTierOf = async (description: string) => {
+        const root = await mkdtemp(join(tmpdir(), 'baf-proj-tier-file-'))
+        try {
+          const store = new ProjectionStore({ workspaceRoot: root })
+          const service = createWorkflowService({ store })
+          const { intake } = await service.intake({ description, workspace: { root } })
+          return (await confirmIntake(store, intake.changeId)).taskTier
+        } finally {
+          await rm(root, { recursive: true, force: true })
+        }
+      }
+      expect(await taskTierOf('梳理整体架构并重构模块边界')).toBeUndefined()
+      expect(await taskTierOf('做一个对账数据核对任务')).toEqual({ tier: 'high', matched: '对账' })
+      // Parking the pack (类级开关) drops the rule: the same text freezes nothing.
+      writeRouteTierConfigSync(join(home, 'baf-route-config.json'), {
+        ...config,
+        packs: { reconPack: false },
+      })
+      expect(await taskTierOf('再做一个对账数据核对任务')).toBeUndefined()
+    } finally {
       await rm(home, { recursive: true, force: true })
     }
   })

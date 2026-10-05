@@ -15,10 +15,11 @@
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
-  BUILTIN_KEYWORD_PRESETS, DEFAULT_PHASE_TIER, effectiveKeywordRules, parseRouteTierConfig,
-  resolveTaskTier, type RouteTierConfig,
+  DEFAULT_PHASE_TIER, parseRouteTierConfig, resolveTaskTier, type RouteTierConfig,
 } from '@deepseek-ai/dsh-baf-core'
 import {
+  effectiveRouteKeywordRules,
+  readRoutePresetsSync,
   readRouteTierConfigSync,
   resetRouteTierConfigSync,
   writeRouteTierConfigSync,
@@ -94,12 +95,17 @@ export class BafRouteConfigRemote extends TypertRemoteService {
    * 多模型路由 M3 预演: dry-run the intake keyword match host-side. The
    * browser cannot value-import baf-core (client bundle purity), so the
    * settings row ships the summary here and renders the tier a confirm would
-   * freeze — the same `effectiveKeywordRules` list the freeze chain runs
-   * (user rules first, then the always-on builtin packs), one source of truth.
+   * freeze — the same `effectiveRouteKeywordRules` fold the freeze chain runs
+   * (user rules first, then the FILE preset packs under their enable states),
+   * one source of truth.
    * 【变更】2026-10-05 (auto 批): a passed DRAFT previews live (未保存改动即时
    * 预演 — an invalid draft falls back to the saved file), and
    * `options.verifyRetry` simulates the M4 verify-failed floor: a below-mid
    * verdict escalates to mid with `escalated` on the result.
+   * 【变更】2026-10-06 (问题 5 root fix): the `enabled` gate is GONE — the
+   * master switch governs live routing only, never the dry-run (a disabled or
+   * even absent config still evaluates the preset packs, so 预演 never freezes
+   * at「不会冻结角色」again).
    * @param summary - a task summary as it would be intaken.
    * @param draft - the unsaved config the row is editing (optional).
    * @param options - simulation switches.
@@ -114,8 +120,7 @@ export class BafRouteConfigRemote extends TypertRemoteService {
   ): Promise<BafRoutePreviewResult> {
     const fromDraft = draft === undefined ? undefined : parseRouteTierConfig(draft)
     const config = fromDraft ?? readRouteTierConfigSync()
-    if (config === undefined || !config.enabled) return { tier: null }
-    const hit = resolveTaskTier(summary, effectiveKeywordRules(config.keywords))
+    const hit = resolveTaskTier(summary, effectiveRouteKeywordRules(config))
     let tier = hit?.tier
     let escalated = false
     if (options?.verifyRetry === true && tier !== 'mid' && tier !== 'high') {
@@ -132,13 +137,15 @@ export class BafRouteConfigRemote extends TypertRemoteService {
 
   /**
    * The built-in phase→tier map for a fresh draft (no config saved yet), plus
-   * the always-on builtin keyword packs for the read-only preset block (2.4
-   * 默认启用). The client cannot import baf-core, so this is the one source
-   * the settings row seeds its phase rows and preset display from.
+   * the preset keyword packs for the settings display. 【变更】2026-10-06
+   * (问题 4): the packs come from the user-editable preset file
+   * (`~/.dsh/baf-route-presets.json`, seeded from the code builtins on first
+   * read) — the client cannot import baf-core, so this is the one source the
+   * settings row seeds its phase rows and preset display from.
    */
   @Remote
   async defaults(): Promise<BafRouteConfigDefaults> {
-    return { phaseTier: DEFAULT_PHASE_TIER, presets: BUILTIN_KEYWORD_PRESETS }
+    return { phaseTier: DEFAULT_PHASE_TIER, presets: readRoutePresetsSync().packs }
   }
 }
 

@@ -1,6 +1,9 @@
 /**
- * General-settings row: durable toggle for the 轨迹图 conversation tab.
+ * 工作流-settings row: durable toggle for the 轨迹图 conversation tab.
  * Visibility is driven by `BafWorkflowSettings.showTraceGraph`.
+ *
+ * 【变更】2026-10-06 (问题 1): the row moved from General settings into the
+ * 工作流 section (`settings.workflow.item`), ahead of the 工作流图页签 row.
  *
  * 【变更】2026-09-30 (demo31 问题 3): the toggle is the shared `Switch`
  * primitive — the exact control the 开发者工具 row uses in General settings —
@@ -26,9 +29,9 @@ export interface TraceGraphRowInjected {
   setShowTraceGraph: (value: boolean) => Promise<void>
 }
 
-/** Full component props for the General-settings row. */
+/** Full component props for the 工作流-settings row. */
 export type TraceGraphRowProps =
-  PropsRuntime<'settings.general.item'>
+  PropsRuntime<'settings.workflow.item'>
   & PropsLocale<'baf.workflow'>
   & InjectFace<TraceGraphRowInjected>
 

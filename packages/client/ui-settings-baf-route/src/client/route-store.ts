@@ -90,6 +90,14 @@ export interface RouteSectionFace {
   removeKeyword(index: number): void
   /** 【变更】2026-10-05 (point 5): replace the keyword rule at `index` in place (inline tag edit). */
   updateKeyword(index: number, rule: TierKeywordRule): void
+  /** 【变更】2026-10-06 (问题 4): park one user rule at the tag level (`enabled:false` keeps it listed). */
+  setKeywordEnabled(index: number, enabled: boolean): void
+  /** 【变更】2026-10-06 (问题 3): flip every rule carrying `category` in one click (类级一键开关). */
+  setCategoryEnabled(category: string, enabled: boolean): void
+  /** 【变更】2026-10-06 (问题 3): park a whole preset pack via `draft.packs`. */
+  setPackEnabled(packId: string, enabled: boolean): void
+  /** 【变更】2026-10-06 (问题 4): park one preset word via `draft.presetWords` (key `pack::word`). */
+  setPresetWordEnabled(packId: string, word: string, enabled: boolean): void
   /** Flip the keyword-escalates-only flag. */
   setEscalateOnly(value: boolean): void
   /** Persist the draft; a refusal keeps it dirty with `error` set. */
@@ -175,9 +183,38 @@ export class RouteSectionController {
 
   /** @inheritdoc */
   updateKeyword(index: number, rule: TierKeywordRule): void {
+    // Merge, not replace: the inline edit row re-sends words+tier, and the
+    // rule's category (问题 3 自定义分类) must survive a patch that omits it.
     this.edit((draft) => {
-      draft.keywords = (draft.keywords ?? []).map((existing, at) => at === index ? rule : existing)
+      draft.keywords = (draft.keywords ?? [])
+        .map((existing, at) => at === index ? { ...existing, ...rule } : existing)
     })
+  }
+
+  /** @inheritdoc */
+  setKeywordEnabled(index: number, enabled: boolean): void {
+    this.edit((draft) => {
+      draft.keywords = (draft.keywords ?? [])
+        .map((existing, at) => at === index ? { ...existing, enabled } : existing)
+    })
+  }
+
+  /** @inheritdoc */
+  setCategoryEnabled(category: string, enabled: boolean): void {
+    this.edit((draft) => {
+      draft.keywords = (draft.keywords ?? [])
+        .map(rule => rule.category === category ? { ...rule, enabled } : rule)
+    })
+  }
+
+  /** @inheritdoc */
+  setPackEnabled(packId: string, enabled: boolean): void {
+    this.edit((draft) => { draft.packs = { ...draft.packs, [packId]: enabled } })
+  }
+
+  /** @inheritdoc */
+  setPresetWordEnabled(packId: string, word: string, enabled: boolean): void {
+    this.edit((draft) => { draft.presetWords = { ...draft.presetWords, [`${packId}::${word}`]: enabled } })
   }
 
   /** @inheritdoc */
@@ -256,6 +293,10 @@ export class RouteSectionController {
       addKeyword: rule => this.addKeyword(rule),
       removeKeyword: index => this.removeKeyword(index),
       updateKeyword: (index, rule) => this.updateKeyword(index, rule),
+      setKeywordEnabled: (index, enabled) => this.setKeywordEnabled(index, enabled),
+      setCategoryEnabled: (category, enabled) => this.setCategoryEnabled(category, enabled),
+      setPackEnabled: (packId, enabled) => this.setPackEnabled(packId, enabled),
+      setPresetWordEnabled: (packId, word, enabled) => this.setPresetWordEnabled(packId, word, enabled),
       setEscalateOnly: value => this.setEscalateOnly(value),
       save: () => this.save(),
       reset: () => this.reset(),

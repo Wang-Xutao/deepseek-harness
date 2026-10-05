@@ -27,8 +27,18 @@
  * effective phase mapping always arrives materialized from the Host — `get`
  * fills defaults on an existing config and a fresh draft seeds from
  * `defaults()`, which also carries the builtin packs (2.4).
+ * 【变更】2026-10-06 (问题 2/3/4 批): the three role rows became three CARDS —
+ * no shared header row, each card leads with its role name + one-line
+ * description (主次分明) and then labels its own 服务商/模型/思考力度 fields;
+ * keyword tags carry a mini role="switch" each (off parks the word without
+ * deleting it), preset packs gained a master switch beside the pack name and
+ * each preset word its own tag switch, and user rules can carry a custom
+ * 功能分类 rendered as a labelled group with its own one-click master switch;
+ * the tag's inner tier label is gone (the group already says the role); the
+ * preset block points at the user-editable preset file; the 预演 box explains
+ * the verify-retry floor its checkbox simulates.
  */
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import {
   IconChevronDownOutlineMedium as IconChevronDownOutline14, Menu, Switch,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -216,11 +226,13 @@ export type ModelRoutingRowProps =
  */
 export function ModelRoutingRow({
   useRouteSection, setEnabled, setTierModel, setTierProvider, setTierEffort, setPhaseTier,
-  addKeyword, removeKeyword, updateKeyword, setEscalateOnly, save, reset, runPreview, t,
+  addKeyword, removeKeyword, updateKeyword, setKeywordEnabled, setCategoryEnabled,
+  setPackEnabled, setPresetWordEnabled, setEscalateOnly, save, reset, runPreview, t,
 }: ModelRoutingRowProps) {
   const state = useRouteSection(identity)
   const keywordWordsId = useId()
   const keywordTierId = useId()
+  const keywordCategoryId = useId()
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null)
   const [keywordEdit, setKeywordEdit] = useState<KeywordEdit | null>(null)
   const [verifyRetry, setVerifyRetry] = useState(false)
@@ -239,10 +251,103 @@ export function ModelRoutingRow({
   }
   const escalate = draft.escalateOnly ?? true
   const models = state.catalog?.models ?? []
-  const addKeywordFrom = (words: string, tier: RouteTier): void => {
+  // 问题 3: the adder's optional 功能分类 rides the new rule when filled.
+  const addKeywordFrom = (words: string, tier: RouteTier, category: string): void => {
     if (words === '') return
-    const rule: TierKeywordRule = { words, tier }
+    const rule: TierKeywordRule = category === '' ? { words, tier } : { words, tier, category }
     addKeyword(rule)
+  }
+
+  /**
+   * One user keyword rule: the inline edit row, or the tag — word, a mini
+   * role="switch" that parks the rule without deleting it (问题 4), and the
+   * edit/remove buttons. The tag carries NO tier label inside: it sits inside
+   * its tier group, which already names the role.
+   */
+  const renderUserRule = (rule: TierKeywordRule, index: number): ReactNode => {
+    if (keywordEdit !== null && keywordEdit.index === index) {
+      return (
+        <div key={`${rule.words}-${index}`} className={css.keywordEdit} data-testid="route-keyword-edit">
+          <input
+            className={css.input}
+            data-testid="route-keyword-edit-input"
+            defaultValue={rule.words}
+            aria-label={t('keywordWords')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commitKeywordEdit(event.currentTarget, rule.category)
+            }}
+          />
+          <select
+            className={css.select}
+            data-testid="route-keyword-edit-tier"
+            aria-label={t('keywordTier')}
+            value={keywordEdit.tier}
+            onChange={(event) => {
+              setKeywordEdit({ ...keywordEdit, tier: event.currentTarget.value as RouteTier })
+            }}
+          >
+            {TIERS.map(option => (
+              <option key={option} value={option}>{t(tierKey(option))}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className={css.btn}
+            data-testid="route-keyword-save"
+            onClick={(event) => {
+              const input = event.currentTarget.parentElement?.querySelector('input') ?? null
+              commitKeywordEdit(input, rule.category)
+            }}
+          >
+            {t('keywordSave')}
+          </button>
+          <button
+            type="button"
+            className={css.btn}
+            onClick={() => { setKeywordEdit(null) }}
+          >
+            {t('keywordCancel')}
+          </button>
+        </div>
+      )
+    }
+    const on = rule.enabled !== false
+    return (
+      <span
+        key={`${rule.words}-${index}`}
+        className={join(css.keywordTag, TIER_CLASS[rule.tier], on ? '' : css.keywordTagOff)}
+        data-testid="route-keyword-tag"
+      >
+        <span className={css.keywordTagWords}>{rule.words}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on ? 'true' : 'false'}
+          aria-label={t('tagToggle')}
+          className={join(css.tagSwitch, on ? '' : css.tagSwitchOff)}
+          data-testid="route-keyword-toggle"
+          onClick={() => { setKeywordEnabled(index, !on) }}
+        />
+        <button
+          type="button"
+          className={css.tagBtn}
+          data-testid="route-keyword-edit-btn"
+          aria-label={t('keywordEdit')}
+          onClick={() => { setKeywordEdit({ index, tier: rule.tier }) }}
+        >
+          ✎
+        </button>
+        <button
+          type="button"
+          className={css.tagBtn}
+          data-testid="route-keyword-remove"
+          aria-label={t('keywordRemove')}
+          onClick={() => { removeKeyword(index) }}
+        >
+          ✕
+        </button>
+      </span>
+    )
   }
   return (
     <div className={css.section} data-testid="route-section">
@@ -270,16 +375,12 @@ export function ModelRoutingRow({
         </button>
       </div>
 
-      {/* 1.3 block 1 — 模型分级: one role ROW per tier (1.1). */}
+      {/* 问题 2 (2026-10-06) — 模型分级: one role CARD per tier. The role
+          name + one-line description lead the card (主次分明), then the card
+          labels its own three fields — no shared header row remains. */}
       <div className={css.block}>
         <div className={css.blockTitle}>{t('tiersTitle')}</div>
         <div className={css.tiers}>
-          <div className={css.tiersHead} aria-hidden="true">
-            <span className={css.tiersHeadRole}>{t('roleLabel')}</span>
-            <span>{t('provider')}</span>
-            <span>{t('model')}</span>
-            <span>{t('effortLabel')}</span>
-          </div>
           {TIERS.map((tier) => {
             const spec = draft.tiers[tier]
             const selected = models.find(model => model.id === spec.model)
@@ -298,97 +399,26 @@ export function ModelRoutingRow({
                 ?? spec.reasoningEffort
                 ?? t('effortDefault')
             return (
-              <div key={tier} className={join(css.tier, TIER_CLASS[tier])} data-testid={`route-tier-${tier}`}>
-                <div className={css.tierRole}>
+              <div key={tier} className={join(css.tierCard, TIER_CLASS[tier])} data-testid={`route-tier-${tier}`}>
+                <div className={css.tierCardHead}>
                   <span className={css.tierHead}>
                     <span className={join(css.dot, TIER_CLASS[tier])} aria-hidden="true" />
                     <span className={css.tierTitle}>{t(tierKey(tier))}</span>
                   </span>
                   <span className={css.tierDesc}>{t(tierDescKey(tier))}</span>
                 </div>
-                <div className={css.cell}>
-                  {/* point 1: the provider re-points alone — model and effort stay. */}
-                  <Menu
-                    open={openMenu === `${tier}:provider`}
-                    onClose={() => { setOpenMenu(null) }}
-                    items={providers.map(provider => ({ id: provider, label: provider }))}
-                    selectedId={spec.provider}
-                    onSelect={(provider) => {
-                      setOpenMenu(null)
-                      setTierProvider(tier, provider)
-                    }}
-                    align="start"
-                    portal
-                    anchor={(
-                      <button
-                        type="button"
-                        className={css.selector}
-                        aria-haspopup="menu"
-                        aria-expanded={openMenu === `${tier}:provider`}
-                        onClick={() => { setOpenMenu(openMenu === `${tier}:provider` ? null : `${tier}:provider`) }}
-                      >
-                        <span className={css.selectorLabel}>{spec.provider}</span>
-                        <IconChevronDownOutline14 className={css.chevron} />
-                      </button>
-                    )}
-                  />
-                </div>
-                <div className={css.cell}>
-                  <Menu
-                    open={openMenu === `${tier}:model`}
-                    onClose={() => { setOpenMenu(null) }}
-                    items={providerModels.map(model => ({ id: model.id, label: model.label }))}
-                    selectedId={spec.model}
-                    onSelect={(id) => {
-                      setOpenMenu(null)
-                      const chosen = providerModels.find(model => model.id === id)
-                      if (chosen !== undefined) {
-                        // A pick derives the provider from the catalog group the
-                        // model lives in — the user never types one by hand.
-                        setTierModel(tier, { provider: chosen.provider, model: chosen.id })
-                      }
-                    }}
-                    align="start"
-                    portal
-                    anchor={(
-                      <button
-                        type="button"
-                        className={css.selector}
-                        aria-haspopup="menu"
-                        aria-expanded={openMenu === `${tier}:model`}
-                        onClick={() => { setOpenMenu(openMenu === `${tier}:model` ? null : `${tier}:model`) }}
-                      >
-                        <span className={css.selectorLabel}>{anchorLabel}</span>
-                        <IconChevronDownOutline14 className={css.chevron} />
-                      </button>
-                    )}
-                  />
-                  {/* 批次B-D/E: a model that left the catalog (or the chosen
-                      provider's menu) keeps its raw id with a 未在目录 chip. */}
-                  {spec.model !== '' && !providerModels.some(model => model.id === spec.model)
-                    ? <span className={css.notInCatalog} data-testid="route-not-in-catalog">{t('notInCatalog')}</span>
-                    : undefined}
-                </div>
-                <div className={css.cell}>
-                  {/* 批次B-B: the effort ladder comes from the selected model;
-                      models without one hold the column with a disabled — so
-                      the three-column rhythm never collapses (1.1). */}
-                  {selected?.reasoning === undefined ? (
-                    <button type="button" className={css.selector} disabled>
-                      <span className={css.selectorLabel}>—</span>
-                    </button>
-                  ) : (
+                <div className={css.tierCardGrid}>
+                  <div className={css.field}>
+                    <span className={css.fieldLabel}>{t('provider')}</span>
+                    {/* point 1: the provider re-points alone — model and effort stay. */}
                     <Menu
-                      open={openMenu === `${tier}:effort`}
+                      open={openMenu === `${tier}:provider`}
                       onClose={() => { setOpenMenu(null) }}
-                      items={[
-                        { id: '', label: t('effortDefault') },
-                        ...selected.reasoning.efforts.map(effort => ({ id: effort.id, label: effort.name })),
-                      ]}
-                      selectedId={spec.reasoningEffort ?? ''}
-                      onSelect={(id) => {
+                      items={providers.map(provider => ({ id: provider, label: provider }))}
+                      selectedId={spec.provider}
+                      onSelect={(provider) => {
                         setOpenMenu(null)
-                        setTierEffort(tier, id === '' ? undefined : id)
+                        setTierProvider(tier, provider)
                       }}
                       align="start"
                       portal
@@ -397,15 +427,91 @@ export function ModelRoutingRow({
                           type="button"
                           className={css.selector}
                           aria-haspopup="menu"
-                          aria-expanded={openMenu === `${tier}:effort`}
-                          onClick={() => { setOpenMenu(openMenu === `${tier}:effort` ? null : `${tier}:effort`) }}
+                          aria-expanded={openMenu === `${tier}:provider`}
+                          onClick={() => { setOpenMenu(openMenu === `${tier}:provider` ? null : `${tier}:provider`) }}
                         >
-                          <span className={css.selectorLabel}>{effortName}</span>
+                          <span className={css.selectorLabel}>{spec.provider}</span>
                           <IconChevronDownOutline14 className={css.chevron} />
                         </button>
                       )}
                     />
-                  )}
+                  </div>
+                  <div className={css.field}>
+                    <span className={css.fieldLabel}>{t('model')}</span>
+                    <Menu
+                      open={openMenu === `${tier}:model`}
+                      onClose={() => { setOpenMenu(null) }}
+                      items={providerModels.map(model => ({ id: model.id, label: model.label }))}
+                      selectedId={spec.model}
+                      onSelect={(id) => {
+                        setOpenMenu(null)
+                        const chosen = providerModels.find(model => model.id === id)
+                        if (chosen !== undefined) {
+                          // A pick derives the provider from the catalog group the
+                          // model lives in — the user never types one by hand.
+                          setTierModel(tier, { provider: chosen.provider, model: chosen.id })
+                        }
+                      }}
+                      align="start"
+                      portal
+                      anchor={(
+                        <button
+                          type="button"
+                          className={css.selector}
+                          aria-haspopup="menu"
+                          aria-expanded={openMenu === `${tier}:model`}
+                          onClick={() => { setOpenMenu(openMenu === `${tier}:model` ? null : `${tier}:model`) }}
+                        >
+                          <span className={css.selectorLabel}>{anchorLabel}</span>
+                          <IconChevronDownOutline14 className={css.chevron} />
+                        </button>
+                      )}
+                    />
+                    {/* 批次B-D/E: a model that left the catalog (or the chosen
+                        provider's menu) keeps its raw id with a 未在目录 chip. */}
+                    {spec.model !== '' && !providerModels.some(model => model.id === spec.model)
+                      ? <span className={css.notInCatalog} data-testid="route-not-in-catalog">{t('notInCatalog')}</span>
+                      : undefined}
+                  </div>
+                  <div className={css.field}>
+                    <span className={css.fieldLabel}>{t('effortLabel')}</span>
+                    {/* 批次B-B: the effort ladder comes from the selected model;
+                        models without one hold the column with a disabled — so
+                        the three-field rhythm never collapses (1.1). */}
+                    {selected?.reasoning === undefined ? (
+                      <button type="button" className={css.selector} disabled>
+                        <span className={css.selectorLabel}>—</span>
+                      </button>
+                    ) : (
+                      <Menu
+                        open={openMenu === `${tier}:effort`}
+                        onClose={() => { setOpenMenu(null) }}
+                        items={[
+                          { id: '', label: t('effortDefault') },
+                          ...selected.reasoning.efforts.map(effort => ({ id: effort.id, label: effort.name })),
+                        ]}
+                        selectedId={spec.reasoningEffort ?? ''}
+                        onSelect={(id) => {
+                          setOpenMenu(null)
+                          setTierEffort(tier, id === '' ? undefined : id)
+                        }}
+                        align="start"
+                        portal
+                        anchor={(
+                          <button
+                            type="button"
+                            className={css.selector}
+                            aria-haspopup="menu"
+                            aria-expanded={openMenu === `${tier}:effort`}
+                            onClick={() => { setOpenMenu(openMenu === `${tier}:effort` ? null : `${tier}:effort`) }}
+                          >
+                            <span className={css.selectorLabel}>{effortName}</span>
+                            <IconChevronDownOutline14 className={css.chevron} />
+                          </button>
+                        )}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -485,114 +591,101 @@ export function ModelRoutingRow({
         </div>
       </div>
 
-      {/* 1.3 block 3 — 关键词规则: builtin presets already ARE rules (1.5), so
-          they render inside this block as read-only 预设-badged tags, grouped
-          by role then by pack; the user's own tags stay editable. */}
+      {/* 1.3 block 3 — 关键词规则: preset packs already ARE rules (1.5), so
+          they render inside this block as 预设-badged tags with a master
+          switch beside each pack name (问题 3 类级一键开关) and a mini switch
+          inside every tag (问题 4 标签级开关), grouped by role then by pack;
+          the user's own tags stay editable and can carry a custom 功能分类
+          rendered as a labelled group with its own master switch. */}
       <div className={css.block}>
         <div className={css.blockTitle}>{t('keywordsTitle')}</div>
         <div className={css.description}>{t('keywordsHint')}</div>
+        {/* 问题 4: the preset packs live in a user-editable file — say so. */}
+        <div className={css.description}>{t('presetsFileHint')}</div>
         {TIERS.map((tier) => {
           const rules = (draft.keywords ?? [])
             .map((rule, index) => ({ rule, index }))
             .filter(entry => entry.rule.tier === tier)
           const packs = (state.presets ?? []).filter(preset => preset.tier === tier)
           if (rules.length === 0 && packs.length === 0) return undefined
+          // 问题 3 自定义功能分类: rules sharing a category render inside one
+          // labelled wrapper whose switch parks the whole category at once.
+          const categories = [...new Set(
+            rules.map(entry => entry.rule.category)
+              .filter((category): category is string => category !== undefined && category !== ''),
+          )]
+          const bare = rules.filter(entry => entry.rule.category === undefined || entry.rule.category === '')
           return (
             <div key={tier} className={css.ruleTier} data-testid="route-keyword-group">
               <span className={join(css.ruleTierLabel, TIER_CLASS[tier])}>{t(tierKey(tier))}</span>
               <div className={css.ruleTags}>
-                {rules.map(({ rule, index }) => {
-                  if (keywordEdit !== null && keywordEdit.index === index) {
-                    return (
-                      <div key={`${rule.words}-${index}`} className={css.keywordEdit} data-testid="route-keyword-edit">
-                        <input
-                          className={css.input}
-                          data-testid="route-keyword-edit-input"
-                          defaultValue={rule.words}
-                          aria-label={t('keywordWords')}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') commitKeywordEdit(event.currentTarget)
-                          }}
-                        />
-                        <select
-                          className={css.select}
-                          data-testid="route-keyword-edit-tier"
-                          aria-label={t('keywordTier')}
-                          value={keywordEdit.tier}
-                          onChange={(event) => {
-                            setKeywordEdit({ ...keywordEdit, tier: event.currentTarget.value as RouteTier })
-                          }}
-                        >
-                          {TIERS.map(option => (
-                            <option key={option} value={option}>{t(tierKey(option))}</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className={css.btn}
-                          data-testid="route-keyword-save"
-                          onClick={(event) => {
-                            const input = event.currentTarget.parentElement?.querySelector('input') ?? null
-                            commitKeywordEdit(input)
-                          }}
-                        >
-                          {t('keywordSave')}
-                        </button>
-                        <button
-                          type="button"
-                          className={css.btn}
-                          onClick={() => { setKeywordEdit(null) }}
-                        >
-                          {t('keywordCancel')}
-                        </button>
-                      </div>
-                    )
-                  }
+                {categories.map((category) => {
+                  const entries = rules.filter(entry => entry.rule.category === category)
+                  const allOn = entries.every(entry => entry.rule.enabled !== false)
                   return (
-                    <span key={`${rule.words}-${index}`} className={join(css.keywordTag, TIER_CLASS[rule.tier])} data-testid="route-keyword-tag">
-                      <span className={css.keywordTagWords}>{rule.words}</span>
-                      <span className={css.keywordTagTier}>{t(tierKey(rule.tier))}</span>
-                      <button
-                        type="button"
-                        className={css.tagBtn}
-                        data-testid="route-keyword-edit-btn"
-                        aria-label={t('keywordEdit')}
-                        onClick={() => { setKeywordEdit({ index, tier: rule.tier }) }}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        className={css.tagBtn}
-                        data-testid="route-keyword-remove"
-                        aria-label={t('keywordRemove')}
-                        onClick={() => { removeKeyword(index) }}
-                      >
-                        ✕
-                      </button>
+                    <span key={category} className={css.ruleCategory} data-testid="route-category">
+                      <span className={css.ruleCategoryName}>{category}</span>
+                      <span className={css.tagSwitchWrap} data-testid="route-category-toggle">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={allOn ? 'true' : 'false'}
+                          aria-label={category}
+                          className={css.tagSwitch}
+                          onClick={() => { setCategoryEnabled(category, !allOn) }}
+                        />
+                      </span>
+                      {entries.map(({ rule, index }) => renderUserRule(rule, index))}
                     </span>
                   )
                 })}
+                {bare.map(({ rule, index }) => renderUserRule(rule, index))}
                 {packs.map((preset) => {
                   // Known ids carry a display name; a version-skewed unknown id
                   // still renders (raw) rather than vanishing.
                   const known = (KEYWORD_PRESET_IDS as readonly string[]).includes(preset.id)
                   const packName = known ? t(presetNameKey(preset.id as KeywordPresetId)) : preset.id
                   const words = preset.words.split('|').filter(word => word !== '')
+                  // 问题 3 类级一键开关: one switch parks the entire pack.
+                  const packOn = draft.packs?.[preset.id] !== false
                   return (
                     <span key={preset.id} className={css.rulePack}>
                       <span className={css.rulePackName}>{packName}</span>
-                      {words.map(word => (
-                        <span
-                          key={word}
-                          className={join(css.presetTag, TIER_CLASS[tier])}
-                          data-testid="route-preset-tag"
-                          title={`${packName} · ${t('presetAlwaysHint')}`}
-                        >
-                          <span>{word}</span>
-                          <span className={css.presetBadge}>{t('presetBadge')}</span>
-                        </span>
-                      ))}
+                      <span className={css.tagSwitchWrap} data-testid="route-pack-toggle">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={packOn ? 'true' : 'false'}
+                          aria-label={packName}
+                          className={css.tagSwitch}
+                          onClick={() => { setPackEnabled(preset.id, !packOn) }}
+                        />
+                      </span>
+                      {words.map((word) => {
+                        // 问题 4 标签级开关: every preset word parks on its own.
+                        const wordOn = draft.presetWords?.[`${preset.id}::${word}`] !== false
+                        return (
+                          <span
+                            key={word}
+                            className={join(css.presetTag, TIER_CLASS[tier], wordOn ? '' : css.presetTagOff)}
+                            data-testid="route-preset-tag"
+                            title={`${packName} · ${t('presetAlwaysHint')}`}
+                          >
+                            <span>{word}</span>
+                            <span className={css.tagSwitchWrap} data-testid="route-preset-toggle">
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={wordOn ? 'true' : 'false'}
+                                aria-label={word}
+                                className={css.tagSwitch}
+                                onClick={() => { setPresetWordEnabled(preset.id, word, !wordOn) }}
+                              />
+                            </span>
+                            <span className={css.presetBadge}>{t('presetBadge')}</span>
+                          </span>
+                        )
+                      })}
                     </span>
                   )
                 })}
@@ -600,7 +693,11 @@ export function ModelRoutingRow({
             </div>
           )
         })}
-        <KeywordAdder id={{ words: keywordWordsId, tier: keywordTierId }} t={t} onAdd={addKeywordFrom} />
+        <KeywordAdder
+          id={{ words: keywordWordsId, tier: keywordTierId, category: keywordCategoryId }}
+          t={t}
+          onAdd={addKeywordFrom}
+        />
         <Switch checked={escalate} label={t('escalateOnly')} onChange={setEscalateOnly} />
         <div className={css.description}>{t('escalateOnlyHint')}</div>
 
@@ -626,6 +723,9 @@ export function ModelRoutingRow({
               {t('previewRun')}
             </button>
           </div>
+          {/* 问题 5 说明: say WHAT the verify-retry checkbox simulates — the
+              M4 floor a real failed-verify turn retries at. */}
+          <div className={css.description}>{t('previewVerifyHint')}</div>
           {/* 批次C: simulate the M4 verify-failed retry floor (a below-Reviewer
               verdict runs at Reviewer) — 预演 reads the unsaved draft (批次A). */}
           <label className={css.previewOpt}>
@@ -654,35 +754,62 @@ export function ModelRoutingRow({
     </div>
   )
 
-  /** Commit the open keyword-tag edit (words from the inline input, tier from the selector). */
-  function commitKeywordEdit(input: HTMLInputElement | null): void {
+  /** Commit the open keyword-tag edit (words from the inline input, tier from
+   *  the selector, and the rule's own 功能分类 carried through untouched). */
+  function commitKeywordEdit(input: HTMLInputElement | null, category?: string): void {
     if (input === null || keywordEdit === null) return
     const words = input.value
     if (words === '') return
-    updateKeyword(keywordEdit.index, { words, tier: keywordEdit.tier })
+    updateKeyword(keywordEdit.index, {
+      words,
+      tier: keywordEdit.tier,
+      ...(category === undefined ? {} : { category }),
+    })
     setKeywordEdit(null)
   }
 }
 
-/** Uncontrolled words + tier inputs that append one keyword rule. */
+/** Uncontrolled words + optional category + tier inputs that append one rule. */
 function KeywordAdder({ id, t, onAdd }: {
-  id: { words: string; tier: string }
-  t: (key: 'keywordWords' | 'keywordTier' | 'keywordAdd' | 'tierHigh' | 'tierMid' | 'tierLow') => string
-  onAdd: (words: string, tier: RouteTier) => void
+  id: { words: string; tier: string; category: string }
+  t: (key: 'keywordWords' | 'keywordCategory' | 'keywordTier' | 'keywordAdd'
+    | 'tierHigh' | 'tierMid' | 'tierLow') => string
+  onAdd: (words: string, tier: RouteTier, category: string) => void
 }) {
+  // The row reads its own inputs by id on commit (Enter or the button) — an
+  // empty 功能分类 adds a bare rule, a filled one labels it for 类级 grouping.
+  const readRow = (): { words: string; tier: RouteTier; category: string } => {
+    const words = document.getElementById(id.words) as HTMLInputElement | null
+    const tier = document.getElementById(id.tier) as HTMLSelectElement | null
+    const category = document.getElementById(id.category) as HTMLInputElement | null
+    return {
+      words: words?.value ?? '',
+      tier: (tier?.value ?? 'high') as RouteTier,
+      category: category?.value ?? '',
+    }
+  }
+  const commit = (): void => {
+    const { words, tier, category } = readRow()
+    onAdd(words, tier, category)
+    const wordsInput = document.getElementById(id.words) as HTMLInputElement | null
+    if (wordsInput !== null) wordsInput.value = ''
+  }
   return (
-    <div className={css.keywordRow}>
+    <div className={css.keywordRow} data-testid="route-keyword-adder">
       <input
         id={id.words}
         className={css.input}
+        data-testid="route-keyword-add-words"
         placeholder={t('keywordWords')}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            const select = document.getElementById(id.tier) as HTMLSelectElement | null
-            onAdd(event.currentTarget.value, (select?.value ?? 'high') as RouteTier)
-            event.currentTarget.value = ''
-          }
+          if (event.key === 'Enter') commit()
         }}
+      />
+      <input
+        id={id.category}
+        className={css.input}
+        data-testid="route-keyword-add-category"
+        placeholder={t('keywordCategory')}
       />
       <select id={id.tier} className={css.select} aria-label={t('keywordTier')} defaultValue="high">
         {TIERS.map(option => (
@@ -694,15 +821,7 @@ function KeywordAdder({ id, t, onAdd }: {
       <button
         type="button"
         className={css.btn}
-        onClick={(event) => {
-          const row = event.currentTarget.parentElement
-          if (row === null) return
-          const words = row.querySelector('input') as HTMLInputElement | null
-          const tier = row.querySelector('select') as HTMLSelectElement | null
-          if (words === null || tier === null) return
-          onAdd(words.value, tier.value as RouteTier)
-          words.value = ''
-        }}
+        onClick={() => { commit() }}
       >
         {t('keywordAdd')}
       </button>

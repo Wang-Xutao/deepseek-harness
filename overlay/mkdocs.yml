@@ -21,5 +21,7 @@ nav:
   - 安装与启动: install.md
   - 快速上手: getting-started.md
   - BAF 模式: baf-mode.md
-  - 精选插件: featured-plugins.md
+  - BAF 插件包: baf-packages.md
+  - 版本与更新: updates.md
+  - 推荐插件: featured-plugins.md
   - 常见问题: faq.md

@@ -48,9 +48,11 @@ export type FeaturedSettingsKey =
   | 'progressRegistry'
 
 export const en: Record<FeaturedSettingsKey, string> = {
-  nav: 'Featured plugins',
-  title: 'Featured plugins',
-  intro: 'Curated open-source plugins. Install, update, enable, or disable them here; installed plugins hot-update without a new app release.',
+  // 【变更】2026-10-06 (问题 7): 精选插件 → 推荐插件 (Recommended plugins) —
+  // the section id in the settings registry stays 'featured-plugins'.
+  nav: 'Recommended plugins',
+  title: 'Recommended plugins',
+  intro: 'Recommended open-source plugins. Install, update, enable, or disable them here; installed plugins hot-update without a new app release.',
   stateNotInstalled: 'Not installed',
   stateEnabled: 'Enabled',
   stateDisabled: 'Disabled',
@@ -75,10 +77,10 @@ export const en: Record<FeaturedSettingsKey, string> = {
   checkUpdates: 'Check for updates',
   checking: 'Checking…',
   loading: 'Loading…',
-  loadFailed: 'Could not load the featured plugin list',
+  loadFailed: 'Could not load the recommended plugin list',
   retry: 'Retry',
-  emptyList: 'No featured plugins yet.',
-  manifestProblem: 'The featured list could not be read',
+  emptyList: 'No recommended plugins yet.',
+  manifestProblem: 'The recommended list could not be read',
   managerUnavailable: 'Plugin management is unavailable in this session.',
   unavailableHint: 'This plugin is temporarily unavailable. It will return in a later list update.',
   confirmRiskTitle: 'Compatibility confirmation',
@@ -96,9 +98,11 @@ export const en: Record<FeaturedSettingsKey, string> = {
 }
 
 export const zh: Record<FeaturedSettingsKey, string> = {
-  nav: '精选插件',
-  title: '精选插件',
-  intro: '官方精选的开源插件，可在这里安装、更新、启用或禁用；已安装插件支持热更新，无需等待应用发版。',
+  // 【变更】2026-10-06 (问题 7): 精选插件 → 推荐插件 — 设置注册表里的分区 id
+  // 仍是 'featured-plugins'，仅文案改名。
+  nav: '推荐插件',
+  title: '推荐插件',
+  intro: '官方推荐的开源插件，可在这里安装、更新、启用或禁用；已安装插件支持热更新，无需等待应用发版。',
   stateNotInstalled: '未安装',
   stateEnabled: '已启用',
   stateDisabled: '已禁用',
@@ -123,10 +127,10 @@ export const zh: Record<FeaturedSettingsKey, string> = {
   checkUpdates: '检查更新',
   checking: '正在检查…',
   loading: '正在加载…',
-  loadFailed: '精选插件列表加载失败',
+  loadFailed: '推荐插件列表加载失败',
   retry: '重试',
-  emptyList: '暂无精选插件。',
-  manifestProblem: '精选清单读取失败',
+  emptyList: '暂无推荐插件。',
+  manifestProblem: '推荐清单读取失败',
   managerUnavailable: '当前会话暂不支持插件管理。',
   unavailableHint: '该插件暂时不可用，将在后续清单更新中恢复。',
   confirmRiskTitle: '兼容性确认',

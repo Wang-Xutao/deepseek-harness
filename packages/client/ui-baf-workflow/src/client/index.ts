@@ -1,5 +1,5 @@
 /**
- * Browser half: conversation Tab「工作流」— only registered for BAF sessions.
+ * Browser half: conversation Tab「工作流图」— only registered for BAF sessions.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'

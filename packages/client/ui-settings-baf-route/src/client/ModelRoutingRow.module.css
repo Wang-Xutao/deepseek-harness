@@ -63,46 +63,39 @@
   background: var(--tier-color);
 }
 
-/* 【变更】2026-10-05 (UI 三块批, 1.1): the three roles render as ROWS in one
-   column — a shared header row labels the selector columns, then one row per
-   tier: role | provider | model | effort, all on a single line. */
+/* 【变更】2026-10-06 (问题 2): the three roles render as CARDS in one column
+   — no shared header row. Each card leads with its role name + one-line
+   description (主次分明), then labels its own three fields; the tier accent
+   colors the left border, the dot, and the title as before (颜色分级不变). */
 .tiers {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.tiersHead,
-.tier {
-  display: grid;
-  grid-template-columns: 148px 1fr 1.4fr 1fr;
-  gap: 8px;
-  align-items: center;
-}
-
-.tiersHead {
-  padding: 0 12px;
-  font-size: 11px;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.tiersHeadRole {
-  padding-left: 13px;
-}
-
-.tier {
-  padding: 8px 12px;
+.tierCard {
+  padding: 12px;
   border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
   border-left: 3px solid var(--tier-color);
   border-radius: 10px;
-  background: var(--dsw-alias-bg-elevated, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--tier-color) 5%, var(--dsw-alias-bg-elevated, transparent)),
+    var(--dsw-alias-bg-elevated, transparent) 55%
+  );
 }
 
-.tierRole {
+.tierCardHead {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.tierCardGrid {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr 0.9fr;
+  gap: 10px;
 }
 
 .tierHead {
@@ -123,13 +116,18 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* One selector column cell — stacks the picker and (model column only) the
-   未在目录 chip under it. */
-.cell {
+/* One labelled field inside a card — the caption above the picker (and, model
+   column only, the 未在目录 chip under it). */
+.field {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 /* The model picker — the same selector chrome the generic settings rows use
@@ -332,6 +330,24 @@
   gap: 6px 14px;
 }
 
+/* 【变更】2026-10-06 (问题 3): a custom 功能分类 groups its own rules — the
+   label + a master switch, then the group's tags inline inside one frame. */
+.ruleCategory {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px dashed var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 9px;
+}
+
+.ruleCategoryName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .rulePack {
   display: inline-flex;
   flex-wrap: wrap;
@@ -383,10 +399,52 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.keywordTagTier {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--tier-color);
+/* 【变更】2026-10-06 (问题 4): a parked tag (its switch off) stays listed but
+   dims — the rule is disabled, not deleted. */
+.keywordTagOff,
+.presetTagOff {
+  opacity: 0.45;
+}
+
+/* 【变更】2026-10-06 (问题 3/4): the mini tag switches — one per tag (word
+   level), one beside each pack name and each category label (group level).
+   Deliberately tiny and quiet: a 22×12 track with a sliding dot, colored by
+   the tier accent while on; the track greys out when off. */
+.tagSwitchWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tagSwitch {
+  position: relative;
+  width: 22px;
+  height: 12px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.35));
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.tagSwitch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 140ms ease;
+}
+
+.tagSwitch[aria-checked='true'] {
+  background: var(--tier-color, var(--dsw-alias-brand-primary, #4a78d2));
+}
+
+.tagSwitch[aria-checked='true']::after {
+  left: 12px;
 }
 
 .tagBtn {

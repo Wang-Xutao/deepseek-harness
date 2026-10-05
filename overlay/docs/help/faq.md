@@ -16,16 +16,19 @@
 
 ## 更新如何工作？
 
-- 设置 →「版本与更新」可查看三层产品版本并手动检查。
+详见 [版本与更新](updates.md)。要点：
+
+- 设置 →「版本与更新」可查看三层产品版本（BAF DSH DESKTOP / DeepSeek Harness / BAF 插件包）并手动检查，结果显示在按钮正下方。
 - splash 会后台检查；有可用更新时，主界面就绪后弹出选择立即/稍后。
 - 小改可通过热替换；大改需下载 Setup 覆盖安装。
+- BAF 插件包支持热升级：会话里 `/baf-update` 检查并更新、`/baf-update-rollback` 回滚，无需重启。
 - 斜杠 `/baf-version` 与设置页字段对齐（BAF DSH DESKTOP / DeepSeek Harness / 各 BAF 插件独立版本）。
 
 ## BAF 模式相关？
 
 见 [BAF 模式](baf-mode.md)。
 
-- 只有 **BAF 模式** 才显示「工作流」页签。
+- 只有 **BAF 模式** 才显示「工作流图」页签。
 - `baf-*` 指令为**系统指令卡**，默认展开分区正文（可点行收起）；不是大模型闲聊。
 - full-go-path / 快路径由 **intake 分类**决定；同变更可升级，不必为换模式新开会话。
 - 续跑依赖工作区 `.baf/projection/`；换机需同步该目录。

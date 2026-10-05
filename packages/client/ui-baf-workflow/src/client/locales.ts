@@ -258,7 +258,9 @@ export const NS = 'baf.go-workflow'
 
 /** English copy. */
 export const en: Record<WorkflowTabKey, string> = {
-  'view.workflow': 'Workflow',
+  // 【变更】2026-10-06 (问题 1): the tab shows the workflow GRAPH — renamed
+  // from 'Workflow' to 'Workflow graph'.
+  'view.workflow': 'Workflow graph',
   'strip.current': 'Current',
   'strip.mode': 'Mode',
   'strip.totalTime': 'Change time',
@@ -452,8 +454,8 @@ export const en: Record<WorkflowTabKey, string> = {
   'dashboard.board.allChanges': 'All changes',
   'dashboard.board.empty': 'No change records yet.',
   'dashboard.board.endedAt': 'Ended at',
-  'settings.workflowTab.title': 'Workflow tab',
-  'settings.workflowTab.description': 'Turn off to hide the Workflow tab on the conversation view.',
+  'settings.workflowTab.title': 'Workflow graph tab',
+  'settings.workflowTab.description': 'Turn off to hide the Workflow graph tab on the conversation view.',
   'artifact.title': 'Stage artifacts',
   'artifact.help': 'One row per stage document. Open reviews/edits it in the sidebar; the state mirrors /baf-status.',
   'artifact.open': 'Open',
@@ -493,7 +495,8 @@ export const en: Record<WorkflowTabKey, string> = {
 
 /** Simplified Chinese copy. */
 export const zh: Record<WorkflowTabKey, string> = {
-  'view.workflow': '工作流',
+  // 【变更】2026-10-06 (问题 1): 页签呈现的是工作流图，改名「工作流图」。
+  'view.workflow': '工作流图',
   'strip.current': '当前',
   'strip.mode': '模式',
   'strip.totalTime': '变更耗时',
@@ -697,8 +700,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   'dashboard.board.allChanges': '全部变更',
   'dashboard.board.empty': '暂无变更记录',
   'dashboard.board.endedAt': '结束于',
-  'settings.workflowTab.title': '工作流页签',
-  'settings.workflowTab.description': '关闭后，对话 Tab 不再显示「工作流」。',
+  'settings.workflowTab.title': '工作流图页签',
+  'settings.workflowTab.description': '关闭后，对话 Tab 不再显示「工作流图」。',
   'dashboard.focus': '当前焦点',
   'dashboard.openChange': '在工作流页查看该变更',
   'dashboard.note': '点击行即在流程图聚焦该变更；终态行的产物从归档目录读取。',

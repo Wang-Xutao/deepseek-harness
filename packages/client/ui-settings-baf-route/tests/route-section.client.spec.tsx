@@ -43,7 +43,7 @@ const CONFIG: RouteTierConfig = {
     design: 'high', plan: 'high', clarify: 'mid', verify: 'mid', implement: 'low',
     intake: 'low', open: 'low', archive: 'low', drift: 'low',
   },
-  keywords: [{ words: '架构|refactor', tier: 'high' }],
+  keywords: [{ words: '架构|refactor', tier: 'high', category: '复杂任务' }],
   escalateOnly: true,
 }
 
@@ -131,6 +131,10 @@ function harness(state: RouteSectionState) {
     addKeyword: vi.fn(),
     removeKeyword: vi.fn(),
     updateKeyword: vi.fn(),
+    setKeywordEnabled: vi.fn(),
+    setCategoryEnabled: vi.fn(),
+    setPackEnabled: vi.fn(),
+    setPresetWordEnabled: vi.fn(),
     setEscalateOnly: vi.fn(),
     save: vi.fn(),
     reset: vi.fn(),
@@ -203,12 +207,65 @@ describe('RouteSectionController', () => {
     expect(store.getSnapshot().draft?.tiers.mid).toEqual({ provider: 'p', model: 'mid' })
   })
 
-  it('updateKeyword replaces one rule in place', async () => {
+  it('updateKeyword patches one rule in place, keeping fields the patch omits', async () => {
     const controller = new RouteSectionController(fakeCtx())
     const store = controller.inject().hooks.routeSection
     await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    // The inline edit row re-sends words+tier; the category survives the patch.
     controller.updateKeyword(0, { words: '重构|refactor', tier: 'mid' })
-    expect(store.getSnapshot().draft?.keywords).toEqual([{ words: '重构|refactor', tier: 'mid' }])
+    expect(store.getSnapshot().draft?.keywords)
+      .toEqual([{ words: '重构|refactor', tier: 'mid', category: '复杂任务' }])
+  })
+
+  it('setKeywordEnabled parks one rule at the tag level (问题 4 标签级开关)', async () => {
+    const controller = new RouteSectionController(fakeCtx())
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    controller.setKeywordEnabled(0, false)
+    expect(store.getSnapshot().draft?.keywords)
+      .toEqual([{ words: '架构|refactor', tier: 'high', category: '复杂任务', enabled: false }])
+    expect(store.getSnapshot().dirty).toBe(true)
+    controller.setKeywordEnabled(0, true)
+    expect(store.getSnapshot().draft?.keywords[0]?.enabled).toBe(true)
+  })
+
+  it('setCategoryEnabled flips every rule in a category in one click (问题 3 类级开关)', async () => {
+    const controller = new RouteSectionController(fakeCtx())
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    controller.addKeyword({ words: 'typo', tier: 'low' })
+    controller.setCategoryEnabled('复杂任务', false)
+    const keywords = store.getSnapshot().draft?.keywords ?? []
+    expect(keywords[0]?.enabled).toBe(false)
+    // A rule OUTSIDE the category keeps its default (live).
+    expect(keywords[1]?.enabled).toBeUndefined()
+    controller.setCategoryEnabled('复杂任务', true)
+    expect(store.getSnapshot().draft?.keywords[0]?.enabled).toBe(true)
+  })
+
+  it('setPackEnabled parks a preset pack in draft.packs (问题 3 类级一键开关)', async () => {
+    const controller = new RouteSectionController(fakeCtx())
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    controller.setPackEnabled('complexEngineering', false)
+    expect(store.getSnapshot().draft?.packs).toEqual({ complexEngineering: false })
+    expect(store.getSnapshot().dirty).toBe(true)
+    controller.setPackEnabled('complexEngineering', true)
+    expect(store.getSnapshot().draft?.packs).toEqual({ complexEngineering: true })
+  })
+
+  it('setPresetWordEnabled parks one preset word under pack::word (问题 4 标签级开关)', async () => {
+    const controller = new RouteSectionController(fakeCtx())
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    controller.setPresetWordEnabled('complexEngineering', '架构', false)
+    expect(store.getSnapshot().draft?.presetWords).toEqual({ 'complexEngineering::架构': false })
+    // A second word joins the map without clobbering the first.
+    controller.setPresetWordEnabled('routineEdits', 'typo', false)
+    expect(store.getSnapshot().draft?.presetWords).toEqual({
+      'complexEngineering::架构': false,
+      'routineEdits::typo': false,
+    })
   })
 
   it('seeds a fresh disabled draft from the model catalog default when no config exists', async () => {
@@ -357,22 +414,30 @@ describe('ModelRoutingRow', () => {
     expect(screen.queryByText('presetsTitle')).toBeNull()
   })
 
-  it('renders the three roles as ROWS in one column, provider → model → effort per row (1.1)', () => {
+  it('renders the three roles as CARDS: role header prominent, then labelled pickers (问题 2)', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     expect(screen.getByRole('switch', { name: 'master' })).toBeTruthy()
     const high = screen.getByTestId('route-tier-high')
     const mid = screen.getByTestId('route-tier-mid')
     const low = screen.getByTestId('route-tier-low')
-    // One column: the rows stack in role order high → mid → low.
+    // One column: the cards stack in role order high → mid → low.
     expect(high.compareDocumentPosition(mid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(mid.compareDocumentPosition(low) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // A header row labels the three selector columns.
-    expect(screen.getByText('roleLabel')).toBeTruthy()
-    expect(screen.getByText('provider')).toBeTruthy()
-    expect(screen.getByText('model')).toBeTruthy()
-    // Within one row the pickers read left→right: provider, model, effort.
+    // NO shared table header row — each card labels its own three fields.
+    expect(screen.queryByTestId('route-tiers-head')).toBeNull()
+    for (const card of [high, mid, low]) {
+      expect(within(card).getByText('provider')).toBeTruthy()
+      expect(within(card).getByText('model')).toBeTruthy()
+      expect(within(card).getByText('effortLabel')).toBeTruthy()
+    }
+    // 主次分明: the role name + description sit ABOVE the pickers in the card.
+    const name = within(high).getByText('tierHigh')
+    const desc = within(high).getByText('tierHighDesc')
     const providerBtn = within(high).getByRole('button', { name: 'p' })
+    expect(name.compareDocumentPosition(providerBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(desc.compareDocumentPosition(providerBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Within the card the pickers read left→right: provider, model, effort.
     const modelBtn = within(high).getByRole('button', { name: 'Big Brain' })
     const effortBtn = within(high).getByRole('button', { name: 'High' })
     expect(providerBtn.compareDocumentPosition(modelBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -549,19 +614,18 @@ describe('ModelRoutingRow', () => {
     expect(face.setPhaseTier).toHaveBeenCalledWith('design', 'low')
   })
 
-  it('renders builtin presets INSIDE 关键词规则 as 预设-badged read-only tags, grouped by role (1.5)', () => {
+  it('renders builtin presets INSIDE 关键词规则 as 预设-badged tags with per-pack master switches (1.5 + 问题 3)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     const tags = screen.getAllByTestId('route-preset-tag')
     // Every word of every pack renders as its own tag (3 per fixture pack),
     // each carrying the 预设 badge and its pack name in the tooltip.
     expect(tags).toHaveLength(12)
-    // Identity t concatenates word + badge key; match on the word prefix.
     expect(tags.map(tag => tag.textContent).some(text => text?.startsWith('架构'))).toBe(true)
     expect(tags.map(tag => tag.textContent).some(text => text?.startsWith('README'))).toBe(true)
     expect(tags.every(tag => tag.textContent?.includes('presetBadge') === true)).toBe(true)
     expect(tags.find(tag => tag.textContent?.includes('架构'))?.getAttribute('title')).toContain('presetComplexEngineering')
-    // Read-only: clicking a preset tag no longer 引用's anything.
+    // Clicking a preset tag's WORD adds nothing (read-only vocabulary)…
     fireEvent.click(tags.find(tag => tag.textContent?.includes('重构'))!)
     expect(face.addKeyword).not.toHaveBeenCalled()
     // Role-grouped with the user's own rules: the high group hosts both high
@@ -573,6 +637,78 @@ describe('ModelRoutingRow', () => {
     expect(groups[0]?.textContent).toContain('presetComplexEngineering')
     expect(groups[0]?.textContent).toContain('presetCriticalRelease')
     expect(groups[2]?.textContent).toContain('README')
+    // …but each PACK carries a master switch (类级一键开关) → setPackEnabled.
+    const packToggles = screen.getAllByTestId('route-pack-toggle')
+    expect(packToggles).toHaveLength(4)
+    fireEvent.click(within(packToggles[0]!).getByRole('switch'))
+    expect(face.setPackEnabled).toHaveBeenCalledWith('complexEngineering', false)
+    // And every preset WORD tag carries its own mini switch (标签级开关).
+    const wordToggle = within(tags.find(tag => tag.textContent?.includes('架构'))!).getByTestId('route-preset-toggle')
+    fireEvent.click(within(wordToggle).getByRole('switch'))
+    expect(face.setPresetWordEnabled).toHaveBeenCalledWith('complexEngineering', '架构', false)
+    // 问题 4 配置文件: the block points at the user-editable preset file.
+    expect(screen.getByText('presetsFileHint')).toBeTruthy()
+  })
+
+  it('user keyword tags carry a mini switch and NO tier label inside (问题 4)', () => {
+    const { face, props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    const tag = screen.getByTestId('route-keyword-tag')
+    // The tag sits in its tier group — no tier label inside the tag itself.
+    expect(tag.textContent).not.toContain('tierHigh')
+    // The mini switch parks the rule without deleting it.
+    fireEvent.click(within(tag).getByTestId('route-keyword-toggle'))
+    expect(face.setKeywordEnabled).toHaveBeenCalledWith(0, false)
+    // A parked (enabled:false) rule still renders, dimmed, switch off.
+    const parked = harness({
+      ...READY,
+      draft: {
+        ...CONFIG,
+        keywords: [{ words: '架构|refactor', tier: 'high', category: '复杂任务', enabled: false }],
+      },
+    })
+    // Scoped to this second render's container — the first row is still mounted.
+    const { container } = render(<ModelRoutingRow {...parked.props} />)
+    const parkedTag = within(container).getByTestId('route-keyword-tag')
+    expect(parkedTag.className).toContain('Off')
+    expect((within(parkedTag).getByRole('switch') as HTMLElement).getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('groups user rules by custom category with a one-click master switch (问题 3 自定义分类)', () => {
+    const { face, props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    // The fixture rule carries category 复杂任务 — the group renders the label
+    // and a master switch wired to setCategoryEnabled.
+    const group = screen.getAllByTestId('route-keyword-group')[0]!
+    const category = within(group).getByTestId('route-category')
+    expect(within(category).getByText('复杂任务')).toBeTruthy()
+    fireEvent.click(within(within(category).getByTestId('route-category-toggle')).getByRole('switch'))
+    expect(face.setCategoryEnabled).toHaveBeenCalledWith('复杂任务', false)
+  })
+
+  it('the adder takes an optional category, and the edit row keeps it (问题 3)', () => {
+    const { face, props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    const adder = screen.getByTestId('route-keyword-adder')
+    fireEvent.change(within(adder).getByTestId('route-keyword-add-words'), { target: { value: '导出' } })
+    fireEvent.change(within(adder).getByTestId('route-keyword-add-category'), { target: { value: '数据导出' } })
+    fireEvent.click(within(adder).getByRole('button', { name: 'keywordAdd' }))
+    expect(face.addKeyword).toHaveBeenCalledWith({ words: '导出', tier: 'high', category: '数据导出' })
+    // The inline edit carries the existing category through untouched.
+    fireEvent.click(within(screen.getByTestId('route-keyword-tag')).getByTestId('route-keyword-edit-btn'))
+    fireEvent.change(screen.getByTestId('route-keyword-edit-input'), { target: { value: '导出|export' } })
+    fireEvent.click(screen.getByTestId('route-keyword-save'))
+    expect(face.updateKeyword).toHaveBeenCalledWith(0, {
+      words: '导出|export', tier: 'high', category: '复杂任务',
+    })
+  })
+
+  it('explains the verify-retry floor under the switch (问题 5 说明)', () => {
+    const { props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    const hint = screen.getByText('previewVerifyHint')
+    const toggle = screen.getByTestId('route-preview-verify')
+    expect(hint.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('user keyword tags edit inline and delete', () => {
@@ -587,7 +723,7 @@ describe('ModelRoutingRow', () => {
     const input = screen.getByTestId('route-keyword-edit-input')
     fireEvent.change(input, { target: { value: '重构|refactor' } })
     fireEvent.click(screen.getByTestId('route-keyword-save'))
-    expect(face.updateKeyword).toHaveBeenCalledWith(0, { words: '重构|refactor', tier: 'high' })
+    expect(face.updateKeyword).toHaveBeenCalledWith(0, { words: '重构|refactor', tier: 'high', category: '复杂任务' })
   })
 
   it('forwards the master switch to the face', () => {

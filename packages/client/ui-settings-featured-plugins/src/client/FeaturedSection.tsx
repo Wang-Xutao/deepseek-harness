@@ -148,7 +148,13 @@ export function FeaturedSection(props: FeaturedSectionProps) {
             {state.plugins.map(card => (
               <li key={card.id} className={css.card} data-testid={`featured-card-${card.id}`}>
                 <div className={css.cardHead}>
-                  <span className={css.cardName}>{props.nameOf(card)}</span>
+                  <span className={css.cardName}>
+                    {props.nameOf(card)}
+                    {/* 【变更】2026-10-06 (问题 9): the plugin's package id rides
+                        beside the display name — 飞书 · dsh-feishu — so the
+                        customer can tell plugins apart (and quote them) by id. */}
+                    <span className={css.cardId} data-testid="featured-card-id">{card.id}</span>
+                  </span>
                   <span
                     className={card.state === 'enabled' ? css.badgeOn : card.state === 'disabled' ? css.badgeOff : css.badge}
                     data-testid="featured-state"

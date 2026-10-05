@@ -1,5 +1,5 @@
 /**
- * Featured plugins settings section, browser half: the「精选插件」page that
+ * Featured plugins settings section, browser half: the「推荐插件」page that
  * installs, updates, enables, disables, and removes the Host's curated
  * open-source plugins through the `featuredPlugins` Remote, with bulk
  * actions, per-plugin auto-update, and the compatibility/build confirmations

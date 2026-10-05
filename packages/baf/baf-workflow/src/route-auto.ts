@@ -30,13 +30,12 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-session' // Context 'session/event' augmentation
 import {
-  effectiveKeywordRules,
   isTierRoutingActive,
   resolveTaskTier,
   type RouteTier,
   type RouteTierConfig,
 } from '@deepseek-ai/dsh-baf-core'
-import { readRouteTierConfigSync } from './route-config-io.ts'
+import { effectiveRouteKeywordRules, readRouteTierConfigSync } from './route-config-io.ts'
 
 /** Pseudo provider id of the auto entry (the catalog group id). */
 export const AUTO_PROVIDER = 'baf-route'
@@ -144,7 +143,7 @@ export class BafRouteAutoRuntime extends Service {
     // Re-read per resolution: a save in the settings UI applies to the next turn.
     const config = readRouteTierConfigSync()
     if (config === undefined || !isTierRoutingActive(config)) return undefined
-    const hit = resolveTaskTier(this.lastUserText.get(sessionId) ?? '', effectiveKeywordRules(config.keywords))
+    const hit = resolveTaskTier(this.lastUserText.get(sessionId) ?? '', effectiveRouteKeywordRules(config))
     return selectionOfTier(config, hit?.tier ?? 'low')
   }
 

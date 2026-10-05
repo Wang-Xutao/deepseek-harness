@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import type { RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
-import { writeRouteTierConfigSync } from '../src/route-config-io.ts'
+import { writeRoutePresetsSync, writeRouteTierConfigSync } from '../src/route-config-io.ts'
 import { BafRouteAutoRuntime, AUTO_MODEL, AUTO_PROVIDER } from '../src/route-auto.ts'
 
 function makeConfig(overrides: Partial<RouteTierConfig> = {}): RouteTierConfig {
@@ -152,5 +152,27 @@ describe('BafRouteAutoRuntime (多模型路由 auto 模型)', () => {
       .toEqual({ provider: 'p2', model: 'cheap-fast' })
     writeRouteTierConfigSync(undefined, { ...makeConfig(), enabled: false })
     expect(service.resolveAuto('sess-1', { provider: AUTO_PROVIDER, model: AUTO_MODEL })).toBeUndefined()
+  })
+
+  it('escalates by the FILE preset packs and honors the config pack park (2026-10-06 问题 3/4)', async () => {
+    const { ctx } = await fixture()
+    const service = ctx.get('bafRouteAuto') as BafRouteAutoRuntime
+    writeRoutePresetsSync(undefined, {
+      schema: 1,
+      packs: [{ id: 'myPack', tier: 'high', words: '对账|reconciliation' }],
+    })
+    writeRouteTierConfigSync(undefined, makeConfig())
+    ctx.emit('session/event', { id: 'sess-1', header: { id: 'sess-1' } } as never, {
+      type: 'user/message',
+      data: { source: { kind: 'user' }, content: [{ type: 'text', text: '做一个对账任务' }] },
+    } as never)
+    // The user-edited pack file drives the escalation — not the code builtins.
+    expect(service.resolveAuto('sess-1', { provider: AUTO_PROVIDER, model: AUTO_MODEL }))
+      .toEqual({ provider: 'p1', model: 'big-brain', reasoningEffort: 'deep' })
+    // Parking the pack (类级开关) drops the rule; the same cached text falls
+    // back to the Worker default.
+    writeRouteTierConfigSync(undefined, makeConfig({ packs: { myPack: false } }))
+    expect(service.resolveAuto('sess-1', { provider: AUTO_PROVIDER, model: AUTO_MODEL }))
+      .toEqual({ provider: 'p2', model: 'cheap-fast' })
   })
 })

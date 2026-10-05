@@ -7,9 +7,9 @@
  * - The preference persists in localStorage via the client snapshot store
  *   (【变更】2026-09-25: the host settings namespace round-trip was a silent
  *   no-op after the master merge; see ../workflow-settings.ts).
- * - The toggle lives under General settings; the dedicated 工作流 section
- *   hosts the feature-registered workflow preference rows
- *   (`settings.workflow.item`).
+ * - 【变更】2026-10-06 (问题 1): the toggle lives under the dedicated 工作流
+ *   settings section (`settings.workflow.item`, order 5 — ahead of the
+ *   工作流图页签 row), no longer under General settings.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -91,10 +91,10 @@ export function apply(ctx: ClientContext): void {
     },
   })
 
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
+  ctx.slots.inject('settings.workflow.item', () => ctx.slots.register({
+    name: 'settings.workflow.item',
     id: 'trace-graph',
-    order: 20,
+    order: 5,
     locale: WORKFLOW_NS,
     inject: settingsInject,
   }, TraceGraphRow))

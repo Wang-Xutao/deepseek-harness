@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": 1,
+  "revision": 2,
   "plugins": [
     {
       "id": "dsh-feishu",
@@ -15,6 +15,19 @@
       "autoUpdateDefault": true,
       "peerExemptionExpected": true,
       "verified": true
+    },
+    {
+      "id": "dshmarket",
+      "package": "dshmarket",
+      "version": "^1.66.9",
+      "nameZh": "插件市场",
+      "nameEn": "Plugin Market",
+      "descriptionZh": "DSH 可视化插件市场：逛一逛，点一下，装好——在应用里直接浏览、搜索社区插件并一键安装。",
+      "descriptionEn": "A visual plugin market inside DeepSeek Harness: browse, search, and one-click install community plugins.",
+      "homepage": "https://dshmarket.com",
+      "registryFirst": "https://registry.npmmirror.com",
+      "autoUpdateDefault": true,
+      "peerExemptionExpected": true
     }
   ]
 }

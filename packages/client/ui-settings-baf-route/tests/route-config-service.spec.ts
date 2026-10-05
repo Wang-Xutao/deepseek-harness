@@ -15,7 +15,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import type { RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
 import BafRouteConfigService from '../src/index.ts'
-import { routeTierConfigPath } from '@deepseek-ai/dsh-baf-workflow/route-config-io'
+import { routeTierConfigPath, writeRoutePresetsSync } from '@deepseek-ai/dsh-baf-workflow/route-config-io'
 
 const VALID: RouteTierConfig = {
   schema: 1,
@@ -97,13 +97,16 @@ describe('bafRouteConfig Remote', () => {
 
   it('preview() dry-runs the keyword match host-side (多模型路由 M3 预演)', async () => {
     const { service } = await fixture()
-    // No config: nothing would freeze.
-    expect(await service.preview('梳理整体架构')).toEqual({ tier: null })
+    // 【变更】2026-10-06 (问题 5): the enabled gate is GONE from 预演 — the
+    // preset packs evaluate with NO config at all (fresh machine), and the
+    // switch only gates live routing. 架构 lives in the seeded pack file.
+    expect(await service.preview('梳理整体架构')).toEqual({ tier: 'high', matched: '架构' })
+    // A summary nothing matches still freezes nothing.
+    expect(await service.preview('帮我看看这个问题')).toEqual({ tier: null })
 
     expect((await service.save(VALID)).ok).toBe(true)
-    // VALID's keywords hit 架构 → high; a summary nothing matches freezes nothing.
+    // VALID's keywords hit 架构 → high.
     expect(await service.preview('梳理整体架构')).toEqual({ tier: 'high', matched: '架构' })
-    expect(await service.preview('帮我看看这个问题')).toEqual({ tier: null })
   })
 
   it('preview() matches builtin presets even with zero user keywords (2.4 默认启用)', async () => {
@@ -142,6 +145,68 @@ describe('bafRouteConfig Remote', () => {
     expect(presets?.[0]).toMatchObject({ tier: 'high' })
     expect(presets?.[0]?.words).toContain('架构')
     expect(presets?.[3]).toMatchObject({ tier: 'low' })
+  })
+})
+
+describe('bafRouteConfig Remote — 2026-10-06 问题 3/4/5 批 (enable states + preset file)', () => {
+  it('preview() ignores the master switch: a DISABLED draft still evaluates (问题 5 root fix)', async () => {
+    const { service } = await fixture()
+    // freshDraft ships enabled:false — the exact screen the customer hit:
+    // 「不会冻结角色」then nothing. The rules must evaluate regardless.
+    const draft: RouteTierConfig = {
+      ...VALID,
+      enabled: false,
+      keywords: [{ words: '灰度|canary', tier: 'mid' }],
+    }
+    expect(await service.preview('帮我做一次灰度切流', draft)).toEqual({ tier: 'mid', matched: '灰度' })
+    // The saved file being disabled must not freeze the preview either.
+    expect((await service.save({ ...VALID, enabled: false, keywords: [{ words: '灰度', tier: 'low' }] })).ok).toBe(true)
+    expect(await service.preview('帮我做一次灰度切流')).toEqual({ tier: 'low', matched: '灰度' })
+  })
+
+  it('preview() and defaults() read the FILE preset packs (问题 4 配置文件)', async () => {
+    const { service } = await fixture()
+    writeRoutePresetsSync(undefined, {
+      schema: 1,
+      packs: [{ id: 'myPack', tier: 'high', words: '对账|reconciliation' }],
+    })
+    expect((await service.save({ ...VALID, keywords: [] })).ok).toBe(true)
+    expect(await service.preview('做一个对账任务')).toEqual({ tier: 'high', matched: '对账' })
+    // 架构 is NOT in the user's file — no builtin fallback when the file exists.
+    expect(await service.preview('梳理整体架构')).toEqual({ tier: null })
+    // defaults() seeds the settings display from the same file.
+    expect((await service.defaults()).presets).toEqual([
+      { id: 'myPack', tier: 'high', words: '对账|reconciliation' },
+    ])
+  })
+
+  it('preview() honors the pack and per-word parks (问题 3/4 类级+标签级开关)', async () => {
+    const { service } = await fixture()
+    expect((await service.save({
+      ...VALID,
+      keywords: [],
+      packs: { routineEdits: false },
+    })).ok).toBe(true)
+    // The whole routineEdits pack is parked: README freezes nothing.
+    expect(await service.preview('补充 README 安装说明')).toEqual({ tier: null })
+    // Parking a single word keeps the rest of the pack live.
+    expect((await service.save({
+      ...VALID,
+      keywords: [],
+      presetWords: { 'routineEdits::typo': false },
+    })).ok).toBe(true)
+    expect(await service.preview('fix a typo')).toEqual({ tier: null })
+    expect(await service.preview('补充 README 安装说明')).toEqual({ tier: 'low', matched: 'readme' })
+  })
+
+  it('preview() drops user rules disabled at the tag level (enabled: false)', async () => {
+    const { service } = await fixture()
+    expect((await service.save({
+      ...VALID,
+      keywords: [{ words: '架构', tier: 'low', enabled: false }],
+    })).ok).toBe(true)
+    // The parked low rule never fires; the seeded preset pack lifts 架构 high.
+    expect(await service.preview('梳理整体架构')).toEqual({ tier: 'high', matched: '架构' })
   })
 })
 

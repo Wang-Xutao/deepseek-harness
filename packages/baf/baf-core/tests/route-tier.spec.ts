@@ -281,3 +281,77 @@ describe('builtin keyword presets (2.4 默认启用)', () => {
       .toEqual({ tier: 'low', matched: '架构' })
   })
 })
+
+describe('keyword rule enable state + custom categories + preset file (2026-10-06 问题 3/4)', () => {
+  it('round-trips category/enabled on user rules and packs/presetWords overrides through the schema', () => {
+    const config = parseRouteTierConfig({
+      ...makeConfig(),
+      keywords: [{ words: '导出|export', tier: 'low', category: '数据导出', enabled: false }],
+      packs: { routineEdits: false },
+      presetWords: { 'routineEdits::typo': false },
+    })
+    expect(config?.keywords?.[0]).toEqual({
+      words: '导出|export', tier: 'low', category: '数据导出', enabled: false,
+    })
+    expect(config?.packs).toEqual({ routineEdits: false })
+    expect(config?.presetWords).toEqual({ 'routineEdits::typo': false })
+  })
+
+  it('drops user rules disabled at the tag level (enabled: false)', () => {
+    const rules = effectiveKeywordRules([
+      { words: '架构', tier: 'low', enabled: false },
+      { words: '架构', tier: 'mid', enabled: true },
+    ])
+    // The disabled low rule never fires; the enabled mid one does.
+    expect(resolveTaskTier('架构', rules)).toEqual({ tier: 'mid', matched: '架构' })
+  })
+
+  it('evaluates a caller-provided preset list (the file-backed packs) instead of the code builtins', () => {
+    const rules = effectiveKeywordRules([], {
+      presets: [{ id: 'customPack', tier: 'high', words: '对账|reconciliation' }],
+    })
+    expect(rules).toHaveLength(1)
+    expect(resolveTaskTier('做一个对账报表', rules)).toEqual({ tier: 'high', matched: '对账' })
+  })
+
+  it('drops a whole pack disabled through packs (类级一键开关)', () => {
+    const rules = effectiveKeywordRules([], { packs: { routineEdits: false } })
+    expect(resolveTaskTier('fix a typo in the docs', rules)).toBeUndefined()
+    // Other packs keep matching.
+    expect(resolveTaskTier('梳理整体架构', rules)).toEqual({ tier: 'high', matched: '架构' })
+  })
+
+  it('drops a single preset word disabled through presetWords (标签级开关)', () => {
+    const rules = effectiveKeywordRules([], { presetWords: { 'routineEdits::typo': false } })
+    expect(resolveTaskTier('fix a typo', rules)).toBeUndefined()
+    expect(resolveTaskTier('update the wording', rules)).toEqual({ tier: 'low', matched: 'wording' })
+  })
+
+  it('drops a pack whose every word is disabled', () => {
+    const words = BUILTIN_KEYWORD_PRESETS[3]!
+    const presetWords = Object.fromEntries(
+      words.words.split('|').map(word => [`routineEdits::${word}`, false]),
+    )
+    const rules = effectiveKeywordRules([], { presetWords })
+    expect(rules.at(-1)?.tier ?? '').not.toBe('low')
+    expect(rules).toHaveLength(BUILTIN_KEYWORD_PRESETS.length - 1)
+  })
+
+  it('matches either side of a `|` alternation (问题 4: the separator works)', () => {
+    expect(resolveTaskTier('alpha needs work', effectiveKeywordRules([{ words: 'alpha|beta', tier: 'high' }])))
+      .toEqual({ tier: 'high', matched: 'alpha' })
+    expect(resolveTaskTier('beta needs work', effectiveKeywordRules([{ words: 'alpha|beta', tier: 'high' }])))
+      .toEqual({ tier: 'high', matched: 'beta' })
+  })
+
+  it('repositions Worker as 日常代码实现+文案: plain implementation wording lands low (问题 3)', () => {
+    // 代码实现 vocabulary lives in the Worker pack now — plain coding asks
+    // do not fall through to "no keyword hit".
+    expect(resolveTaskTier('实现一个导出函数', effectiveKeywordRules([]))?.tier).toBe('low')
+    expect(resolveTaskTier('写代码处理分页逻辑', effectiveKeywordRules([]))?.tier).toBe('low')
+    // Architecture vocabulary still escalates above it (first-match-wins).
+    expect(resolveTaskTier('重构架构并实现分页', effectiveKeywordRules([]))?.tier).toBe('high')
+    // Copy vocabulary stays Worker.
+    expect(resolveTaskTier('改一下首页文案', effectiveKeywordRules([]))?.tier).toBe('low')
+  })
+})

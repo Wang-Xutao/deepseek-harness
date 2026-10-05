@@ -215,6 +215,109 @@ describe('UpdatesSection', () => {
     ).toBeTruthy()
   })
 
+  it('prints the check result — full error text included — directly under the buttons (2026-10-06 问题 6)', async () => {
+    // The exact sentence the desktop throws when the release channel is empty.
+    const errorText = '无法读取更新通道（HTTP 404）。仓库尚未发布 Release「baf-channel-stable」；请先在 baf 分支打 tag baf-dsh-v* 并完成发版工作流。'
+    const ERROR: CheckUpdateResult = {
+      status: 'error',
+      versions: { ...VERSIONS },
+      error: errorText,
+      checkedAt: new Date().toISOString(),
+    }
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS }),
+      // The silent re-check keeps failing the same way — the block stays an error.
+      checkForUpdate: async () => ERROR,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => ERROR,
+      onUpdateProgress: () => () => {},
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      const result = screen.getByTestId('update-check-result')
+      // The FULL error sentence rides the status line (prefixed by the label).
+      expect(result.textContent).toContain(`error：${errorText}`)
+      // Directly under the buttons: actions precede the block, the block
+      // precedes the first version row — not stranded at the page bottom.
+      const checkButton = screen.getByRole('button', { name: 'check' })
+      expect(
+        (checkButton.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      ).toBe(true)
+      const firstRow = screen.getByText('0.0.8').closest('li')!
+      expect(
+        (result.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      ).toBe(true)
+    })
+  })
+
+  it('shows the current AND latest version in the result block (问题 6)', async () => {
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS }),
+      checkForUpdate: async () => AVAILABLE,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => AVAILABLE,
+      onUpdateProgress: () => () => {},
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      const result = screen.getByTestId('update-check-result')
+      // An available plan: current 0.0.8 AND latest 0.0.9 side by side.
+      expect(result.textContent).toContain('currentVersion')
+      expect(result.textContent).toContain('latestVersion')
+      expect(result.textContent).toContain('0.0.8')
+      expect(result.textContent).toContain('0.0.9')
+    })
+    cleanup()
+    // Up to date: the latest IS the current one — both labels still render.
+    const fresh: BafDesktopBridge = {
+      ...bridge,
+      checkForUpdate: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+      getLastCheckResult: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+    }
+    window.bafDesktop = fresh
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      const result = screen.getByTestId('update-check-result')
+      expect(result.textContent).toContain('upToDate')
+      expect(result.textContent).toContain('latestVersion')
+      expect(result.textContent).toContain('0.0.8')
+    })
+  })
+
+  it('states the hot-upgrade path for the BAF packages (问题 6 热升级)', async () => {
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS }),
+      checkForUpdate: async () => AVAILABLE,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => AVAILABLE,
+      onUpdateProgress: () => () => {},
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      expect(screen.getByText('hotUpgradeHint')).toBeTruthy()
+    })
+  })
+
   it('refreshes from the onCheckResult push channel', async () => {
     let push: ((result: CheckUpdateResult) => void) | undefined
     const bridge: BafDesktopBridge = {

@@ -310,3 +310,25 @@ describe('FeaturedSectionController', () => {
     })
   })
 })
+
+describe('FeaturedSection — 2026-10-06 问题 7/9 批 (推荐插件 + 卡片插件名)', () => {
+  it('names every card with its plugin package id (问题 9)', () => {
+    const { props } = harness(readyState([card()]))
+    render(<FeaturedSection {...props} />)
+    // The display name AND the plugin id both render: 飞书（Feishu）· dsh-feishu —
+    // the customer installs by id, so the id must be visible on the card.
+    const cardEl = screen.getByTestId('featured-card-dsh-feishu')
+    expect(within(cardEl).getByText('Feishu')).toBeTruthy()
+    expect(within(cardEl).getByTestId('featured-card-id').textContent).toBe('dsh-feishu')
+  })
+
+  it('renames the section 推荐插件 / Recommended plugins across the copy (问题 7)', async () => {
+    const { zh, en } = await import('../src/client/locales.ts')
+    expect(zh.nav).toBe('推荐插件')
+    expect(zh.title).toBe('推荐插件')
+    expect(zh.intro).toContain('推荐')
+    expect(zh.loadFailed).toContain('推荐插件')
+    expect(en.nav).toBe('Recommended plugins')
+    expect(en.title).toBe('Recommended plugins')
+  })
+})

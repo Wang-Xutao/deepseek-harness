@@ -41,6 +41,11 @@ function noteParagraphs(notes: string | undefined): readonly string[] {
   return notes.split('\n').map(line => line.trim()).filter(line => line.length > 0)
 }
 
+/** Join CSS-module class names, dropping the ones the sheet lacks. */
+function joinClasses(...names: ReadonlyArray<string | undefined>): string {
+  return names.filter(name => name !== undefined && name !== '').join(' ')
+}
+
 function VersionRow(props: {
   label: string
   version: string | undefined
@@ -132,9 +137,10 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
       const result = await bridge.checkForUpdate()
       setCheck(result)
       setVersions(result.versions)
-      if (result.status === 'up-to-date') setMessage(t('upToDate'))
-      else if (result.status === 'available') setMessage(`${t('available')}：${result.plan.summaryZh}`)
-      else setMessage(`${t('error')}：${result.error}`)
+    } catch (error) {
+      // 【变更】2026-10-06 (问题 6): transport failures surface inline under the
+      // buttons too (the check state drives the regular status lines).
+      setMessage(`${t('error')}：${String(error)}`)
     } finally {
       setBusy(null)
     }
@@ -174,6 +180,16 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
     : (planRecord.notesZh
       || planRecord.manifest?.notesZh
       || planRecord.summaryZh)
+  // 【变更】2026-10-06 (问题 6): the latest version the check knows about —
+  // the plan target when an update exists, the running version when current,
+  // unknown on a failed check.
+  const latestVersion = check === null
+    ? undefined
+    : check.status === 'available'
+      ? targetVersion
+      : check.status === 'up-to-date'
+        ? check.versions.bafDsh
+        : '—'
 
   return (
     <div className={css.section} data-testid="updates-section">
@@ -202,6 +218,32 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
           </button>
         ) : null}
       </div>
+      {/* 【变更】2026-10-06 (问题 6): the check output lives DIRECTLY under the
+          buttons — status line with the full error sentence on failure, and
+          the current + latest version pair — never stranded at the page
+          bottom. */}
+      {check !== null ? (
+        <div
+          className={check.status === 'error' ? joinClasses(css.checkResult, css.checkResultError) : css.checkResult}
+          data-testid="update-check-result"
+        >
+          <p className={css.checkStatus}>
+            {check.status === 'error'
+              ? `${t('error')}：${check.error}`
+              : check.status === 'available'
+                ? `${t('available')}：${check.plan.summaryZh}`
+                : t('upToDate')}
+          </p>
+          <p className={css.checkVersions}>
+            <span>{t('currentVersion')}：{check.versions.bafDsh}</span>
+            <span>{t('latestVersion')}：{latestVersion}</span>
+          </p>
+        </div>
+      ) : null}
+      {progress ? <p className={css.status}>{t('progress')}：{progress}</p> : null}
+      {message ? (
+        <p className={check?.status === 'error' ? css.statusError : css.status}>{message}</p>
+      ) : null}
       {updateAvailable ? (
         <div className={css.updateCard} data-testid="update-available-card">
           <p className={css.updateLine}>
@@ -233,6 +275,9 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
           plain-language description under its name — the release notes say
           what CHANGED, this says what the package IS. */}
       <p className={css.packagesHint}>{t('packagesHint')}</p>
+      {/* 【变更】2026-10-06 (问题 6): the hot-upgrade path the packages ALSO
+          support — /baf-update without an app restart. */}
+      <p className={css.packagesHint}>{t('hotUpgradeHint')}</p>
       <ul className={css.rows}>
         <VersionRow
           label={t('labelBafCore')}
@@ -277,10 +322,6 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
           desc={t('descBafScaffold')}
         />
       </ul>
-      {progress ? <p className={css.status}>{t('progress')}：{progress}</p> : null}
-      {message ? (
-        <p className={check?.status === 'error' ? css.statusError : css.status}>{message}</p>
-      ) : null}
     </div>
   )
 }

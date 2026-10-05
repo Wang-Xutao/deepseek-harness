@@ -5,7 +5,6 @@
 
 import {
   BafError,
-  effectiveKeywordRules,
   isTierRoutingActive,
   resolveTaskTier,
   type IntakeInput,
@@ -22,7 +21,7 @@ import {
 } from '@deepseek-ai/dsh-baf-core'
 import { classifyIntake } from './intake.ts'
 import { ProjectionStore } from './projection.ts'
-import { readRouteTierConfigSync } from './route-config-io.ts'
+import { effectiveRouteKeywordRules, readRouteTierConfigSync } from './route-config-io.ts'
 import { rememberTaskTier } from './task-tier-memory.ts'
 import { assertTransitionAccepted, decideTransition } from './transition.ts'
 
@@ -55,7 +54,7 @@ export function createWorkflowService(options: WorkflowServiceOptions): Workflow
       // rides the intake event, so it is durable across restarts.
       const tierConfig = readRouteTierConfigSync()
       const taskTierHit = tierConfig !== undefined && isTierRoutingActive(tierConfig)
-        ? resolveTaskTier(input.description, effectiveKeywordRules(tierConfig.keywords))
+        ? resolveTaskTier(input.description, effectiveRouteKeywordRules(tierConfig))
         : undefined
       const recorded = taskTierHit === undefined
         ? intake
@@ -210,7 +209,7 @@ export async function confirmIntake(
   const tierConfig = readRouteTierConfigSync()
   if (tierConfig !== undefined && isTierRoutingActive(tierConfig)) {
     const hit = next.intake?.taskTierHit
-      ?? resolveTaskTier(next.intake?.summary ?? '', effectiveKeywordRules(tierConfig.keywords))
+      ?? resolveTaskTier(next.intake?.summary ?? '', effectiveRouteKeywordRules(tierConfig))
     if (hit !== undefined) {
       const { status: frozen } = await store.append(next.changeId, next.projectionVersion, meta => ({
         type: 'task-tier-frozen' as const,
