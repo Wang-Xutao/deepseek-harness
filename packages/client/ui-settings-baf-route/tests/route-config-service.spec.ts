@@ -48,7 +48,7 @@ afterEach(() => {
 async function fixture() {
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
-  await ctx.plugin(BafRouteConfigService, {})
+  await ctx.plugin(BafRouteConfigService)
   return { ctx, service: ctx.bafRouteConfig }
 }
 

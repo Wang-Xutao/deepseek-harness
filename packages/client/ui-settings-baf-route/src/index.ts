@@ -13,7 +13,6 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
   DEFAULT_PHASE_TIER, parseRouteTierConfig, resolveTaskTier, type RouteTierConfig,
@@ -39,9 +38,7 @@ declare module '@deepseek-ai/cordis' {
  * the file is tiny, and the dispatch path deliberately re-reads it per turn.
  */
 export class BafRouteConfigRemote extends TypertRemoteService {
-  static Config = z.object({})
-
-  constructor(ctx: Context, _config: Record<string, never>) {
+  constructor(ctx: Context) {
     super(ctx, 'bafRouteConfig')
   }
 
