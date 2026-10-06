@@ -11,6 +11,12 @@
  * INSIDE 关键词规则 as read-only 预设-badged tags (role-grouped, pack-labeled)
  * — the 引用 click is gone, they are already rules; 预演 hot-reloads: draft
  * edits re-run the dry-run on a debounce while text is present.
+ * 【变更】2026-10-06 (问题 5 批): 恢复默认 parks LEFT and 取消 joins 保存 at
+ * the right end (4.1); a provider switch re-points the model to that
+ * provider's first offering and load normalizes the draft, so 未在目录 is gone
+ * (4.3); the TAG itself is the switch — user tags and preset words park on
+ * click, no per-tag switch button (4.5) — and every group splits its tags
+ * into 中文 / 英文 segments.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -59,6 +65,23 @@ const BUILTIN_PRESETS: readonly { id: string; tier: RouteTier; words: string }[]
   { id: 'qualityAssurance', tier: 'mid', words: '单元测试|review|debug' },
   { id: 'routineEdits', tier: 'low', words: '文案|README|typo' },
 ]
+
+/**
+ * 问题 5 (4.3): a catalog with real provider groups — the controller needs it
+ * to re-point models on provider switches and to normalize loaded drafts.
+ */
+const groupedCatalog = async () => ({
+  ok: true as const,
+  value: {
+    default: { provider: 'p', model: 'big' },
+    routableProviders: [],
+    groups: [
+      { id: 'p', name: 'P', models: [{ id: 'big', name: 'Big Brain' }, { id: 'mid', name: 'Middle' }] },
+      { id: 'q', name: 'Q', models: [{ id: 'cheap', name: 'Cheap' }] },
+    ],
+    failures: [],
+  },
+})
 
 function t(key: string): string {
   return key
@@ -137,6 +160,7 @@ function harness(state: RouteSectionState) {
     setPresetWordEnabled: vi.fn(),
     setEscalateOnly: vi.fn(),
     save: vi.fn(),
+    cancel: vi.fn(),
     reset: vi.fn(),
     runPreview: vi.fn(),
   }
@@ -186,15 +210,55 @@ describe('RouteSectionController', () => {
     expect(store.getSnapshot().draft?.tiers.high.provider).toBe('p')
   })
 
-  it('setTierProvider re-points the provider alone (model and effort kept)', async () => {
-    const controller = new RouteSectionController(fakeCtx())
+  it('setTierProvider re-points the model to the provider\'s first offering and clears the effort (问题 5/4.3)', async () => {
+    const controller = new RouteSectionController(fakeCtx({ catalog: groupedCatalog }))
     const store = controller.inject().hooks.routeSection
     await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
     controller.setTierProvider('high', 'q')
-    expect(store.getSnapshot().draft?.tiers.high).toEqual({
-      provider: 'q', model: 'big', reasoningEffort: 'high',
-    })
+    // q's first offering is cheap; effort ladders are per-model, so the stale
+    // high effort from big does not survive the re-point.
+    expect(store.getSnapshot().draft?.tiers.high).toEqual({ provider: 'q', model: 'cheap' })
     expect(store.getSnapshot().dirty).toBe(true)
+  })
+
+  it('normalizes a loaded draft against the catalog — no dangling ids (问题 5/4.3)', async () => {
+    const controller = new RouteSectionController(fakeCtx({
+      catalog: groupedCatalog,
+      get: async () => ({
+        ok: true as const,
+        value: {
+          ...CONFIG,
+          tiers: {
+            high: { provider: 'p', model: 'big', reasoningEffort: 'high' },
+            // mid's provider left the catalog — it re-points to the catalog's
+            // FIRST model (p/big), effort dropped.
+            mid: { provider: 'gone', model: 'x', reasoningEffort: 'max' },
+            // low's provider stayed but its model left the menu — re-point to
+            // q's first offering.
+            low: { provider: 'q', model: 'ghost' },
+          },
+        },
+      }) as const,
+    }))
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    const tiers = store.getSnapshot().draft?.tiers
+    expect(tiers?.mid).toEqual({ provider: 'p', model: 'big' })
+    expect(tiers?.low).toEqual({ provider: 'q', model: 'cheap' })
+  })
+
+  it('cancel() discards the draft\'s unsaved edits, back to the saved file (问题 5/4.1)', async () => {
+    const controller = new RouteSectionController(fakeCtx())
+    const store = controller.inject().hooks.routeSection
+    await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    controller.setTierModel('high', { model: 'bigger' })
+    controller.setKeywordEnabled(0, false)
+    expect(store.getSnapshot().dirty).toBe(true)
+    await controller.cancel()
+    // The saved file replaces the edited draft wholesale.
+    expect(store.getSnapshot().draft).toEqual(CONFIG)
+    expect(store.getSnapshot().dirty).toBe(false)
+    expect(store.getSnapshot().error).toBeUndefined()
   })
 
   it('setTierEffort sets and clears the tier effort', async () => {
@@ -496,17 +560,18 @@ describe('ModelRoutingRow', () => {
     expect((placeholder as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('shows a 未在目录 chip and the raw model id when the model left the catalog', () => {
+  it('never shows a 未在目录 chip — the anchor falls back to the raw id (问题 5/4.3)', () => {
     const { props } = harness({
       ...READY,
       draft: { ...CONFIG, tiers: { ...CONFIG.tiers, low: { provider: 'q', model: 'ghost' } } },
     })
     render(<ModelRoutingRow {...props} />)
-    const row = screen.getByTestId('route-tier-low')
-    expect(within(row).getByRole('button', { name: 'ghost' })).toBeTruthy()
-    expect(within(row).getByTestId('route-not-in-catalog').textContent).toContain('notInCatalog')
-    // A catalog model shows no chip.
-    expect(within(screen.getByTestId('route-tier-high')).queryByTestId('route-not-in-catalog')).toBeNull()
+    // The chip block is gone from the page entirely; a model outside the
+    // provider's menu can only arrive through a state injected verbatim, and
+    // even then the anchor shows the raw id with no verdict attached.
+    expect(screen.queryByTestId('route-not-in-catalog')).toBeNull()
+    expect(screen.queryByText('notInCatalog')).toBeNull()
+    expect(within(screen.getByTestId('route-tier-low')).getByRole('button', { name: 'ghost' })).toBeTruthy()
   })
 
   it('suffixed duplicate names resolve to their own id/provider per provider menu (批次B-E)', () => {
@@ -531,17 +596,28 @@ describe('ModelRoutingRow', () => {
     expect(face.setTierModel).toHaveBeenCalledWith('low', { provider: 'q', model: 'm2' })
   })
 
-  it('puts save/reset at the top, above the tier rows (2.1)', () => {
+  it('rests 恢复默认 at the LEFT end and 取消+保存 at the right end of the action row (问题 5/4.1)', () => {
     const { props } = harness({ ...READY, dirty: true })
     render(<ModelRoutingRow {...props} />)
     const actions = screen.getByTestId('route-actions')
-    expect(actions.textContent).toContain('save')
-    expect(actions.textContent).toContain('reset')
-    expect(actions.textContent).toContain('dirty')
-    const saveButton = within(actions).getByRole('button', { name: 'save' })
-    const row = screen.getByTestId('route-tier-high')
-    // The toolbar precedes the first tier row in document order.
-    expect(saveButton.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const resetButton = within(actions).getByTestId('route-reset')
+    const cancelButton = within(actions).getByTestId('route-cancel')
+    const saveButton = within(actions).getByTestId('route-save')
+    // 恢复默认 leads the row (行首, far from the commit cluster); 取消 sits
+    // beside 保存 (行尾) — and while dirty, both are clickable.
+    expect(resetButton.compareDocumentPosition(cancelButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(cancelButton.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect((cancelButton as HTMLButtonElement).disabled).toBe(false)
+    // The toolbar still precedes the first tier row in document order.
+    expect(saveButton.compareDocumentPosition(screen.getByTestId('route-tier-high'))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('disables 取消 until the draft is dirty (问题 5/4.1)', () => {
+    const { props } = harness(READY)
+    render(<ModelRoutingRow {...props} />)
+    const cancelButton = within(screen.getByTestId('route-actions')).getByTestId('route-cancel')
+    expect((cancelButton as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('draws the workflow binding flow compactly with NO overlapping nodes (1.2)', () => {
@@ -614,7 +690,7 @@ describe('ModelRoutingRow', () => {
     expect(face.setPhaseTier).toHaveBeenCalledWith('design', 'low')
   })
 
-  it('renders builtin presets INSIDE 关键词规则 as 预设-badged tags with per-pack master switches (1.5 + 问题 3)', () => {
+  it('renders builtin presets INSIDE 关键词规则 as clickable 预设 tags with per-pack master switches (问题 5/4.5)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     const tags = screen.getAllByTestId('route-preset-tag')
@@ -625,8 +701,13 @@ describe('ModelRoutingRow', () => {
     expect(tags.map(tag => tag.textContent).some(text => text?.startsWith('README'))).toBe(true)
     expect(tags.every(tag => tag.textContent?.includes('presetBadge') === true)).toBe(true)
     expect(tags.find(tag => tag.textContent?.includes('架构'))?.getAttribute('title')).toContain('presetComplexEngineering')
-    // Clicking a preset tag's WORD adds nothing (read-only vocabulary)…
-    fireEvent.click(tags.find(tag => tag.textContent?.includes('重构'))!)
+    // 4.5: the TAG is the switch — no per-tag switch button inside; a click
+    // parks the word (nothing is added — it already IS a rule).
+    const wordTag = tags.find(tag => tag.textContent?.includes('架构'))!
+    expect(within(wordTag).queryByRole('switch')).toBeNull()
+    expect(wordTag.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(wordTag)
+    expect(face.setPresetWordEnabled).toHaveBeenCalledWith('complexEngineering', '架构', false)
     expect(face.addKeyword).not.toHaveBeenCalled()
     // Role-grouped with the user's own rules: the high group hosts both high
     // packs AND the fixture's own 架构|refactor rule; pack names subdivide.
@@ -642,24 +723,58 @@ describe('ModelRoutingRow', () => {
     expect(packToggles).toHaveLength(4)
     fireEvent.click(within(packToggles[0]!).getByRole('switch'))
     expect(face.setPackEnabled).toHaveBeenCalledWith('complexEngineering', false)
-    // And every preset WORD tag carries its own mini switch (标签级开关).
-    const wordToggle = within(tags.find(tag => tag.textContent?.includes('架构'))!).getByTestId('route-preset-toggle')
-    fireEvent.click(within(wordToggle).getByRole('switch'))
-    expect(face.setPresetWordEnabled).toHaveBeenCalledWith('complexEngineering', '架构', false)
+    // 4.5 中文/英文分段: a mixed-language pack splits its words into a 中文
+    // line and an 英文 line, each labelled. (rulePackName → ruleHead → rulePack
+    // — walked explicitly, the hashed class names substring-collide.)
+    const pack = screen.getByText('presetComplexEngineering').parentElement?.parentElement
+    expect(pack?.className).toContain('rulePack')
+    const lines = pack?.querySelectorAll('[class*="segLine"]')
+    expect(lines?.length).toBe(2)
+    expect(lines?.[0]?.textContent).toContain('架构')
+    expect(lines?.[0]?.textContent).toContain('重构')
+    expect(lines?.[0]?.textContent).not.toContain('refactor')
+    expect(lines?.[0]?.textContent).toContain('tagsZh')
+    expect(lines?.[1]?.textContent).toContain('refactor')
+    expect(lines?.[1]?.textContent).toContain('tagsEn')
     // 问题 4 配置文件: the block points at the user-editable preset file.
     expect(screen.getByText('presetsFileHint')).toBeTruthy()
   })
 
-  it('user keyword tags carry a mini switch and NO tier label inside (问题 4)', () => {
+  it('a preset word parked via draft.presetWords renders checked off (问题 5/4.5)', () => {
+    const { props } = harness({
+      ...READY,
+      draft: { ...CONFIG, presetWords: { 'complexEngineering::架构': false } },
+    })
+    render(<ModelRoutingRow {...props} />)
+    const tags = screen.getAllByTestId('route-preset-tag')
+    const parked = tags.find(tag => tag.textContent?.includes('架构'))!
+    expect(parked.getAttribute('aria-checked')).toBe('false')
+    expect(parked.className).toContain('Off')
+    // The pack's other words stay on.
+    const refactor = tags.find(tag => tag.textContent?.includes('refactor'))!
+    expect(refactor.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('the user tag ITSELF is the switch — click or Enter parks the rule (问题 5/4.5)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     const tag = screen.getByTestId('route-keyword-tag')
-    // The tag sits in its tier group — no tier label inside the tag itself.
+    // The tag sits in its tier group — no tier label inside the tag itself,
+    // and no mini switch button anymore: the tag carries role="switch".
     expect(tag.textContent).not.toContain('tierHigh')
-    // The mini switch parks the rule without deleting it.
-    fireEvent.click(within(tag).getByTestId('route-keyword-toggle'))
+    expect(tag.getAttribute('role')).toBe('switch')
+    expect(tag.getAttribute('aria-checked')).toBe('true')
+    expect(within(tag).queryByRole('switch')).toBeNull()
+    fireEvent.click(tag)
     expect(face.setKeywordEnabled).toHaveBeenCalledWith(0, false)
-    // A parked (enabled:false) rule still renders, dimmed, switch off.
+    // Keyboard toggles too (tabbable tag) — the harness state is static, so
+    // the tag is still on and Enter asks to park it again.
+    fireEvent.keyDown(tag, { key: 'Enter' })
+    expect(face.setKeywordEnabled).toHaveBeenLastCalledWith(0, false)
+    // ✎/✕ stop propagation — editing never toggles the rule.
+    fireEvent.click(within(tag).getByTestId('route-keyword-edit-btn'))
+    expect(face.setKeywordEnabled).toHaveBeenCalledTimes(2)
+    // A parked (enabled:false) rule still renders, dimmed, off.
     const parked = harness({
       ...READY,
       draft: {
@@ -671,7 +786,7 @@ describe('ModelRoutingRow', () => {
     const { container } = render(<ModelRoutingRow {...parked.props} />)
     const parkedTag = within(container).getByTestId('route-keyword-tag')
     expect(parkedTag.className).toContain('Off')
-    expect((within(parkedTag).getByRole('switch') as HTMLElement).getAttribute('aria-checked')).toBe('false')
+    expect(parkedTag.getAttribute('aria-checked')).toBe('false')
   })
 
   it('groups user rules by custom category with a one-click master switch (问题 3 自定义分类)', () => {
@@ -684,6 +799,10 @@ describe('ModelRoutingRow', () => {
     expect(within(category).getByText('复杂任务')).toBeTruthy()
     fireEvent.click(within(within(category).getByTestId('route-category-toggle')).getByRole('switch'))
     expect(face.setCategoryEnabled).toHaveBeenCalledWith('复杂任务', false)
+    // 4.5: the category's one rule ('架构|refactor' carries CJK) reads 中文 —
+    // a single-language segment carries NO 中文/英文 divider label.
+    expect(category.textContent).not.toContain('tagsZh')
+    expect(category.textContent).not.toContain('tagsEn')
   })
 
   it('the adder takes an optional category, and the edit row keeps it (问题 3)', () => {

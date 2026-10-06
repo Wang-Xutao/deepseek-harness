@@ -43,6 +43,7 @@ export type FeaturedSettingsKey =
   | 'applied'
   | 'restartRequired'
   | 'operationFailed'
+  | 'reasonManagementRequired'
   | 'progressInstalling'
   | 'progressApplying'
   | 'progressRegistry'
@@ -92,6 +93,9 @@ export const en: Record<FeaturedSettingsKey, string> = {
   applied: 'Done.',
   restartRequired: 'Applied. Restart the app to finish.',
   operationFailed: 'Operation failed',
+  // 【变更】2026-10-06 (问题 7): the raw refusal code never reaches the person
+  // — the sentence the plugin-inventory page uses explains it instead.
+  reasonManagementRequired: 'Plugin management needs it; it cannot be switched off or uninstalled.',
   progressInstalling: 'Installing',
   progressApplying: 'Applying changes',
   progressRegistry: 'registry',
@@ -142,6 +146,9 @@ export const zh: Record<FeaturedSettingsKey, string> = {
   applied: '操作成功。',
   restartRequired: '已应用，重启应用后生效。',
   operationFailed: '操作失败',
+  // 【变更】2026-10-06 (问题 7): 不再裸报 management-required，改用插件管理页
+  // 同款说明句。
+  reasonManagementRequired: '插件管理所需，不能停用或卸载',
   progressInstalling: '正在安装',
   progressApplying: '正在应用变更',
   progressRegistry: '源',

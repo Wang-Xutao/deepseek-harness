@@ -3,7 +3,7 @@
  * Visibility is driven by `BafWorkflowSettings.showTraceGraph`.
  *
  * 【变更】2026-10-06 (问题 1): the row moved from General settings into the
- * 工作流 section (`settings.workflow.item`), ahead of the 工作流图页签 row.
+ * 工作流 section (`settings.workflow.item`), ahead of the 工作流图 row.
  *
  * 【变更】2026-09-30 (demo31 问题 3): the toggle is the shared `Switch`
  * primitive — the exact control the 开发者工具 row uses in General settings —

@@ -700,7 +700,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'dashboard.board.allChanges': '全部变更',
   'dashboard.board.empty': '暂无变更记录',
   'dashboard.board.endedAt': '结束于',
-  'settings.workflowTab.title': '工作流图页签',
+  'settings.workflowTab.title': '工作流图',
   'settings.workflowTab.description': '关闭后，对话 Tab 不再显示「工作流图」。',
   'dashboard.focus': '当前焦点',
   'dashboard.openChange': '在工作流页查看该变更',

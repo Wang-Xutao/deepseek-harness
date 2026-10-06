@@ -183,6 +183,39 @@ describe('FeaturedSection', () => {
     expect(screen.getByTestId('featured-notice').textContent).toContain('pnpm refused')
   })
 
+  it('speaks a mapped refusal code and paints the failure red (问题 7)', () => {
+    // 【变更】2026-10-06 (问题 7): management-required never reaches the person
+    // raw — the locale sentence the plugin-inventory page uses explains it, and
+    // the notice box carries the danger frame + alert role instead of a quiet
+    // status line.
+    const { props } = harness(readyState([card()], {
+      notice: { kind: 'failed', text: 'management-required', code: 'management-required', seq: 2 },
+    }))
+    render(<FeaturedSection {...props} />)
+    const notice = screen.getByTestId('featured-notice')
+    expect(notice.getAttribute('role')).toBe('alert')
+    expect(notice.className).toContain('noticeError')
+    expect(notice.textContent).toContain('operationFailed')
+    expect(notice.textContent).toContain('reasonManagementRequired')
+    expect(notice.textContent).not.toContain('management-required：')
+    // An unmapped failure keeps the Host's own words, still in the red box.
+    const unmapped = harness(readyState([card()], {
+      notice: { kind: 'failed', text: 'pnpm refused', code: 'not-found', seq: 3 },
+    }))
+    const second = render(<FeaturedSection {...unmapped.props} />)
+    const secondNotice = within(second.container).getAllByTestId('featured-notice')
+      .find(node => node.textContent?.includes('pnpm refused'))!
+    expect(secondNotice.className).toContain('noticeError')
+    expect(secondNotice.textContent).toContain('pnpm refused')
+    // And a success notice stays a plain status line.
+    const ok = harness(readyState([card()], { notice: { kind: 'ok', text: '', seq: 4 } }))
+    const third = render(<FeaturedSection {...ok.props} />)
+    const okNotice = within(third.container).getAllByTestId('featured-notice')
+      .find(node => node.textContent?.includes('applied'))!
+    expect(okNotice.className).not.toContain('noticeError')
+    expect(okNotice.getAttribute('role')).toBe('status')
+  })
+
   it('renders load failure with retry', () => {
     const { face, props } = harness({ ...readyState([]), status: 'failed' })
     render(<FeaturedSection {...props} />)

@@ -41,6 +41,10 @@ export const zh = {
   'desktopClose.ask': '每次询问',
   'desktopClose.tray': '最小化到托盘',
   'desktopClose.quit': '直接退出',
+  // 【变更】2026-10-06 (问题 2): 开机自启动 — background start to tray, no splash.
+  'desktopLaunch.title': '开机自启动',
+  'desktopLaunch.description': '开启后，开机时在后台自动启动并最小化到托盘，不显示启动画面',
+  'desktopLaunch.error': '设置开机自启动失败，请重试',
 } satisfies Record<string, string>
 
 /** The settings namespace key union. */
@@ -87,4 +91,8 @@ export const en = {
   'desktopClose.ask': 'Ask every time',
   'desktopClose.tray': 'Minimize to tray',
   'desktopClose.quit': 'Quit directly',
+  // 【变更】2026-10-06 (问题 2): launch at login — background start to tray, no splash.
+  'desktopLaunch.title': 'Launch at startup',
+  'desktopLaunch.description': 'Start in the background at login, minimized to the tray, without the splash screen',
+  'desktopLaunch.error': 'Could not set launch at startup, try again',
 } satisfies Record<SettingsKey, string>

@@ -778,9 +778,15 @@ export class PluginManager extends TypertRemoteService {
     let protectedBundle: boolean
     try {
       const rows = this.bundleRows(name)
-      // A declared protected module protects even while its own layer disables it.
-      protectedBundle = rows.some(row => (protectedModules.has(row.name) && !vetoed.has(row.id))
-        || `include:${row.id}` === this.ownerEntryId)
+      // A declared protected module protects even while its own layer disables
+      // it — but only while THIS bundle is its sole provider (2026-10-06
+      // 问题 7): a bundle that merely re-declares a protected module another
+      // SELECTED bundle also mounts (the feishu bundle re-declares
+      // client-connection/api-session-controller that the app bundle provides)
+      // may be disabled — the other layer keeps the module mounted.
+      protectedBundle = rows.some(row => `include:${row.id}` === this.ownerEntryId
+        || (protectedModules.has(row.name) && !vetoed.has(row.id)
+          && !this.providedElsewhere(name, row.name, vetoed)))
     } catch (_error) {
       // Unreadable bundles contribute no new rows; listBundles reports their diagnostics.
       return false
@@ -788,6 +794,22 @@ export class PluginManager extends TypertRemoteService {
     if (protectedBundle) this.managementBundles.add(name)
     else this.managementBundles.delete(name)
     return protectedBundle
+  }
+
+  /**
+   * Whether any OTHER selected bundle also mounts `moduleName` under a row the
+   * person's own layers did not disable — a second provider means disabling
+   * `name` leaves the module loaded.
+   */
+  private providedElsewhere(name: string, moduleName: string, vetoed: ReadonlySet<string>): boolean {
+    const selected = readProfileManifest('dsh', this.profile.dir).dsh?.profile?.bundles ?? []
+    for (const other of selected) {
+      if (other === name) continue
+      try {
+        if (this.bundleRows(other).some(row => row.name === moduleName && !vetoed.has(row.id))) return true
+      } catch (_error) { /* unreadable bundles contribute no rows */ }
+    }
+    return false
   }
 
   /** Row ids the person's own layers — profile patch, home patch, launch overlays — disable. */

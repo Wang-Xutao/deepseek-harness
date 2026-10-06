@@ -78,7 +78,12 @@ export interface RouteSectionFace {
   setEnabled(enabled: boolean): void
   /** Patch one tier's model spec (provider/model, kept in the draft). */
   setTierModel(tier: RouteTier, patch: Partial<TierModelSpec>): void
-  /** 【变更】2026-10-05 (point 1): re-point one tier's provider alone; model and effort stay. */
+  /**
+   * Re-point one tier's provider.
+   * 【变更】2026-10-05 (point 1): re-points the provider alone.
+   * 【变更】2026-10-06 (问题 5/4.3): the model follows to the provider's first
+   * offering — a provider switch never leaves a dangling out-of-provider id.
+   */
   setTierProvider(tier: RouteTier, provider: string): void
   /** 【变更】2026-10-05 (批次B-B): set one tier's reasoning effort; undefined follows the model default. */
   setTierEffort(tier: RouteTier, effort: string | undefined): void
@@ -102,6 +107,8 @@ export interface RouteSectionFace {
   setEscalateOnly(value: boolean): void
   /** Persist the draft; a refusal keeps it dirty with `error` set. */
   save(): Promise<void>
+  /** 【变更】2026-10-06 (问题 5/4.1): discard the draft's unsaved edits, back to the saved file. */
+  cancel(): Promise<void>
   /** Remove the config file and return to a freshly seeded draft. */
   reset(): Promise<void>
   /**
@@ -153,7 +160,17 @@ export class RouteSectionController {
 
   /** @inheritdoc */
   setTierProvider(tier: RouteTier, provider: string): void {
-    this.edit((draft) => { draft.tiers[tier] = { ...draft.tiers[tier], provider } })
+    // 问题 5 (4.3): the provider's first offering becomes the model — effort
+    // ladders are per-model, so a re-point clears the stale pick.
+    const first = this.store.getSnapshot().catalog?.models.find(model => model.provider === provider)
+    this.edit((draft) => {
+      const spec: TierModelSpec = { ...draft.tiers[tier], provider }
+      if (first !== undefined && first.id !== spec.model) {
+        spec.model = first.id
+        delete spec.reasoningEffort
+      }
+      draft.tiers[tier] = spec
+    })
   }
 
   /** @inheritdoc */
@@ -249,6 +266,17 @@ export class RouteSectionController {
   }
 
   /** @inheritdoc */
+  async cancel(): Promise<void> {
+    // 4.1 取消: the saved file is the truth again — re-read replaces the draft
+    // wholesale, then the dirty flag (load leaves it untouched) drops.
+    await this.load()
+    this.store.update((state) => {
+      state.dirty = false
+      state.error = undefined
+    })
+  }
+
+  /** @inheritdoc */
   async reset(): Promise<void> {
     await this.ctx.remote.bafRouteConfig.reset()
     const catalog = await this.ctx.remote.session.modelCatalog()
@@ -299,6 +327,7 @@ export class RouteSectionController {
       setPresetWordEnabled: (packId, word, enabled) => this.setPresetWordEnabled(packId, word, enabled),
       setEscalateOnly: value => this.setEscalateOnly(value),
       save: () => this.save(),
+      cancel: () => this.cancel(),
       reset: () => this.reset(),
       runPreview: (summary, options) => this.runPreview(summary, options),
     }
@@ -334,7 +363,7 @@ export class RouteSectionController {
         }
         : response.value
       this.store.update((state) => {
-        state.draft = config
+        state.draft = this.normalizeTiers(config, suggestions)
         state.status = 'ready'
         state.catalog = suggestions
         state.presets = presets
@@ -385,6 +414,38 @@ export class RouteSectionController {
         label: (counts.get(model.name) ?? 1) > 1 ? `${model.name} · ${model.provider}` : model.name,
       })),
     }
+  }
+
+  /**
+   * 【变更】2026-10-06 (问题 5/4.3): heal a loaded config against the live
+   * catalog — a tier whose provider vanished re-points to the catalog's first
+   * provider+model, a tier whose model left its provider's menu re-points to
+   * that provider's first model (effort ladders are per-model, so a re-point
+   * clears them). The draft then never renders a dangling id, which is what
+   * retired the 未在目录 chip.
+   */
+  private normalizeTiers(
+    config: RouteTierConfig,
+    catalog: RouteCatalogSuggestions | undefined,
+  ): RouteTierConfig {
+    if (catalog === undefined || catalog.models.length === 0) return config
+    const tiers = { ...config.tiers }
+    for (const tier of ['high', 'mid', 'low'] as const) {
+      const spec: TierModelSpec = { ...tiers[tier] }
+      const underProvider = catalog.models.filter(model => model.provider === spec.provider)
+      if (underProvider.length === 0) {
+        const first = catalog.models[0]
+        if (first === undefined) continue
+        spec.provider = first.provider
+        spec.model = first.id
+        delete spec.reasoningEffort
+      } else if (!underProvider.some(model => model.id === spec.model)) {
+        spec.model = underProvider[0]?.id ?? spec.model
+        delete spec.reasoningEffort
+      }
+      tiers[tier] = spec
+    }
+    return { ...config, tiers }
   }
 
   /**

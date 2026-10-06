@@ -13,6 +13,12 @@
  * per-session singleton with no global layer to merge.
  */
 import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
+// Type-only: loads the cordis Events augmentation that declares the forwarded
+// 'baf-route-config/changed' notification (the $on key face below). Without it
+// the api-remotes selection key lands but the carrier-compatible event union
+// drops the name — ambient merging does not ride `import type {}` across
+// declaration emit, so each remote consumer loads it at its own source.
+import type {} from '@deepseek-ai/dsh-client-ui-settings-baf-route/types'
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -55,6 +61,11 @@ export class ModelDirectoryResolver extends Service {
     ctx.remote.$on('settings/document-updated', () => { this.catalog.refresh() })
     ctx.remote.$on('credentials/record-updated', () => { this.catalog.refresh() })
     ctx.remote.$on('credentials/reference-updated', () => { this.catalog.refresh() })
+    // 【变更】2026-10-06 (问题 1): enabling/disabling multi-model routing adds
+    // or removes the Auto pseudo model from the session catalog — without this
+    // listener the /model seat keeps serving the pre-toggle catalog, so the
+    // auto entry never appears (or lingers) until a full reload.
+    ctx.remote.$on('baf-route-config/changed', () => { this.catalog.refresh() })
   }
 
   /**

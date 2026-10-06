@@ -37,8 +37,16 @@
  * the tag's inner tier label is gone (the group already says the role); the
  * preset block points at the user-editable preset file; the 预演 box explains
  * the verify-retry floor its checkbox simulates.
+ * 【变更】2026-10-06 (问题 5 批): 恢复默认 parks at the action row's LEFT end and
+ * 取消 joins 保存 at the right end (cancel discards the draft, re-reading the
+ * saved file); roles renamed 旗舰/评审/执行 with one-line role descriptions;
+ * a provider switch re-points the model to that provider's first offering and
+ * the loaded draft is normalized against the catalog, so the 未在目录 chip is
+ * gone; per-tag switch buttons are GONE — clicking a tag parks/revives it —
+ * and every group renders its tags in 中文 / 英文 segments, each custom
+ * 功能分类 (and each preset pack) as its own framed segment.
  */
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
 import {
   IconChevronDownOutlineMedium as IconChevronDownOutline14, Menu, Switch,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -193,6 +201,32 @@ function nextTier(tier: RouteTier): RouteTier {
   return tier === 'low' ? 'mid' : tier === 'mid' ? 'high' : 'low'
 }
 
+/** 问题 5 (4.5): any CJK glyph reads the word as 中文, everything else 英文. */
+const CJK = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/
+
+/** Whether one keyword word carries CJK. */
+function isCjkWord(word: string): boolean {
+  return CJK.test(word)
+}
+
+/**
+ * 问题 5 (4.5): one labelled 中文/英文 line of tags inside a group — the
+ * caption only rides along when the group holds BOTH languages (a single
+ * language needs no divider).
+ */
+function TagLine({ label, showLabel, children }: {
+  label: string
+  showLabel: boolean
+  children: ReactNode
+}): ReactElement {
+  return (
+    <span className={css.segLine}>
+      {showLabel ? <span className={css.segLabel}>{label}</span> : null}
+      {children}
+    </span>
+  )
+}
+
 /**
  * Join CSS-module class names without a clsx dependency. The ambient
  * css-module type reads as `string | undefined` under noUncheckedIndexedAccess,
@@ -227,7 +261,7 @@ export type ModelRoutingRowProps =
 export function ModelRoutingRow({
   useRouteSection, setEnabled, setTierModel, setTierProvider, setTierEffort, setPhaseTier,
   addKeyword, removeKeyword, updateKeyword, setKeywordEnabled, setCategoryEnabled,
-  setPackEnabled, setPresetWordEnabled, setEscalateOnly, save, reset, runPreview, t,
+  setPackEnabled, setPresetWordEnabled, setEscalateOnly, save, cancel, reset, runPreview, t,
 }: ModelRoutingRowProps) {
   const state = useRouteSection(identity)
   const keywordWordsId = useId()
@@ -312,28 +346,36 @@ export function ModelRoutingRow({
       )
     }
     const on = rule.enabled !== false
+    // 问题 5 (4.5): the TAG is the switch — a click (or Enter/Space) parks or
+    // revives the word; the mini switch button is gone. ✎/✕ stop the click so
+    // editing never toggles.
     return (
       <span
         key={`${rule.words}-${index}`}
         className={join(css.keywordTag, TIER_CLASS[rule.tier], on ? '' : css.keywordTagOff)}
         data-testid="route-keyword-tag"
+        role="switch"
+        aria-checked={on ? 'true' : 'false'}
+        aria-label={`${t('tagToggle')}：${rule.words}`}
+        tabIndex={0}
+        onClick={() => { setKeywordEnabled(index, !on) }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setKeywordEnabled(index, !on)
+          }
+        }}
       >
         <span className={css.keywordTagWords}>{rule.words}</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={on ? 'true' : 'false'}
-          aria-label={t('tagToggle')}
-          className={join(css.tagSwitch, on ? '' : css.tagSwitchOff)}
-          data-testid="route-keyword-toggle"
-          onClick={() => { setKeywordEnabled(index, !on) }}
-        />
         <button
           type="button"
           className={css.tagBtn}
           data-testid="route-keyword-edit-btn"
           aria-label={t('keywordEdit')}
-          onClick={() => { setKeywordEdit({ index, tier: rule.tier }) }}
+          onClick={(event) => {
+            event.stopPropagation()
+            setKeywordEdit({ index, tier: rule.tier })
+          }}
         >
           ✎
         </button>
@@ -342,10 +384,46 @@ export function ModelRoutingRow({
           className={css.tagBtn}
           data-testid="route-keyword-remove"
           aria-label={t('keywordRemove')}
-          onClick={() => { removeKeyword(index) }}
+          onClick={(event) => {
+            event.stopPropagation()
+            removeKeyword(index)
+          }}
         >
           ✕
         </button>
+      </span>
+    )
+  }
+
+  /**
+   * 问题 5 (4.5): one preset-pack word as a CLICKABLE tag — the tag itself is
+   * the switch (off parks the word without deleting it); the per-word switch
+   * button is gone, matching the user tags.
+   */
+  const renderPresetWord = (
+    preset: { readonly id: string }, word: string, tier: RouteTier, packName: string,
+  ): ReactElement => {
+    const wordOn = draft.presetWords?.[`${preset.id}::${word}`] !== false
+    return (
+      <span
+        key={`${preset.id}-${word}`}
+        className={join(css.presetTag, TIER_CLASS[tier], wordOn ? '' : css.presetTagOff)}
+        data-testid="route-preset-tag"
+        role="switch"
+        aria-checked={wordOn ? 'true' : 'false'}
+        aria-label={`${t('tagToggle')}：${word}`}
+        tabIndex={0}
+        title={`${packName} · ${t('presetAlwaysHint')}`}
+        onClick={() => { setPresetWordEnabled(preset.id, word, !wordOn) }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setPresetWordEnabled(preset.id, word, !wordOn)
+          }
+        }}
+      >
+        <span>{word}</span>
+        <span className={css.presetBadge}>{t('presetBadge')}</span>
       </span>
     )
   }
@@ -359,20 +437,39 @@ export function ModelRoutingRow({
         <Switch checked={draft.enabled} label={t('master')} onChange={setEnabled} />
       </div>
 
-      {/* 1.4: featured-plugins pill style — primary save, secondary reset. */}
+      {/* 问题 5 (4.1): 恢复默认 parks at the LEFT end — far from the commit
+          cluster; 取消 joins 保存 at the right end and discards the draft. */}
       <div className={css.actions} data-testid="route-actions">
-        {state.dirty ? <span className={css.dirty}>{t('dirty')}</span> : undefined}
         <button
           type="button"
-          className={css.btnPrimary}
-          disabled={!state.dirty || state.saving}
-          onClick={() => { void save() }}
+          className={css.btn}
+          disabled={state.saving}
+          data-testid="route-reset"
+          onClick={() => { void reset() }}
         >
-          {t('save')}
-        </button>
-        <button type="button" className={css.btn} disabled={state.saving} onClick={() => { void reset() }}>
           {t('reset')}
         </button>
+        <span className={css.actionsEnd}>
+          {state.dirty ? <span className={css.dirty}>{t('dirty')}</span> : undefined}
+          <button
+            type="button"
+            className={css.btn}
+            disabled={!state.dirty || state.saving}
+            data-testid="route-cancel"
+            onClick={() => { void cancel() }}
+          >
+            {t('cancel')}
+          </button>
+          <button
+            type="button"
+            className={css.btnPrimary}
+            disabled={!state.dirty || state.saving}
+            data-testid="route-save"
+            onClick={() => { void save() }}
+          >
+            {t('save')}
+          </button>
+        </span>
       </div>
 
       {/* 问题 2 (2026-10-06) — 模型分级: one role CARD per tier. The role
@@ -383,11 +480,15 @@ export function ModelRoutingRow({
         <div className={css.tiers}>
           {TIERS.map((tier) => {
             const spec = draft.tiers[tier]
-            const selected = models.find(model => model.id === spec.model)
-            // 1.1: the model menu follows the provider — only that
-            // provider's models are offered; the anchor keeps the current
-            // pick (with a 未在目录 chip when it left the provider's menu).
+            // 1.1: the model menu follows the provider — only that provider's
+            // models are offered. 问题 5 (4.3/4.4): the loaded draft is
+            // normalized against the catalog and a provider switch re-points
+            // the model, so the pick always sits under the chosen provider;
+            // the anchor lookup stays scoped to it (a same-named model on
+            // ANOTHER provider — MiniMax-M3 · minimax-cn — can never bleed
+            // in), and the 未在目录 chip is gone.
             const providerModels = models.filter(model => model.provider === spec.provider)
+            const selected = providerModels.find(model => model.id === spec.model)
             const anchorLabel = selected?.label ?? spec.model
             const providers = [...new Set([
               ...models.map(model => model.provider),
@@ -438,6 +539,9 @@ export function ModelRoutingRow({
                   </div>
                   <div className={css.field}>
                     <span className={css.fieldLabel}>{t('model')}</span>
+                    {/* 问题 5 (4.3): no 未在目录 chip — the store normalizes the
+                        draft and provider switches re-point the model, so the
+                        anchor is always a real catalog entry. */}
                     <Menu
                       open={openMenu === `${tier}:model`}
                       onClose={() => { setOpenMenu(null) }}
@@ -467,11 +571,6 @@ export function ModelRoutingRow({
                         </button>
                       )}
                     />
-                    {/* 批次B-D/E: a model that left the catalog (or the chosen
-                        provider's menu) keeps its raw id with a 未在目录 chip. */}
-                    {spec.model !== '' && !providerModels.some(model => model.id === spec.model)
-                      ? <span className={css.notInCatalog} data-testid="route-not-in-catalog">{t('notInCatalog')}</span>
-                      : undefined}
                   </div>
                   <div className={css.field}>
                     <span className={css.fieldLabel}>{t('effortLabel')}</span>
@@ -609,12 +708,15 @@ export function ModelRoutingRow({
           const packs = (state.presets ?? []).filter(preset => preset.tier === tier)
           if (rules.length === 0 && packs.length === 0) return undefined
           // 问题 3 自定义功能分类: rules sharing a category render inside one
-          // labelled wrapper whose switch parks the whole category at once.
+          // labelled SEGMENT whose switch parks the whole category at once.
           const categories = [...new Set(
             rules.map(entry => entry.rule.category)
               .filter((category): category is string => category !== undefined && category !== ''),
           )]
           const bare = rules.filter(entry => entry.rule.category === undefined || entry.rule.category === '')
+          // 问题 5 (4.5): 中文/英文 split — CJK-carrying words one line, the
+          // rest another; the caption rides only when both languages exist.
+          const bothLanguages = (zh: number, en: number): boolean => zh > 0 && en > 0
           return (
             <div key={tier} className={css.ruleTier} data-testid="route-keyword-group">
               <span className={join(css.ruleTierLabel, TIER_CLASS[tier])}>{t(tierKey(tier))}</span>
@@ -622,24 +724,47 @@ export function ModelRoutingRow({
                 {categories.map((category) => {
                   const entries = rules.filter(entry => entry.rule.category === category)
                   const allOn = entries.every(entry => entry.rule.enabled !== false)
+                  const zh = entries.filter(({ rule }) => isCjkWord(rule.words))
+                  const en = entries.filter(({ rule }) => !isCjkWord(rule.words))
                   return (
                     <span key={category} className={css.ruleCategory} data-testid="route-category">
-                      <span className={css.ruleCategoryName}>{category}</span>
-                      <span className={css.tagSwitchWrap} data-testid="route-category-toggle">
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={allOn ? 'true' : 'false'}
-                          aria-label={category}
-                          className={css.tagSwitch}
-                          onClick={() => { setCategoryEnabled(category, !allOn) }}
-                        />
+                      <span className={css.ruleHead}>
+                        <span className={css.ruleCategoryName}>{category}</span>
+                        <span className={css.tagSwitchWrap} data-testid="route-category-toggle">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={allOn ? 'true' : 'false'}
+                            aria-label={category}
+                            className={css.tagSwitch}
+                            onClick={() => { setCategoryEnabled(category, !allOn) }}
+                          />
+                        </span>
                       </span>
-                      {entries.map(({ rule, index }) => renderUserRule(rule, index))}
+                      <TagLine label={t('tagsZh')} showLabel={bothLanguages(zh.length, en.length)}>
+                        {zh.map(({ rule, index }) => renderUserRule(rule, index))}
+                      </TagLine>
+                      <TagLine label={t('tagsEn')} showLabel={bothLanguages(zh.length, en.length)}>
+                        {en.map(({ rule, index }) => renderUserRule(rule, index))}
+                      </TagLine>
                     </span>
                   )
                 })}
-                {bare.map(({ rule, index }) => renderUserRule(rule, index))}
+                {(() => {
+                  const zh = bare.filter(({ rule }) => isCjkWord(rule.words))
+                  const en = bare.filter(({ rule }) => !isCjkWord(rule.words))
+                  if (zh.length === 0 && en.length === 0) return undefined
+                  return (
+                    <span className={css.ruleBare}>
+                      <TagLine label={t('tagsZh')} showLabel={bothLanguages(zh.length, en.length)}>
+                        {zh.map(({ rule, index }) => renderUserRule(rule, index))}
+                      </TagLine>
+                      <TagLine label={t('tagsEn')} showLabel={bothLanguages(zh.length, en.length)}>
+                        {en.map(({ rule, index }) => renderUserRule(rule, index))}
+                      </TagLine>
+                    </span>
+                  )
+                })()}
                 {packs.map((preset) => {
                   // Known ids carry a display name; a version-skewed unknown id
                   // still renders (raw) rather than vanishing.
@@ -648,44 +773,29 @@ export function ModelRoutingRow({
                   const words = preset.words.split('|').filter(word => word !== '')
                   // 问题 3 类级一键开关: one switch parks the entire pack.
                   const packOn = draft.packs?.[preset.id] !== false
+                  const zhWords = words.filter(isCjkWord)
+                  const enWords = words.filter(word => !isCjkWord(word))
                   return (
                     <span key={preset.id} className={css.rulePack}>
-                      <span className={css.rulePackName}>{packName}</span>
-                      <span className={css.tagSwitchWrap} data-testid="route-pack-toggle">
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={packOn ? 'true' : 'false'}
-                          aria-label={packName}
-                          className={css.tagSwitch}
-                          onClick={() => { setPackEnabled(preset.id, !packOn) }}
-                        />
+                      <span className={css.ruleHead}>
+                        <span className={css.rulePackName}>{packName}</span>
+                        <span className={css.tagSwitchWrap} data-testid="route-pack-toggle">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={packOn ? 'true' : 'false'}
+                            aria-label={packName}
+                            className={css.tagSwitch}
+                            onClick={() => { setPackEnabled(preset.id, !packOn) }}
+                          />
+                        </span>
                       </span>
-                      {words.map((word) => {
-                        // 问题 4 标签级开关: every preset word parks on its own.
-                        const wordOn = draft.presetWords?.[`${preset.id}::${word}`] !== false
-                        return (
-                          <span
-                            key={word}
-                            className={join(css.presetTag, TIER_CLASS[tier], wordOn ? '' : css.presetTagOff)}
-                            data-testid="route-preset-tag"
-                            title={`${packName} · ${t('presetAlwaysHint')}`}
-                          >
-                            <span>{word}</span>
-                            <span className={css.tagSwitchWrap} data-testid="route-preset-toggle">
-                              <button
-                                type="button"
-                                role="switch"
-                                aria-checked={wordOn ? 'true' : 'false'}
-                                aria-label={word}
-                                className={css.tagSwitch}
-                                onClick={() => { setPresetWordEnabled(preset.id, word, !wordOn) }}
-                              />
-                            </span>
-                            <span className={css.presetBadge}>{t('presetBadge')}</span>
-                          </span>
-                        )
-                      })}
+                      <TagLine label={t('tagsZh')} showLabel={bothLanguages(zhWords.length, enWords.length)}>
+                        {zhWords.map(word => renderPresetWord(preset, word, tier, packName))}
+                      </TagLine>
+                      <TagLine label={t('tagsEn')} showLabel={bothLanguages(zhWords.length, enWords.length)}>
+                        {enWords.map(word => renderPresetWord(preset, word, tier, packName))}
+                      </TagLine>
                     </span>
                   )
                 })}

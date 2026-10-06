@@ -29,12 +29,19 @@
   color: var(--dsw-alias-attention, #d19a66);
 }
 
-/* 2.1: save/reset live in a toolbar directly under the header — always in
-   view at the top, never a scroll to the bottom of the section. */
+/* 2.1: the toolbar directly under the header — always in view at the top.
+   【变更】2026-10-06 (问题 5/4.1): 恢复默认 parks at the LEFT end (away from
+   the commit cluster, no misclicks), 取消+保存 cluster at the right end. */
 .actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.actionsEnd {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 
@@ -170,17 +177,9 @@
   flex: none;
 }
 
-/* 批次B-D: an out-of-catalog model (hand-edited file / removed model / left
-   the chosen provider's menu) keeps its raw id on the anchor; this chip
-   explains why the name is missing. */
-.notInCatalog {
-  align-self: flex-start;
-  padding: 1px 8px;
-  border-radius: 9px;
-  font-size: 11px;
-  color: var(--dsw-alias-attention, #d19a66);
-  background: color-mix(in srgb, var(--dsw-alias-attention, #d19a66) 12%, transparent);
-}
+/* 批次B-D's 未在目录 chip is GONE (问题 5/4.3): the store normalizes the
+   draft against the catalog and provider switches re-point the model, so a
+   dangling id can no longer render. */
 
 .block {
   display: flex;
@@ -323,23 +322,35 @@
   color: var(--tier-color);
 }
 
+/* 【变更】2026-10-06 (问题 5/4.5): the tier's groups STACK — every custom
+   功能分类, the bare-rule run, and every preset pack renders as its own
+   SEGMENT (分段显示), never inline-clumped into one row. */
 .ruleTags {
   display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 /* 【变更】2026-10-06 (问题 3): a custom 功能分类 groups its own rules — the
-   label + a master switch, then the group's tags inline inside one frame. */
+   label + a master switch, then the group's 中文/英文 tag lines inside one
+   framed segment. */
 .ruleCategory {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px 8px;
   border: 1px dashed var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
   border-radius: 9px;
+}
+
+/* One segment's head: the group/pack name beside its master switch. */
+.ruleHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .ruleCategoryName {
@@ -348,11 +359,36 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* The bare (uncategorised) rules — a segment without a frame. */
+.ruleBare {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 .rulePack {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 9px;
+}
+
+/* 问题 5 (4.5): one language's line of tags inside a segment, captioned
+   中文/英文 only when the segment holds BOTH languages. */
+.segLine {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 5px;
+}
+
+.segLabel {
+  font-size: 10px;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .rulePackName {
@@ -371,6 +407,14 @@
   font-size: 11px;
   color: var(--dsw-alias-label-primary);
   background: color-mix(in srgb, var(--tier-color) 6%, transparent);
+  /* 问题 5 (4.5): the tag IS the switch — it reads clickable. */
+  cursor: pointer;
+}
+
+.presetTag:focus-visible,
+.keywordTag:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline-offset: 1px;
 }
 
 .presetBadge {
@@ -393,6 +437,8 @@
   border-radius: 9px;
   font-size: 12px;
   background: color-mix(in srgb, var(--tier-color) 5%, transparent);
+  /* 问题 5 (4.5): the tag IS the switch — a click parks/revives the word. */
+  cursor: pointer;
 }
 
 .keywordTagWords {

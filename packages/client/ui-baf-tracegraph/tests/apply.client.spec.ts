@@ -4,7 +4,7 @@
  *
  * 【变更】2026-10-06 (问题 1): the 轨迹图 toggle row moved from General
  * settings ('settings.general.item') INTO the 工作流 section
- * ('settings.workflow.item', order 5 — ahead of the 工作流图页签 row at
+ * ('settings.workflow.item', order 5 — ahead of the 工作流图 row at
  * order 10). The 工作流 settings section (owned here) still declares the
  * child slot and now hosts both rows.
  */

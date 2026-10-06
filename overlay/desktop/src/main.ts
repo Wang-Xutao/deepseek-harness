@@ -220,6 +220,13 @@ let quitting = false
 let prefs: AppPrefs = { ...DEFAULT_PREFS }
 let updateService: UpdateService | undefined
 
+/**
+ * 【变更】2026-10-06 (问题 2): a launch the OS auto-start entry started (it
+ * registers `--hidden`). The whole boot stays background: no splash, the main
+ * window loads hidden, and the tray appears instead.
+ */
+const hiddenLaunch = process.argv.includes('--hidden')
+
 function killChildTree(): void {
   if (child?.pid === undefined) return
   const pid = child.pid
@@ -317,6 +324,31 @@ function ensureTray(): void {
 function minimizeToTray(): void {
   ensureTray()
   mainWindow?.hide()
+}
+
+/**
+ * 【变更】2026-10-06 (问题 2): mirror the launch-at-login pref into the OS
+ * login entries (Windows Run key via Electron). The registered command reuses
+ * this executable with `--hidden`, so an auto-started launch boots straight to
+ * the tray — no splash wait (问题 2 的诉求), no window. Re-applied at every
+ * boot so an entry deleted by hand (or by a cleaner) converges back to the pref.
+ */
+function applyLaunchAtLogin(enabled: boolean): void {
+  if (process.platform !== 'win32' && process.platform !== 'darwin') return
+  try {
+    if (app.isPackaged) {
+      app.setLoginItemSettings({ openAtLogin: enabled, args: ['--hidden'] })
+    } else {
+      // Dev runs electron.exe directly, which needs the app directory as its
+      // first argument to load this checkout — register THAT shape so the
+      // toggle is real (and verifiable) in a dev build too.
+      app.setLoginItemSettings({
+        openAtLogin: enabled, path: process.execPath, args: [app.getAppPath(), '--hidden'],
+      })
+    }
+  } catch (err) {
+    logLaunchFailure(`设置开机自启动失败：${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 function applyCloseAction(action: Exclude<CloseAction, 'ask'>): void {
@@ -482,8 +514,15 @@ async function createWindow(url: string): Promise<void> {
   // web dist's first-paint, doubling perceived startup time.
   closeSplash()
   markLaunch('splash-closed')
-  markLaunch('main-shown')
-  window.show()
+  if (hiddenLaunch) {
+    // 【变更】2026-10-06 (问题 2): auto-started launch — the window stays
+    // hidden with the tray up; it still loads the app now so 打开窗口 from
+    // the tray reveals an already-ready page.
+    ensureTray()
+  } else {
+    markLaunch('main-shown')
+    window.show()
+  }
   markLaunch('main-load-url')
   await window.loadURL(url)
 }
@@ -738,8 +777,12 @@ async function promptUpdateAfterReady(
 ipcMain.handle('prefs:get', () => prefs)
 
 ipcMain.handle('prefs:set', (_event, raw: unknown) => {
+  const before = prefs.launchAtLogin
   prefs = mergePrefs(prefs, raw)
   savePrefs(prefs)
+  // 【变更】2026-10-06 (问题 2): the OS login entry follows the pref the moment
+  // it changes, not on the next boot.
+  if (prefs.launchAtLogin !== before) applyLaunchAtLogin(prefs.launchAtLogin)
   return prefs
 })
 
@@ -801,8 +844,17 @@ ipcMain.on('close-dialog:choice', (_event, payload: { action?: string, remember?
 app.whenReady().then(async () => {
   prefs = loadPrefs()
   enableLaunchTimings(app.getPath('userData'))
-  openSplash()
-  markLaunch('splash-shown')
+  if (hiddenLaunch) {
+    // 【变更】2026-10-06 (问题 2): auto-started launch — tray only, no splash
+    // (开机后台自启动并最小化到托盘，不显示 splash 界面).
+    ensureTray()
+  } else {
+    openSplash()
+    markLaunch('splash-shown')
+  }
+  // Converge the OS login entry to the pref every boot (a hand-deleted entry
+  // comes back; a stale entry from an uninstalled build does not linger).
+  applyLaunchAtLogin(prefs.launchAtLogin)
   updateService = createUpdateService()
 
   const seedPlugin = packagedPluginRoot()
@@ -825,7 +877,9 @@ app.whenReady().then(async () => {
     return
   }
 
-  void promptUpdateAfterReady(checkPromise)
+  // A hidden auto-start never prompts: the update dialog is modal to a window
+  // the person has not opened — the nav red dot carries the news instead.
+  if (!hiddenLaunch) void promptUpdateAfterReady(checkPromise)
 })
 
 app.on('before-quit', () => {

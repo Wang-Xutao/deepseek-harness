@@ -224,7 +224,10 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
           bottom. */}
       {check !== null ? (
         <div
-          className={check.status === 'error' ? joinClasses(css.checkResult, css.checkResultError) : css.checkResult}
+          className={joinClasses(
+            css.checkResult,
+            check.status === 'error' ? css.checkResultError : css.checkResultOk,
+          )}
           data-testid="update-check-result"
         >
           <p className={css.checkStatus}>
@@ -273,11 +276,10 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
       <h3 className={css.subtitle}>{t('packagesHeading')}</h3>
       {/* 【变更】2026-10-05 (插件包说明): each package row carries a static
           plain-language description under its name — the release notes say
-          what CHANGED, this says what the package IS. */}
-      <p className={css.packagesHint}>{t('packagesHint')}</p>
-      {/* 【变更】2026-10-06 (问题 6): the hot-upgrade path the packages ALSO
-          support — /baf-update without an app restart. */}
-      <p className={css.packagesHint}>{t('hotUpgradeHint')}</p>
+          what CHANGED, this says what the package IS.
+          【变更】2026-10-06 (问题 8): the packagesHint and hotUpgradeHint
+          paragraphs are GONE — the customer asked for the two explanatory
+          lines removed; the rows' own descriptions carry the meaning now. */}
       <ul className={css.rows}>
         <VersionRow
           label={t('labelBafCore')}

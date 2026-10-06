@@ -8,7 +8,6 @@ export type UpdatesSettingsKey =
   | 'labelBaf'
   | 'labelDsh'
   | 'packagesHeading'
-  | 'packagesHint'
   | 'descBafCore'
   | 'labelBafWorkflow'
   | 'descBafWorkflow'
@@ -34,7 +33,6 @@ export type UpdatesSettingsKey =
   | 'updateNotes'
   | 'currentVersion'
   | 'latestVersion'
-  | 'hotUpgradeHint'
 
 export const en: Record<UpdatesSettingsKey, string> = {
   nav: 'Version & updates',
@@ -44,7 +42,6 @@ export const en: Record<UpdatesSettingsKey, string> = {
   labelBaf: 'BAF DSH DESKTOP',
   labelDsh: 'DeepSeek Harness',
   packagesHeading: 'BAF packages',
-  packagesHint: 'These packages ship with the app and update together with it — nothing to install or manage on your own.',
   labelBafCore: '@deepseek-ai/dsh-baf-core',
   descBafCore: 'The workflow kernel: stages, gates, and task structures every BAF feature builds on, plus the enterprise baseline loader.',
   labelBafWorkflow: '@deepseek-ai/dsh-baf-workflow',
@@ -71,7 +68,6 @@ export const en: Record<UpdatesSettingsKey, string> = {
   updateNotes: 'What is new',
   currentVersion: 'Current version',
   latestVersion: 'Latest available version',
-  hotUpgradeHint: 'BAF packages also hot-upgrade: run /baf-update in a session to check and update them without restarting the app; /baf-update-rollback rolls a hot scope back to its last applied bits.',
 }
 
 export const zh: Record<UpdatesSettingsKey, string> = {
@@ -82,7 +78,6 @@ export const zh: Record<UpdatesSettingsKey, string> = {
   labelBaf: 'BAF DSH DESKTOP',
   labelDsh: 'DeepSeek Harness',
   packagesHeading: 'BAF 插件包',
-  packagesHint: '以下插件包随应用一起安装、一起更新，无需单独安装或管理。',
   labelBafCore: '@deepseek-ai/dsh-baf-core',
   descBafCore: '工作流内核：定义阶段、门禁、任务等所有 BAF 功能共用的核心结构，并加载企业基线。',
   labelBafWorkflow: '@deepseek-ai/dsh-baf-workflow',
@@ -109,5 +104,4 @@ export const zh: Record<UpdatesSettingsKey, string> = {
   updateNotes: '更新内容',
   currentVersion: '当前版本',
   latestVersion: '最新可升级版本',
-  hotUpgradeHint: 'BAF 插件包还支持热升级：在会话里执行 /baf-update，无需重启应用即可检查并更新插件包；/baf-update-rollback 可把热升级回滚到上一版。',
 }

@@ -349,9 +349,12 @@ export class FeaturedSectionController {
         }
       }
       const failed = response.value.outcomes.filter(outcome => !outcome.result.ok)
+      // 【变更】2026-10-06 (问题 7): the bulk path carries the refusal code too,
+      // so a bulk disable that hits a protected bundle speaks the mapped
+      // sentence instead of the raw code.
       draft.notice = failed.length === 0
         ? this.noticeOf('ok', '')
-        : this.noticeOf('failed', failed[0]?.result.error?.diagnostic ?? failed[0]?.result.error?.code ?? '')
+        : this.noticeOf('failed', failed[0]?.result.error?.diagnostic ?? failed[0]?.result.error?.code ?? '', failed[0]?.result.error?.code)
     })
     await this.load()
   }

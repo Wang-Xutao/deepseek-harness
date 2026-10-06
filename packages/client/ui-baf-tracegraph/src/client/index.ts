@@ -9,7 +9,7 @@
  *   no-op after the master merge; see ../workflow-settings.ts).
  * - 【变更】2026-10-06 (问题 1): the toggle lives under the dedicated 工作流
  *   settings section (`settings.workflow.item`, order 5 — ahead of the
- *   工作流图页签 row), no longer under General settings.
+ *   工作流图 row), no longer under General settings.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'

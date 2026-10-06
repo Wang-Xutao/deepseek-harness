@@ -24,6 +24,14 @@ function stateKey(state: FeaturedPluginCard['state']): FeaturedSettingsKey {
   }
 }
 
+/**
+ * 【变更】2026-10-06 (问题 7): refusal codes the notice translates into locale
+ * sentences — the raw code (`management-required`) never reaches the person.
+ */
+const NOTICE_REASONS: Readonly<Record<string, FeaturedSettingsKey>> = {
+  'management-required': 'reasonManagementRequired',
+}
+
 /** One card's action buttons for its state, minus the one busy running. */
 function CardActions(props: {
   t: (key: FeaturedSettingsKey) => string
@@ -78,6 +86,16 @@ export function FeaturedSection(props: FeaturedSectionProps) {
   const state = props.useFeaturedSection(snapshot => snapshot)
   const cardBusy = (id: string): boolean => state.busy?.id === id
   const anyRun = state.busy !== undefined || state.bulk !== undefined
+  // 【变更】2026-10-06 (问题 7): a mapped refusal code speaks its locale
+  // sentence; only an unmapped failure falls back to the Host's words.
+  const noticeText = state.notice === undefined ? '' : (() => {
+    const notice = state.notice
+    if (notice.kind === 'restart') return t('restartRequired')
+    if (notice.kind === 'ok') return t('applied')
+    const key = notice.code === undefined ? undefined : NOTICE_REASONS[notice.code]
+    const reason = key !== undefined ? t(key) : notice.text
+    return reason.length > 0 ? `${t('operationFailed')}：${reason}` : t('operationFailed')
+  })()
 
   return (
     <div className={css.section} data-testid="featured-section">
@@ -243,14 +261,15 @@ export function FeaturedSection(props: FeaturedSectionProps) {
       ) : null}
 
       {state.notice !== undefined ? (
-        <p
-          className={state.notice.kind === 'failed' ? css.statusError : css.status}
+        /* 【变更】2026-10-06 (问题 7): a failure is a RED FRAMED alert (醒目),
+           not a quiet status line. */
+        <div
+          className={state.notice.kind === 'failed' ? css.noticeError : css.status}
           data-testid="featured-notice"
+          role={state.notice.kind === 'failed' ? 'alert' : 'status'}
         >
-          {state.notice.kind === 'restart' ? t('restartRequired')
-            : state.notice.kind === 'ok' ? t('applied')
-              : `${t('operationFailed')}${state.notice.text.length > 0 ? `：${state.notice.text}` : ''}`}
-        </p>
+          {noticeText}
+        </div>
       ) : null}
     </div>
   )

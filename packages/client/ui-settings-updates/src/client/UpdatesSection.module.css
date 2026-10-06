@@ -169,20 +169,37 @@
 
 /* 【变更】2026-10-06 (问题 6): the check output block sits directly under the
    action buttons — status line (full error sentence on failure) plus the
-   current + latest version pair. */
+   current + latest version pair.
+   【变更】2026-10-06 (问题 8): success and failure paint the block — green
+   status + border when the check answered, red status + border + tint when
+   it failed, so the outcome reads at a glance (清晰直观醒目). */
 .checkResult {
   display: flex;
   flex-direction: column;
   gap: 2px;
   margin: 0;
   padding: 8px 12px;
-  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
   border-radius: 8px;
-  background: var(--dsw-alias-bg-elevated, transparent);
+}
+
+.checkResultOk {
+  border: 1px solid var(--dsw-alias-state-success-border, rgba(96, 165, 250, 0.4));
+  background: color-mix(in srgb, var(--dsw-alias-state-success-border, rgba(125, 169, 132, 0.5)) 10%, transparent);
+}
+
+.checkResultOk .checkStatus {
+  color: var(--dsw-alias-state-success-label, #7ba984);
+  font-weight: 600;
+}
+
+.checkResultError {
+  border: 1px solid var(--dsw-alias-state-danger-border, rgba(204, 102, 102, 0.5));
+  background: color-mix(in srgb, var(--dsw-alias-state-danger-label, #cc6666) 8%, transparent);
 }
 
 .checkResultError .checkStatus {
   color: var(--dsw-alias-state-danger-label);
+  font-weight: 600;
 }
 
 .checkStatus {

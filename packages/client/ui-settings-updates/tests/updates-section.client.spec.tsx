@@ -37,6 +37,14 @@ const AVAILABLE: CheckUpdateResult = {
   checkedAt: '2026-01-01T00:00:00.000Z',
 }
 
+/** The failing check the colored-result test reuses (问题 8 配色). */
+const ERROR_RESULT: CheckUpdateResult = {
+  status: 'error',
+  versions: { ...VERSIONS },
+  error: '无法读取更新通道（HTTP 404）。',
+  checkedAt: '2026-01-01T00:00:00.000Z',
+}
+
 afterEach(() => {
   cleanup()
   delete (window as { bafDesktop?: unknown }).bafDesktop
@@ -77,9 +85,12 @@ describe('UpdatesSection', () => {
     // 【变更】2026-10-05 (插件包说明): every package row carries a static
     // plain-language description — what the package DOES — under its name,
     // independent of the release notes the bridge may hand.
+    // 【变更】2026-10-06 (问题 8): the packagesHint paragraph is GONE — the
+    // heading plus the rows' own descriptions carry the section now.
     await waitFor(() => {
-      expect(screen.getByText('packagesHint')).toBeTruthy()
+      expect(screen.getByText('packagesHeading')).toBeTruthy()
     })
+    expect(screen.queryByText('packagesHint')).toBeNull()
     for (const key of [
       'descBafCore', 'descBafWorkflow', 'descBafOpenspec', 'descBafStandard',
       'descBafQuality', 'descBafGuard', 'descBafScaffold',
@@ -300,8 +311,11 @@ describe('UpdatesSection', () => {
     })
   })
 
-  it('states the hot-upgrade path for the BAF packages (问题 6 热升级)', async () => {
-    const bridge: BafDesktopBridge = {
+  it('paints the check result green on success and red on failure (问题 8 配色)', async () => {
+    // 【变更】2026-10-06 (问题 8): the hot-upgrade hint paragraph is gone (its
+    // test retired with it); success and failure now carry DIFFERENT colors —
+    // the result block's state class is the contract.
+    const okBridge: BafDesktopBridge = {
       isDesktop: true,
       getPrefs: async () => ({ closeAction: 'ask' }),
       setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
@@ -311,10 +325,25 @@ describe('UpdatesSection', () => {
       getLastCheckResult: async () => AVAILABLE,
       onUpdateProgress: () => () => {},
     }
-    window.bafDesktop = bridge
+    window.bafDesktop = okBridge
     render(<UpdatesSection {...kit} t={t as never} />)
     await waitFor(() => {
-      expect(screen.getByText('hotUpgradeHint')).toBeTruthy()
+      const result = screen.getByTestId('update-check-result')
+      expect(result.className).toContain('checkResultOk')
+      expect(result.className).not.toContain('checkResultError')
+    })
+    cleanup()
+    const errorBridge: BafDesktopBridge = {
+      ...okBridge,
+      checkForUpdate: async () => ERROR_RESULT,
+      getLastCheckResult: async () => ERROR_RESULT,
+    }
+    window.bafDesktop = errorBridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      const result = screen.getByTestId('update-check-result')
+      expect(result.className).toContain('checkResultError')
+      expect(result.className).not.toContain('checkResultOk')
     })
   })
 

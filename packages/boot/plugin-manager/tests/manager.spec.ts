@@ -261,6 +261,54 @@ it.each(['missing files', 'missing declaration'])('keeps a running management bu
   })
 })
 
+// 【变更】2026-10-06 (问题 7): protection is SOLE-PROVIDER — a bundle that
+// merely re-declares a protected module another SELECTED bundle also mounts
+// (the feishu bundle re-declares client-connection the app bundle provides)
+// may be disabled; the other layer keeps the module loaded.
+function writeShieldBundles(dir: string, selected: string[]): void {
+  const write = (name: string, rows: unknown[]) => {
+    const path = join(dir, 'node_modules', name)
+    mkdirSync(path, { recursive: true })
+    writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    writeFileSync(join(path, 'cordis.patch.yml'), JSON.stringify([{ insert: rows }]))
+  }
+  write('shield', [{ id: 'shared-conn', name: '@deepseek-ai/dsh-client-connection' }])
+  write('carrier', [{ id: 'carrier-conn', name: '@deepseek-ai/dsh-client-connection' }])
+  // A loadable stand-in for the protected module name, so boot never trips on
+  // an unresolvable import — the protection logic only reads the row names.
+  const stub = join(dir, 'node_modules', '@deepseek-ai', 'dsh-client-connection')
+  mkdirSync(stub, { recursive: true })
+  writeFileSync(join(stub, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-client-connection', version: '1.0.0', type: 'module', main: 'index.mjs' }))
+  writeFileSync(join(stub, 'index.mjs'), 'export function apply() {}\n')
+  const manifest = readProfileManifest('test', dir)
+  manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: selected } }
+  writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+}
+
+it('refuses to disable the sole provider of a protected module (问题 7 sole-provider)', async () => {
+  // Only shield is selected — it alone mounts client-connection, so disabling
+  // it would strand the connection service; the refusal stands.
+  const { manager, dir } = await fixture('startup', false, undefined, {}, undefined, d => writeShieldBundles(d, ['core', 'extra', 'shield']))
+  expect((await manager.listBundles()).find(row => row.name === 'shield')).toMatchObject({
+    enabled: true, readOnlyReason: 'management-required', removable: false,
+  })
+  expect(await manager.setBundleEnabled('shield', false)).toMatchObject({
+    changed: false, application: 'failed', error: { code: 'management-required' },
+  })
+  expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toContain('shield')
+})
+
+it('lets a bundle that re-declares a protected module another selected bundle provides be disabled (问题 7)', async () => {
+  // carrier also mounts client-connection under its own row — shield is a
+  // redundant provider, so disabling it leaves the module loaded.
+  const { manager, dir } = await fixture('startup', false, undefined, {}, undefined, d => writeShieldBundles(d, ['core', 'extra', 'shield', 'carrier']))
+  expect((await manager.listBundles()).find(row => row.name === 'shield')?.readOnlyReason).toBeUndefined()
+  expect(await manager.setBundleEnabled('shield', false)).toMatchObject({
+    changed: true, application: 'restart-required',
+  })
+  expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toEqual(['core', 'extra', 'carrier'])
+})
+
 it.each(['live', 'startup'] as const)('removes a bundle skipped at startup in a %s profile', async (mode) => {
   const { manager, dir } = await fixture(mode, false, undefined, {}, undefined, (dir) => {
     rmSync(join(dir, 'node_modules', 'extra'), { recursive: true })

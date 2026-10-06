@@ -12,6 +12,9 @@
       "path": "../../api/remotes/tsconfig.client.json"
     },
     {
+      "path": "../ui-settings-baf-route/tsconfig.client.json"
+    },
+    {
       "path": "../connection/tsconfig.client.json"
     },
     {
