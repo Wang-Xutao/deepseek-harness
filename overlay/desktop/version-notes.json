@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "demo33 四问题批次\n① 账本双命名：bug-fix-path 模式独立落盘 bug-fix-path-ledger.json，rail 按模式裁剪\n② checklist.md 每项中文明确检查项与判定标准\n③ verify.md 升级为正式测试报告（检查项注册表 + 四段式结构）\n④ 变更总览新增「在浏览器中打开」与独立深色看板页",
-    "notesEn": "Demo33 four-issue round\n(1) dual-named implementation ledger: bug-fix-path writes bug-fix-path-ledger.json; the rail prunes by mode\n(2) checklist.md items carry named Chinese checks with explicit criteria\n(3) verify.md is now a formal test report (check registry + four-section layout)\n(4) change overview gains open-in-browser plus a standalone dark dashboard"
+    "notesZh": "六问题批·第二轮\n① 模型菜单显示原始模型名（不再带供应商后缀）\n② 模型分级改用 Commander/Reviewer/Worker 命名，中文作职责解释\n③ 保底规则文案通俗化（规则逻辑不变：验证失败的返工至少 Reviewer 档）\n④ OpenSpec×Matt 融合：产品自带默认工程规则文档，开箱即生效，企业可整体替换\n⑤ 更新失败只报「故障码 U-0x + 一句人话」，技术细节进帮助文档故障码表\n⑥ 设置→工作流新增「BAF 工程规范」规范总览（只读）：七个插件包规则当前值 + 规则文档全文",
+    "notesEn": "Six-issue round 2\n(1) model menus show the raw model name (provider suffixes removed)\n(2) tiers renamed Commander/Reviewer/Worker with Chinese duty notes\n(3) floor-rule wording made plain (logic unchanged: verify-failed redos run at Reviewer or above)\n(4) OpenSpec×Matt fusion: bundled default rules document, active out of the box, enterprise-replaceable\n(5) update failures report fault code U-0x + one plain line; details live in the help-doc fault table\n(6) Settings→Workflow gains the read-only BAF standards overview: current rule values for all seven packages + the full rules document"
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
@@ -13,16 +13,16 @@
       "notesEn": "Baseline loader, adapter stubs, bafCore isolate mount"
     },
     "@deepseek-ai/dsh-baf-workflow": {
-      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go-path 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级；Phase 7 verify CheckRunner 接入 stack/guard adapter；§22.17 J：分类弹窗两路径改道（intake-mode-set）+ 缺陷草案五字段 + auto-pop 宿主行（状态驱动自动弹）+ 门弹窗通道；卡死修复 A–G：/baf-go 直绑唯一活跃变更、铸造设焦点、已确认未 open 不重弹、Tab 恢复按钮、mode= 硬要求、setIntakeMode 补救臂、git_unavailable 审计",
-      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go-path seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation; Phase 7 verify CheckRunner wires stack/guard adapters; §22.17 J: clickable path re-routing in the classify dialog (intake-mode-set) + five-field bug draft + auto-pop host row (state-driven auto popup) + gate dialog channel"
+      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go-path 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级；Phase 7 verify CheckRunner 接入 stack/guard adapter；§22.17 J：分类弹窗两路径改道（intake-mode-set）+ 缺陷草案五字段 + auto-pop 宿主行（状态驱动自动弹）+ 门弹窗通道；卡死修复 A–G：/baf-go 直绑唯一活跃变更、铸造设焦点、已确认未 open 不重弹、Tab 恢复按钮、mode= 硬要求、setIntakeMode 补救臂、git_unavailable 审计；OpenSpec×Matt 融合：会话提示词节 baf:standard-rules 每回合注入工程规则源",
+      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go-path seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation; Phase 7 verify CheckRunner wires stack/guard adapters; §22.17 J: clickable path re-routing in the classify dialog (intake-mode-set) + five-field bug draft + auto-pop host row (state-driven auto popup) + gate dialog channel; OpenSpec×Matt fusion: the baf:standard-rules session section injects the standards source every turn"
     },
     "@deepseek-ai/dsh-baf-openspec": {
-      "notesZh": "OpenSpec 本地文件适配器：骨架、校验、原子归档",
-      "notesEn": "Local file-mode OpenSpec adapter: skeleton, validate, atomic archive"
+      "notesZh": "OpenSpec 本地文件适配器：骨架、校验、原子归档；design/tasks 模板 TODO 提示规则源锚点（偏离需注明、测试遵循 testing-discipline）",
+      "notesEn": "Local file-mode OpenSpec adapter: skeleton, validate, atomic archive; design/tasks template TODOs point at the rules source anchors"
     },
     "@deepseek-ai/dsh-baf-standard": {
-      "notesZh": "baseline 摘要 + 提示词渲染：占位态返回 policy_missing，给出 sourceRef#anchor 指引",
-      "notesEn": "Baseline summary + prompt render: placeholder state returns policy_missing with sourceRef#anchor guidance"
+      "notesZh": "baseline 摘要 + 提示词渲染：产品默认规则文档 .baf/standards/default-rules.md 开箱即挂接（8 规则域，企业改 mattPocockRulesRef 整体替换）；占位态返回 policy_missing，给出 sourceRef#anchor 指引",
+      "notesEn": "Baseline summary + prompt render: the bundled default rules document wires up out of the box (8 rule areas; enterprises repoint mattPocockRulesRef to swap wholesale); placeholder state returns policy_missing with sourceRef#anchor guidance"
     },
     "@deepseek-ai/dsh-baf-quality": {
       "notesZh": "C 栈质量执行器：build/test/coverage/analyzer 命令注入；占位态返回 policy_missing 与工具版本",
@@ -33,8 +33,8 @@
       "notesEn": "Tool-call hard gate: synchronous fs/shell adjudication + projection re-read + secret scan + dangerous/indirect shell pattern detection; install row hooks tools.guard for every agent"
     },
     "@deepseek-ai/dsh-baf-scaffold": {
-      "notesZh": "工作区 init 骨架：基线模板 + openspec 目录；人工确认才落盘，差异文件走 .baf-backup-<时间戳> 备份",
-      "notesEn": "Workspace init skeleton: baseline template + openspec layout; requires human confirmation, divergent files moved to .baf-backup-<timestamp>"
+      "notesZh": "工作区 init 骨架三产物：基线配置 + 默认工程规则文档（.baf/standards/default-rules.md）+ openspec 目录；人工确认才落盘，差异文件走 .baf-backup-<时间戳> 备份",
+      "notesEn": "Workspace init skeleton, three artifacts: baseline config + default rules document (.baf/standards/default-rules.md) + openspec layout; requires human confirmation, divergent files moved to .baf-backup-<timestamp>"
     }
   }
 }
