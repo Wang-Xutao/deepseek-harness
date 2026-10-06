@@ -52,11 +52,17 @@
 
 ## 剩余风险（按危害排序）
 
-1. **打包产物仍是旧桌面 lib**：`dist/win-unpacked/resources/app.asar` 与 03:03 的 `baf-dsh-Setup-0.0.23.exe` 均无 launchAtLogin — 装包形态下问题 2 开关会静默无效。发版前必须重跑 `dist`（Tier-2 范围未重打包）。
+1. ~~**打包产物仍是旧桌面 lib**~~ **已闭环（10-06 下午重打包）**：重跑 pack-dsh + `dist:dir` 后复核 — `dist/win-unpacked/resources/app.asar` 含 launchAtLogin（18 处），`resources/dsh/node_modules/…ui-settings-baf-route/lib/client.js` 与 packages 侧逐字节一致。旧的 `baf-dsh-Setup-0.0.23.exe`（03:03）仍旧勿用。
 2. **更新绿路径未走真网**：真机只见红（404）路径；绿框由单测覆盖，`baf-channel-stable` 发版后建议真机复验一次。
-3. **开机自启动 dev 形态验证**：注册表写的是 `electron.exe <appPath> --hidden`；安装形态（固定 exe）仅代码审读 + 单测，未装包实测。
+3. ~~**开机自启动安装形态未实测**~~ **已闭环（10-06 打包 exe 冒烟）**：`dist/win-unpacked/baf-dsh.exe --remote-debugging-port=9203` 实测（packprobe.mjs，`fail: []`）— 开关 ON 写入 `com.baf.dsh.desktop = <…win-unpacked\baf-dsh.exe> --hidden`（指向打包 exe 本体，非 dev electron.exe 形态），OFF 即消失；推荐插件 4 卡、更新红框、删段文案均与 dev 一致。
 4. `--hidden` 冷启的「托盘在位」未直接探（OS 托盘无 CDP 面）；以 ensureTray 分支必经 + 无窗口双证替代。
 5. 隔离 profile web 的 workspace 复原项未回退（见上），下次若需纯净 web 宿主注意此项。
+
+## 交付物（10-06 下午）
+
+- 复验：web 3180 + 桌面 dev 双端 webprobe-v4 / desktopprobe-v4 重跑 `fail: []`（对 commit `17c7091988`）。
+- web 端：`node apps/cli/lib/bin.js --profile web --port 3080 --no-open`（带 `BAF_DSH_FEATURED_MANIFEST`），token 见交付消息。
+- 桌面端：`overlay/desktop/dist/win-unpacked/baf-dsh.exe`（免安装 dir 构建，无 NSIS；pack-dsh 戳 2026-10-06T06:02:47Z，14:04 出包，含上述冒烟证据 v4-pack-*.png）。
 
 ## 代码内批注口径对照
 
