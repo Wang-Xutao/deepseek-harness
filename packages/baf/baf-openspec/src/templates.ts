@@ -41,6 +41,12 @@ TODO: one entry per blocking question, each with:
 - Answer (decision source + date) or \`deferred: <reason>\`:
 - Decided / Deferred / Out-of-scope:
 
+Asking discipline (grill-me style): ask ONE blocking question at a time, the
+most blocking first. Each question = one line of context + options with a
+recommended default; when the customer cannot answer, record your own
+recommendation and mark it \`deferred\`. Design starts only when the blocking
+list is empty.
+
 ## Acceptance criteria
 
 TODO: testable acceptance conditions. Each must be checkable by a command or an observable behavior.

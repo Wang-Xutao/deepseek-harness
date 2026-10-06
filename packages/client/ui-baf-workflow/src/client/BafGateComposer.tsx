@@ -35,8 +35,11 @@
  */
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { answerGateOption, answerGateRevision, gateAskViewOf, isSecondaryOptionLabel, type GateAskCarrier } from './gate-ask.ts'
+import { answerGateOption, answerGateRevision, dispatchNodeOfGate, gateAskViewOf, isSecondaryOptionLabel, type GateAskCarrier } from './gate-ask.ts'
 import { isWorkflowTabActive, subscribeTabActivity } from './tab-activity.ts'
+import { RouteDispatchLine } from './WorkflowView.tsx'
+import type { WorkflowNodeId, WorkflowTabRoutePreview } from './tab-types.ts'
+import type { WorkflowTabKey } from './locales.ts'
 import css from './BafGateComposer.module.css'
 
 /** Props of the elected composer entry (owner share + the `matched` carrier). */
@@ -52,6 +55,13 @@ export interface BafGateComposerProps {
    * artifact rows then render as plain (non-clickable) chips.
    */
   readonly openArtifact?: (path: string) => void
+  /**
+   * 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview loader — same
+   * remote the Tab cards use. Absent in tests; the line simply never renders.
+   */
+  readonly routePreview?: (changeId: string, node: WorkflowNodeId) => Promise<WorkflowTabRoutePreview>
+  /** Tab locale translator (the preview line's two keys live in the Tab NS). */
+  readonly t?: (key: WorkflowTabKey) => string
 }
 
 /**
@@ -106,13 +116,23 @@ function useConversationPaneRect(sentinel: React.RefObject<HTMLDivElement | null
  */
 export function bindGateOpenArtifact(
   open: (sessionId: string, path: string) => void,
+  extras?: {
+    routePreview?: (sessionId: string, changeId: string, node: WorkflowNodeId) => Promise<WorkflowTabRoutePreview>
+    t?: (key: WorkflowTabKey) => string
+  },
 ): (props: BafGateComposerProps) => React.ReactElement | null {
   return function BafGateComposerBound(props: BafGateComposerProps): React.ReactElement | null {
     const sessionId = props.matched.sessionId
+    const preview = extras?.routePreview
+    const translator = extras?.t
     return (
       <BafGateComposer
         {...props}
         openArtifact={(path) => { open(sessionId, path) }}
+        {...preview === undefined ? {} : {
+          routePreview: (changeId: string, node: WorkflowNodeId) => preview(sessionId, changeId, node),
+        }}
+        {...translator === undefined ? {} : { t: translator }}
       />
     )
   }
@@ -125,7 +145,7 @@ export function bindGateOpenArtifact(
  * @returns the card element, or null.
  */
 export function BafGateComposer(props: BafGateComposerProps): React.ReactElement | null {
-  const { matched, sessionId, openArtifact } = props
+  const { matched, sessionId, openArtifact, routePreview, t } = props
   const tabActive = useSyncExternalStore(
     subscribeTabActivity,
     () => sessionId !== undefined && isWorkflowTabActive(sessionId),
@@ -201,6 +221,17 @@ export function BafGateComposer(props: BafGateComposerProps): React.ReactElement
                 ))}
             </section>
           ))}
+          {/* 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview — the
+           * tier·model the confirm's work order runs on (Auto sessions only;
+           * gates that dispatch nothing model-authored render no line). */}
+          {routePreview !== undefined && t !== undefined && (
+            <RouteDispatchLine
+              load={routePreview}
+              changeId={view.changeId ?? null}
+              node={dispatchNodeOfGate(view.id)}
+              t={t}
+            />
+          )}
           {/* 用户问题 1.6: horizontal row, confirm emphasized. */}
           <div className={css.options}>
             {view.options.map(opt => (

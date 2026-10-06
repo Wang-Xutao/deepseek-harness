@@ -195,8 +195,10 @@ export function artifactPathFor(
  * The implement stage's pass conditions, quoted from `implementGate` (the doc
  * stages' prose table has no `implement` row — that stage's gate is the
  * ledger inside `plan.json`, not an article).
+ * 【变更】2026-10-07 (九点批 问题 9): exported for the read-only gates overview
+ * (the projection quotes the exact conditions the gate checks).
  */
-const IMPLEMENT_REQUIREMENTS_ZH = [
+export const IMPLEMENT_REQUIREMENTS_ZH = [
   '实现账本（plan.json / bug-fix-path-ledger.json）里每个任务的 done 标为 true（剩余任务做完并标记）',
   '改动文件全部在实现账本的 allowlist 内',
   // 【变更】2026-09-28 (用户问题 8): the checklist is implement's exit
@@ -272,6 +274,11 @@ export function workOrderText(signal: DispatchSignal): string {
     // off scope_exceeded, and concluded the chosen fix was infeasible.
     ...(cause === 'verify-failed'
       ? ['1a. 若修复必须新建 allowlist 之外的文件：先把文件路径加进 plan.json 的 allowlist（并补对应任务）再创建；拿不准要不要扩范围时用 baf_question_ask 问客户；']
+      : []),
+    // 【变更】2026-10-07 (九点批 问题 1 · grill-me 轻量融入): clarify 派单带一条
+    // 追问纪律（风格提示，不是完成条件 — 裁决门仍只查 clarify.md 形状）。
+    ...(node === 'clarify'
+      ? ['1b. 追问纪律：一次只问一个最阻塞的问题（先问卡住后续决策的）；每问给一句背景＋选项与推荐默认；客户答不上就给出你的建议并标记「待定」；阻塞问题清零后才算澄清完成；']
       : []),
     '2. 补齐后立即结束本回合——系统会在回合结束时自动弹出下一阶段裁决卡，无需你调用任何命令；',
     '3. 需要客户决策时调用 baf_question_ask，不要用文字向客户提问；',

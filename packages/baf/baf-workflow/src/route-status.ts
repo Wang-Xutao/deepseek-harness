@@ -12,6 +12,7 @@ import {
   resolvePhaseTier,
   type RouteTier,
   type RouteTierConfig,
+  type TierRouteChangeRow,
   type TierRouteStatusView,
   type WorkflowNode,
   type WorkflowTabRouteStatus,
@@ -54,21 +55,54 @@ export function lastRouteAuditByPhase(
 }
 
 /**
+ * 【变更】2026-10-07 (九点批 问题 4): fold the audits a second way — LAST
+ * `baf/route-resolved` audit per CHANGE (log order wins). The 变更总览 rows
+ * badge each change with the model that last served it; entries without a
+ * changeId are skipped.
+ * @param entries - audit entries in log order.
+ * @returns last audit per changeId, when the audits carry one.
+ */
+export function lastRouteAuditByChange(entries: Iterable<RouteAuditEntry>): Readonly<Record<string, TierRouteChangeRow>> {
+  const last: Record<string, TierRouteChangeRow> = {}
+  for (const entry of entries) {
+    if (entry.changeId === undefined || entry.changeId === '') continue
+    last[entry.changeId] = {
+      provider: entry.provider,
+      model: entry.model,
+      ...entry.tier === undefined ? {} : { tier: entry.tier },
+      at: entry.at,
+    }
+  }
+  return last
+}
+
+/**
  * Build the Tab's「当前路由」payload: `off` unless the config enables tier
  * routing, else one row per phase with the mapped tier's model as preferred
  * and the last audit (if any) as actual.
+ * 【变更】2026-10-07 (九点批 问题 5): the optional `sessionModel` (the
+ * session's last `request/header` provider/model + auto flag) rides the
+ * routed view so the empty state can explain itself.
+ * 【变更】2026-10-07 (九点批 问题 4): the optional `byChange` (last audit per
+ * change) rides along for the 变更总览 row badges.
  * @param config - config as read from `~/.dsh/baf-route-config.json`.
  * @param auditsByPhase - last `baf/route-resolved` audit per phase.
+ * @param sessionModel - the session's current raw model, when known.
+ * @param byChange - last audit per changeId, when known.
  * @returns the wire payload for `WorkflowTabView.routeStatus`.
  */
 export function buildTierRouteStatus(
   config: RouteTierConfig | undefined,
   auditsByPhase: Readonly<Partial<Record<WorkflowNode, RouteAuditEntry>>>,
+  sessionModel?: TierRouteStatusView['sessionModel'],
+  byChange?: Readonly<Record<string, TierRouteChangeRow>>,
 ): WorkflowTabRouteStatus {
   if (config === undefined || !config.enabled) return { state: 'off' }
   const view: TierRouteStatusView = {
     state: 'routed',
     tiers: tierRefs(config),
+    ...(sessionModel === undefined ? {} : { sessionModel }),
+    ...(byChange === undefined ? {} : { byChange }),
     phases: TAB_PHASE_ORDER.map((phase) => {
       const preferredTier = resolvePhaseTier(config, phase)
       const spec = config.tiers[preferredTier]

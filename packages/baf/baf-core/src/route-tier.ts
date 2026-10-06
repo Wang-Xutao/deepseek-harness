@@ -371,6 +371,33 @@ export interface TierRouteStatusView {
   readonly tiers: Readonly<Record<RouteTier, { readonly provider: string; readonly model: string }>>
   /** Nine rows (8 stages + drift) in workflow order. */
   readonly phases: readonly TierRoutePhaseRow[]
+  /**
+   * 【变更】2026-10-07 (九点批 问题 5): the session's CURRENT raw model (from
+   * its last `request/header` epoch), with whether it is the Auto pseudo entry
+   * — the empty-state copy explains WHY「暂无派单路由」is empty (Auto engaged
+   * vs. pinned to a concrete model) instead of a bare "none".
+   */
+  readonly sessionModel?: {
+    readonly provider: string
+    readonly model: string
+    readonly auto: boolean
+  }
+  /**
+   * 【变更】2026-10-07 (九点批 问题 4): the driving session's LAST audit per
+   * CHANGE (changeId → served model) — the 变更总览 rows badge each change
+   * with the tier·model that last served it. Same session log as `phases`;
+   * changes driven by other sessions stay absent (the fold never guesses).
+   */
+  readonly byChange?: Readonly<Record<string, TierRouteChangeRow>>
+}
+
+/** One change's last-served model (九点批 问题 4 dashboard badge). */
+export interface TierRouteChangeRow {
+  readonly provider: string
+  readonly model: string
+  /** Effective tier when the turn was tier-routed (pre-M2 audits omit it). */
+  readonly tier?: RouteTier
+  readonly at: string
 }
 
 /**

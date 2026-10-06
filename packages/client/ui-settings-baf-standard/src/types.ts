@@ -30,6 +30,22 @@ export interface BafStandardPackageCard {
 /** Availability mirrors baf-standard's own vocabulary. */
 export type BafStandardAvailability = 'ready' | 'policy_missing'
 
+/**
+ * 【变更】2026-10-07 (九点批 问题 8): one rule area of the standards source —
+ * id + locale title key + the ANCHORED sourceRef (`ref#anchor`) so the client
+ * can point each of the 8 domains at the exact section it governs. Pure
+ * projection of `summarizeStandard().areas`; no content rides the wire (the
+ * client slices the rules document it already receives via `rulesDoc`).
+ */
+export interface BafStandardAreaRow {
+  /** Stable area id (matches the `## <anchor>` heading in the rules doc). */
+  readonly id: string
+  /** Locale key (`baf.standard.area.<id>`), rendered by the client. */
+  readonly titleKey: string
+  /** Anchored pointer: `<rulesRef>#<anchor>` (raw placeholder when missing). */
+  readonly sourceRef: string
+}
+
 /** `summary()` outcome — every non-ready status carries its own empty state. */
 export interface BafStandardSummaryResult {
   readonly status: 'ready' | 'no-workspace' | 'no-baseline' | 'failed'
@@ -39,6 +55,8 @@ export interface BafStandardSummaryResult {
   readonly compatibility?: { readonly min: string; readonly max: string }
   readonly standardSourceRef?: string
   readonly standardAvailability?: BafStandardAvailability
+  /** 【变更】2026-10-07 (九点批 问题 8): the 8 rule areas, anchored. */
+  readonly standardAreas?: readonly BafStandardAreaRow[]
   readonly cards?: readonly BafStandardPackageCard[]
   /** Technical one-liner for `failed` only; never shown for the empty states. */
   readonly error?: string

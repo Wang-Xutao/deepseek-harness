@@ -40,13 +40,55 @@ export interface WorkflowTabRoutePhaseRow {
   }
 }
 
-/** Mirror of baf-core `WorkflowTabRouteStatus` (M3 批次C). */
+/** Mirror of baf-core `WorkflowTabRouteStatus` (M3 批次C; sessionModel 九点批 问题 5). */
 export type WorkflowTabRouteStatus =
   | { readonly state: 'off' }
   | {
     readonly state: 'routed'
     readonly tiers: Readonly<Record<RouteTier, { readonly provider: string; readonly model: string }>>
     readonly phases: readonly WorkflowTabRoutePhaseRow[]
+    /**
+     * 【变更】2026-10-07 (九点批 问题 5): the session's CURRENT raw model (last
+     * `request/header` epoch) + whether it is the Auto pseudo entry — the
+     * empty state explains itself (Auto engaged vs. pinned) instead of a
+     * bare「暂无派单路由」.
+     */
+    readonly sessionModel?: {
+      readonly provider: string
+      readonly model: string
+      readonly auto: boolean
+    }
+    /**
+     * 【变更】2026-10-07 (九点批 问题 4): last audit per changeId — the
+     * 变更总览 rows badge each change with the tier·model that last served
+     * it (mirror of baf-core `TierRouteChangeRow`).
+     */
+    readonly byChange?: Readonly<Record<string, WorkflowTabRouteChangeRow>>
+  }
+
+/** One change's last-served model (九点批 问题 4 dashboard badge; baf-core mirror). */
+export interface WorkflowTabRouteChangeRow {
+  readonly provider: string
+  readonly model: string
+  readonly tier?: RouteTier
+  readonly at: string
+}
+
+/**
+ * 【变更】2026-10-07 (九点批 问题 2): what a gate/advance confirm would
+ * dispatch the next work order on — the client mirror of the host's
+ * routePreview payload. `off` carries WHY (config disabled vs. session not on
+ * Auto); only `routed` renders a badge line.
+ */
+export type WorkflowTabRoutePreview =
+  | { readonly state: 'off'; readonly why: 'config' | 'session' }
+  | { readonly state: 'unresolved' }
+  | {
+    readonly state: 'routed'
+    readonly tier: RouteTier
+    readonly reason: string
+    readonly provider: string
+    readonly model: string
   }
 
 /** Mandatory customer-confirmation gate the change is parked on (§18.5). */

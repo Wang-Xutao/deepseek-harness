@@ -217,6 +217,15 @@ export class BafStandardConfigRemote extends TypertRemoteService {
       compatibility: { min: manifest.bafCompatibility.min, max: manifest.bafCompatibility.max },
       standardSourceRef: standard.sourceRef,
       standardAvailability: standard.availability,
+      // 【变更】2026-10-07 (九点批 问题 8): the 8 rule areas ride the summary —
+      // id + titleKey + anchored sourceRef — so the client can render one
+      // section per domain and point each at where its rules live. Content
+      // still never rides this Remote (rulesDoc serves the document itself).
+      standardAreas: standard.areas.map(area => ({
+        id: area.id,
+        titleKey: area.titleKey,
+        sourceRef: area.sourceRef,
+      })),
       cards: projectStandardCards(manifest),
     }
   }

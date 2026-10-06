@@ -21,6 +21,11 @@ export interface StandardsOverviewState {
   rules: BafStandardRulesDocResult | undefined
   /** Whether the rules document viewer shows the full text. */
   rulesExpanded: boolean
+  /**
+   * 【变更】2026-10-07 (九点批 问题 8): which of the 8 rule domains are
+   * expanded in the digest section (keyed by area id).
+   */
+  areasExpanded: Record<string, boolean>
 }
 
 /** The registration-side face the row's slot entry injects. */
@@ -35,6 +40,8 @@ export interface StandardsOverviewFace {
   loadRules(): Promise<void>
   /** Toggle the rules document viewer's expanded flag. */
   toggleRules(): void
+  /** 【变更】2026-10-07 (九点批 问题 8): toggle one rule domain in the digest. */
+  toggleArea(id: string): void
 }
 
 /** Initial state: loading, viewer closed. */
@@ -43,6 +50,7 @@ const INITIAL: StandardsOverviewState = {
   summary: undefined,
   rules: undefined,
   rulesExpanded: false,
+  areasExpanded: {},
 }
 
 /**
@@ -67,6 +75,7 @@ export class StandardsController {
       reload: () => this.reload(),
       loadRules: () => this.loadRules(),
       toggleRules: () => this.toggleRules(),
+      toggleArea: (id: string) => this.toggleArea(id),
     }
   }
 
@@ -92,6 +101,7 @@ export class StandardsController {
         // A different workspace story invalidates the viewer's payload.
         state.rules = undefined
         state.rulesExpanded = false
+        state.areasExpanded = {}
       }
     })
   }
@@ -116,6 +126,19 @@ export class StandardsController {
     this.store.update((state) => {
       state.rulesExpanded = !state.rulesExpanded
       if (state.rulesExpanded && state.rules === undefined) void this.loadRules()
+    })
+  }
+
+  /**
+   * 【变更】2026-10-07 (九点批 问题 8): flip one rule domain's digest row;
+   * the first expand anywhere in the digest also pulls the rules document
+   * (the digest slices its content from it).
+   * @param id - the area id (`project-charter` … `testing-discipline`).
+   */
+  toggleArea(id: string): void {
+    this.store.update((state) => {
+      state.areasExpanded[id] = !state.areasExpanded[id]
+      if (state.areasExpanded[id] && state.rules === undefined) void this.loadRules()
     })
   }
 }

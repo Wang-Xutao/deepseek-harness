@@ -2,11 +2,30 @@
  * BafWorkflow service freeze + resolveAndAudit.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import BafWorkflow from '../src/index.ts'
 import { ENTERPRISE, FALLBACK, LIGHT, PRIMARY, PROFILE, availabilityOf } from './fixtures.ts'
+
+// 【变更】2026-10-07 (九点批 测试整备): routeStatus()'s not-frozen expectation
+// is machine-dependent without this — the M1 lazy tier freeze reads the REAL
+// ~/.dsh/baf-route-config.json (enabled:true on any machine that ever saved
+// the routing settings), which makes requireFrozen() succeed and the throw
+// vanish. Point DSH_HOME at an empty temp dir so the spec sees no config.
+let hermeticHome = ''
+const realDshHome = process.env.DSH_HOME
+beforeEach(() => {
+  hermeticHome = mkdtempSync(join(tmpdir(), 'baf-mount-home-'))
+  process.env.DSH_HOME = hermeticHome
+})
+afterEach(() => {
+  process.env.DSH_HOME = realDshHome
+  rmSync(hermeticHome, { recursive: true, force: true })
+})
 
 function key(ref: { provider: string; model: string }): string {
   return `${ref.provider}::${ref.model}`

@@ -314,8 +314,12 @@
   gap: 8px;
 }
 
+/* 【变更】2026-10-07 (九点批 问题 6): fixed width so Commander/Reviewer/Worker
+   labels occupy identical boxes and the right-hand tag groups left-align
+   across the three role rows. */
 .ruleTierLabel {
   flex: none;
+  width: 6.5em;
   margin-top: 3px;
   font-size: 11px;
   font-weight: 600;

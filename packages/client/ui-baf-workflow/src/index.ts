@@ -21,6 +21,7 @@ import {
   bindSessionChange,
   buildTierRouteStatus,
   deriveSessionChangeFromEvents,
+  lastRouteAuditByChange,
   lastRouteAuditByPhase,
   type RouteAuditEntry,
   sessionChangeFor,
@@ -30,6 +31,7 @@ import {
   continueParkedRequirement,
   DISPATCH_SENT_MARKER,
   advanceGateIdForNode,
+  artifactPathFor,
   dispatchGateRevisionFromTab,
   driveAbandon,
   driveArchive,
@@ -46,6 +48,16 @@ import {
   resolveActiveChange,
   makeGateAsk,
   makeGoDispatcher,
+  // 【变更】2026-10-07 (九点批 问题 2/4/9): the gate-overview projection and
+  // the pure routing core routePreview runs (see the two @Remote methods).
+  projectGateOverview,
+  taskTierFor,
+  tierRouteSelection,
+  type DispatchNode,
+  // 【变更】2026-10-07 (九点批 问题 5): the Auto pseudo entry ids, for the
+  // route-scan's session-model auto flag (see readSessionRouteScan).
+  AUTO_PROVIDER,
+  AUTO_MODEL,
   resolveIsolateService,
   resolveScaffoldService,
   type DispatchAgent,
@@ -53,6 +65,7 @@ import {
   type ScaffoldAdapter,
 } from '@deepseek-ai/dsh-baf-workflow'
 import { readRouteTierConfigSync } from '@deepseek-ai/dsh-baf-workflow/route-config-io'
+import { isTierRoutingActive } from '@deepseek-ai/dsh-baf-core'
 import type {
   WorkflowDashboardView,
   WorkflowNode,
@@ -68,9 +81,12 @@ import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typer
 import type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowGateOverview,
   BafWorkflowGateResolveRequest,
   BafWorkflowGateReviseRequest,
   BafWorkflowResumeRequest,
+  BafWorkflowRoutePreview,
+  BafWorkflowRoutePreviewRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
   BafWorkflowTransitionRequest,
@@ -98,10 +114,16 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 export type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowGateConfirmRow,
+  BafWorkflowGateOptionRow,
+  BafWorkflowGateOverview,
   BafWorkflowGateResolveRequest,
   BafWorkflowGateReviseRequest,
+  BafWorkflowGateStageRow,
   BafWorkflowProjectionAppended,
   BafWorkflowResumeRequest,
+  BafWorkflowRoutePreview,
+  BafWorkflowRoutePreviewRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
   BafWorkflowTransitionRequest,
@@ -229,22 +251,59 @@ async function readSessionUsagePoints(ctx: Context, sessionId: SessionId): Promi
  * @returns the audit payloads in log order (empty when sessionQuery is absent).
  */
 export async function readSessionRouteAudits(ctx: Context, sessionId: SessionId): Promise<readonly RouteAuditEntry[]> {
-  interface AuditEvent { readonly type: string; readonly data?: unknown }
+  return (await readSessionRouteScan(ctx, sessionId)).audits
+}
+
+/**
+ * 【变更】2026-10-07 (九点批 问题 5): one cold-log pass collecting BOTH the
+ * `baf/route-resolved` audits AND the session's CURRENT raw model — the last
+ * `request/header` epoch's call config, flagged `auto` when it is the
+ * `baf-route/auto` pseudo entry. The「当前路由」empty state needs the model to
+ * explain itself (Auto engaged vs. pinned), so the scan rides the same
+ * observation the audit fold already pays for.
+ * @param ctx - host context.
+ * @param sessionId - the session whose log to scan.
+ * @returns audits in log order + the session's current model (absent when the
+ * log carries no header epoch or sessionQuery is unavailable).
+ */
+export async function readSessionRouteScan(
+  ctx: Context,
+  sessionId: SessionId,
+): Promise<{
+  audits: readonly RouteAuditEntry[]
+  sessionModel?: { provider: string; model: string; auto: boolean }
+}> {
+  interface ScanEvent { readonly type: string; readonly data?: unknown }
   interface Observation {
-    readonly events: Iterable<AuditEvent>
+    readonly events: Iterable<ScanEvent>
     [Symbol.dispose]?: () => void
   }
   type SessionQuery = { observeSession: (id: SessionId, options?: { projectionMode?: string }) => Promise<Observation> }
   const query = (ctx as { sessionQuery?: SessionQuery }).sessionQuery
-  if (query === undefined) return []
+  if (query === undefined) return { audits: [] }
   const observation = await query.observeSession(sessionId, { projectionMode: 'none' })
   try {
     const entries: RouteAuditEntry[] = []
+    let sessionModel: { provider: string; model: string; auto: boolean } | undefined
     for (const event of observation.events) {
-      if (event.type !== 'baf/route-resolved') continue
-      entries.push(event.data as RouteAuditEntry)
+      if (event.type === 'baf/route-resolved') {
+        entries.push(event.data as RouteAuditEntry)
+        continue
+      }
+      if (event.type === 'request/header') {
+        // The LAST header epoch is the session's current raw selection.
+        const config = (event.data as { header?: { config?: { provider?: unknown; model?: unknown } } } | undefined)
+          ?.header?.config
+        if (typeof config?.provider === 'string' && typeof config?.model === 'string') {
+          sessionModel = {
+            provider: config.provider,
+            model: config.model,
+            auto: config.provider === AUTO_PROVIDER && config.model === AUTO_MODEL,
+          }
+        }
+      }
     }
-    return entries
+    return sessionModel === undefined ? { audits: entries } : { audits: entries, sessionModel }
   } finally {
     observation[Symbol.dispose]?.()
   }
@@ -337,10 +396,12 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     return { ...view, routeStatus: await this.routeStatusFor(sessionId) }
   }
 
-  /** Cached `(sessionId → last-per-phase audits)` with the revision the fold was made at. */
+  /** Cached `(sessionId → last-per-phase audits + session model + by-change)` with the revision the fold was made at. */
   private readonly routeAuditCache = new Map<SessionId, {
     revision: string
     byPhase: Readonly<Partial<Record<WorkflowNode, RouteAuditEntry>>>
+    sessionModel?: { provider: string; model: string; auto: boolean }
+    byChange?: Readonly<Record<string, import('@deepseek-ai/dsh-baf-core').TierRouteChangeRow>>
   }>()
 
   /**
@@ -363,11 +424,23 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
         : `${String(stat.revision)}:${String(stat.eventCount ?? '?')}:${String(stat.sizeBytes ?? '?')}`
       const cached = this.routeAuditCache.get(sessionId)
       if (cached !== undefined && cached.revision === revision) {
-        return buildTierRouteStatus(config, cached.byPhase)
+        return buildTierRouteStatus(config, cached.byPhase, cached.sessionModel, cached.byChange)
       }
-      const byPhase = lastRouteAuditByPhase(await readSessionRouteAudits(this.ctx, sessionId))
-      this.routeAuditCache.set(sessionId, { revision, byPhase })
-      return buildTierRouteStatus(config, byPhase)
+      // 【变更】2026-10-07 (九点批 问题 5): the same cold-log pass now also
+      // captures the session's current model (last request/header epoch) so
+      // the「当前路由」empty state can say WHY it is empty.
+      // 【变更】2026-10-07 (九点批 问题 4): …and the by-change fold (last
+      // audit per changeId) for the 变更总览 row badges.
+      const scan = await readSessionRouteScan(this.ctx, sessionId)
+      const byPhase = lastRouteAuditByPhase(scan.audits)
+      const byChange = lastRouteAuditByChange(scan.audits)
+      this.routeAuditCache.set(sessionId, {
+        revision,
+        byPhase,
+        byChange,
+        ...(scan.sessionModel === undefined ? {} : { sessionModel: scan.sessionModel }),
+      })
+      return buildTierRouteStatus(config, byPhase, scan.sessionModel, byChange)
     } catch {
       return buildTierRouteStatus(config, {})
     }
@@ -956,6 +1029,78 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       }
     }
     return await this.viewFor(request.sessionId, store, resolvedChangeId)
+  }
+
+  /**
+   * 【变更】2026-10-07 (九点批 问题 9): the settings 门禁总览 row's payload —
+   * the read-only projection of BOTH gate layers (the 15 confirm-gate registry
+   * entries and the per-stage completion gates, condition lines verbatim).
+   * Zero-arg and static: the registry is product data, so the answer never
+   * varies per workspace. The row's copy answers 增删改 honestly — gate
+   * entries live in the product registry (code + tests); configuration files
+   * govern switches and thresholds.
+   * @returns both gate-layer tables.
+   */
+  @Remote('gateOverview')
+  gateOverview(): Promise<BafWorkflowGateOverview> {
+    return Promise.resolve(projectGateOverview())
+  }
+
+  /**
+   * 【变更】2026-10-07 (九点批 问题 2/4): preview the model a gate click would
+   * dispatch the next work order on — the advance dialog and the gate cards
+   * render their 「确认后派单：<档位>·<模型>」 line from this. Runs the SAME
+   * pure core a real dispatch runs (`tierRouteSelection`), with the same
+   * auto-gate (a session not on the Auto pseudo entry dispatches on its own
+   * model — preview says `off/session`, never a tier that would not run), but
+   * pins nothing and audits nothing: previewed, not executed.
+   * @param request - session + change + the stage the gate rests on.
+   * @returns the preview outcome.
+   */
+  @Remote('routePreview')
+  async routePreview(request: BafWorkflowRoutePreviewRequest): Promise<BafWorkflowRoutePreview> {
+    const config = readRouteTierConfigSync()
+    if (config === undefined || !isTierRoutingActive(config)) return { state: 'off', why: 'config' }
+    // The auto gate, structurally read exactly like the dispatch hook's shell
+    // (`tierRouteSelectorFor`): no pin surface is touched, only consulted.
+    let controller: { rawSelectionOf(agent: unknown): { provider: string; model: string } | undefined } | undefined
+    let auto: { accepts(provider: string, model: string): boolean } | undefined
+    try {
+      const resolvedController = this.ctx.get('sessionController')
+      if (resolvedController !== undefined && typeof (resolvedController as { rawSelectionOf?: unknown }).rawSelectionOf === 'function') {
+        controller = resolvedController as typeof controller
+      }
+      const resolvedAuto = this.ctx.get('bafRouteAuto')
+      if (resolvedAuto !== undefined && typeof (resolvedAuto as { accepts?: unknown }).accepts === 'function') {
+        auto = resolvedAuto as typeof auto
+      }
+    } catch {
+      // Structural reads are best-effort — fall through to the off/session
+      // answer below, which is what an unrouted session renders anyway.
+    }
+    if (controller === undefined || auto === undefined) return { state: 'off', why: 'session' }
+    const raw = controller.rawSelectionOf(this.liveAgentFor(request.sessionId))
+    if (raw === undefined || !auto.accepts(raw.provider, raw.model)) return { state: 'off', why: 'session' }
+    const cwd = await this.requireCwd(request.sessionId)
+    const node = request.node as DispatchNode
+    const outcome = tierRouteSelection(
+      {
+        changeId: request.changeId,
+        node,
+        artifactPath: artifactPathFor(request.changeId, node),
+        missing: [],
+      },
+      config,
+      taskTierFor(cwd, request.changeId)?.tier,
+    )
+    if (outcome === undefined) return { state: 'unresolved' }
+    return {
+      state: 'routed',
+      tier: outcome.tier,
+      reason: outcome.reason,
+      provider: outcome.selection.provider,
+      model: outcome.selection.model,
+    }
   }
 
   /**

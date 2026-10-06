@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { readSessionRouteAudits } from '../src/index.ts'
+import { readSessionRouteAudits, readSessionRouteScan } from '../src/index.ts'
 
 /** One recorded observeSession call. */
 interface QueryCall {
@@ -53,5 +53,46 @@ describe('readSessionRouteAudits (M3 批次C host cold read)', () => {
   it('returns an empty list when sessionQuery is not composed', async () => {
     const ctx = {} as unknown as Context
     expect(await readSessionRouteAudits(ctx, 's1')).toEqual([])
+  })
+})
+
+describe('readSessionRouteScan (九点批 问题 5 audits + session model, one pass)', () => {
+  const audit = {
+    provider: 'p1', model: 'big-brain', source: 'phase', phase: 'design',
+    tier: 'high', at: '2026-10-05T00:00:00.000Z', sessionId: 's1',
+  }
+
+  it('flags the session model auto when the LAST header epoch is the baf-route/auto pseudo entry', async () => {
+    const { ctx } = queryCtx([
+      { type: 'request/header', data: { header: { config: { provider: 'p1', model: 'old-model' } } } },
+      { type: 'baf/route-resolved', data: audit },
+      { type: 'request/header', data: { header: { config: { provider: 'baf-route', model: 'auto' } } } },
+    ])
+    const scan = await readSessionRouteScan(ctx, 's1')
+    expect(scan.audits).toEqual([audit])
+    expect(scan.sessionModel).toEqual({ provider: 'baf-route', model: 'auto', auto: true })
+  })
+
+  it('reports a pinned concrete model with auto false (the routing-never-engages case)', async () => {
+    const { ctx } = queryCtx([
+      { type: 'request/header', data: { header: { config: { provider: 'deepseek', model: 'chat-pro' } } } },
+    ])
+    const scan = await readSessionRouteScan(ctx, 's1')
+    expect(scan.sessionModel).toEqual({ provider: 'deepseek', model: 'chat-pro', auto: false })
+  })
+
+  it('omits sessionModel when the log carries no readable header epoch', async () => {
+    const { ctx } = queryCtx([
+      { type: 'request/header', data: { header: {} } },
+      { type: 'baf/route-resolved', data: audit },
+    ])
+    const scan = await readSessionRouteScan(ctx, 's1')
+    expect(scan.audits).toEqual([audit])
+    expect(scan.sessionModel).toBeUndefined()
+  })
+
+  it('degrades to an empty scan when sessionQuery is not composed', async () => {
+    const ctx = {} as unknown as Context
+    expect(await readSessionRouteScan(ctx, 's1')).toEqual({ audits: [] })
   })
 })

@@ -130,6 +130,76 @@ export interface BafWorkflowGateReviseRequest {
 }
 
 /**
+ * 【变更】2026-10-07 (九点批 问题 2/4): what the gate click would dispatch on —
+ * the advance dialog / gate cards render a 「确认后派单：<档位>·<模型>」 line
+ * from this preview. Same pure core a real dispatch runs (`tierRouteSelection`),
+ * but no pin and no audit: the decision previewed is the decision that would
+ * run, not one that ran.
+ */
+export type BafWorkflowRoutePreview =
+  | {
+    readonly state: 'off'
+    /** Why no routing: config off, or the session is not on the Auto entry. */
+    readonly why: 'config' | 'session'
+  }
+    | { readonly state: 'unresolved' }
+    | {
+      readonly state: 'routed'
+      readonly tier: 'high' | 'mid' | 'low'
+      readonly reason: 'keyword' | 'phase' | 'verify-escalation'
+      readonly provider: string
+      readonly model: string
+    }
+
+/** `routePreview` request — session + change + the stage the gate rests on. */
+export interface BafWorkflowRoutePreviewRequest {
+  readonly sessionId: SessionId
+  readonly changeId: string
+  readonly node: WorkflowNode
+}
+
+/**
+ * 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 payload — a read-only
+ * projection of both gate layers (the confirm-gate registry and the per-stage
+ * completion gates), declared here as the typert boundary contract.
+ */
+export interface BafWorkflowGateOptionRow {
+  readonly id: string
+  readonly label: string
+  readonly command: string
+}
+
+/** One 客户确认门 row (a GATE_REGISTRY entry, verbatim). */
+export interface BafWorkflowGateConfirmRow {
+  readonly id: string
+  readonly title: string
+  readonly question: string
+  readonly options: readonly BafWorkflowGateOptionRow[]
+  /** Stage node the gate rests on (advance gates); absent for one-shot gates. */
+  readonly node?: string
+  /** Bug-fix-path variant of the same rest (open only). */
+  readonly bugFix?: boolean
+  /** Registry marker that options are populated at runtime (bind-workflow). */
+  readonly dynamicOptions?: string
+}
+
+/** One 阶段完成门 row: what a stage must produce before it may advance. */
+export interface BafWorkflowGateStageRow {
+  readonly node: string
+  readonly gateFn: string
+  readonly artifact: string
+  readonly conditions: readonly string[]
+  readonly advanceGateId?: string
+  readonly note?: string
+}
+
+/** The full `gateOverview` payload. */
+export interface BafWorkflowGateOverview {
+  readonly confirmGates: readonly BafWorkflowGateConfirmRow[]
+  readonly stageGates: readonly BafWorkflowGateStageRow[]
+}
+
+/**
  * §22.19 R5 — payload of `baf-workflow/projection-appended`. The interface
  * and the cordis Events declaration live with the projection domain in
  * dsh-baf-workflow (packages/baf/baf-workflow/src/projection-events.ts — a

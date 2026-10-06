@@ -1,0 +1,141 @@
+/* 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 read-only row — tables and
+ * text only, no inputs (the StandardsOverview precedent). */
+
+.block {
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.description {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.toggle {
+  flex: none;
+}
+
+.status {
+  margin-top: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.statusError {
+  margin-top: 12px;
+  color: var(--dsw-alias-state-danger-label);
+  font-size: 12px;
+  line-height: 18px;
+  word-break: break-all;
+}
+
+.section {
+  margin-top: 12px;
+}
+
+.sectionTitle {
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.sectionHint {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+}
+
+.table th {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.table td,
+.table th {
+  padding: 4px 10px 4px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  vertical-align: top;
+}
+
+.mono {
+  font-family: var(--dsw-alias-font-mono, monospace);
+  white-space: nowrap;
+}
+
+.question {
+  min-width: 200px;
+  word-break: break-word;
+}
+
+.option {
+  white-space: nowrap;
+}
+
+.chip {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.conditions {
+  margin: 0;
+  padding-left: 16px;
+  word-break: break-word;
+}
+
+.note {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.config {
+  margin-top: 12px;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+
+.configList {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.honesty {
+  margin-top: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}

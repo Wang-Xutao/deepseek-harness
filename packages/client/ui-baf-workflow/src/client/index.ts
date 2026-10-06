@@ -17,6 +17,7 @@ import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import type {} from './remote-types.ts'
 import { WorkflowView, type WorkflowViewInjected } from './WorkflowView.tsx'
 import { WorkflowTabRow, type WorkflowTabRowInjected } from './WorkflowTabRow.tsx'
+import { GatesOverviewRow, type GatesOverviewRowInjected } from './GatesOverviewRow.tsx'
 import {
   INITIAL_WORKFLOW_TAB_PREFS, WORKFLOW_TAB_PREF_KEY, type BafWorkflowTabSettings,
 } from '../workflow-tab-settings.ts'
@@ -55,6 +56,12 @@ function unwrap<T>(result: { ok: true; value: T } | { ok: false; error: { messag
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-baf-workflow: dictionaries')
 
+  // 【变更】2026-10-07 (九点批 修): bound BEFORE the composer inject below —
+  // that callback runs synchronously when the parent slot already exists, and
+  // its options object reads `t` (the routePreview line's label binder), so a
+  // later `const t` hit the TDZ and killed the whole entry's activation.
+  const t = ctx.locale.bind(NS)
+
   // 【变更】2026-09-25 (用户需求 工作流 1/2): the unified BAF gate card as a
   // composer-chain entry. Priority -10 runs the selector BEFORE
   // ui-user-questions' default-0 entry, so every `header: 'BAF 工作流'`
@@ -77,13 +84,23 @@ export function apply(ctx: ClientContext): void {
         isBafGatePending(pendingInteraction) ? pendingInteraction : null,
       locale: NS,
     },
-    bindGateOpenArtifact((sessionId, path) => {
-      const cwd = ctx.sessions.list.getSnapshot().byId[sessionId as SessionId]?.cwd
-      ctx.sidebarRight.openResource(fileAddressFor(sessionId as SessionId, cwd, path))
-    }),
+    bindGateOpenArtifact(
+      (sessionId, path) => {
+        const cwd = ctx.sessions.list.getSnapshot().byId[sessionId as SessionId]?.cwd
+        ctx.sidebarRight.openResource(fileAddressFor(sessionId as SessionId, cwd, path))
+      },
+      {
+        // 【变更】2026-10-07 (九点批 问题 2): the card-level「确认后派单」preview —
+        // the same routePreview remote the Tab decision cards render.
+        routePreview: async (sessionId, changeId, node) => unwrap(await ctx.remote.bafWorkflowView.routePreview({
+          sessionId: sessionId as SessionId,
+          changeId,
+          node,
+        })) as import('./tab-types.ts').WorkflowTabRoutePreview,
+        t,
+      },
+    ),
   ))
-
-  const t = ctx.locale.bind(NS)
 
   // 【变更】2026-09-29 (demo23 问题 5): the 是否显示工作流 Tab preference —
   // device-local (localStorage via the client snapshot store), default on.
@@ -111,6 +128,19 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: settingsInject,
   }, WorkflowTabRow))
+
+  // 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 read-only row — loads the
+  // static registry projection on the user's first expand (user-triggered, so
+  // no remote-default-responses entry; the rulesDoc precedent).
+  ctx.slots.inject('settings.workflow.item', () => ctx.slots.register({
+    name: 'settings.workflow.item',
+    id: 'baf-gates-overview',
+    order: 15,
+    locale: NS,
+    inject: (): GatesOverviewRowInjected => ({
+      loadGateOverview: async () => unwrap(await ctx.remote.bafWorkflowView.gateOverview()),
+    }),
+  }, GatesOverviewRow))
 
   const installView = (): (() => void) => ctx.slots.register({
     name: 'conversation.view',
@@ -173,6 +203,13 @@ export function apply(ctx: ClientContext): void {
         })) as WorkflowTabView,
         // 【变更】2026-09-23 (user issue #6): the 变更总览 dashboard payload.
         dashboard: async () => unwrap(await remote.dashboard({ sessionId })),
+        // 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview — same pure
+        // core a real dispatch runs, no pin, no audit.
+        routePreview: async (changeId, node) => unwrap(await remote.routePreview({
+          sessionId,
+          changeId,
+          node,
+        })) as import('./tab-types.ts').WorkflowTabRoutePreview,
         // 2026-09-21 (session 5.jsonl) — the Tab's real "open this artifact"
         // channel. Cards render in <pre> plain text (no clickable paths), so
         // the artifact rows in the rail open the file in the right sidebar

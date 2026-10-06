@@ -325,6 +325,64 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 【变更】2026-10-07 (九点批 问题 2): per-node last-served 档位·模型 badge —
+   one muted mono chip under the metrics line, audited phases only. */
+.flowNodeRoute {
+  margin-top: 0.32rem;
+  padding: 0.1rem 0.36rem;
+  border-radius: 4px;
+  font-size: 0.58rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--wf-muted);
+  background: color-mix(in srgb, var(--wf-muted) 12%, transparent);
+  align-self: flex-start;
+}
+
+/* 【变更】2026-10-07 (九点批 问题 4): the node's real artifact files as
+   click-to-open chips (the rail's openArtifact channel). */
+.flowNodeArtifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.24rem;
+  margin-top: 0.32rem;
+}
+
+.flowNodeArtifactChip {
+  padding: 0.08rem 0.32rem;
+  border: 1px solid color-mix(in srgb, var(--wf-muted) 30%, transparent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--wf-muted);
+  font-size: 0.56rem;
+  cursor: pointer;
+}
+
+.flowNodeArtifactChip:hover {
+  color: inherit;
+  border-color: var(--wf-muted);
+}
+
+/* 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview line inside the
+   decision cards — quiet mono, directly above the option buttons. */
+.routeDispatchLine {
+  margin: 0.4rem 0 0;
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--wf-muted);
+}
+
+/* 【变更】2026-10-07 (九点批 问题 4): the dashboard row's last-served
+   档位·模型 chip (rides the meta line). */
+.dashboardRouteChip {
+  margin-left: 0.4rem;
+  padding: 0.04rem 0.32rem;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--wf-muted);
+  background: color-mix(in srgb, var(--wf-muted) 12%, transparent);
+}
+
 .flowNext {
   margin-top: 0.35rem;
   padding-top: 0.35rem;

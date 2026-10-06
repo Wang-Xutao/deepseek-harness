@@ -23,6 +23,7 @@ import type {
   WorkflowNodeId,
   WorkflowTabLanesView,
   WorkflowTabNodeView,
+  WorkflowTabRoutePreview,
   WorkflowTabView,
 } from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
@@ -30,7 +31,7 @@ import { CATALOG_ZH } from './catalog-i18n.ts'
 import { buildClientTemplateTabView, withRenderableGraph } from './graph-template.ts'
 import { NodeIcon } from './icons.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
-import { RouteStatusRow } from './RouteStatusRow.tsx'
+import { RouteStatusRow, routeBadgeText } from './RouteStatusRow.tsx'
 import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel } from './gate-ask.ts'
 import { setWorkflowTabActive } from './tab-activity.ts'
 import { buildDashboardHtml, type DashboardHtmlLabels } from './dashboard-html.ts'
@@ -113,6 +114,14 @@ export interface WorkflowViewInjected {
    * plain text, so this rail button is the GUI's true open channel.
    */
   openArtifact: (path: string) => void
+  /**
+   * 【变更】2026-10-07 (九点批 问题 2): preview the model a gate/advance
+   * confirm would dispatch the next work order on — the host runs the SAME
+   * pure routing core a real dispatch runs, with the same Auto gate, but
+   * pins nothing and audits nothing. Only a `routed` outcome renders a
+   * 「确认后派单」line; `off`/`unresolved` stay silent.
+   */
+  routePreview: (changeId: string, node: WorkflowNodeId) => Promise<WorkflowTabRoutePreview>
   /**
    * §22.19 R5 — real-time push subscription. The host emits
    * `baf-workflow/projection-appended` after every appended projection
@@ -230,6 +239,63 @@ function statusClass(status: WorkflowTabNodeView['status']): string {
     case 'clipped': return css.statusIdle ?? ''
     default: return css.statusIdle ?? ''
   }
+}
+
+/**
+ * 【变更】2026-10-07 (九点批 问题 2): the node whose work order a confirm on
+ * the TOP decision cards (advance dialog, live gate, pending gate) would
+ * dispatch. A change resting on a COMPLETED stage advances into the next
+ * forward node (the same edge the advance dialog names); mid-stage gates
+ * (clarification asks, proposal gates) continue the CURRENT node. Terminal
+ * targets archive nothing model-authored — no preview.
+ * @param view - the current Tab view.
+ * @returns the dispatch node, or null when no previewable target exists.
+ */
+function dispatchNodeForConfirm(view: WorkflowTabView): WorkflowNodeId | null {
+  const current = view.current
+  if (current === null || current === 'completed' || current === 'abandoned') return null
+  const currentNode = view.nodes.find(n => n.id === current)
+  if (currentNode?.status !== 'completed') return current
+  const edge = view.graph.edges.find(e => e.from === current && e.kind === 'forward')
+    ?? view.graph.edges.find(e => e.from === current)
+  const to = edge?.to
+  if (to === undefined || to === 'completed' || to === 'abandoned') return null
+  return to as WorkflowNodeId
+}
+
+/**
+ * 【变更】2026-10-07 (九点批 问题 2): the「确认后派单：<档位>·<模型>」line —
+ * one async best-effort preview per (change, node); only a `routed` outcome
+ * renders. Off (config disabled / session not on Auto) and unresolved stay
+ * silent: the card never promises a tier the dispatch would not use.
+ */
+export function RouteDispatchLine(props: {
+  load: (changeId: string, node: WorkflowNodeId) => Promise<WorkflowTabRoutePreview>
+  changeId: string | null
+  node: WorkflowNodeId | null
+  t: (key: WorkflowTabKey) => string
+}): React.ReactElement | null {
+  const { load, changeId, node, t } = props
+  const [badge, setBadge] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setBadge(null)
+    if (changeId === null || node === null) return
+    load(changeId, node)
+      .then((preview) => {
+        if (cancelled || preview.state !== 'routed') return
+        const tierLabel: WorkflowTabKey = preview.tier === 'high'
+          ? 'route.tierHigh'
+          : preview.tier === 'mid' ? 'route.tierMid' : 'route.tierLow'
+        setBadge(`${t('route.dispatchOn')}${t(tierLabel)}·${preview.model}`)
+      })
+      .catch(() => {
+        // Informational line only — a failed preview never blocks the card.
+      })
+    return () => { cancelled = true }
+  }, [load, changeId, node, t])
+  if (badge === null) return null
+  return <p className={css.routeDispatchLine} data-testid="route-dispatch-line">{badge}</p>
 }
 
 /**
@@ -472,7 +538,7 @@ function RailSplitter(props: {
 export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   const {
     t, refresh, startIntake, advance, transition, resume,
-    gateResolve, gateRevise, openArtifact, useProjection, subscribe, dashboard,
+    gateResolve, gateRevise, openArtifact, routePreview, useProjection, subscribe, dashboard,
     sessionId, useSessionStatus,
   } = props
   const preset = useProjection('agentPreset')
@@ -955,6 +1021,23 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               {' · '}
               <span className={clsx(css.dashboardPhase, terminal && css.dashboardPhaseTerminal)}>{stageLabel}</span>
               {row.endedAt !== undefined && ` · ${row.endedAt.slice(0, 16).replace('T', ' ')}`}
+              {/* 【变更】2026-10-07 (九点批 问题 4): the last-served 档位·模型 chip —
+                  from the focused session's byChange fold; changes this session
+                  never dispatched stay unbadged (the fold never guesses). */}
+              {(() => {
+                const byChange = view.routeStatus?.state === 'routed' ? view.routeStatus.byChange : undefined
+                const served = byChange?.[row.changeId]
+                if (served === undefined) return null
+                return (
+                  <span
+                    className={css.dashboardRouteChip}
+                    data-testid="dashboard-route-chip"
+                    title={t('route.title')}
+                  >
+                    {routeBadgeText(served, t)}
+                  </span>
+                )
+              })()}
             </span>
             <span className={css.dashboardRowMetrics}>
               {row.tasks !== undefined && (
@@ -1092,7 +1175,33 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
             the TOP advance dialog below — it pops only when the host-derived
             `advance` says the change rests at a point that can advance, so
             the strip no longer carries a permanent decision the customer
-            would otherwise see on every paint. */}
+            would otherwise see on every paint.
+            【变更】2026-10-07 (九点批 问题 3): it is BACK as a RE-ARM — a quiet
+            ghost button that shows only while an advance rest point actually
+            exists (view.advance.ready), and its single job is to undo the
+            暂不推进 dismissal for the CURRENT rest point so the TOP dialog
+            re-renders (then scrolls into view). Before this, dismissing the
+            dialog left typing /baf-go in chat as the only way back. */}
+        {view.advance?.ready === true && (
+          <button
+            type="button"
+            className={clsx(css.btn, css.btnGhost)}
+            disabled={busy}
+            data-testid="strip-advance-rearm"
+            onClick={() => {
+              setAdvanceDismissed(null)
+              // The dialog mounts on the re-render this click schedules —
+              // scroll AFTER the commit (rAF), not now.
+              requestAnimationFrame(() => {
+                document
+                  .querySelector('[data-advance-dialog]')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              })
+            }}
+          >
+            {t('action.advance')}
+          </button>
+        )}
       </div>
 
       {/* 多模型路由 M3 批次C —「当前路由」chips row. Absent when the fold says
@@ -1176,6 +1285,14 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                 ))}
             </div>
           ))}
+          {/* 【变更】2026-10-07 (九点批 问题 2): 确认后派单 preview — the tier·model
+              the option's work order will run on (Auto sessions only). */}
+          <RouteDispatchLine
+            load={routePreview}
+            changeId={view.changeId}
+            node={dispatchNodeForConfirm(view)}
+            t={t}
+          />
           <div className={css.actions}>
             {liveGateView.options.map(opt => (
               <button
@@ -1244,6 +1361,14 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           {(view.pendingGate.detail ?? []).map(line => (
             <p key={line} className={css.hint}>{line}</p>
           ))}
+          {/* 【变更】2026-10-07 (九点批 问题 2): 确认后派单 preview — the tier·model
+              the confirm's work order will run on (Auto sessions only). */}
+          <RouteDispatchLine
+            load={routePreview}
+            changeId={view.pendingGate.changeId ?? view.changeId}
+            node={dispatchNodeForConfirm(view)}
+            t={t}
+          />
           <div className={css.actions}>
             {view.pendingGate.options.map((opt) => {
               const isCancel = opt.id === 'cancel' || opt.id === 'reject'
@@ -1401,6 +1526,14 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               ? <div key={`adv-sec-${pi}`} className={css.gateSectionTitle}>{part}</div>
               : <p key={`adv-p-${pi}`} className={css.hint}>{part}</p>
           ))}
+          {/* 【变更】2026-10-07 (九点批 问题 2): 确认后派单 preview — the tier·model
+              the confirm's work order will run on (Auto sessions only). */}
+          <RouteDispatchLine
+            load={routePreview}
+            changeId={view.changeId}
+            node={dispatchNodeForConfirm(view)}
+            t={t}
+          />
           <div className={css.actions}>
             <button
               type="button"
@@ -1488,7 +1621,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               component (pan/zoom/canvas math live inside) so the history
               modal re-renders the SAME graph for any change without touching
               the main view's state. */}
-          <FlowCanvas view={view} selected={selected} onActivate={onCardActivate} t={t} />
+          <FlowCanvas view={view} selected={selected} onActivate={onCardActivate} onOpenArtifact={openArtifact} t={t} />
 
           {view.empty && (
             <div className={css.toolbar}>
@@ -2082,9 +2215,11 @@ function FlowCanvas(props: {
   view: WorkflowTabView
   selected: WorkflowNodeId | null
   onActivate: (id: string) => void
+  /** 【变更】2026-10-07 (九点批 问题 4): opens one node artifact in the sidebar. */
+  onOpenArtifact: (path: string) => void
   t: (key: WorkflowTabKey) => string
 }): React.ReactElement {
-  const { view, selected, onActivate, t } = props
+  const { view, selected, onActivate, onOpenArtifact, t } = props
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const panDrag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
@@ -2345,6 +2480,43 @@ function FlowCanvas(props: {
                     )
                   })()}
                 </div>
+                {/* 【变更】2026-10-07 (九点批 问题 2/4): per-node route badge +
+                    artifact chips. The badge reads the「当前路由」fold's audit
+                    for THIS phase (last-served tier·model); the chips are the
+                    stage's real artifact files (node.artifacts), click-to-open
+                    through the rail's openArtifact channel. Nodes without an
+                    audit or artifacts render neither. */}
+                {(() => {
+                  const routeActual = view.routeStatus?.state === 'routed'
+                    ? view.routeStatus.phases.find(row => row.phase === placement.id)?.actual
+                    : undefined
+                  if (routeActual === undefined) return null
+                  return (
+                    <div className={css.flowNodeRoute} data-testid={`flow-node-route-${placement.id}`}>
+                      {routeBadgeText(routeActual, t)}
+                    </div>
+                  )
+                })()}
+                {node?.artifacts !== undefined && node.artifacts.length > 0 && (
+                  <div className={css.flowNodeArtifacts}>
+                    {node.artifacts.map(artifact => (
+                      <button
+                        key={`${placement.id}:${artifact}`}
+                        type="button"
+                        className={css.flowNodeArtifactChip}
+                        title={artifact}
+                        onClick={(event) => {
+                          // The node itself selects on click — the chip must
+                          // not, it opens the file.
+                          event.stopPropagation()
+                          onOpenArtifact(artifact)
+                        }}
+                      >
+                        {artifact.split('/').pop() ?? artifact}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -2438,6 +2610,7 @@ function HistoryFlowModal(props: {
                 view={history}
                 selected={selected}
                 onActivate={(id) => { setSelected(id as WorkflowNodeId) }}
+                onOpenArtifact={onOpenArtifact}
                 t={t}
               />
             </div>

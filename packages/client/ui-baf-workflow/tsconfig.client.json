@@ -23,6 +23,7 @@
     "src/client/WorkflowView.tsx",
     "src/client/WorkflowTabRow.tsx",
     "src/client/RouteStatusRow.tsx",
+    "src/client/GatesOverviewRow.tsx",
     "src/workflow-tab-settings.ts",
     "src/css-modules.d.ts"
   ],

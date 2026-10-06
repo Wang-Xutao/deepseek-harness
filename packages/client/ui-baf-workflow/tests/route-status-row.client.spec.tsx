@@ -8,12 +8,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { within } from '@testing-library/react'
 afterEach(cleanup)
-import { RouteStatusRow } from '../src/client/RouteStatusRow.tsx'
+import { RouteStatusRow, routeBadgeText } from '../src/client/RouteStatusRow.tsx'
 import type { WorkflowTabRouteStatus } from '../src/client/tab-types.ts'
 
 const t = (key: string): string => key
 
-function statusOf(phases: WorkflowTabRouteStatus extends { state: 'routed'; phases: infer P } ? P : never): WorkflowTabRouteStatus {
+function statusOf(
+  phases: WorkflowTabRouteStatus extends { state: 'routed'; phases: infer P } ? P : never,
+  extra: { sessionModel?: { provider: string; model: string; auto: boolean } } = {},
+): WorkflowTabRouteStatus {
   return {
     state: 'routed',
     tiers: {
@@ -22,6 +25,7 @@ function statusOf(phases: WorkflowTabRouteStatus extends { state: 'routed'; phas
       low: { provider: 'p2', model: 'cheap-fast' },
     },
     phases,
+    ...extra,
   }
 }
 
@@ -98,5 +102,46 @@ describe('RouteStatusRow (M3 批次C 当前路由行)', () => {
     // never "mid·big-brain" (the tier label would misname the model's tier).
     expect(screen.getByTestId('route-chip').textContent)
       .toBe('node.implementbig-brainroute.fallbackroute.escalation')
+  })
+})
+
+describe('RouteStatusRow empty state (九点批 问题 5 动态提示)', () => {
+  it('says Auto is engaged when the session sits on the baf-route/auto pseudo entry', () => {
+    render(<RouteStatusRow status={statusOf(
+      [{ phase: 'design', preferredTier: 'high', preferred: { provider: 'p1', model: 'big-brain' } }],
+      { sessionModel: { provider: 'baf-route', model: 'auto', auto: true } },
+    )} t={t as never} />)
+    expect(screen.getByTestId('route-empty').textContent).toBe('route.noneAuto')
+  })
+
+  it('names the pinned model and why routing is not engaged', () => {
+    render(<RouteStatusRow status={statusOf(
+      [{ phase: 'design', preferredTier: 'high', preferred: { provider: 'p1', model: 'big-brain' } }],
+      { sessionModel: { provider: 'deepseek', model: 'chat-pro', auto: false } },
+    )} t={t as never} />)
+    expect(screen.getByTestId('route-empty').textContent)
+      .toBe('route.nonePinnedPrechat-proroute.nonePinnedPost')
+  })
+
+  it('keeps the bare blank only when the log proves no session model either', () => {
+    render(<RouteStatusRow status={statusOf(
+      [{ phase: 'design', preferredTier: 'high', preferred: { provider: 'p1', model: 'big-brain' } }],
+    )} t={t as never} />)
+    expect(screen.getByTestId('route-empty').textContent).toBe('route.none')
+  })
+})
+
+describe('routeBadgeText (九点批 问题 2/4 shared 档位·模型 badge)', () => {
+  it('prefixes the tier label when the audit carries one and no fallback moved the turn', () => {
+    expect(routeBadgeText({ tier: 'high', fallbackActive: false, model: 'big-brain' }, t as never))
+      .toBe('route.tierHigh·big-brain')
+    expect(routeBadgeText({ tier: 'low', model: 'cheap-fast' }, t as never))
+      .toBe('route.tierLow·cheap-fast')
+  })
+
+  it('shows the model alone for pre-M2 audits and fallback-moved turns', () => {
+    expect(routeBadgeText({ model: 'middle' }, t as never)).toBe('middle')
+    expect(routeBadgeText({ tier: 'mid', fallbackActive: true, model: 'big-brain' }, t as never))
+      .toBe('big-brain')
   })
 })

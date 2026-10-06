@@ -126,6 +126,38 @@ export function isSecondaryOptionLabel(label: string): boolean {
   return label.startsWith('暂不') || label.startsWith('只是')
 }
 
+/**
+ * 【变更】2026-10-07 (九点批 问题 2): the node whose work order a gate card's
+ * confirm dispatches — the closed-set mirror of `advanceGateIdForNode` +
+ * `GATE_REGISTRY` (the question id on the wire IS the gate id). Stage-advance
+ * gates dispatch the stage they advance INTO (the landed rest takes the work
+ * order); the classify confirm installs the open-stage template; gates that
+ * archive/init/escalate/replay dispatch nothing model-authored — null, no
+ * preview line. Locked by the gates-overview projection test.
+ */
+const DISPATCH_NODE_OF_GATE: Readonly<Record<string, import('./tab-types.ts').WorkflowNodeId>> = {
+  'intake-classify': 'open',
+  'open-advance': 'clarify',
+  'bugfix-open-advance': 'implement',
+  'clarify-advance': 'design',
+  'design-advance': 'plan',
+  'plan-advance': 'implement',
+  'verify-advance': 'verify',
+  // The design park gate rides the wire as its REGISTRY confirm id
+  // (go-coordinator maps design-to-plan → design-confirm), not the park name.
+  'design-confirm': 'plan',
+}
+
+/**
+ * The dispatch node for one gate id (see {@link DISPATCH_NODE_OF_GATE}).
+ * @param gateId - the ask's question id (the GATE_REGISTRY id).
+ * @returns the node the confirm's work order authors, or null.
+ */
+export function dispatchNodeOfGate(gateId: string | undefined): import('./tab-types.ts').WorkflowNodeId | null {
+  if (gateId === undefined) return null
+  return DISPATCH_NODE_OF_GATE[gateId] ?? null
+}
+
 /** Whole-line `{{change:<id>}}` marker (用户问题 1.2 wire protocol). */
 const CHANGE_LINE = /^\{\{change:([^}]+)\}\}$/
 /** List-line artifact token: `- {{art:<path>}} <label>` (用户问题 1.5). */

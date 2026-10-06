@@ -130,6 +130,15 @@ describe('workOrderText', () => {
     expect(text).toContain('baf_question_ask')
     expect(text).toContain('本工单由客户敲 /baf-go 生成（客户已授权）')
   })
+
+  // 【变更】2026-10-07 (九点批 问题 1 · grill-me 轻量融入): the clarify order
+  // carries ONE asking-discipline line — a style hint, not a completion
+  // condition (the gate still judges only the clarify.md shape).
+  it('clarify orders carry the grill-me asking-discipline line', () => {
+    const text = workOrderText(CLARIFY_GAP)
+    expect(text).toContain('1b. 追问纪律：一次只问一个最阻塞的问题')
+    expect(text).toContain('阻塞问题清零后才算澄清完成')
+  })
 })
 
 describe('artifactPathFor', () => {

@@ -204,6 +204,24 @@ describe('BafStandardConfigRemote (mounted)', () => {
     expect(doc.content).toContain('testing-discipline')
   })
 
+  // 【变更】2026-10-07 (九点批 问题 8): the 8 rule areas ride the summary —
+  // id + locale titleKey + ANCHORED sourceRef (raw ref while placeholder).
+  it('exposes the 8 rule areas with anchored sourceRefs', async () => {
+    const { remote } = await workspace(true, true)
+    const summary = await remote.summary()
+    const areas = summary.standardAreas ?? []
+    expect(areas.map(area => area.id)).toEqual([
+      'project-charter', 'coding-style', 'interfaces', 'error-handling',
+      'logging', 'documentation', 'branch-commit', 'testing-discipline',
+    ])
+    expect(areas[0]).toEqual({
+      id: 'project-charter',
+      titleKey: 'baf.standard.area.project-charter',
+      sourceRef: '.baf/standards/default-rules.md#project-charter',
+    })
+    expect(areas[7]?.sourceRef).toBe('.baf/standards/default-rules.md#testing-discipline')
+  })
+
   it('answers no-workspace / no-baseline / failed with distinct statuses', async () => {
     const { remote } = await workspace(false, false)
     // The workspace exists on disk but the sandbox root below names nothing.

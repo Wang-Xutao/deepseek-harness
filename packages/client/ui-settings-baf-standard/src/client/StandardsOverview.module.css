@@ -170,3 +170,93 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* 【变更】2026-10-07 (九点批 问题 8): the 8-domain digest + provenance chain. */
+
+.areaList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.areaRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.areaHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.areaHead:hover {
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+}
+
+.areaTitle {
+  flex: none;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.areaDesc {
+  flex: 1 1 auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.areaToggle {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.areaAnchor {
+  padding-left: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  word-break: break-all;
+}
+
+.areaBody {
+  width: 100%;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fromSteps {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.fromLiving {
+  margin-top: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}

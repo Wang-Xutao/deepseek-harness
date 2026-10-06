@@ -9,10 +9,55 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { BafStandardCardId, BafStandardFieldRow } from '../types.ts'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
-import type { BafStandardKey } from './locales.ts'
+import { NS, type BafStandardKey } from './locales.ts'
 import css from './StandardsOverview.module.css'
 
 const identity = <T,>(value: T): T => value
+
+/**
+ * 【变更】2026-10-07 (九点批 问题 8): per-domain locale keys (title + one-line
+ * jurisdiction), keyed by area id — the host's `titleKey` resolves into this
+ * table after its `${NS}.area.` prefix is stripped.
+ */
+const AREA_META: Record<string, readonly [BafStandardKey, BafStandardKey]> = {
+  'project-charter': ['area.project-charter', 'areaDesc.project-charter'],
+  'coding-style': ['area.coding-style', 'areaDesc.coding-style'],
+  interfaces: ['area.interfaces', 'areaDesc.interfaces'],
+  'error-handling': ['area.error-handling', 'areaDesc.error-handling'],
+  logging: ['area.logging', 'areaDesc.logging'],
+  documentation: ['area.documentation', 'areaDesc.documentation'],
+  'branch-commit': ['area.branch-commit', 'areaDesc.branch-commit'],
+  'testing-discipline': ['area.testing-discipline', 'areaDesc.testing-discipline'],
+}
+
+/** Resolve a host area's id from its `titleKey` (`<NS>.area.<id>`). */
+function areaIdOf(titleKey: string, fallbackId: string): string {
+  const prefix = `${NS}.area.`
+  return titleKey.startsWith(prefix) ? titleKey.slice(prefix.length) : fallbackId
+}
+
+/**
+ * Slice one rule domain's rules out of the rules document: the section from
+ * its `## <anchor>…` heading up to the next `## ` heading (the scaffold's
+ * headings carry a Chinese tail after the anchor — `## logging 日志` — so the
+ * match is prefix-wise). Pure; exported for the client spec.
+ * @param content - the rules document text.
+ * @param anchor - the area's heading anchor (its id).
+ * @returns the trimmed section, or undefined when the heading is absent.
+ */
+export function sliceAreaContent(content: string, anchor: string): string | undefined {
+  const lines = content.split('\n')
+  const start = lines.findIndex(line => line.startsWith(`## ${anchor} `) || line.trim() === `## ${anchor}`)
+  if (start === -1) return undefined
+  let end = lines.length
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (lines[index]?.startsWith('## ') === true) {
+      end = index
+      break
+    }
+  }
+  return lines.slice(start, end).join('\n').trim()
+}
 
 /** Locale keys per host card: title, one-line purpose, command entry. */
 const CARD_META: Record<BafStandardCardId, readonly [BafStandardKey, BafStandardKey, BafStandardKey]> = {
@@ -69,7 +114,7 @@ function FieldTable({ fields, t }: {
  * @param props - composed slot + inject props.
  * @returns the overview row.
  */
-export function StandardsOverview({ useStandards, reload, loadRules, toggleRules, t }: StandardsOverviewProps) {
+export function StandardsOverview({ useStandards, reload, loadRules, toggleRules, toggleArea, t }: StandardsOverviewProps) {
   const state = useStandards(identity<StandardsOverviewState>)
   const summary = state.summary
 
@@ -134,6 +179,63 @@ export function StandardsOverview({ useStandards, reload, loadRules, toggleRules
                 <li>{t('scaffoldFileOpenspec')}</li>
               </ul>
             </div>
+          </div>
+
+          {/* 【变更】2026-10-07 (九点批 问题 8): the 8 rule domains, one digest row
+              each — title + one-line jurisdiction + anchored pointer; expanding
+              slices the domain's rules out of the loaded rules document. */}
+          <div className={css.rules} data-testid="baf-standard-areas">
+            <div className={css.rulesHead}>
+              <div>
+                <div className={css.cardTitle}>{t('areasTitle')}</div>
+                <div className={css.cardDesc}>{t('areasHint')}</div>
+              </div>
+            </div>
+            <div className={css.areaList}>
+              {(summary.standardAreas ?? []).map((area) => {
+                const id = areaIdOf(area.titleKey, area.id)
+                const meta = AREA_META[id]
+                const expanded = state.areasExpanded[id] === true
+                const content = state.rules?.status === 'ready' && state.rules.content !== undefined
+                  ? sliceAreaContent(state.rules.content, id)
+                  : undefined
+                return (
+                  <div key={id} className={css.areaRow} data-testid={`baf-standard-area-${id}`}>
+                    <button
+                      type="button"
+                      className={css.areaHead}
+                      data-testid={`baf-standard-area-toggle-${id}`}
+                      onClick={() => { toggleArea(id) }}
+                    >
+                      <span className={css.areaTitle}>{meta === undefined ? id : t(meta[0])}</span>
+                      <span className={css.areaDesc}>{meta === undefined ? '' : t(meta[1])}</span>
+                      <span className={css.areaToggle}>{expanded ? t('areaCollapse') : t('areaExpand')}</span>
+                    </button>
+                    <span className={css.areaAnchor}>{area.sourceRef}</span>
+                    {expanded ? (
+                      content !== undefined ? (
+                        <pre className={css.areaBody} data-testid={`baf-standard-area-body-${id}`}>{content}</pre>
+                      ) : (
+                        <div className={css.status} data-testid={`baf-standard-area-missing-${id}`}>{t('areaNoContent')}</div>
+                      )
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 【变更】2026-10-07 (九点批 问题 8): the provenance chain — where the
+              rules document comes from, who reads it, and how to swap it. */}
+          <div className={css.rules} data-testid="baf-standard-from">
+            <div className={css.cardTitle}>{t('fromTitle')}</div>
+            <ol className={css.fromSteps}>
+              <li data-testid="baf-standard-from-step-1">{t('fromStep1')}</li>
+              <li data-testid="baf-standard-from-step-2">{t('fromStep2')}</li>
+              <li data-testid="baf-standard-from-step-3">{t('fromStep3')}</li>
+              <li data-testid="baf-standard-from-step-4">{t('fromStep4')}</li>
+            </ol>
+            <div className={css.fromLiving}>{t('fromLiving')}</div>
           </div>
 
           <div className={css.rules} data-testid="baf-standard-rules">

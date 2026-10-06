@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RouteTierConfig, WorkflowNode } from '@deepseek-ai/dsh-baf-core'
 import type { RouteAuditEntry } from '../src/route-audit.ts'
-import { buildTierRouteStatus, lastRouteAuditByPhase } from '../src/route-status.ts'
+import { buildTierRouteStatus, lastRouteAuditByChange, lastRouteAuditByPhase } from '../src/route-status.ts'
 
 const CONFIG: RouteTierConfig = {
   schema: 1,
@@ -103,6 +103,44 @@ describe('buildTierRouteStatus (M3 批次C 纯核)', () => {
     const status = buildTierRouteStatus(CONFIG, { design: auditOf('design') })
     if (status.state !== 'routed') throw new Error('expected routed')
     expect(status.phases.find(row => row.phase === 'verify')?.actual).toBeUndefined()
+  })
+
+  it('rides the session model and by-change fold on the routed view (九点批 问题 4/5)', () => {
+    const sessionModel = { provider: 'baf-route', model: 'auto', auto: true }
+    const byChange = { 'change-1': { provider: 'p1', model: 'big-brain', tier: 'high' as const, at: '2026-10-07T00:00:00.000Z' } }
+    const status = buildTierRouteStatus(CONFIG, {}, sessionModel, byChange)
+    if (status.state !== 'routed') throw new Error('expected routed')
+    expect(status.sessionModel).toEqual(sessionModel)
+    expect(status.byChange).toEqual(byChange)
+    // absent stays absent (exactOptionalPropertyTypes on the wire view)
+    const bare = buildTierRouteStatus(CONFIG, {})
+    if (bare.state !== 'routed') throw new Error('expected routed')
+    expect(bare.sessionModel).toBeUndefined()
+    expect(bare.byChange).toBeUndefined()
+  })
+})
+
+describe('lastRouteAuditByChange (九点批 问题 4 dashboard fold)', () => {
+  it('keeps the LAST audit per changeId in log order, carrying tier only when present', () => {
+    const byChange = lastRouteAuditByChange([
+      auditOf('design', { changeId: 'change-1', model: 'middle', at: '2026-10-07T00:00:01.000Z' }),
+      auditOf('implement', { changeId: 'change-2', model: 'big-brain', tier: 'high', at: '2026-10-07T00:00:02.000Z' }),
+      // a later turn for change-1 supersedes its earlier audit
+      auditOf('verify', { changeId: 'change-1', model: 'cheap-fast', tier: 'low', at: '2026-10-07T00:00:03.000Z' }),
+    ])
+    expect(byChange['change-1']).toEqual({
+      provider: 'p1', model: 'cheap-fast', tier: 'low', at: '2026-10-07T00:00:03.000Z',
+    })
+    expect(byChange['change-2']?.model).toBe('big-brain')
+    expect(Object.keys(byChange).sort()).toEqual(['change-1', 'change-2'])
+  })
+
+  it('skips audits without a changeId entirely', () => {
+    const byChange = lastRouteAuditByChange([
+      auditOf('design', { changeId: '' }),
+      auditOf('implement'),
+    ])
+    expect(byChange).toEqual({})
   })
 })
 

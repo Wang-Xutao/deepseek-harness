@@ -97,6 +97,19 @@ export {
  */
 export { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
 /**
+ * 【变更】2026-10-07 (九点批 问题 2/4): the pure routing core + its inputs,
+ * for the Tab Remote's routePreview (what a gate click would dispatch on —
+ * no pin, no audit, same decision as a real dispatch).
+ */
+export {
+  artifactPathFor, IMPLEMENT_REQUIREMENTS_ZH, type DispatchNode, type DispatchSignal,
+} from './go-dispatch.ts'
+export { tierRouteSelection, type TierRouteOutcome } from './route-dispatch.ts'
+export { taskTierFor, type FrozenTaskTier } from './task-tier-memory.ts'
+/** 【变更】2026-10-07 (九点批 问题 5): the Auto pseudo entry ids, for the
+ * Tab fold's session-model auto flag (last request/header epoch). */
+export { AUTO_PROVIDER, AUTO_MODEL } from './route-auto.ts'
+/**
  * 【变更】2026-09-23 (demo1 issue #4): the §22.17 popup channel builder, for
  * host-plane customer surfaces (the Tab 「推进」 remote) that must behave
  * exactly like the typed `/baf-go` — pop the gate dialog, then let the click
@@ -111,6 +124,15 @@ export { makeGateAsk } from './gate-dialog.ts'
  */
 export { advanceGateIdForNode } from './gate-dialog.ts'
 export { dispatchGateRevisionFromTab } from './go-coordinator.ts'
+/**
+ * 【变更】2026-10-07 (九点批 问题 9): the read-only gates-overview projection —
+ * both gate layers (the confirm-gate registry and the per-stage completion
+ * gates) quoted verbatim for the settings 门禁总览 row.
+ */
+export {
+  projectGateOverview, gateOverviewIds,
+  type GateOverview, type GateOverviewConfirmRow, type GateOverviewOptionRow, type GateOverviewStageRow,
+} from './gate-overview.ts'
 /**
  * 【变更】2026-09-23 (demo1 issue #1): the title marker a dispatched resting
  * card carries — combining surfaces use it to keep「stopped because the model
