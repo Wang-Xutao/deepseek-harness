@@ -67,7 +67,7 @@ export type BafRouteKey =
 export const en: Record<BafRouteKey, string> = {
   nav: 'Multi-model routing',
   title: 'Multi-model routing',
-  description: 'Route work by phase and keyword to the Flagship / Reviewer / Worker model roles. Sessions on the Auto model route automatically; sessions on a concrete model always run on it (~/.dsh/baf-route-config.json).',
+  description: 'Route work by phase and keyword to the Commander / Reviewer / Worker model roles (flagship / review / execute). Sessions on the Auto model route automatically; sessions on a concrete model always run on it (~/.dsh/baf-route-config.json).',
   master: 'Enable multi-model routing',
   dirty: 'Unsaved changes',
   // 【变更】2026-10-05 (角色三档): tiers are named as ROLES — Commander leads,
@@ -83,12 +83,15 @@ export const en: Record<BafRouteKey, string> = {
   // reads as Flagship (strong reasoning, complex engineering), Reviewer and
   // Worker keep their audit/execute meanings, descriptions tightened to one
   // line each.
-  tierHigh: 'Flagship',
+  // 【变更】2026-10-06 (问题 2 批): the English role names are the labels after
+  // all — Commander/Reviewer/Worker, matching the workflow Tab's vocabulary;
+  // Chinese (旗舰/评审/执行) survives only inside the one-line descriptions.
+  tierHigh: 'Commander',
   tierMid: 'Reviewer',
   tierLow: 'Worker',
-  tierHighDesc: 'Strong reasoning, complex engineering, critical design & release, architecture decisions',
-  tierMidDesc: 'Review, investigation, testing, auditing Worker output',
-  tierLowDesc: 'Code implementation, documentation edits, light changes',
+  tierHighDesc: 'Flagship tier: strong reasoning, complex engineering, critical design & release, architecture decisions',
+  tierMidDesc: 'Reviewer tier: review, investigation, testing, auditing Worker output',
+  tierLowDesc: 'Worker tier: code implementation, documentation edits, light changes',
   provider: 'Provider',
   model: 'Model',
   effortLabel: 'Effort',
@@ -96,7 +99,7 @@ export const en: Record<BafRouteKey, string> = {
   tiersTitle: 'Model tiers',
   roleLabel: 'Role',
   phaseTitle: 'Workflow model binding',
-  flowHint: 'Bind one model role per workflow stage; click a node to cycle its role (Worker → Reviewer → Flagship).',
+  flowHint: 'Bind one model role per workflow stage; click a node to cycle its role (Worker → Reviewer → Commander).',
   phaseDesign: 'Design',
   phasePlan: 'Plan',
   phaseClarify: 'Clarify',
@@ -133,7 +136,7 @@ export const en: Record<BafRouteKey, string> = {
   previewRun: 'Dry-run',
   previewNone: 'No role would freeze',
   previewVerify: 'Simulate a verify-failed retry (floor: Reviewer)',
-  previewVerifyHint: 'Retry floor: in the real workflow, a turn whose verify stage fails retries at Reviewer or higher — check the box to preview with that floor applied.',
+  previewVerifyHint: 'A real rule, not just a preview switch: a turn that fails its verify stage redoes the work at Reviewer or above, so a Worker never retries its own failure. Check the box to preview under that rule.',
   previewEscalated: 'raised by verify retry',
   save: 'Save',
   cancel: 'Cancel',
@@ -145,7 +148,7 @@ export const en: Record<BafRouteKey, string> = {
 export const zh: Record<BafRouteKey, string> = {
   nav: '多模型路由',
   title: '多模型路由',
-  description: '按阶段与关键词把工单派给 旗舰 / 评审 / 执行 三级模型。会话选择 Auto 模型时自动路由；选择具体模型则始终使用该模型（~/.dsh/baf-route-config.json）。',
+  description: '按阶段与关键词把工单派给 Commander / Reviewer / Worker 三级模型（旗舰/评审/执行）。会话选择 Auto 模型时自动路由；选择具体模型则始终使用该模型（~/.dsh/baf-route-config.json）。',
   master: '启用多模型路由',
   dirty: '有未保存修改',
   // 【变更】2026-10-05 (角色三档): 档位以角色命名 — Commander 统帅、Reviewer
@@ -158,12 +161,14 @@ export const zh: Record<BafRouteKey, string> = {
   // 都是执行档；Reviewer 负责审查；Commander 负责架构决策与关键发布。
   // 【变更】2026-10-06 (问题 5/4.2): 角色按客户口径改名 — Commander 呈现为
   // 「旗舰」（强推理、复杂工程），评审/执行语义不变，描述各收紧为一行。
-  tierHigh: '旗舰',
-  tierMid: '评审',
-  tierLow: '执行',
-  tierHighDesc: '强推理、复杂工程、关键设计与发布、架构决策',
-  tierMidDesc: '评审、排查、测试、审查 Worker 产出',
-  tierLowDesc: '代码实现、文档改动、轻量修改',
+  // 【变更】2026-10-06 (问题 2 批): 实际使用英文角色名 — Commander/Reviewer/
+  // Worker，与工作流 Tab 一致；中文（旗舰/评审/执行）只出现在解释文字里。
+  tierHigh: 'Commander',
+  tierMid: 'Reviewer',
+  tierLow: 'Worker',
+  tierHighDesc: '旗舰档：强推理、复杂工程、关键设计与发布、架构决策',
+  tierMidDesc: '评审档：评审、排查、测试、审查 Worker 产出',
+  tierLowDesc: '执行档：代码实现、文档改动、轻量修改',
   provider: '服务商',
   model: '模型',
   effortLabel: '思考力度',
@@ -171,7 +176,7 @@ export const zh: Record<BafRouteKey, string> = {
   tiersTitle: '模型分级',
   roleLabel: '角色',
   phaseTitle: '工作流模型绑定',
-  flowHint: '为每个工作流阶段绑定角色模型；点击节点切换角色（执行 → 评审 → 旗舰）。',
+  flowHint: '为每个工作流阶段绑定角色模型；点击节点切换角色（Worker → Reviewer → Commander）。',
   phaseDesign: '设计',
   phasePlan: '规划',
   phaseClarify: '澄清',
@@ -208,7 +213,9 @@ export const zh: Record<BafRouteKey, string> = {
   previewRun: '预演',
   previewNone: '不会冻结角色',
   previewVerify: '模拟 verify 失败重试（保底 Reviewer）',
-  previewVerifyHint: '保底规则：真实工作流里 verify 阶段失败的回合，重试时至少用 Reviewer 档执行；勾选后预演按该保底规则演示。',
+  // 【变更】2026-10-06 (问题 3 批): 保底规则逻辑不动，文案改通俗 — 说清这是
+  // 真实规则、为什么要保底（防低档模型反复栽在同一处），勾选只是让预演演示它。
+  previewVerifyHint: '这是真实规则：模型自查（verify）没通过的活，重做时至少换 Reviewer 档接手，免得低档模型在同一个坑里反复失败。勾选后，预演就按这条规则演示。',
   previewEscalated: '经 verify 重试保底升档',
   save: '保存',
   cancel: '取消',

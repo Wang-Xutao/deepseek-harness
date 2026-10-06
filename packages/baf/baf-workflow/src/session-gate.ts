@@ -62,6 +62,7 @@
  */
 
 import { exec, execFile } from 'node:child_process'
+import { statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -75,6 +76,9 @@ import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import { isBafError } from '@deepseek-ai/dsh-baf-core'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
 import { createLocalOpenSpecAdapter } from '@deepseek-ai/dsh-baf-openspec'
+import {
+  renderStandardPrompt, summarizeStandard, type StandardSummary,
+} from '@deepseek-ai/dsh-baf-standard'
 import { presetCovers } from './preset-cover.ts'
 import { formatCommandReport, modeZh } from './command-format.ts'
 import { listActiveChanges, ProjectionStore, type ProjectionIndexEntry } from './projection.ts'
@@ -113,6 +117,19 @@ const SECTION_ORDER = 605
 
 /** Prompt-section name. Namespaced like `deployment:persona-prefix`. */
 const SECTION_NAME = 'baf:session-gate'
+
+/**
+ * 【变更】2026-10-06 (问题 4 · OpenSpec × Matt 融合 抓手 1): the standard-rules
+ * section sits right after the session gate (605) — the gate states WHERE the
+ * session works, this one states WHAT the workspace's engineering rules are
+ * and where they live. It injects a POINTER (source ref + rule areas), never
+ * rule text: the model reads the referenced document itself, so a live-edited
+ * rules file is always current without any prompt rebuild.
+ */
+const STANDARD_SECTION_ORDER = 606
+
+/** Prompt-section name for the standard-rules pointer. */
+const STANDARD_SECTION_NAME = 'baf:standard-rules'
 
 /** Per-item probe budget (§18.3.2). */
 const DEFAULT_TIMEOUT_MS = 1500
@@ -194,12 +211,25 @@ const inflight = new Map<Agent, AbortController>()
 const gateFired = new WeakSet<Agent>()
 
 /**
+ * Cached standard summary per workspace, with the baseline file's mtime —
+ * `standardRulesSection` is synchronous, so it renders the cached summary and
+ * lets an mtime drift trigger an async re-prime for the NEXT turn (§ below).
+ */
+interface StandardCacheEntry {
+  readonly summary: StandardSummary
+  readonly mtimeMs: number
+}
+
+const standardCache = new Map<string, StandardCacheEntry>()
+
+/**
  * Drop every cached probe/snapshot. Tests call this between workspaces; the
  * row never does (a workspace's probe stays fresh for one card render).
  */
 export function resetSessionGateCache(): void {
   probeCache.clear()
   snapshotCache.clear()
+  standardCache.clear()
 }
 
 /**
@@ -493,6 +523,73 @@ export function sessionGateSection(cwd: string): string {
 }
 
 /**
+ * Load the workspace baseline and cache its standard summary — the model-side
+ * 抓手 1 of the OpenSpec × Matt fusion (2026-10-06 问题 4).
+ *
+ * Failure containment mirrors the gate: an unreadable/absent baseline simply
+ * leaves the section hidden (the scaffold gate card owns that story), never
+ * blocks the session. A baseline whose `standard.mattPocockRulesRef` is still
+ * the enterprise placeholder caches as `policy_missing` — the section then
+ * SAYS the policy is not configured instead of improvising rules.
+ * @param cwd - workspace root.
+ * @returns the cached summary, or undefined when the baseline is unreadable.
+ */
+export async function primeStandardSummary(cwd: string): Promise<StandardSummary | undefined> {
+  if (cwd === undefined || cwd === '') return undefined
+  try {
+    const path = join(cwd, '.baf', 'baseline.yml')
+    const manifest = await loadBaselineFile(path)
+    const mtime = await stat(path)
+    const summary = summarizeStandard(manifest)
+    standardCache.set(cwd, { summary, mtimeMs: mtime.mtimeMs })
+    return summary
+  } catch {
+    standardCache.delete(cwd)
+    return undefined
+  }
+}
+
+/**
+ * The model-facing standard-rules pointer for one workspace. Synchronous: it
+ * renders the cached summary, and when the baseline file's mtime has drifted
+ * (customer scaffolded mid-session, or an enterprise ref edit) it kicks an
+ * async re-prime so the NEXT turn renders fresh — eventual consistency, one
+ * turn late, never stale forever.
+ * @param cwd - workspace root.
+ * @returns prompt text; empty (section hidden) when no summary is cached yet.
+ */
+export function standardRulesSection(cwd: string): string {
+  const entry = standardCache.get(cwd)
+  try {
+    const mtimeMs = statSync(join(cwd, '.baf', 'baseline.yml')).mtimeMs
+    if (entry !== undefined && entry.mtimeMs !== mtimeMs) {
+      void primeStandardSummary(cwd)
+    }
+  } catch {
+    // No baseline on disk: if a cache entry lingers from a deleted file,
+    // re-prime (which will drop it); render nothing meanwhile.
+    if (entry !== undefined) void primeStandardSummary(cwd)
+    return ''
+  }
+  if (entry === undefined) {
+    // Never primed (or dropped): kick a load so a baseline that appeared after
+    // install shows up from the following turn.
+    void primeStandardSummary(cwd)
+    return ''
+  }
+  const summary = entry.summary
+  // Available: the pointer plus the read-first instruction. Placeholder: the
+  // provider's policy_missing lines already say exactly what that means.
+  const extra = summary.available
+    ? ['撰写 design.md / plan.json 等 OpenSpec 产物前，先读规则源对应锚点；确需偏离时，在产物中注明偏离项与理由。']
+    : []
+  return [
+    '## BAF 工程规范（规则源）',
+    ...[...renderStandardPrompt(summary).split('\n'), ...extra].map(line => `- ${line}`),
+  ].join('\n')
+}
+
+/**
  * Probe the toolchain and binding and cache the snapshot — without touching
  * the transcript.
  *
@@ -540,6 +637,11 @@ export async function runSessionGate(ctx: Context, agent: Agent): Promise<void> 
   if (cwd === undefined || cwd === '') return
   const controller = new AbortController()
   inflight.set(agent, controller)
+  // Refresh the standard-rules pointer at fire time too: a customer may have
+  // scaffolded between install and this first genuine message, and the very
+  // first model turn should already see the rules source (the mtime self-heal
+  // in `standardRulesSection` covers everything later).
+  void primeStandardSummary(cwd)
   try {
     // Reuse the arm-time snapshot while it is fresh; a settled (reopened /
     // swept / explicitly selected) session has none yet, so this is also the
@@ -608,8 +710,18 @@ export function apply(ctx: Context): void {
         order: SECTION_ORDER,
         text: () => cwd === undefined || cwd === '' ? '' : sessionGateSection(cwd),
       })
+      // 抓手 1 (2026-10-06 问题 4): the standard-rules POINTER rides right after
+      // the gate facts — same fiber, shared disposal, primed fire-and-forget so
+      // the section fills in on a later turn even for a workspace without a
+      // baseline yet (it self-heals via the mtime check once scaffolded).
+      scope.systemPrompt.section({
+        name: STANDARD_SECTION_NAME,
+        order: STANDARD_SECTION_ORDER,
+        text: () => cwd === undefined || cwd === '' ? '' : standardRulesSection(cwd),
+      })
     })
     fibers.set(agent, fiber)
+    if (cwd !== undefined && cwd !== '') void primeStandardSummary(cwd)
     if (gateFired.has(agent)) return
     // Fire-and-forget: the first screen must not wait on the probe (§17.7 R20).
     if (settled) {

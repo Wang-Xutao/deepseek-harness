@@ -1,0 +1,30 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "types": [
+    "node",
+    "client-build-environment"
+  ],
+  "files": [
+    "src/types.ts",
+    "src/css-modules.d.ts",
+    "src/client/index.ts",
+    "src/client/locales.ts",
+    "src/client/remote-types.ts",
+    "src/client/standards-store.ts",
+    "src/client/StandardsOverview.tsx"
+  ],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../baf/baf-core" },
+    { "path": "../locale/tsconfig.client.json" },
+    { "path": "../ui-primitives" },
+    { "path": "../ui-settings/tsconfig.client.json" },
+    { "path": "../ui-slots" },
+    { "path": "../../typert/protocol" }
+  ]
+}

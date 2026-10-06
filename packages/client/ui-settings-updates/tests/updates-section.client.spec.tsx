@@ -226,9 +226,11 @@ describe('UpdatesSection', () => {
     ).toBeTruthy()
   })
 
-  it('prints the check result — full error text included — directly under the buttons (2026-10-06 问题 6)', async () => {
-    // The exact sentence the desktop throws when the release channel is empty.
-    const errorText = '无法读取更新通道（HTTP 404）。仓库尚未发布 Release「baf-channel-stable」；请先在 baf 分支打 tag baf-dsh-v* 并完成发版工作流。'
+  it('prints the check result — the fault-code one-liner — directly under the buttons (2026-10-06 问题 5 批)', async () => {
+    // 问题 5 客户决策: the customer sees the code + one plain sentence; the
+    // technical sentence (HTTP 404 / Release 名 / 发版流程) now lives only in
+    // the main-process log and the help doc's fault-code table.
+    const errorText = '故障码 U-01 · 更新服务尚未就绪（详见 帮助文档→版本与更新）'
     const ERROR: CheckUpdateResult = {
       status: 'error',
       versions: { ...VERSIONS },

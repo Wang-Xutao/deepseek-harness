@@ -379,7 +379,7 @@ describe('RouteSectionController', () => {
     expect(store.getSnapshot().dirty).toBe(false)
   })
 
-  it('distills the catalog: auto group dropped, reasoning carried, dup names suffixed', async () => {
+  it('distills the catalog: auto group dropped, reasoning carried, only same-provider dup names suffixed', async () => {
     const controller = new RouteSectionController(fakeCtx({
       catalog: async () => ({
         ok: true,
@@ -398,7 +398,7 @@ describe('RouteSectionController', () => {
                 { id: 'm2', name: 'Same' },
               ],
             },
-            { id: 'q', name: 'Q', models: [{ id: 'cheap', name: 'C' }] },
+            { id: 'q', name: 'Q', models: [{ id: 'cheap', name: 'C' }, { id: 'sameq', name: 'Same' }] },
           ],
           failures: [],
         },
@@ -406,14 +406,18 @@ describe('RouteSectionController', () => {
     }))
     const store = controller.inject().hooks.routeSection
     await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
+    // 问题 1 (2026-10-06): the label is the fetched name itself — the menus
+    // are provider-scoped, so a CROSS-provider duplicate stays bare; only a
+    // duplicate name inside ONE provider disambiguates, via the id.
     expect(store.getSnapshot().catalog).toEqual({
       models: [
         {
-          id: 'm1', name: 'Same', provider: 'p', label: 'Same · p',
+          id: 'm1', name: 'Same', provider: 'p', label: 'Same · m1',
           reasoning: { efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high' },
         },
-        { id: 'm2', name: 'Same', provider: 'p', label: 'Same · p' },
+        { id: 'm2', name: 'Same', provider: 'p', label: 'Same · m2' },
         { id: 'cheap', name: 'C', provider: 'q', label: 'C' },
+        { id: 'sameq', name: 'Same', provider: 'q', label: 'Same' },
       ],
     })
   })
@@ -574,25 +578,26 @@ describe('ModelRoutingRow', () => {
     expect(within(screen.getByTestId('route-tier-low')).getByRole('button', { name: 'ghost' })).toBeTruthy()
   })
 
-  it('suffixed duplicate names resolve to their own id/provider per provider menu (批次B-E)', () => {
+  it('provider-scoped menus keep names bare; the pick still resolves id+provider (问题 1)', () => {
     const { face, props } = harness({
       ...READY,
       catalog: {
         models: [
-          { id: 'm1', name: 'Same', provider: 'p', label: 'Same · p' },
-          { id: 'm2', name: 'Same', provider: 'q', label: 'Same · q' },
+          { id: 'm1', name: 'Same', provider: 'p', label: 'Same' },
+          { id: 'm2', name: 'Same', provider: 'q', label: 'Same' },
           { id: 'big', name: 'Big Brain', provider: 'p', label: 'Big Brain' },
         ],
       },
     })
     render(<ModelRoutingRow {...props} />)
     // low runs provider q (its model cheap is absent from this catalog, so the
-    // anchor reads the raw id) — the filtered menu shows the q duplicate with
-    // its provider suffix, never the p namesake; the pick carries q/m2.
+    // anchor reads the raw id) — the filtered menu shows ONLY q's Same, its
+    // label the bare fetched name (the menu scope already says the provider),
+    // never the p namesake; the pick carries q/m2.
     fireEvent.click(within(screen.getByTestId('route-tier-low')).getByRole('button', { name: 'cheap' }))
-    expect(screen.getByRole('menuitem', { name: 'Same · q' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Same' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'Same · p' })).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Same · q' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Same' }))
     expect(face.setTierModel).toHaveBeenCalledWith('low', { provider: 'q', model: 'm2' })
   })
 

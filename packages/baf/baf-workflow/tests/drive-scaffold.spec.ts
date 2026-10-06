@@ -24,7 +24,7 @@ function makeStubAdapter(record: { calls: ScaffoldAdapterOptions[]; outcome: 'do
       }
       return {
         kind: 'done',
-        changes: { created: ['.baf/baseline.yml'], skipped: ['openspec/changes/.gitkeep'], backedUp: [] },
+        changes: { created: ['.baf/baseline.yml', '.baf/standards/default-rules.md'], skipped: ['openspec/changes/.gitkeep'], backedUp: [] },
       }
     },
   }

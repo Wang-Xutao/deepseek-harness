@@ -1292,6 +1292,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings-baf-route':
         specifier: workspace:*
         version: link:../../client/ui-settings-baf-route
+      '@deepseek-ai/dsh-client-ui-settings-baf-standard':
+        specifier: workspace:*
+        version: link:../../client/ui-settings-baf-standard
       '@deepseek-ai/dsh-command-feedback':
         specifier: workspace:*
         version: link:../../feedback/command-feedback
@@ -1890,6 +1893,9 @@ importers:
       '@deepseek-ai/dsh-baf-openspec':
         specifier: workspace:^
         version: link:../baf-openspec
+      '@deepseek-ai/dsh-baf-standard':
+        specifier: workspace:^
+        version: link:../baf-standard
       '@deepseek-ai/dsh-cmdline':
         specifier: workspace:^
         version: link:../../boot/cmdline
@@ -2830,6 +2836,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings-baf-route':
         specifier: workspace:*
         version: link:../../client/ui-settings-baf-route
+      '@deepseek-ai/dsh-client-ui-settings-baf-standard':
+        specifier: workspace:*
+        version: link:../../client/ui-settings-baf-standard
       '@deepseek-ai/dsh-client-ui-settings-featured-plugins':
         specifier: workspace:*
         version: link:../../client/ui-settings-featured-plugins
@@ -5394,6 +5403,67 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings':
         specifier: workspace:*
         version: link:../ui-settings
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ~18.3.0
+        version: 18.3.7(@types/react@18.3.31)
+      jsdom:
+        specifier: ^26.0.0
+        version: 26.1.0
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.1.2)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0)
+
+  packages/client/ui-settings-baf-standard:
+    dependencies:
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:^
+        version: link:../../typert/protocol
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:^
+        version: link:../../api/remotes
+      '@deepseek-ai/dsh-baf-core':
+        specifier: workspace:^
+        version: link:../../baf/baf-core
+      '@deepseek-ai/dsh-baf-standard':
+        specifier: workspace:^
+        version: link:../../baf/baf-standard
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:^
+        version: link:../locale
+      '@deepseek-ai/dsh-client-store':
+        specifier: workspace:*
+        version: link:../store
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:^
+        version: link:../ui-primitives
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../ui-settings
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:*
+        version: link:../../sandbox/sandbox-policy
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

@@ -138,7 +138,9 @@ describe('dispatchUpdateRequest (9.6 子→主命令回路)', () => {
   function makeService(): { service: UpdateService, dir: string, restore: () => void } {
     const dir = mkdtempSync(join(tmpdir(), 'baf-dispatch-'))
     const originalFetch = globalThis.fetch
-    globalThis.fetch = ((): Promise<Response> => Promise.reject(new Error('网络不可用'))) as typeof fetch
+    // Node fetch rejects network-layer failures as TypeError — the shape the
+    // fault-code classifier reads (U-02); plain Errors fall to U-03.
+    globalThis.fetch = ((): Promise<Response> => Promise.reject(new TypeError('网络不可用'))) as typeof fetch
     const service = new UpdateService({
       userData: dir,
       seedVersions: { bafDsh: '0.0.23', dsh: '0.1.10', bafPlugin: '0.0.23' },
@@ -156,12 +158,17 @@ describe('dispatchUpdateRequest (9.6 子→主命令回路)', () => {
     return { service, dir, restore }
   }
 
-  it('check maps a failed pull to ok:false + error (never throws)', async () => {
+  it('check maps a failed pull to ok:false + fault code (never throws)', async () => {
     const { service, restore } = makeService()
     try {
       const r = await service.dispatchUpdateRequest({ id: 'req-1', command: 'check' })
       expect(r.ok).toBe(false)
-      expect(r.error).toContain('网络不可用')
+      // 问题 5 (2026-10-06): the customer line is the code + one plain
+      // sentence; the technical detail lives in the main-process log.
+      expect(r.error).toContain('故障码 U-02')
+      expect(r.error).toContain('网络连接失败')
+      expect(r.error).toContain('帮助文档')
+      expect(r.error).not.toContain('网络不可用')
       expect(r.check?.status).toBe('error')
     } finally {
       restore()
@@ -173,7 +180,7 @@ describe('dispatchUpdateRequest (9.6 子→主命令回路)', () => {
     try {
       const r = await service.dispatchUpdateRequest({ id: 'req-2', command: 'apply' })
       expect(r.ok).toBe(false)
-      expect(r.error).toContain('网络不可用')
+      expect(r.error).toContain('故障码 U-02')
       expect(r.apply?.launchedInstaller).toBe(false)
       expect(r.apply?.scopes).toEqual([])
     } finally {

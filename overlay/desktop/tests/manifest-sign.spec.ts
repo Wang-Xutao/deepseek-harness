@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { createHash, generateKeyPairSync, sign } from 'node:crypto'
-import { fetchChannelManifest, verifyManifestSignature, type GithubUpdateConfig } from '../src/update/github.ts'
+import { fetchChannelManifest, verifyManifestSignature, UpdateFault, type GithubUpdateConfig } from '../src/update/github.ts'
 import { checkManifestPolicy, parseManifest, type UpdateManifest } from '../src/update/manifest.ts'
 import {
   registerSigningKey,
@@ -18,6 +18,20 @@ import {
 } from '../src/update/public-key.ts'
 
 const CONFIG: GithubUpdateConfig = { owner: 'o', repo: 'r', channelTag: 'baf-channel-stable' }
+
+/**
+ * Await a rejection and expose its fault code (问题 5: the thrown message keeps
+ * the technical detail; the code is what the customer-facing card quotes).
+ */
+async function faultCodeOf(run: () => Promise<unknown>): Promise<string> {
+  try {
+    await run()
+  } catch (err) {
+    if (err instanceof UpdateFault) return err.code
+    throw err
+  }
+  throw new Error('expected a rejection')
+}
 
 /** A valid schema-2 manifest value with an overridable signature descriptor. */
 function buildManifest(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -110,6 +124,7 @@ describe('fetchChannelManifest enforcement (production)', () => {
     const bytes = Buffer.from(JSON.stringify(buildManifest()), 'utf8')
     globalThis.fetch = serveRelease(bytes) as typeof fetch
     await expect(fetchChannelManifest(CONFIG)).rejects.toThrow('manifest.sig')
+    expect(await faultCodeOf(() => fetchChannelManifest(CONFIG))).toBe('U-04')
   })
 
   it('refuses an unregistered keyId and a test-only key', async () => {
@@ -120,6 +135,7 @@ describe('fetchChannelManifest enforcement (production)', () => {
     const sig = Buffer.from(sign(null, bytes, stray.pem))
     globalThis.fetch = serveRelease(bytes, sig) as typeof fetch
     await expect(fetchChannelManifest(CONFIG)).rejects.toThrow('未注册')
+    expect(await faultCodeOf(() => fetchChannelManifest(CONFIG))).toBe('U-04')
 
     // Registered but testOnly under packaged build → refused (the descriptor
     // names the test key, so keyId resolution succeeds and testOnly bites).
@@ -130,6 +146,7 @@ describe('fetchChannelManifest enforcement (production)', () => {
     const testSig = Buffer.from(sign(null, testBytes, pem))
     globalThis.fetch = serveRelease(testBytes, testSig) as typeof fetch
     await expect(fetchChannelManifest(CONFIG)).rejects.toThrow('测试签名 key')
+    expect(await faultCodeOf(() => fetchChannelManifest(CONFIG))).toBe('U-04')
   })
 
   it('accepts a properly signed manifest from a registered production key', async () => {

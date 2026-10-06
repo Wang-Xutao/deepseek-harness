@@ -13,7 +13,7 @@
  * constraint the gate is designed around (§18.3.3).
  */
 
-import { chmod, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, mkdir, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -33,6 +33,7 @@ import {
   name as gateName,
   probeMountFlags,
   probeToolchain,
+  primeStandardSummary,
   renderProbeLines,
   renderWelcomeCard,
   resetSessionGateCache,
@@ -42,6 +43,7 @@ import {
   runSessionGate,
   sessionGateLogLine,
   sessionGateSection,
+  standardRulesSection,
   startupGateCardFor,
   type ToolchainProbe,
 } from '../src/session-gate.ts'
@@ -450,6 +452,82 @@ describe('BAF session gate · two channels (§18.3.3)', () => {
   })
 })
 
+// ── standard-rules section (2026-10-06 问题 4 · OpenSpec × Matt 融合 抓手 1) ──
+
+describe('BAF session gate · standard-rules section (问题 4 抓手 1)', () => {
+  /** Fixture baseline text with the standard ref re-pointed. */
+  async function writeBaseline(root: string, ref: string): Promise<void> {
+    await mkdir(join(root, '.baf'), { recursive: true })
+    const text = (await readFile(FIXTURE_BASELINE, 'utf8'))
+      .replace('mattPocockRulesRef: <enterprise-tbd>', `mattPocockRulesRef: ${ref}`)
+    await writeFile(join(root, '.baf', 'baseline.yml'), text, 'utf8')
+  }
+
+  it('stays hidden (empty text) while no baseline exists, and never throws', async () => {
+    const root = await emptyWorkspace()
+    try {
+      expect(standardRulesSection(root)).toBe('')
+      expect(await primeStandardSummary(root)).toBeUndefined()
+      expect(standardRulesSection(root)).toBe('')
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('renders the rules-source pointer for a ready baseline', async () => {
+    const root = await emptyWorkspace()
+    try {
+      await writeBaseline(root, '.baf/standards/default-rules.md')
+      const summary = await primeStandardSummary(root)
+      expect(summary?.availability).toBe('ready')
+      const text = standardRulesSection(root)
+      expect(text).toContain('## BAF 工程规范')
+      expect(text).toContain('Rules source: .baf/standards/default-rules.md')
+      expect(text).toContain('testing-discipline')
+      // The read-first instruction rides the pointer (抓手 1).
+      expect(text).toContain('先读规则源对应锚点')
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('says policy_missing for a placeholder ref instead of improvising rules', async () => {
+    const root = await emptyWorkspace()
+    try {
+      await mkdir(join(root, '.baf'), { recursive: true })
+      await writeFile(join(root, '.baf', 'baseline.yml'), await readFile(FIXTURE_BASELINE, 'utf8'), 'utf8')
+      const summary = await primeStandardSummary(root)
+      expect(summary?.availability).toBe('policy_missing')
+      const text = standardRulesSection(root)
+      expect(text).toContain('policy_missing')
+      // No read-first instruction when there is nothing to read.
+      expect(text).not.toContain('先读规则源对应锚点')
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('self-heals one turn late when the baseline changes on disk', async () => {
+    const root = await emptyWorkspace()
+    try {
+      const baselinePath = join(root, '.baf', 'baseline.yml')
+      await writeBaseline(root, '.baf/standards/default-rules.md')
+      await primeStandardSummary(root)
+      // Enterprise edit: re-point the ref wholesale, with a forced mtime drift.
+      await writeBaseline(root, 'docs/enterprise-rules.md')
+      const later = new Date(Date.now() + 5000)
+      await utimes(baselinePath, later, later)
+      // The sync call renders the STALE summary but kicks an async re-prime…
+      expect(standardRulesSection(root)).toContain('.baf/standards/default-rules.md')
+      await new Promise(resolve => setTimeout(resolve, 50))
+      // …so the next turn already answers with the new ref.
+      expect(standardRulesSection(root)).toContain('docs/enterprise-rules.md')
+    } finally {
+      await cleanup(root)
+    }
+  })
+})
+
 describe('BAF session gate · row install (§18.3)', () => {
   it('installs one prompt section per existing agent and per new agent', async () => {
     const root = await emptyWorkspace()
@@ -468,15 +546,18 @@ describe('BAF session gate · row install (§18.3)', () => {
         effect: () => undefined,
       })
       apply(ctx)
-      expect(sections.map(s => s.name)).toEqual(['baf:session-gate'])
+      // 【变更】2026-10-06 (问题 4): one fiber now installs TWO sections — the
+      // gate facts (605) and the standard-rules pointer right behind it (606).
+      expect(sections.map(s => s.name)).toEqual(['baf:session-gate', 'baf:standard-rules'])
       expect(sections[0]?.order).toBe(605)
+      expect(sections[1]?.order).toBe(606)
 
       // The section is synchronous and reads the cached snapshot, so a second
       // agent's provider must answer without awaiting anything.
       const laterSections: SectionShape[] = []
       const later = fakeAgent(root, laterSections, disposed, 'later')
       handlers.get('agent/created')?.({ agent: later })
-      expect(laterSections).toHaveLength(1)
+      expect(laterSections).toHaveLength(2)
       expect(typeof laterSections[0]?.text()).toBe('string')
 
       handlers.get('agent/disposed')?.({ agent: later })

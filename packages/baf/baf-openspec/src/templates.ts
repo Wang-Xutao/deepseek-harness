@@ -1,6 +1,11 @@
 /**
  * English skeleton bodies for OpenSpec change documents.
  * Templates are data; handlers fill the marked TODO sections.
+ *
+ * 【变更】2026-10-06 (问题 4 · OpenSpec × Matt 融合 抓手 2): the design/tasks TODO
+ * lines name the workspace rules source — a structural hint only, deliberately
+ * NOT a gate condition (work orders quote exactly what the gates check; the
+ * rules themselves stay a soft constraint the prompt section points at).
  * @module @deepseek-ai/dsh-baf-openspec/templates
  */
 
@@ -53,6 +58,9 @@ export function designTemplate(changeId: string): string {
 ## Approach
 
 TODO: interfaces, data flow, error paths, and compatibility notes.
+Any deviation from the workspace rules source (baseline standard.mattPocockRulesRef,
+e.g. \`.baf/standards/default-rules.md\`) must be named here with the rule
+anchor it deviates from and why.
 
 ## Repository references
 
@@ -69,6 +77,8 @@ export function tasksTemplate(changeId: string): string {
   return `# Tasks — ${changeId}
 
 TODO: ordered task list. Each task states input, output, affected files,
-the verification command, and the rollback point.
+the verification command, and the rollback point. Test-adding tasks follow
+the testing-discipline anchor of the workspace rules source (bug fixes land
+the regression test first — red, then green).
 `
 }

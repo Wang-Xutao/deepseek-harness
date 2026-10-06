@@ -18,11 +18,10 @@
  * present (1.6); save/reset (and the small action buttons) ride the
  * featured-plugins pill style (1.4).
  * 【变更】2026-10-05 (auto 批): an out-of-catalog model (or one that left the
- * chosen provider's menu) shows a 未在目录 chip beside its raw id; duplicate
- * catalog names disambiguate via the provider-suffixed labels the store
- * distills; 预演 reads the unsaved draft and forwards the M4 verify-retry
- * switch. Tier labels read Commander/Reviewer/Worker (presentation only — the
- * wire stays high/mid/low). Testids live on intrinsics this component renders
+ * chosen provider's menu) shows a 未在目录 chip beside its raw id; 预演 reads
+ * the unsaved draft and forwards the M4 verify-retry switch. Tier labels
+ * read Commander/Reviewer/Worker (presentation only — the wire stays
+ * high/mid/low). Testids live on intrinsics this component renders
  * (the repo convention); primitives are queried through their roles. The
  * effective phase mapping always arrives materialized from the Host — `get`
  * fills defaults on an existing config and a fresh draft seeds from
@@ -45,6 +44,13 @@
  * gone; per-tag switch buttons are GONE — clicking a tag parks/revives it —
  * and every group renders its tags in 中文 / 英文 segments, each custom
  * 功能分类 (and each preset pack) as its own framed segment.
+ * 【变更】2026-10-06 (问题 1/2/3 批): the model menus are provider-scoped, so
+ * the label is now the fetched name itself (a cross-provider suffix repeated
+ * what the menu already scoped — only same-provider duplicate names still
+ * disambiguate, via the id); the role labels are the English
+ * Commander/Reviewer/Worker (Chinese survives only in the one-line
+ * descriptions); the 预演 hint explains the verify-retry floor in plain
+ * words (the rule itself is unchanged).
  */
 import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
 import {
@@ -483,10 +489,11 @@ export function ModelRoutingRow({
             // 1.1: the model menu follows the provider — only that provider's
             // models are offered. 问题 5 (4.3/4.4): the loaded draft is
             // normalized against the catalog and a provider switch re-points
-            // the model, so the pick always sits under the chosen provider;
-            // the anchor lookup stays scoped to it (a same-named model on
-            // ANOTHER provider — MiniMax-M3 · minimax-cn — can never bleed
-            // in), and the 未在目录 chip is gone.
+            // the model, so the pick always sits under the chosen provider
+            // and the anchor lookup stays scoped to it (a same-named model
+            // on ANOTHER provider can never bleed in), and the 未在目录 chip
+            // is gone. 问题 1 (2026-10-06): the menu text is the fetched
+            // name itself — the scoping above already says the provider.
             const providerModels = models.filter(model => model.provider === spec.provider)
             const selected = providerModels.find(model => model.id === spec.model)
             const anchorLabel = selected?.label ?? spec.model

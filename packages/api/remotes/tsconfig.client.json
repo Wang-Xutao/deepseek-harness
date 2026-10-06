@@ -49,6 +49,9 @@
       "path": "../../client/ui-settings-baf-route/tsconfig.host.json"
     },
     {
+      "path": "../../client/ui-settings-baf-standard/tsconfig.host.json"
+    },
+    {
       "path": "../../schedule/schedule"
     },
     {

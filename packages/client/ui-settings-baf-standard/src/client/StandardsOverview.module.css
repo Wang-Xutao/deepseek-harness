@@ -1,0 +1,172 @@
+/* BAF 工程规范 overview row chrome (2026-10-06 问题 6: 规范总览·只读).
+ * Read-only by design: no inputs, no toggles — tables and text only. */
+
+.block {
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.description {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.refresh {
+  flex: none;
+}
+
+.status {
+  margin-top: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.statusError {
+  margin-top: 12px;
+  color: var(--dsw-alias-state-danger-label);
+  font-size: 12px;
+  line-height: 18px;
+  word-break: break-all;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.path {
+  font-family: var(--dsw-alias-font-mono, monospace);
+  word-break: break-all;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.card {
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+
+.cardTitle {
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.cardDesc {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cardCommand {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.scaffoldFiles {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.fields {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+}
+
+.fields th {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: normal;
+}
+
+.fields td,
+.fields th {
+  padding: 2px 8px 2px 0;
+  vertical-align: top;
+}
+
+.fieldPath {
+  font-family: var(--dsw-alias-font-mono, monospace);
+  white-space: nowrap;
+}
+
+.value {
+  word-break: break-all;
+}
+
+.valueTbd {
+  color: var(--dsw-alias-label-secondary);
+  word-break: break-all;
+}
+
+.chipTbd {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.rules {
+  margin-top: 12px;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+
+.rulesHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rulesBody {
+  max-height: 360px;
+  margin: 8px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

@@ -39,6 +39,13 @@ describe('web-app composition roster', () => {
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-settings-baf-route')
   })
 
+  it('names the BAF 工程规范 dual-face package (its Host Remote must mount)', () => {
+    // 2026-10-06 问题 6: same failure class as above — a missing tree row
+    // strands the settings row on "waiting for service: remote.bafStandardConfig".
+    expect(pluginNamesInTree()).toContain('@deepseek-ai/dsh-client-ui-settings-baf-standard')
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-settings-baf-standard')
+  })
+
   it('keeps every tree entry resolvable: each named plugin is a dependency', () => {
     const missing = pluginNamesInTree()
       .filter(name => name.startsWith('@deepseek-ai/dsh-'))

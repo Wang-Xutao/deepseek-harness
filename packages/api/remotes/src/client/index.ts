@@ -29,6 +29,7 @@ import terminalRemote from '@deepseek-ai/dsh-api-terminal-controller/remote'
 import workspaceFilesRemote from '@deepseek-ai/dsh-api-workspace-files/remote'
 import bafWorkflowRemote from '@deepseek-ai/dsh-client-ui-baf-workflow/remote'
 import bafRouteConfigRemote from '@deepseek-ai/dsh-client-ui-settings-baf-route/remote'
+import bafStandardConfigRemote from '@deepseek-ai/dsh-client-ui-settings-baf-standard/remote'
 import featuredPluginsRemote from '@deepseek-ai/dsh-baf-featured/remote'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 
@@ -192,7 +193,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       pluginInventoryRemote, pluginManagerRemote, pluginRegistryProbeRemote, messageFeedbackRemote, sessionFeedbackRemote,
       fileUploadsRemote, sessionReferencesRemote,
       permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
-      officeToPdfRemote, userQuestionsRemote, bafWorkflowRemote, bafRouteConfigRemote, featuredPluginsRemote,
+      officeToPdfRemote, userQuestionsRemote, bafWorkflowRemote, bafRouteConfigRemote, bafStandardConfigRemote, featuredPluginsRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

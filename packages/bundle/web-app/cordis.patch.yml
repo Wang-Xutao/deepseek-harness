@@ -462,6 +462,14 @@
     - id: ui-settings-baf-route
       name: '@deepseek-ai/dsh-client-ui-settings-baf-route'
 
+    # baf-dsh BAF 工程规范 (2026-10-06 问题 6): the「规范总览·只读」row in the
+    # 工作流 settings section + Host Typert Remote in one dual package. The
+    # Remote (summary/rulesDoc over the workspace's .baf/baseline.yml and its
+    # referenced rules document) is strictly read-only — value edits go to the
+    # baseline file itself, per the 规范总览 decision.
+    - id: ui-settings-baf-standard
+      name: '@deepseek-ai/dsh-client-ui-settings-baf-standard'
+
     # baf-dsh desktop chrome: hero trailing mark, IDE open, help placeholder.
     - id: ui-baf-desktop
       name: '@deepseek-ai/dsh-client-ui-baf-desktop'

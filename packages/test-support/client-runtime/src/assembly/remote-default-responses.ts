@@ -52,6 +52,10 @@ export const remoteDefaultResponses: RemoteTable = {
     }),
     // ui-settings-featured-plugins `FeaturedSectionController` first read at apply.
     'featuredPlugins/list': ok({ plugins: [] }),
+    // ui-settings-baf-standard `StandardsController` first read at apply — the
+    // assembled client boots with no workspace, so the overview row renders its
+    // no-workspace empty state (the rules doc is fetched on demand only).
+    'bafStandardConfig/summary': ok({ status: 'no-workspace' }),
     // cordis-client-runner `ClientCordisInspectRegistry.sync` at apply and on `connection/reset`.
     'dynamicCordisRunner/syncInspectManifest': ok(null),
     // ui-cordis inventory at apply and on `connection/reset`.

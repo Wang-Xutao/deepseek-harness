@@ -83,7 +83,7 @@ function fakeScaffoldService() {
       return {
         kind: 'done',
         changes: {
-          created: ['.baf/baseline.yml', 'openspec/changes/.gitkeep'],
+          created: ['.baf/baseline.yml', '.baf/standards/default-rules.md', 'openspec/changes/.gitkeep'],
           skipped: [] as string[],
           backedUp: [] as string[],
         },

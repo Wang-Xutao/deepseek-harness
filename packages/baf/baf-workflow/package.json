@@ -86,6 +86,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-baf-core": "workspace:^",
     "@deepseek-ai/dsh-baf-openspec": "workspace:^",
+    "@deepseek-ai/dsh-baf-standard": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-scope": "workspace:*",

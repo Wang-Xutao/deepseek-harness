@@ -19,9 +19,13 @@ import type { RouteTier } from '../types.ts'
  * name, falling back to the id) plus the provider group it lives in — a pick
  * derives both, so the user never types a provider by hand.
  *
- * 【变更】2026-10-05 (auto 批): `label` is the menu text (duplicate names
- * disambiguate with a ` · provider` suffix), and `reasoning` carries the
- * ladder the tier's effort menu offers (omitted when the model has none).
+ * 【变更】2026-10-05 (auto 批): `label` is the menu text, and `reasoning`
+ * carries the ladder the tier's effort menu offers (omitted when the model
+ * has none).
+ * 【变更】2026-10-06 (问题 1): `label` is now the fetched name itself — the
+ * menus are provider-scoped, so the old cross-provider ` · provider` suffix
+ * repeated information. Only a duplicate name INSIDE one provider still
+ * disambiguates, with the id.
  */
 export interface RouteCatalogModel {
   readonly id: string
@@ -386,9 +390,12 @@ export class RouteSectionController {
    *
    * 【变更】2026-10-05 (auto 批): the `baf-route` pseudo group (the Auto model)
    * never reaches the tier pickers — a tier slot always holds a concrete
-   * model; duplicate display names disambiguate with a ` · provider` suffix
-   * so two same-named models stay distinguishable (批次B-E); each model
-   * carries its reasoning ladder for the effort menu.
+   * model; each model carries its reasoning ladder for the effort menu.
+   * 【变更】2026-10-06 (问题 1): the label is the fetched name itself. The model
+   * menus are already filtered to one provider, so a cross-provider suffix
+   * (`MiniMax-M3 · baf`) repeated information the menu context already gives;
+   * only two same-named models under ONE provider still disambiguate (with
+   * the id), where the name alone genuinely cannot tell them apart.
    */
   private suggestionsOf(catalog: CatalogLookup): RouteCatalogSuggestions | undefined {
     if (!catalog.ok) return undefined
@@ -407,11 +414,16 @@ export class RouteSectionController {
         }
       }))
     const counts = new Map<string, number>()
-    for (const model of models) counts.set(model.name, (counts.get(model.name) ?? 0) + 1)
+    for (const model of models) {
+      const key = `${model.provider}::${model.name}`
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
     return {
       models: models.map(model => ({
         ...model,
-        label: (counts.get(model.name) ?? 1) > 1 ? `${model.name} · ${model.provider}` : model.name,
+        label: (counts.get(`${model.provider}::${model.name}`) ?? 1) > 1
+          ? `${model.name} · ${model.id}`
+          : model.name,
       })),
     }
   }

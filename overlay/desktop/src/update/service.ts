@@ -3,8 +3,21 @@ import { dirname, join } from 'node:path'
 import type { AppVersions } from '../versions.ts'
 import { loadVersions, saveVersions } from '../versions.ts'
 import { applyScopedUpdate, rollbackScope, type ApplyProgress, type ApplyResult } from './apply.ts'
-import { fetchChannelManifest, type GithubUpdateConfig } from './github.ts'
+import { classifyUpdateError, fetchChannelManifest, type GithubUpdateConfig, type UpdateFaultCode } from './github.ts'
 import { buildScopedUpdatePlans, buildUpdatePlan, type ScopedPlanResult, type UpdatePlan } from './plan.ts'
+
+/**
+ * One plain-language line per fault code (2026-10-06 问题 5 客户决策: 码+一句
+ * 人话). The customer-facing card shows ONLY 「故障码 <code> · <line>（详见
+ * 帮助文档→版本与更新）」; the technical message goes to the main-process log
+ * and the help doc carries the per-code explanation table.
+ */
+const FAULT_TEXT_ZH: Record<UpdateFaultCode, string> = {
+  'U-01': '更新服务尚未就绪',
+  'U-02': '网络连接失败，请检查网络后重试',
+  'U-03': '更新通道数据异常',
+  'U-04': '更新包安全校验未通过',
+}
 
 export type CheckUpdateResult =
   | { status: 'up-to-date', versions: AppVersions, checkedAt: string }
@@ -136,7 +149,13 @@ export class UpdateService {
       })
       return this.lastCheck
     } catch (err) {
-      const error = err instanceof Error ? err.message : String(err)
+      // 问题 5 (2026-10-06): classify, then split the audiences — the customer
+      // reads the fault code + one plain line; the technical detail goes to the
+      // main-process log (the help doc table explains each code generically).
+      const code = classifyUpdateError(err)
+      const technical = err instanceof Error ? err.message : String(err)
+      console.warn(`[update] check failed (${code}): ${technical}`)
+      const error = `故障码 ${code} · ${FAULT_TEXT_ZH[code]}（详见 帮助文档→版本与更新）`
       this.lastCheck = { status: 'error', versions: this.versions, error, checkedAt }
       this.writeState({ lastCheckAt: checkedAt, lastCheckStatus: 'error', summaryZh: error })
       return this.lastCheck

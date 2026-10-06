@@ -13,6 +13,41 @@ export type GithubUpdateConfig = {
   channelTag: string
 }
 
+/**
+ * Update-channel fault codes (2026-10-06 问题 5): classify every updater
+ * failure into one of four codes the customer-facing card can quote; the
+ * technical detail stays in `message` for logs and the help-doc table
+ * (帮助文档→版本与更新). Classification rides the thrown `UpdateFault.code`,
+ * never string parsing of messages.
+ *
+ * - U-01 通道未发布（channel Release 404）
+ * - U-02 网络失败（fetch 层 TypeError）
+ * - U-03 通道数据异常（其他 HTTP / manifest 缺失 / 解析失败）
+ * - U-04 安全校验拒绝（签名 / key / 完整性）
+ */
+export type UpdateFaultCode = 'U-01' | 'U-02' | 'U-03' | 'U-04'
+
+/** An updater failure carrying its fault code. */
+export class UpdateFault extends Error {
+  constructor(readonly code: UpdateFaultCode, message: string) {
+    super(message)
+    this.name = 'UpdateFault'
+  }
+}
+
+/**
+ * Classify any thrown value from the update path into a fault code.
+ * @param error - whatever the updater threw.
+ * @returns the fault code (U-03 is the catch-all for the abnormal-channel
+ * bucket — anything unrecognized still maps to a code the card can show).
+ */
+export function classifyUpdateError(error: unknown): UpdateFaultCode {
+  if (error instanceof UpdateFault) return error.code
+  // Node fetch surfaces network-layer failures as TypeError('fetch failed').
+  if (error instanceof TypeError) return 'U-02'
+  return 'U-03'
+}
+
 type GhAsset = {
   id: number
   name: string
@@ -47,37 +82,38 @@ export async function fetchChannelManifest(config: GithubUpdateConfig): Promise<
   const releaseRes = await fetch(releaseUrl, { headers: githubHeaders(config) })
   if (!releaseRes.ok) {
     if (releaseRes.status === 404) {
-      throw new Error(
+      throw new UpdateFault(
+        'U-01',
         `无法读取更新通道（HTTP 404）。仓库尚未发布 Release「${config.channelTag}」；请先在 baf 分支打 tag baf-dsh-v* 并完成发版工作流。`,
       )
     }
-    throw new Error(`无法读取更新通道（HTTP ${String(releaseRes.status)}）`)
+    throw new UpdateFault('U-03', `无法读取更新通道（HTTP ${String(releaseRes.status)}）`)
   }
   const release = await releaseRes.json() as GhRelease
   const manifestAsset = release.assets.find(a => a.name === 'manifest.json')
   if (manifestAsset === undefined) {
-    throw new Error('更新通道缺少 manifest.json')
+    throw new UpdateFault('U-03', '更新通道缺少 manifest.json')
   }
   const manifestBuf = await downloadAssetBuffer(config, manifestAsset)
   const parsed = parseManifest(JSON.parse(manifestBuf.toString('utf8')) as unknown)
-  if (!parsed.ok) throw new Error(parsed.error)
+  if (!parsed.ok) throw new UpdateFault('U-03', parsed.error)
 
   // §11.3: 验签后才解释 signed 字段（issuedAt/expiresAt/releaseEpoch 的
   // policy 检查在 plan 阶段跑）。生产缺签名/错 key/签名不匹配直接拒绝。
   const policy = signaturePolicy()
   const sigAsset = release.assets.find(a => a.name === parsed.value.signature.asset)
   if (policy.required) {
-    if (sigAsset === undefined) throw new Error(`更新通道缺少 ${parsed.value.signature.asset}`)
+    if (sigAsset === undefined) throw new UpdateFault('U-04', `更新通道缺少 ${parsed.value.signature.asset}`)
     const key = findSigningKey(parsed.value.signature.keyId)
     if (key === undefined) {
-      throw new Error(`manifest 签名 keyId「${parsed.value.signature.keyId}」未注册（拒绝）`)
+      throw new UpdateFault('U-04', `manifest 签名 keyId「${parsed.value.signature.keyId}」未注册（拒绝）`)
     }
     if (key.testOnly && !policy.allowTestKeys) {
-      throw new Error('manifest 使用测试签名 key（生产构建拒绝）')
+      throw new UpdateFault('U-04', 'manifest 使用测试签名 key（生产构建拒绝）')
     }
     const sig = await downloadAssetBuffer(config, sigAsset)
     if (!verifyManifestSignature(manifestBuf, sig, key)) {
-      throw new Error('manifest 签名校验失败')
+      throw new UpdateFault('U-04', 'manifest 签名校验失败')
     }
   }
 
@@ -125,7 +161,7 @@ export async function downloadAssetToFile(
   const buf = await downloadAssetBuffer(config, asset)
   const actual = createHash('sha256').update(buf).digest('hex')
   if (actual.toLowerCase() !== expectedSha256.toLowerCase()) {
-    throw new Error(`校验失败：${asset.name}`)
+    throw new UpdateFault('U-04', `校验失败：${asset.name}`)
   }
   writeFileSync(destPath, buf)
 }
