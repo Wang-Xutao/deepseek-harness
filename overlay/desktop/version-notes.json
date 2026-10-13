@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "六问题批·第二轮\n① 模型菜单显示原始模型名（不再带供应商后缀）\n② 模型分级改用 Commander/Reviewer/Worker 命名，中文作职责解释\n③ 保底规则文案通俗化（规则逻辑不变：验证失败的返工至少 Reviewer 档）\n④ OpenSpec×Matt 融合：产品自带默认工程规则文档，开箱即生效，企业可整体替换\n⑤ 更新失败只报「故障码 U-0x + 一句人话」，技术细节进帮助文档故障码表\n⑥ 设置→工作流新增「BAF 工程规范」规范总览（只读）：七个插件包规则当前值 + 规则文档全文",
-    "notesEn": "Six-issue round 2\n(1) model menus show the raw model name (provider suffixes removed)\n(2) tiers renamed Commander/Reviewer/Worker with Chinese duty notes\n(3) floor-rule wording made plain (logic unchanged: verify-failed redos run at Reviewer or above)\n(4) OpenSpec×Matt fusion: bundled default rules document, active out of the box, enterprise-replaceable\n(5) update failures report fault code U-0x + one plain line; details live in the help-doc fault table\n(6) Settings→Workflow gains the read-only BAF standards overview: current rule values for all seven packages + the full rules document"
+    "notesZh": "五问题批 + 四问题批\n① 多模型路由改分页 tab（档位/阶段绑定/关键词/高级），两档·三档下拉样式与语言选择一致，恢复默认移入高级 tab\n② 推荐插件：批量「全部自动更新」开关，名称与 URL 分层显示\n③ 工作流门禁总览改流程卡：九节点管道 + 详细/简洁切换\n④ 企业规范/质量监控不再依赖 BAF 基线：8 域结构与门禁机制说明常显，无基线时内容降级到 /baf-scaffold 指引（并修复展开规则域一直转圈）\n⑤ Worker 兜底档不再配置关键词规则（原为死配置且会遮蔽真实升档，已移除；未命中关键词即兜底 Worker）\n⑥ 用户反馈按钮样式修复 + 反馈区 baf 徽标 + 帮助中心三级目录安静树样式\n另：启动闪屏等待时间优化",
+    "notesEn": "Five-issue round + four-issue round\n(1) multi-model routing is now tabbed (grades / phase bindings / keywords / advanced); the two/three-grade picker matches the language picker's style; reset-to-default moved into the advanced tab\n(2) featured plugins: a bulk auto-update-all switch; plugin name and URL shown on separate layers\n(3) workflow gate overview is now a flow card: nine-node pipeline with detail/concise toggle\n(4) enterprise standards & quality monitoring no longer need a BAF baseline: the 8-domain structure and gate-mechanism note always render; without a baseline the content degrades to /baf-scaffold guidance (also fixes areas stuck spinning forever)\n(5) the Worker fallback grade no longer carries keyword rules (dead config that could shadow real escalations, removed; no keyword hit simply falls back to Worker)\n(6) feedback button style fix + baf badge on the feedback section + quieter help-center third-level toc\nAlso: faster splash wait on startup"
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",
@@ -9,12 +9,12 @@
   },
   "packages": {
     "@deepseek-ai/dsh-baf-core": {
-      "notesZh": "baseline loader、adapter stub、bafCore isolate 挂载；§22.17 J intake-mode-set 分类改判事件",
-      "notesEn": "Baseline loader, adapter stubs, bafCore isolate mount"
+      "notesZh": "baseline loader、adapter stub、bafCore isolate 挂载；§22.17 J intake-mode-set 分类改判事件；两档/三档 TierMode + coerce；Worker 关键词死规则过滤（escalateOnly 下 low 档永不改变结果且 first-match 遮蔽真实升档；两档模式 mid coerce 同死），low 档预设包 routineEdits 移除",
+      "notesEn": "Baseline loader, adapter stubs, bafCore isolate mount; two/three-grade TierMode + coercion; dead Worker-grade keyword rules filtered out (a low keyword never changes the outcome under escalateOnly and first-match shadowed real escalations; mid coerces to low in two-grade mode), low-tier preset pack routineEdits removed"
     },
     "@deepseek-ai/dsh-baf-workflow": {
-      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go-path 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级；Phase 7 verify CheckRunner 接入 stack/guard adapter；§22.17 J：分类弹窗两路径改道（intake-mode-set）+ 缺陷草案五字段 + auto-pop 宿主行（状态驱动自动弹）+ 门弹窗通道；卡死修复 A–G：/baf-go 直绑唯一活跃变更、铸造设焦点、已确认未 open 不重弹、Tab 恢复按钮、mode= 硬要求、setIntakeMode 补救臂、git_unavailable 审计；OpenSpec×Matt 融合：会话提示词节 baf:standard-rules 每回合注入工程规则源",
-      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go-path seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation; Phase 7 verify CheckRunner wires stack/guard adapters; §22.17 J: clickable path re-routing in the classify dialog (intake-mode-set) + five-field bug draft + auto-pop host row (state-driven auto popup) + gate dialog channel; OpenSpec×Matt fusion: the baf:standard-rules session section injects the standards source every turn"
+      "notesZh": "projection、intake、transition、工作流 Tab Remote；full-go-path 七阶段 + drift/abandon/T11；Phase 6 bug 快路径与 T15 升级；Phase 7 verify CheckRunner 接入 stack/guard adapter；§22.17 J：分类弹窗两路径改道（intake-mode-set）+ 缺陷草案五字段 + auto-pop 宿主行（状态驱动自动弹）+ 门弹窗通道；卡死修复 A–G：/baf-go 直绑唯一活跃变更、铸造设焦点、已确认未 open 不重弹、Tab 恢复按钮、mode= 硬要求、setIntakeMode 补救臂、git_unavailable 审计；OpenSpec×Matt 融合：会话提示词节 baf:standard-rules 每回合注入工程规则源；effectiveRouteKeywordRules 透传 tierMode（死规则过滤随档位模式生效）",
+      "notesEn": "Projection, intake, transition, workflow tab Remote; full-go-path seven stages + drift/abandon/T11; Phase 6 bug fast path and T15 escalation; Phase 7 verify CheckRunner wires stack/guard adapters; §22.17 J: clickable path re-routing in the classify dialog (intake-mode-set) + five-field bug draft + auto-pop host row (state-driven auto popup) + gate dialog channel; OpenSpec×Matt fusion: the baf:standard-rules session section injects the standards source every turn; effectiveRouteKeywordRules passes tierMode through so dead-rule filtering follows the active grade mode"
     },
     "@deepseek-ai/dsh-baf-openspec": {
       "notesZh": "OpenSpec 本地文件适配器：骨架、校验、原子归档；design/tasks 模板 TODO 提示规则源锚点（偏离需注明、测试遵循 testing-discipline）",
