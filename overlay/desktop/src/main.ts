@@ -390,7 +390,12 @@ function openSplash(): void {
       sandbox: true,
     },
   })
-  void splashWindow.loadFile(uiPath('splash.html'))
+  const splashVersion = app.getVersion()
+    || readJsonVersion(join(desktopRoot(), 'package.json'))
+    || seedVersions().bafDsh
+  void splashWindow.loadFile(uiPath('splash.html'), {
+    query: { version: splashVersion },
+  })
 }
 
 const CLOSE_SCRIM_ID = 'baf-close-scrim'
