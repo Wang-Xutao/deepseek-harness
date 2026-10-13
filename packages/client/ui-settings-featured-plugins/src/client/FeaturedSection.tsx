@@ -3,6 +3,7 @@
  * actions, the bulk bar, and the confirmations the Host's compatibility and
  * build gates ask for.
  */
+import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { FeaturedSectionFace } from './featured-store.ts'
 import type { FeaturedPluginCard } from '@deepseek-ai/dsh-api-remotes/client'
@@ -144,15 +145,18 @@ export function FeaturedSection(props: FeaturedSectionProps) {
             >
               {t('bulkDisableAll')}
             </button>
-            <label className={css.autoAll}>
-              <input
-                type="checkbox"
-                disabled={anyRun}
+            {/* 【变更】2026-10-12 (问题 2.1): the bulk 自动更新 rides the same
+                Switch the per-card footer uses — one consistent control, not a
+                raw checkbox next to pill buttons. */}
+            <span className={css.autoBulkSwitch} data-testid="featured-auto-all">
+              <span className={css.autoBulkLabel}>{t('autoUpdateAll')}</span>
+              <Switch
                 checked={state.plugins.length > 0 && state.plugins.every(p => p.autoUpdate)}
-                onChange={(event) => { props.setAllAutoUpdate(event.currentTarget.checked) }}
+                label={t('autoUpdateAll')}
+                disabled={anyRun}
+                onChange={(next) => { props.setAllAutoUpdate(next) }}
               />
-              {t('autoUpdate')}
-            </label>
+            </span>
             <button
               type="button" className={css.btn} disabled={anyRun || state.checking}
               data-testid="featured-check-updates"
@@ -164,15 +168,37 @@ export function FeaturedSection(props: FeaturedSectionProps) {
 
           <ul className={css.cards}>
             {state.plugins.map(card => (
-              <li key={card.id} className={css.card} data-testid={`featured-card-${card.id}`}>
+              <li
+                key={card.id}
+                className={css.card}
+                data-testid={`featured-card-${card.id}`}
+                data-update-available={card.updateAvailable || undefined}
+              >
+                {card.updateAvailable ? (
+                  <span className={css.cardUpdateDot} data-testid="featured-update-badge" aria-hidden="true" />
+                ) : null}
                 <div className={css.cardHead}>
-                  <span className={css.cardName}>
-                    {props.nameOf(card)}
-                    {/* 【变更】2026-10-06 (问题 9): the plugin's package id rides
-                        beside the display name — 飞书 · dsh-feishu — so the
-                        customer can tell plugins apart (and quote them) by id. */}
-                    <span className={css.cardId} data-testid="featured-card-id">{card.id}</span>
-                  </span>
+                  <div className={css.cardTitleRow}>
+                    <span className={css.cardName}>
+                      {props.nameOf(card)}
+                      {/* 【变更】2026-10-06 (问题 9): the plugin's package id rides
+                          beside the display name — 飞书 · dsh-feishu — so the
+                          customer can tell plugins apart (and quote them) by id. */}
+                      <span className={css.cardId} data-testid="featured-card-id">{card.id}</span>
+                    </span>
+                    {/* 【变更】2026-10-12: homepage sits after the id; ellipsis
+                        before the state badge when the URL is long. */}
+                    <a
+                      className={css.headLink}
+                      href={card.homepage}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={card.homepage}
+                      data-testid="featured-homepage-link"
+                    >
+                      {card.homepage}
+                    </a>
+                  </div>
                   <span
                     className={card.state === 'enabled' ? css.badgeOn : card.state === 'disabled' ? css.badgeOff : css.badge}
                     data-testid="featured-state"
@@ -188,33 +214,32 @@ export function FeaturedSection(props: FeaturedSectionProps) {
                   {card.latestKnown !== undefined ? (
                     <span className={css.meta}>{t('versionLatest')}：{card.latestKnown}</span>
                   ) : null}
-                  {card.updateAvailable ? <span className={css.updateChip} data-testid="featured-update-chip">{t('updateAvailable')}</span> : null}
-                  <a className={css.metaLink} href={card.homepage} target="_blank" rel="noreferrer">{t('homepage')}</a>
                 </div>
-                {card.state !== 'unavailable' ? (
-                  <label className={css.autoRow}>
-                    <input
-                      type="checkbox"
-                      disabled={anyRun}
-                      checked={card.autoUpdate}
-                      title={t('autoUpdateHint')}
-                      onChange={(event) => { props.setAutoUpdate(card.id, event.currentTarget.checked) }}
-                    />
-                    {t('autoUpdate')}
-                  </label>
-                ) : (
+                {card.state === 'unavailable' ? (
                   <p className={css.cardDesc}>{t('unavailableHint')}</p>
+                ) : (
+                  <div className={css.cardFooter}>
+                    <div className={css.autoSwitch} title={t('autoUpdateHint')}>
+                      <span className={css.autoLabel}>{t('autoUpdate')}</span>
+                      <Switch
+                        checked={card.autoUpdate}
+                        label={t('autoUpdate')}
+                        disabled={anyRun}
+                        onChange={(next) => { props.setAutoUpdate(card.id, next) }}
+                      />
+                    </div>
+                    <CardActions
+                      t={t}
+                      card={card}
+                      busy={cardBusy(card.id)}
+                      disabled={anyRun && state.busy?.id !== card.id}
+                      onInstall={() => { props.install(card.id) }}
+                      onUpdate={() => { props.update(card.id) }}
+                      onSetEnabled={(enabled) => { props.setEnabled(card.id, enabled) }}
+                      onRemove={() => { props.remove(card.id) }}
+                    />
+                  </div>
                 )}
-                <CardActions
-                  t={t}
-                  card={card}
-                  busy={cardBusy(card.id)}
-                  disabled={anyRun && state.busy?.id !== card.id}
-                  onInstall={() => { props.install(card.id) }}
-                  onUpdate={() => { props.update(card.id) }}
-                  onSetEnabled={(enabled) => { props.setEnabled(card.id, enabled) }}
-                  onRemove={() => { props.remove(card.id) }}
-                />
                 {state.busy?.id === card.id && state.progress !== undefined ? (
                   <p className={css.status} data-testid="featured-progress">
                     {state.progress.phase === 'applying' ? t('progressApplying') : t('progressInstalling')}

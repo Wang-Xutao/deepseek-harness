@@ -14,6 +14,41 @@ import type {
 } from '@deepseek-ai/dsh-baf-core'
 import type { RouteTier } from '../types.ts'
 
+/** Grade-count mode (mirrored — client cannot value-import baf-core helpers). */
+type TierMode = 'two' | 'three'
+
+/** Three-grade phase defaults (Host also ships these via defaults() for two). */
+const PHASE_DEFAULTS_THREE: Readonly<Record<WorkflowNode, RouteTier>> = {
+  design: 'high',
+  plan: 'high',
+  clarify: 'mid',
+  verify: 'mid',
+  implement: 'low',
+  intake: 'low',
+  open: 'low',
+  archive: 'low',
+  drift: 'low',
+}
+
+/** Demote Reviewer→Worker in place for a two-grade switch. */
+function demoteDraftToTwo(draft: RouteTierConfig): void {
+  draft.tierMode = 'two'
+  draft.tiers = {
+    high: { ...draft.tiers.high },
+    low: { ...draft.tiers.low },
+    mid: { ...draft.tiers.low },
+  }
+  const phases: Partial<Record<WorkflowNode, RouteTier>> = {}
+  for (const [node, tier] of Object.entries(draft.phaseTier ?? {})) {
+    phases[node as WorkflowNode] = tier === 'mid' ? 'low' : tier
+  }
+  draft.phaseTier = phases
+  draft.keywords = (draft.keywords ?? []).map(rule => ({
+    ...rule,
+    tier: rule.tier === 'mid' ? 'low' : rule.tier,
+  }))
+}
+
 /**
  * One catalog model the tier pickers offer: display name (the「模型」config's
  * name, falling back to the id) plus the provider group it lives in — a pick
@@ -62,7 +97,13 @@ export interface RouteSectionState {
   /** The Host's or transport's words for the last refused save. */
   error: string | undefined
   /** The last 预演 verdict, from the Host's keyword dry-run. */
-  preview: { tier: RouteTier | null; matched?: string; escalated?: boolean } | undefined
+  preview: {
+    tier: RouteTier | null
+    matched?: string
+    escalated?: boolean
+    provider?: string
+    model?: string
+  } | undefined
   /** Catalog models for the tier pickers; undefined when the catalog is unreachable. */
   catalog: RouteCatalogSuggestions | undefined
   /** Always-on builtin packs from the Host, for the read-only preset block (2.4). */
@@ -109,6 +150,11 @@ export interface RouteSectionFace {
   setPresetWordEnabled(packId: string, word: string, enabled: boolean): void
   /** Flip the keyword-escalates-only flag. */
   setEscalateOnly(value: boolean): void
+  /**
+   * Switch two-grade vs three-grade. Switching to two demotes Reviewer→Worker
+   * (mid model, mid phases, mid keywords).
+   */
+  setTierMode(mode: TierMode): void
   /** Persist the draft; a refusal keeps it dirty with `error` set. */
   save(): Promise<void>
   /** 【变更】2026-10-06 (问题 5/4.1): discard the draft's unsaved edits, back to the saved file. */
@@ -244,6 +290,26 @@ export class RouteSectionController {
   }
 
   /** @inheritdoc */
+  setTierMode(mode: TierMode): void {
+    this.edit((draft) => {
+      const previous: TierMode = draft.tierMode === 'two' ? 'two' : 'three'
+      draft.tierMode = mode
+      if (mode === 'two' && previous !== 'two') {
+        demoteDraftToTwo(draft)
+        return
+      }
+      if (mode === 'three' && previous === 'two') {
+        // Re-seed Reviewer from Commander so the third card is usable immediately.
+        draft.tiers = {
+          ...draft.tiers,
+          mid: { ...draft.tiers.high },
+        }
+        draft.phaseTier = { ...PHASE_DEFAULTS_THREE, ...(draft.phaseTier ?? {}) }
+      }
+    })
+  }
+
+  /** @inheritdoc */
   async save(): Promise<void> {
     const draft = this.store.getSnapshot().draft
     if (draft === undefined) return
@@ -330,6 +396,7 @@ export class RouteSectionController {
       setPackEnabled: (packId, enabled) => this.setPackEnabled(packId, enabled),
       setPresetWordEnabled: (packId, word, enabled) => this.setPresetWordEnabled(packId, word, enabled),
       setEscalateOnly: value => this.setEscalateOnly(value),
+      setTierMode: mode => this.setTierMode(mode),
       save: () => this.save(),
       cancel: () => this.cancel(),
       reset: () => this.reset(),
@@ -360,12 +427,17 @@ export class RouteSectionController {
       // win; the node list itself stays Host-owned, never a client copy). A
       // new object, never a mutation: snapshot stores deep-freeze their state,
       // and the Remote's value may be shared.
-      const config: RouteTierConfig = defaults.ok
-        ? {
-          ...response.value,
-          phaseTier: { ...defaults.value.phaseTier, ...(response.value.phaseTier ?? {}) },
-        }
-        : response.value
+      // 【变更】2026-10-12: fill omitted nodes from the map matching the
+      // config's own grade mode (defaults() is two-grade for fresh drafts).
+      const mode: TierMode = response.value.tierMode === 'two' ? 'two' : 'three'
+      const phaseDefaults = mode === 'two' && defaults.ok
+        ? defaults.value.phaseTier
+        : PHASE_DEFAULTS_THREE
+      const config: RouteTierConfig = {
+        ...response.value,
+        tierMode: mode,
+        phaseTier: { ...phaseDefaults, ...(response.value.phaseTier ?? {}) },
+      }
       this.store.update((state) => {
         state.draft = this.normalizeTiers(config, suggestions)
         state.status = 'ready'
@@ -475,9 +547,11 @@ export class RouteSectionController {
     const phaseTier = defaults.ok
       ? { ...defaults.value.phaseTier } as Partial<Record<WorkflowNode, RouteTier>>
       : {}
+    const tierMode = defaults.ok ? defaults.value.tierMode : 'two'
     return {
       schema: 1,
       enabled: false,
+      tierMode,
       tiers: { high: { ...base }, mid: { ...base }, low: { ...base } },
       phaseTier,
       keywords: [],

@@ -13,6 +13,34 @@
   gap: 16px;
 }
 
+.headActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 【变更】2026-10-12 (问题 4.1): the 详细/简洁 density dropdown — same pill
+   shape the 多模型路由 action row uses. */
+.modeSelect {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 18px;
+  background: var(--dsw-alias-bg-module-platform);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.modeSelect:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .title {
   font-size: 14px;
   line-height: 20px;
@@ -27,6 +55,20 @@
 
 .toggle {
   flex: none;
+  padding: 0 14px;
+  height: 36px;
+  border: none;
+  border-radius: 18px;
+  background: var(--dsw-alias-bg-module-platform);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.toggle:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .status {
@@ -93,7 +135,111 @@
 }
 
 .option {
+  word-break: break-word;
+}
+
+/* 【变更】2026-10-12 (问题 4.1): the process-card flow — one card per workflow
+   node (accent rail on the left, artifact chip beside the node name), the
+   confirm gates framed inside. Reads top-to-bottom as the pipeline. */
+.flowCards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.nodeCard {
+  padding: 10px 12px 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-left: 3px solid var(--dsw-alias-state-business-primary, #4f63e7);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1, transparent);
+}
+
+.nodeCard + .nodeCard {
+  margin-top: 8px;
+}
+
+.flowCards .nodeCard + .nodeCard {
+  margin-top: 0;
+}
+
+.nodeHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.nodeName {
+  font-size: 13px;
+  line-height: 19px;
+  font-weight: 600;
+}
+
+.nodeHint {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.nodeChip {
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 17px;
   white-space: nowrap;
+}
+
+.stageLine {
+  margin-top: 6px;
+}
+
+.stageMeta {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.gates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.gateCard {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
+}
+
+.gateLine {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.gateTitle {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.gateQuestion {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.gateOptions {
+  margin-top: 2px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .chip {

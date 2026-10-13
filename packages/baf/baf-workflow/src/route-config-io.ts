@@ -131,5 +131,9 @@ export function effectiveRouteKeywordRules(
     presets,
     ...(config?.packs === undefined ? {} : { packs: config.packs }),
     ...(config?.presetWords === undefined ? {} : { presetWords: config.presetWords }),
+    // 【变更】2026-10-13 (worker 关键词批): dead-rule filtering needs the active
+    // grade mode — a 'low' keyword (or 'mid' in two-grade mode) can never
+    // decide a turn, and first-match-wins let it shadow real escalations.
+    ...(config?.tierMode === undefined ? {} : { tierMode: config.tierMode }),
   })
 }

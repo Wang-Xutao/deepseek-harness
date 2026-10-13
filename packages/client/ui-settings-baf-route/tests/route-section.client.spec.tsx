@@ -40,6 +40,8 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 const CONFIG: RouteTierConfig = {
   schema: 1,
   enabled: true,
+  // Fixture keeps three grades so existing Reviewer assertions stay meaningful.
+  tierMode: 'three',
   tiers: {
     high: { provider: 'p', model: 'big', reasoningEffort: 'high' },
     mid: { provider: 'p', model: 'mid' },
@@ -55,7 +57,7 @@ const CONFIG: RouteTierConfig = {
 
 /** What the Host's `defaults()` Remote hands a fresh draft (presets included, 2.4). */
 const PHASE_DEFAULTS: Record<string, RouteTier> = {
-  design: 'high', plan: 'high', clarify: 'mid', verify: 'mid',
+  design: 'high', plan: 'high', clarify: 'low', verify: 'low',
   implement: 'low', intake: 'low', open: 'low', archive: 'low', drift: 'low',
 }
 
@@ -108,7 +110,10 @@ function fakeCtx(overrides: {
     draft?: RouteTierConfig,
     options?: { verifyRetry?: boolean },
   ) => Promise<{ ok: true; value: { tier: RouteTier | null; matched?: string; escalated?: boolean } }>
-  defaults?: () => Promise<{ ok: true; value: { phaseTier: Record<string, RouteTier>; presets: typeof BUILTIN_PRESETS } }>
+  defaults?: () => Promise<{
+    ok: true
+    value: { phaseTier: Record<string, RouteTier>; presets: typeof BUILTIN_PRESETS; tierMode: 'two' | 'three' }
+  }>
   catalog?: () => Promise<{ ok: true; value: { default: { provider: string; model: string } } }>
 } = {}) {
   const ctx = {
@@ -119,7 +124,10 @@ function fakeCtx(overrides: {
         reset: async () => ({ ok: true, value: undefined }) as const,
         preview: overrides.preview ?? (async () => ({ ok: true, value: { tier: null } }) as const),
         defaults: overrides.defaults
-          ?? (async () => ({ ok: true, value: { phaseTier: PHASE_DEFAULTS, presets: BUILTIN_PRESETS } }) as const),
+          ?? (async () => ({
+            ok: true,
+            value: { phaseTier: PHASE_DEFAULTS, presets: BUILTIN_PRESETS, tierMode: 'two' as const },
+          }) as const),
       },
       session: {
         modelCatalog: overrides.catalog
@@ -159,6 +167,7 @@ function harness(state: RouteSectionState) {
     setPackEnabled: vi.fn(),
     setPresetWordEnabled: vi.fn(),
     setEscalateOnly: vi.fn(),
+    setTierMode: vi.fn(),
     save: vi.fn(),
     cancel: vi.fn(),
     reset: vi.fn(),
@@ -340,9 +349,11 @@ describe('RouteSectionController', () => {
     await waitFor(() => { expect(store.getSnapshot().status).toBe('ready') })
     const draft = store.getSnapshot().draft
     expect(draft?.enabled).toBe(false)
+    expect(draft?.tierMode).toBe('two')
     expect(draft?.tiers.high).toEqual({ provider: 'p', model: 'm' })
     // The phase rows seed from the Host's built-in default map, not a copy.
     expect(draft?.phaseTier?.design).toBe('high')
+    expect(draft?.phaseTier?.verify).toBe('low')
     expect(draft?.keywords).toEqual([])
   })
 
@@ -463,22 +474,29 @@ describe('RouteSectionController', () => {
 })
 
 describe('ModelRoutingRow', () => {
-  it('lays the page out as THREE titled blocks: 模型分级 → 工作流模型绑定 → 关键词规则 (1.3)', () => {
+  it('lays the page out as four tabs — 模型分级 / 工作流模型绑定 / 关键词规则 / 高级 — with real pagination', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
-    const tiersTitle = screen.getByText('tiersTitle')
-    const phaseTitle = screen.getByText('phaseTitle')
-    const keywordsTitle = screen.getByText('keywordsTitle')
-    // Exactly the three blocks, in order, each hosting its content.
-    expect(tiersTitle.compareDocumentPosition(phaseTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(phaseTitle.compareDocumentPosition(keywordsTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(tiersTitle.compareDocumentPosition(screen.getByTestId('route-tier-high'))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(phaseTitle.compareDocumentPosition(screen.getByTestId('route-flow'))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(keywordsTitle.compareDocumentPosition(screen.getByTestId('route-keyword-tag'))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // The standalone presets block is gone — presets live in 关键词规则 now.
+    expect(screen.getByTestId('route-tier-mode')).toBeTruthy()
+    const tiersTab = screen.getByTestId('route-tab-tiers')
+    const phaseTab = screen.getByTestId('route-tab-phase')
+    const keywordsTab = screen.getByTestId('route-tab-keywords')
+    const advancedTab = screen.getByTestId('route-tab-advanced')
+    expect(tiersTab.compareDocumentPosition(phaseTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(phaseTab.compareDocumentPosition(keywordsTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(keywordsTab.compareDocumentPosition(advancedTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByTestId('route-tier-high')).toBeTruthy()
+    // 1.2: exactly one panel is un-hidden at a time (the flex display used to
+    // override the hidden attribute — every panel showed at once).
+    const panelOf = (id: string) => screen.getByTestId(`route-panel-${id}`)
+    expect(panelOf('tiers').hasAttribute('hidden')).toBe(false)
+    expect(panelOf('phase').hasAttribute('hidden')).toBe(true)
+    fireEvent.click(phaseTab)
+    expect(panelOf('tiers').hasAttribute('hidden')).toBe(true)
+    expect(panelOf('phase').hasAttribute('hidden')).toBe(false)
+    expect(screen.getByTestId('route-flow')).toBeTruthy()
+    fireEvent.click(keywordsTab)
+    expect(screen.getByTestId('route-keyword-tag')).toBeTruthy()
     expect(screen.queryByText('presetsTitle')).toBeNull()
   })
 
@@ -601,18 +619,34 @@ describe('ModelRoutingRow', () => {
     expect(face.setTierModel).toHaveBeenCalledWith('low', { provider: 'q', model: 'm2' })
   })
 
-  it('rests 恢复默认 at the LEFT end and 取消+保存 at the right end of the action row (问题 5/4.1)', () => {
-    const { props } = harness({ ...READY, dirty: true })
+  it('parks the 挡位 dropdown at the action row LEFT end and 恢复默认 inside the 高级 tab (1.1/1.3)', () => {
+    const { props, face } = harness({ ...READY, dirty: true })
     render(<ModelRoutingRow {...props} />)
     const actions = screen.getByTestId('route-actions')
-    const resetButton = within(actions).getByTestId('route-reset')
+    // 【变更】2026-10-13 (下拉样式批): the 挡位 control is the same Menu-primitive
+    // selector pill 通用设置·语言 uses — an anchor BUTTON opening a menu, not a
+    // native <select>.
+    const modeButton = within(actions).getByTestId('route-tier-mode')
+    expect(modeButton.getAttribute('aria-haspopup')).toBe('menu')
     const cancelButton = within(actions).getByTestId('route-cancel')
     const saveButton = within(actions).getByTestId('route-save')
-    // 恢复默认 leads the row (行首, far from the commit cluster); 取消 sits
-    // beside 保存 (行尾) — and while dirty, both are clickable.
-    expect(resetButton.compareDocumentPosition(cancelButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The 挡位 pill leads the row (恢复默认's old seat); 取消 sits beside 保存.
+    expect(modeButton.compareDocumentPosition(cancelButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(cancelButton.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect((cancelButton as HTMLButtonElement).disabled).toBe(false)
+    // The anchor names the active mode; the menu offers just 两档 / 三档.
+    expect(modeButton.textContent).toContain('tierModeThree')
+    fireEvent.click(modeButton)
+    expect(screen.getAllByRole('menuitem').map(o => o.textContent)).toEqual(['tierModeTwo', 'tierModeThree'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'tierModeTwo' }))
+    expect(face.setTierMode).toHaveBeenCalledWith('two')
+    // 恢复默认 moved OUT of the action row into the 高级 tab panel.
+    expect(within(actions).queryByTestId('route-reset')).toBeNull()
+    fireEvent.click(screen.getByTestId('route-tab-advanced'))
+    const resetButton = screen.getByTestId('route-reset') as HTMLButtonElement
+    expect(resetButton.disabled).toBe(false)
+    fireEvent.click(resetButton)
+    expect(face.reset).toHaveBeenCalledTimes(1)
     // The toolbar still precedes the first tier row in document order.
     expect(saveButton.compareDocumentPosition(screen.getByTestId('route-tier-high'))
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -672,20 +706,19 @@ describe('ModelRoutingRow', () => {
     expect(canvas?.className).not.toContain('flowScroll')
   })
 
-  it('titles the flow block 工作流模型绑定 with the click-hint directly under the title (1.2)', () => {
+  it('shows the flow click-hint above the canvas on the 工作流模型绑定 tab (1.2)', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
-    const phaseTitle = screen.getByText('phaseTitle')
+    fireEvent.click(screen.getByTestId('route-tab-phase'))
     const hint = screen.getByText('flowHint')
     const flow = screen.getByTestId('route-flow')
-    // hint sits between the title and the canvas — the old bottom hint is gone.
-    expect(phaseTitle.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(hint.compareDocumentPosition(flow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('cycles a node\'s tier on click (worker→reviewer→commander→worker)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
+    fireEvent.click(screen.getByTestId('route-tab-phase'))
     const nodes = screen.getAllByTestId('route-phase-row')
     // implement maps to low in the fixture; one click lifts it to mid.
     fireEvent.click(nodes[5]!)
@@ -698,12 +731,14 @@ describe('ModelRoutingRow', () => {
   it('renders builtin presets INSIDE 关键词规则 as clickable 预设 tags with per-pack master switches (问题 5/4.5)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
+    fireEvent.click(screen.getByTestId('route-tab-keywords'))
     const tags = screen.getAllByTestId('route-preset-tag')
-    // Every word of every pack renders as its own tag (3 per fixture pack),
-    // each carrying the 预设 badge and its pack name in the tooltip.
-    expect(tags).toHaveLength(12)
+    // Every word of every ESCALATION pack renders as its own tag (3 per
+    // fixture pack); the fixture's routineEdits is a version-skewed LOW pack
+    // and must NOT render — Worker is the fallback grade (2026-10-13 批).
+    expect(tags).toHaveLength(9)
     expect(tags.map(tag => tag.textContent).some(text => text?.startsWith('架构'))).toBe(true)
-    expect(tags.map(tag => tag.textContent).some(text => text?.startsWith('README'))).toBe(true)
+    expect(tags.map(tag => tag.textContent).some(text => text?.startsWith('单元测试'))).toBe(true)
     expect(tags.every(tag => tag.textContent?.includes('presetBadge') === true)).toBe(true)
     expect(tags.find(tag => tag.textContent?.includes('架构'))?.getAttribute('title')).toContain('presetComplexEngineering')
     // 4.5: the TAG is the switch — no per-tag switch button inside; a click
@@ -715,17 +750,20 @@ describe('ModelRoutingRow', () => {
     expect(face.setPresetWordEnabled).toHaveBeenCalledWith('complexEngineering', '架构', false)
     expect(face.addKeyword).not.toHaveBeenCalled()
     // Role-grouped with the user's own rules: the high group hosts both high
-    // packs AND the fixture's own 架构|refactor rule; pack names subdivide.
+    // packs AND the fixture's own 架构|refactor rule; the mid group hosts the
+    // QA pack; the dead low pack hosts nothing.
     const groups = screen.getAllByTestId('route-keyword-group')
-    expect(groups).toHaveLength(3)
+    expect(groups).toHaveLength(2)
     expect(groups[0]?.textContent).toContain('tierHigh')
     expect(groups[0]?.textContent).toContain('架构|refactor')
     expect(groups[0]?.textContent).toContain('presetComplexEngineering')
     expect(groups[0]?.textContent).toContain('presetCriticalRelease')
-    expect(groups[2]?.textContent).toContain('README')
+    expect(groups[1]?.textContent).toContain('tierMid')
+    expect(groups[1]?.textContent).toContain('presetQualityAssurance')
+    expect(groups.map(group => group.textContent).some(text => text?.includes('README'))).toBe(false)
     // …but each PACK carries a master switch (类级一键开关) → setPackEnabled.
     const packToggles = screen.getAllByTestId('route-pack-toggle')
-    expect(packToggles).toHaveLength(4)
+    expect(packToggles).toHaveLength(3)
     fireEvent.click(within(packToggles[0]!).getByRole('switch'))
     expect(face.setPackEnabled).toHaveBeenCalledWith('complexEngineering', false)
     // 4.5 中文/英文分段: a mixed-language pack splits its words into a 中文
@@ -797,6 +835,7 @@ describe('ModelRoutingRow', () => {
   it('groups user rules by custom category with a one-click master switch (问题 3 自定义分类)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
+    fireEvent.click(screen.getByTestId('route-tab-keywords'))
     // The fixture rule carries category 复杂任务 — the group renders the label
     // and a master switch wired to setCategoryEnabled.
     const group = screen.getAllByTestId('route-keyword-group')[0]!
@@ -813,6 +852,7 @@ describe('ModelRoutingRow', () => {
   it('the adder takes an optional category, and the edit row keeps it (问题 3)', () => {
     const { face, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
+    fireEvent.click(screen.getByTestId('route-tab-keywords'))
     const adder = screen.getByTestId('route-keyword-adder')
     fireEvent.change(within(adder).getByTestId('route-keyword-add-words'), { target: { value: '导出' } })
     fireEvent.change(within(adder).getByTestId('route-keyword-add-category'), { target: { value: '数据导出' } })
@@ -877,29 +917,36 @@ describe('ModelRoutingRow', () => {
     await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: true }) })
   })
 
-  it('shows the preview verdict, escalated flag, and passes the verify switch', () => {
+  it('shows the preview verdict, escalated flag, and auto-runs on typing (no run button)', async () => {
     const { props } = harness({
       ...READY,
       dirty: true,
       error: 'bad tiers',
-      preview: { tier: 'mid', matched: 'readme', escalated: true },
+      preview: {
+        tier: 'mid', matched: 'readme', escalated: true, provider: 'p', model: 'mid',
+      },
     })
     render(<ModelRoutingRow {...props} />)
+    expect(screen.queryByTestId('route-preview-run')).toBeNull()
     expect(screen.getByTestId('route-preview').textContent).toContain('readme')
     expect(screen.getByTestId('route-preview').textContent).toContain('previewEscalated')
+    expect(screen.getByTestId('route-preview').textContent).toContain('p / mid')
     expect(screen.getByTestId('route-error').textContent).toContain('bad tiers')
     fireEvent.change(screen.getByTestId('route-preview-input'), { target: { value: '重构模块' } })
-    fireEvent.click(screen.getByTestId('route-preview-run'))
-    expect(props.runPreview).toHaveBeenCalledWith('重构模块', { verifyRetry: false })
-    // Flip the verify simulation and run again.
+    await waitFor(() => {
+      expect(props.runPreview).toHaveBeenCalledWith('重构模块', { verifyRetry: false })
+    })
     fireEvent.click(screen.getByTestId('route-preview-verify'))
-    fireEvent.click(screen.getByTestId('route-preview-run'))
-    expect(props.runPreview).toHaveBeenLastCalledWith('重构模块', { verifyRetry: true })
+    await waitFor(() => {
+      expect(props.runPreview).toHaveBeenLastCalledWith('重构模块', { verifyRetry: true })
+    })
   })
 
   it('still lists every preset id the locale knows (display-name coverage)', () => {
     // The Host owns the packs; the client only carries their ids for naming.
-    expect(KEYWORD_PRESET_IDS).toEqual(['complexEngineering', 'criticalRelease', 'qualityAssurance', 'routineEdits'])
+    // 【变更】2026-10-13 (worker 关键词批): the low-tier routineEdits pack is
+    // gone — three escalation packs only.
+    expect(KEYWORD_PRESET_IDS).toEqual(['complexEngineering', 'criticalRelease', 'qualityAssurance'])
   })
 })
 

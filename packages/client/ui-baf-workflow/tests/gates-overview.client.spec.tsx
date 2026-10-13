@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 /**
- * 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 settings row — collapsed by
- * default, first expand loads the projection once (collapse/re-expand never
- * refetches), both gate tables render with sentinel commands localized, and
- * the 配置开关 honesty block names the three config files. The row count
- * fixtures mirror the real registry (15 confirm + 6 stage rows).
+ * 【变更】2026-10-12 (问题 4.1): the 工作流确认门 tab renders the projection
+ * as ONE process-card flow — a one-shot gates card + one card per workflow
+ * node (stage testid inside the node card), a 详细/简洁 dropdown (简洁 drops
+ * options/commands and the config block), collapsed by default in list
+ * context with load-once caching. The row fixtures mirror the real registry
+ * (15 confirm + 6 stage rows).
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -61,37 +62,55 @@ function overviewFixture(): BafWorkflowGateOverview {
   }
 }
 
-function mount(loadGateOverview: () => Promise<BafWorkflowGateOverview>) {
+function mount(
+  loadGateOverview: () => Promise<BafWorkflowGateOverview>,
+  embeddedInTab?: boolean,
+) {
   // 'settings.workflow.item' is root-scoped — no session kit props needed.
   return render(
-    <GatesOverviewRow t={t as never} loadGateOverview={loadGateOverview} />,
+    <GatesOverviewRow
+      t={t as never}
+      loadGateOverview={loadGateOverview}
+      embeddedInTab={embeddedInTab}
+    />,
   )
 }
 
-describe('GatesOverviewRow (九点批 问题 9 门禁总览只读行)', () => {
+describe('GatesOverviewRow (问题 4.1 流程卡片 + 详细/简洁)', () => {
   it('renders collapsed and fetches nothing until the customer expands', () => {
     const load = vi.fn()
     mount(load)
     expect(screen.getByTestId('baf-gates-row')).toBeDefined()
-    expect(screen.queryByTestId('baf-gates-confirm')).toBeNull()
+    expect(screen.queryByTestId('baf-gates-flow')).toBeNull()
     expect(load).not.toHaveBeenCalled()
   })
 
-  it('loads once on first expand and renders both layers with the config block', async () => {
+  it('loads once on first expand and renders the process-card flow', async () => {
     const load = vi.fn().mockResolvedValue(overviewFixture())
     mount(load)
     fireEvent.click(screen.getByTestId('baf-gates-toggle'))
-    expect(await screen.findByTestId('baf-gates-confirm')).toBeDefined()
-    expect(screen.getByTestId('baf-gates-stage')).toBeDefined()
-    expect(screen.getByTestId('baf-gates-config')).toBeDefined()
-    expect(load).toHaveBeenCalledTimes(1)
-    // 15 confirm rows + 6 stage rows, one testid each.
-    for (const gate of ['scaffold', 'intake-classify', 'open-advance', 'abandon', 'resume']) {
+    expect(await screen.findByTestId('baf-gates-flow')).toBeDefined()
+    // One-shot gates sit in their own leading card; node cards carry the rest.
+    expect(screen.getByTestId('baf-gates-once')).toBeDefined()
+    expect(screen.getByTestId('baf-gate-node-open').textContent).toContain('gates.node.open')
+    expect(screen.getByTestId('baf-gate-node-implement').textContent).toContain('plan.json')
+    // Every confirm gate keeps its testid (one-shot + per-node alike).
+    for (const gate of ['scaffold', 'intake-classify', 'open-advance', 'bugfix-open-advance', 'abandon', 'resume']) {
       expect(screen.getByTestId(`baf-gate-confirm-${gate}`)).toBeDefined()
     }
+    // Stage rows render inside the node cards.
     for (const node of ['open', 'clarify', 'design', 'plan', 'implement', 'verify']) {
       expect(screen.getByTestId(`baf-gate-stage-${node}`)).toBeDefined()
     }
+    // 【变更】2026-10-12 (web 复核): the pipeline NEVER drops gate-less nodes —
+    // all nine render in workflow order, the empty ones saying so.
+    const nodes = screen.getAllByTestId(/^baf-gate-node-/)
+    expect(nodes.map(n => n.getAttribute('data-testid')?.slice('baf-gate-node-'.length)))
+      .toEqual(['intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive', 'drift'])
+    expect(screen.getByTestId('baf-gate-node-drift').textContent).toContain('gates.noGate')
+    // 详细 (default) carries the config honesty block.
+    expect(screen.getByTestId('baf-gates-config')).toBeDefined()
+    expect(load).toHaveBeenCalledTimes(1)
     // collapse → re-expand must NOT refetch (client-side cache).
     fireEvent.click(screen.getByTestId('baf-gates-toggle'))
     fireEvent.click(screen.getByTestId('baf-gates-toggle'))
@@ -112,6 +131,22 @@ describe('GatesOverviewRow (九点批 问题 9 门禁总览只读行)', () => {
     expect(screen.getByTestId('baf-gate-dynamic-bind-workflow').textContent).toContain('gates.dynamicOptions')
   })
 
+  it('简洁 mode keeps gate lines but drops options, conditions, and the config block', async () => {
+    const load = vi.fn().mockResolvedValue(overviewFixture())
+    mount(load)
+    fireEvent.click(screen.getByTestId('baf-gates-toggle'))
+    await screen.findByTestId('baf-gates-flow')
+    fireEvent.change(screen.getByTestId('baf-gates-mode'), { target: { value: 'concise' } })
+    // Gate titles survive; commands and the config block do not.
+    expect(screen.getByTestId('baf-gate-confirm-intake-classify').textContent).toContain('intake-classify 标题')
+    expect(screen.queryByText('/baf-workflow-confirm')).toBeNull()
+    expect(screen.queryByTestId('baf-gates-config')).toBeNull()
+    // Stage lines collapse to the condition count.
+    const openStage = screen.getByTestId('baf-gate-stage-open')
+    expect(openStage.textContent).toContain('gates.conditionsCount')
+    expect(openStage.textContent).not.toContain('open 条件一')
+  })
+
   it('shows the load failure surface on a rejected fetch', async () => {
     const load = vi.fn().mockRejectedValue(new Error('remote down'))
     mount(load)
@@ -119,5 +154,13 @@ describe('GatesOverviewRow (九点批 问题 9 门禁总览只读行)', () => {
     const error = await screen.findByTestId('baf-gates-error')
     expect(error.textContent).toContain('gates.loadFailed')
     expect(error.textContent).toContain('remote down')
+  })
+
+  it('loads expanded on mount when embedded in the gates settings tab', async () => {
+    const load = vi.fn().mockResolvedValue(overviewFixture())
+    mount(load, true)
+    expect(screen.queryByTestId('baf-gates-toggle')).toBeNull()
+    expect(await screen.findByTestId('baf-gates-flow')).toBeDefined()
+    expect(load).toHaveBeenCalledTimes(1)
   })
 })

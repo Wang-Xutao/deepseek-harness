@@ -27,6 +27,75 @@
 
 .refresh {
   flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 18px;
+  background: var(--dsw-alias-bg-module-platform);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.refresh:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.blockQuality {
+  padding: 8px 0 16px;
+}
+
+.qualityGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.qualityGrid .card {
+  padding: 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
+}
+
+/* 【变更】2026-10-13 (问题 4 批): the always-on gate-mechanism card rides the
+ * same visual treatment as the grid cards (it sits OUTSIDE the grid). */
+.mechanismCard {
+  padding: 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
+  margin-top: 12px;
+}
+
+.stageList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.stageGroup {
+  padding: 10px 0 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.stageGroup:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.stageTitle {
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.stageHint {
+  margin-top: 2px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .status {

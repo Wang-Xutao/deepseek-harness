@@ -12,6 +12,7 @@ import {
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { openHelpExternal, resolveHelpDocsUrl } from './bridge.ts'
+import { HelpLoadingMark } from './HelpLoadingMark.tsx'
 import css from './HelpFooterAction.module.css'
 
 export type HelpFooterActionProps =
@@ -126,13 +127,8 @@ export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
             }}
           />
           {iframeLoaded ? null : (
-            <div className={css.skeleton} aria-hidden="true">
-              <div className={css.skeletonBar} style={{ width: '40%' }} />
-              <div className={css.skeletonBar} style={{ width: '70%' }} />
-              <div className={css.skeletonBar} style={{ width: '55%' }} />
-              <div className={css.skeletonBar} style={{ width: '85%' }} />
-              <div className={css.skeletonBar} style={{ width: '45%' }} />
-              <div className={css.skeletonBar} style={{ width: '65%' }} />
+            <div className={css.loading} aria-hidden="true">
+              <HelpLoadingMark />
             </div>
           )}
         </div>

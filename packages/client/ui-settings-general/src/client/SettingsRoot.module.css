@@ -191,15 +191,35 @@
   color: var(--dsw-alias-brand-primary, #4a78d2);
 }
 
-/* 【变更】2026-10-04 (用户问题 3): red attention dot on the 版本与更新 nav
-   cell while the baf-dsh shell reports an available update. Decorative —
-   the cell's accessible name stays the section label. */
+/* 【变更】2026-10-04 (用户问题 3): red attention dot on the 版本与更新 /
+   推荐插件 nav cells. Decorative — the cell's accessible name stays the
+   section label.
+   【变更】2026-10-12: soft pulse so the cue feels alive, not a static blot. */
 .navDot {
   flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--dsw-alias-text-danger, #cf222e);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 45%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .navDot {
+    animation: baf-nav-dot-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes baf-nav-dot-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 40%, transparent);
+  }
+  50% {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--dsw-alias-text-danger, #cf222e) 0%, transparent);
+  }
 }
 
 /* Content column (figma Content 501:29980): header + options. */

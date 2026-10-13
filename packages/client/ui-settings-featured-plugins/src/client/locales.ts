@@ -22,6 +22,7 @@ export type FeaturedSettingsKey =
   | 'removing'
   | 'autoUpdate'
   | 'autoUpdateHint'
+  | 'autoUpdateAll'
   | 'bulkInstallAll'
   | 'bulkEnableAll'
   | 'bulkDisableAll'
@@ -72,6 +73,7 @@ export const en: Record<FeaturedSettingsKey, string> = {
   removing: 'Removing…',
   autoUpdate: 'Auto-update',
   autoUpdateHint: 'Keep this plugin updated automatically',
+  autoUpdateAll: 'Auto-update all',
   bulkInstallAll: 'Install all',
   bulkEnableAll: 'Enable all',
   bulkDisableAll: 'Disable all',
@@ -125,6 +127,7 @@ export const zh: Record<FeaturedSettingsKey, string> = {
   removing: '正在删除…',
   autoUpdate: '自动更新',
   autoUpdateHint: '自动保持该插件为最新版本',
+  autoUpdateAll: '全部自动更新',
   bulkInstallAll: '一键安装',
   bulkEnableAll: '全部启用',
   bulkDisableAll: '全部禁用',

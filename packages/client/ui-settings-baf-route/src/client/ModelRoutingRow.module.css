@@ -13,16 +13,80 @@
   gap: 16px;
 }
 
+/* Match 版本与更新 section title/intro. */
 .title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.intro {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .description {
   font-size: 12px;
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* 【变更】2026-10-12 (问题 1.2): the tab panels ride the HTML `hidden`
+   attribute — but `.block`'s own display rule would override it (author
+   display beats the UA sheet), so every panel showed at once. This
+   higher-specificity rule restores real pagination. */
+.block[hidden] {
+  display: none;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 22px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  overflow: visible;
+}
+
+.tab {
+  position: relative;
+  flex: none;
+  border: 0;
+  padding: 7px 1px 9px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.tab:hover,
+.tab[data-active='true'] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tab[data-active='true']::after,
+.tab:focus-visible::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--dsw-alias-label-primary);
+  content: '';
+}
+
+.tab:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* 【变更】2026-10-13 (下拉样式批): .modeSelect is gone — the 挡位 dropdown
+   reuses .selector, the same Menu-primitive pill 通用设置·语言 and the model
+   pickers use, so every dropdown in settings reads as one control family. */
 
 .dirty {
   font-size: 12px;
@@ -175,6 +239,30 @@
 
 .chevron {
   flex: none;
+}
+
+/* 【变更】2026-10-13 (下拉样式批): the 挡位 anchor mirrors 通用设置·语言's
+   selector pill EXACTLY (locale/LanguageRow.module.css .selector — 36px /
+   radius-md / 14px / gap 12 + Regular chevron). The .selector above is the
+   32px compact in-card picker variant; the two must not converge. */
+.modeSelector {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-module-platform);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.modeSelector:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /* 批次B-D's 未在目录 chip is GONE (问题 5/4.3): the store normalizes the
@@ -575,8 +663,33 @@
 }
 
 .preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
   font-size: 13px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-primary));
+}
+
+.previewLine {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.previewLabel {
+  flex: none;
+  min-width: 5.5em;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.previewNote {
+  font-size: 12px;
+  color: var(--dsw-alias-attention, #d19a66);
 }
 
 .error {
@@ -599,14 +712,26 @@
   cursor: pointer;
 }
 
+.btn:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .btnPrimary {
   border-color: var(--dsw-alias-brand-primary);
   background: var(--dsw-alias-brand-primary);
   color: #fff;
 }
 
+.btnPrimary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
 .btn:disabled,
 .btnPrimary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.select:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }

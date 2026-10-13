@@ -78,6 +78,12 @@ export type TraceGraphKey =
 export type WorkflowKey =
   | 'section.title'
   | 'section.intro'
+  | 'tabs.aria'
+  | 'tabs.general'
+  | 'tabs.project'
+  | 'tabs.gates'
+  | 'tabs.standard'
+  | 'tabs.quality'
   | 'traceGraph.title'
   | 'traceGraph.description'
 
@@ -232,6 +238,12 @@ export const en: Record<TraceGraphKey, string> = {
 export const zhWorkflow: Record<WorkflowKey, string> = {
   'section.title': '工作流',
   'section.intro': 'BAF 企业工作流相关选项。',
+  'tabs.aria': '工作流设置分类',
+  'tabs.general': '通用',
+  'tabs.project': '项目工程',
+  'tabs.gates': '工作流确认门',
+  'tabs.standard': '企业规范',
+  'tabs.quality': '质量监控',
   'traceGraph.title': '轨迹图',
   'traceGraph.description': '关闭后，对话 Tab 不再显示「轨迹图」。',
 }
@@ -240,6 +252,12 @@ export const zhWorkflow: Record<WorkflowKey, string> = {
 export const enWorkflow: Record<WorkflowKey, string> = {
   'section.title': 'Workflow',
   'section.intro': 'BAF enterprise workflow preferences.',
+  'tabs.aria': 'Workflow settings categories',
+  'tabs.general': 'General',
+  'tabs.project': 'Project engineering',
+  'tabs.gates': 'Confirmation gates',
+  'tabs.standard': 'Enterprise standards',
+  'tabs.quality': 'Quality monitoring',
   'traceGraph.title': 'Trace Graph',
   'traceGraph.description': 'Hide the Trace Graph tab on the conversation view.',
 }

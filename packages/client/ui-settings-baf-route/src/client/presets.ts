@@ -15,12 +15,17 @@ export type KeywordPresetId =
   | 'complexEngineering'
   | 'criticalRelease'
   | 'qualityAssurance'
-  | 'routineEdits'
 
-/** The builtin pack ids, escalation order (matches baf-core's BUILTIN_KEYWORD_PRESETS). */
+/**
+ * The builtin pack ids, escalation order (matches baf-core's
+ * BUILTIN_KEYWORD_PRESETS). 【变更】2026-10-13 (worker 关键词批): the low-tier
+ * `routineEdits` pack is gone — Worker is the fallback grade; its keywords
+ * could never decide a turn. Version-skewed packs already seeded into a
+ * user's `~/.dsh/baf-route-presets.json` still parse (raw-id render) but the
+ * dead-tier filter drops them before evaluation or display.
+ */
 export const KEYWORD_PRESET_IDS: readonly KeywordPresetId[] = [
   'complexEngineering',
   'criticalRelease',
   'qualityAssurance',
-  'routineEdits',
 ]

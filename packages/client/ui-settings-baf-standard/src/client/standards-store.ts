@@ -108,7 +108,18 @@ export class StandardsController {
 
   /** @inheritdoc */
   async loadRules(): Promise<void> {
-    if (this.store.getSnapshot().summary?.status !== 'ready') return
+    const summary = this.store.getSnapshot().summary
+    // 【变更】2026-10-13 (问题 4 批): without a baseline the rules document
+    // cannot be located — SETTLE the viewer to `unavailable` instead of
+    // returning with `rules` still undefined. Undefined meant "fetch in
+    // flight", so every area body rendered an eternal「正在读取工作区基线…」
+    // spinner after the summary landed no-baseline (web-verified stuck state).
+    if (summary !== undefined && summary.status !== 'ready') {
+      this.store.update((state) => {
+        state.rules = { status: 'unavailable', reason: summary.status }
+      })
+      return
+    }
     try {
       const response = await this.ctx.remote.bafStandardConfig.rulesDoc()
       this.store.update((state) => {

@@ -125,7 +125,16 @@
   margin-top: 4px;
 }
 
+/* 【变更】2026-10-13 (反馈按钮批): .btn/.btnPrimary also ride <a> anchors (the
+ * 用户反馈 form link) — anchors are inline by default, where height/padding
+ * collapse and the browser underline leaks through. inline-flex + centered +
+ * no underline makes an anchor read exactly like the button twin. */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-decoration: none;
   height: 36px;
   padding: 0 16px;
   border-radius: 18px;
@@ -137,6 +146,11 @@
 }
 
 .btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-decoration: none;
   height: 36px;
   padding: 0 16px;
   border-radius: 18px;

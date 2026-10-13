@@ -32,6 +32,9 @@ export interface BafRoutePreviewResult {
   readonly tier: RouteTier | null
   readonly matched?: string
   readonly escalated?: boolean
+  /** Model the matched (or escalated) tier would dispatch to. */
+  readonly provider?: string
+  readonly model?: string
 }
 
 /**
@@ -53,6 +56,8 @@ export interface BafRoutePreviewOptions {
 export interface BafRouteConfigDefaults {
   readonly phaseTier: Readonly<Record<string, RouteTier>>
   readonly presets: readonly { readonly id: string; readonly tier: RouteTier; readonly words: string }[]
+  /** Fresh-draft grade count (product default: two). */
+  readonly tierMode: 'two' | 'three'
 }
 
 declare module '@deepseek-ai/cordis' {

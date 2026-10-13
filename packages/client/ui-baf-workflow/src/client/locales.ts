@@ -247,6 +247,24 @@ export type WorkflowTabKey =
   | 'gates.configRoute'
   | 'gates.configPresets'
   | 'gates.honesty'
+  // 【变更】2026-10-12 (问题 4.1): the process-card flow + 详细/简洁 dropdown copy.
+  | 'gates.modeAria'
+  | 'gates.modeDetail'
+  | 'gates.modeConcise'
+  | 'gates.onceTitle'
+  | 'gates.onceHint'
+  | 'gates.advancePrefix'
+  | 'gates.conditionsCount'
+  | 'gates.noGate'
+  | 'gates.node.intake'
+  | 'gates.node.open'
+  | 'gates.node.clarify'
+  | 'gates.node.design'
+  | 'gates.node.plan'
+  | 'gates.node.implement'
+  | 'gates.node.verify'
+  | 'gates.node.archive'
+  | 'gates.node.drift'
   // 2026-09-21 (session 5.jsonl) — artifact rail card.
   | 'artifact.title'
   | 'artifact.help'
@@ -524,6 +542,23 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.configRoute': '~/.dsh/baf-route-config.json — multi-model routing (keyword rules, tier bindings, the floor-rule switch)',
   'gates.configPresets': '~/.dsh/baf-route-presets.json — the preset keyword packs',
   'gates.honesty': 'To change the gate entries themselves: edit the product code (GATE_REGISTRY / stages/gates.ts in packages/baf/baf-workflow) and its tests — this page stays read-only.',
+  'gates.modeAria': 'Gate display density',
+  'gates.modeDetail': 'Detailed',
+  'gates.modeConcise': 'Concise',
+  'gates.onceTitle': 'One-shot confirm gates',
+  'gates.onceHint': 'not tied to one stage — popped at flow start / wrap-up',
+  'gates.advancePrefix': 'advance gate: ',
+  'gates.conditionsCount': 'pass conditions: ',
+  'gates.noGate': 'no gate on this node',
+  'gates.node.intake': 'Intake',
+  'gates.node.open': 'Open',
+  'gates.node.clarify': 'Clarify',
+  'gates.node.design': 'Design',
+  'gates.node.plan': 'Plan',
+  'gates.node.implement': 'Implement',
+  'gates.node.verify': 'Verify',
+  'gates.node.archive': 'Archive',
+  'gates.node.drift': 'Drift',
   'artifact.title': 'Stage artifacts',
   'artifact.help': 'One row per stage document. Open reviews/edits it in the sidebar; the state mirrors /baf-status.',
   'artifact.open': 'Open',
@@ -805,6 +840,23 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.configRoute': '~/.dsh/baf-route-config.json — 多模型路由（关键词规则、档位绑定、保底规则开关）',
   'gates.configPresets': '~/.dsh/baf-route-presets.json — 预设关键词词库',
   'gates.honesty': '要增删改门禁条目本身：改产品代码（packages/baf/baf-workflow 的 GATE_REGISTRY 与 stages/gates.ts）并同步测试 — 本页只读。',
+  'gates.modeAria': '门禁显示密度',
+  'gates.modeDetail': '详细',
+  'gates.modeConcise': '简洁',
+  'gates.onceTitle': '一次性确认门',
+  'gates.onceHint': '不挂在具体阶段 — 流程启动 / 收尾时弹出',
+  'gates.advancePrefix': '推进确认门：',
+  'gates.conditionsCount': '完成条件数：',
+  'gates.noGate': '本节点无门禁',
+  'gates.node.intake': '接单',
+  'gates.node.open': '建立变更',
+  'gates.node.clarify': '澄清',
+  'gates.node.design': '设计',
+  'gates.node.plan': '计划',
+  'gates.node.implement': '实现',
+  'gates.node.verify': '验证',
+  'gates.node.archive': '归档',
+  'gates.node.drift': '漂移回归',
   'dashboard.focus': '当前焦点',
   'dashboard.openChange': '在工作流页查看该变更',
   'dashboard.note': '点击行即在流程图聚焦该变更；终态行的产物从归档目录读取。',

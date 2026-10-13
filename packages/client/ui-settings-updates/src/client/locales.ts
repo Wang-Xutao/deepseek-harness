@@ -8,6 +8,7 @@ export type UpdatesSettingsKey =
   | 'labelBaf'
   | 'labelDsh'
   | 'packagesHeading'
+  | 'labelBafCore'
   | 'descBafCore'
   | 'labelBafWorkflow'
   | 'descBafWorkflow'
@@ -33,6 +34,10 @@ export type UpdatesSettingsKey =
   | 'updateNotes'
   | 'currentVersion'
   | 'latestVersion'
+  | 'feedbackNav'
+  | 'feedbackHeading'
+  | 'feedbackIntro'
+  | 'feedbackButton'
 
 export const en: Record<UpdatesSettingsKey, string> = {
   nav: 'Version & updates',
@@ -68,6 +73,10 @@ export const en: Record<UpdatesSettingsKey, string> = {
   updateNotes: 'What is new',
   currentVersion: 'Current version',
   latestVersion: 'Latest available version',
+  feedbackNav: 'User feedback',
+  feedbackHeading: 'User feedback',
+  feedbackIntro: 'Share product issues or suggestions with the BAF team via the Feishu form. We read every message.',
+  feedbackButton: 'Open feedback form',
 }
 
 export const zh: Record<UpdatesSettingsKey, string> = {
@@ -104,4 +113,8 @@ export const zh: Record<UpdatesSettingsKey, string> = {
   updateNotes: '更新内容',
   currentVersion: '当前版本',
   latestVersion: '最新可升级版本',
+  feedbackNav: '用户反馈',
+  feedbackHeading: '用户反馈',
+  feedbackIntro: '通过飞书表单向 BAF 团队反馈问题与建议，我们会认真阅读每一条消息。',
+  feedbackButton: '打开反馈表单',
 }

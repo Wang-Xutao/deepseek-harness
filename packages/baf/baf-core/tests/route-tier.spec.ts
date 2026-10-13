@@ -13,14 +13,19 @@ import {
 import {
   BUILTIN_KEYWORD_PRESETS,
   DEFAULT_PHASE_TIER,
-  ROUTE_TIERS,
+  DEFAULT_PHASE_TIER_TWO,
   TIER_CAPABILITIES,
+  activeDisplayTiers,
+  applyTierMode,
+  coerceTierForMode,
   compileTierRouteProfile,
   effectiveKeywordRules,
   effectiveTier,
   isTierRoutingActive,
+  nextTierInMode,
   parseRouteTierConfig,
   resolveTaskTier,
+  resolveTierMode,
   findTierByRef,
   synthesizeTierPolicy,
   type RouteTierConfig,
@@ -117,6 +122,46 @@ describe('effectiveTier', () => {
 
   it('resolves drift via the default table', () => {
     expect(effectiveTier('drift', undefined, makeConfig())).toEqual({ tier: 'low', reason: 'phase' })
+  })
+})
+
+describe('tierMode (two vs three grades)', () => {
+  it('defaults missing tierMode to three (preserve existing configs)', () => {
+    const config = parseRouteTierConfig({
+      schema: 1,
+      enabled: true,
+      tiers: { high: HIGH, mid: MID, low: LOW },
+    })
+    expect(resolveTierMode(config!)).toBe('three')
+    expect(config?.tierMode).toBe('three')
+  })
+
+  it('parses tierMode two and demotes mid→low via applyTierMode', () => {
+    const config = parseRouteTierConfig({
+      schema: 1,
+      enabled: true,
+      tierMode: 'two',
+      tiers: { high: HIGH, mid: MID, low: LOW },
+      phaseTier: { verify: 'mid', design: 'high' },
+      keywords: [{ words: '评审', tier: 'mid' }, { words: '架构', tier: 'high' }],
+    })
+    expect(config?.tierMode).toBe('two')
+    const applied = applyTierMode(config!)
+    expect(applied.tiers.mid).toEqual(applied.tiers.low)
+    expect(applied.phaseTier?.verify).toBe('low')
+    expect(applied.keywords?.find(rule => rule.words === '评审')?.tier).toBe('low')
+    expect(applied.keywords?.find(rule => rule.words === '架构')?.tier).toBe('high')
+  })
+
+  it('cycles and displays only high/low in two-mode', () => {
+    expect(activeDisplayTiers('two')).toEqual(['high', 'low'])
+    expect(activeDisplayTiers('three')).toEqual(['high', 'mid', 'low'])
+    expect(nextTierInMode('low', 'two')).toBe('high')
+    expect(nextTierInMode('high', 'two')).toBe('low')
+    expect(nextTierInMode('low', 'three')).toBe('mid')
+    expect(coerceTierForMode('mid', 'two')).toBe('low')
+    expect(DEFAULT_PHASE_TIER_TWO.verify).toBe('low')
+    expect(DEFAULT_PHASE_TIER_TWO.design).toBe('high')
   })
 })
 
@@ -245,16 +290,17 @@ describe('findTierByRef', () => {
 })
 
 describe('builtin keyword presets (2.4 默认启用)', () => {
-  it('ships the four curated packs with stable ids and non-empty word lists', () => {
+  it('ships the three curated escalation packs with stable ids and non-empty word lists', () => {
+    // 【变更】2026-10-13 (worker 关键词批): three packs, all escalation tiers —
+    // Worker is the fallback grade and carries no keywords of its own.
     expect(BUILTIN_KEYWORD_PRESETS.map(preset => preset.id)).toEqual([
-      'complexEngineering', 'criticalRelease', 'qualityAssurance', 'routineEdits',
+      'complexEngineering', 'criticalRelease', 'qualityAssurance',
     ])
     for (const preset of BUILTIN_KEYWORD_PRESETS) {
       expect(preset.words.length).toBeGreaterThan(0)
-      expect(ROUTE_TIERS).toContain(preset.tier)
+      expect(preset.tier).not.toBe('low')
     }
     expect(BUILTIN_KEYWORD_PRESETS[0]?.tier).toBe('high')
-    expect(BUILTIN_KEYWORD_PRESETS[3]?.tier).toBe('low')
   })
 
   it('effectiveKeywordRules appends the builtins after the user rules', () => {
@@ -268,17 +314,17 @@ describe('builtin keyword presets (2.4 默认启用)', () => {
     // 「架构」 lives in the complexEngineering pack — no user keyword needed.
     expect(resolveTaskTier('梳理整体架构并重构', effectiveKeywordRules([])))
       .toEqual({ tier: 'high', matched: '架构' })
-    // 「typo」 lives in routineEdits.
-    expect(resolveTaskTier('fix a typo in the docs', effectiveKeywordRules([])))
-      .toEqual({ tier: 'low', matched: 'typo' })
+    // Plain copy/typo wording matches NOTHING now — Worker is the fallback
+    // grade; with no keyword hit the turn falls through to it by design.
+    expect(resolveTaskTier('fix a typo in the docs', effectiveKeywordRules([]))).toBeUndefined()
     // 「单元测试」 lives in qualityAssurance.
     expect(resolveTaskTier('补充单元测试覆盖', effectiveKeywordRules([])))
       .toEqual({ tier: 'mid', matched: '单元测试' })
   })
 
-  it('user rules win over builtins on the same word (declared first)', () => {
-    expect(resolveTaskTier('架构', effectiveKeywordRules([{ words: '架构', tier: 'low' }])))
-      .toEqual({ tier: 'low', matched: '架构' })
+  it('user mid rules win over builtins on the same word (declared first)', () => {
+    expect(resolveTaskTier('架构', effectiveKeywordRules([{ words: '架构', tier: 'mid' }])))
+      .toEqual({ tier: 'mid', matched: '架构' })
   })
 })
 
@@ -315,25 +361,24 @@ describe('keyword rule enable state + custom categories + preset file (2026-10-0
   })
 
   it('drops a whole pack disabled through packs (类级一键开关)', () => {
-    const rules = effectiveKeywordRules([], { packs: { routineEdits: false } })
-    expect(resolveTaskTier('fix a typo in the docs', rules)).toBeUndefined()
+    const rules = effectiveKeywordRules([], { packs: { qualityAssurance: false } })
+    expect(resolveTaskTier('补充单元测试覆盖', rules)).toBeUndefined()
     // Other packs keep matching.
     expect(resolveTaskTier('梳理整体架构', rules)).toEqual({ tier: 'high', matched: '架构' })
   })
 
   it('drops a single preset word disabled through presetWords (标签级开关)', () => {
-    const rules = effectiveKeywordRules([], { presetWords: { 'routineEdits::typo': false } })
-    expect(resolveTaskTier('fix a typo', rules)).toBeUndefined()
-    expect(resolveTaskTier('update the wording', rules)).toEqual({ tier: 'low', matched: 'wording' })
+    const rules = effectiveKeywordRules([], { presetWords: { 'qualityAssurance::单元测试': false } })
+    expect(resolveTaskTier('补充单元测试覆盖', rules)).toBeUndefined()
+    expect(resolveTaskTier('排查线上回归', rules)).toEqual({ tier: 'mid', matched: '回归' })
   })
 
   it('drops a pack whose every word is disabled', () => {
-    const words = BUILTIN_KEYWORD_PRESETS[3]!
+    const words = BUILTIN_KEYWORD_PRESETS[2]!
     const presetWords = Object.fromEntries(
-      words.words.split('|').map(word => [`routineEdits::${word}`, false]),
+      words.words.split('|').map(word => [`qualityAssurance::${word}`, false]),
     )
     const rules = effectiveKeywordRules([], { presetWords })
-    expect(rules.at(-1)?.tier ?? '').not.toBe('low')
     expect(rules).toHaveLength(BUILTIN_KEYWORD_PRESETS.length - 1)
   })
 
@@ -343,15 +388,59 @@ describe('keyword rule enable state + custom categories + preset file (2026-10-0
     expect(resolveTaskTier('beta needs work', effectiveKeywordRules([{ words: 'alpha|beta', tier: 'high' }])))
       .toEqual({ tier: 'high', matched: 'beta' })
   })
+})
 
-  it('repositions Worker as 日常代码实现+文案: plain implementation wording lands low (问题 3)', () => {
-    // 代码实现 vocabulary lives in the Worker pack now — plain coding asks
-    // do not fall through to "no keyword hit".
-    expect(resolveTaskTier('实现一个导出函数', effectiveKeywordRules([]))?.tier).toBe('low')
-    expect(resolveTaskTier('写代码处理分页逻辑', effectiveKeywordRules([]))?.tier).toBe('low')
-    // Architecture vocabulary still escalates above it (first-match-wins).
-    expect(resolveTaskTier('重构架构并实现分页', effectiveKeywordRules([]))?.tier).toBe('high')
-    // Copy vocabulary stays Worker.
-    expect(resolveTaskTier('改一下首页文案', effectiveKeywordRules([]))?.tier).toBe('low')
+describe('worker keyword rules are dead config, filtered (2026-10-13 worker 关键词批)', () => {
+  it('drops stored low user rules — Worker is the fallback grade', () => {
+    const rules = effectiveKeywordRules([
+      { words: '函数|typo', tier: 'low' },
+      { words: '架构', tier: 'high' },
+    ])
+    // The low rule is gone; the high user rule + the three builtin packs remain.
+    expect(rules).toHaveLength(1 + BUILTIN_KEYWORD_PRESETS.length)
+    expect(rules[0]).toEqual({ words: '架构', tier: 'high' })
+  })
+
+  it('drops low preset packs (version-skewed seeded files keep parsing)', () => {
+    const rules = effectiveKeywordRules([], {
+      presets: [
+        { id: 'legacyLow', tier: 'low', words: '文案|typo' },
+        { id: 'freshHigh', tier: 'high', words: '对账' },
+      ],
+    })
+    expect(rules).toHaveLength(1)
+    expect(rules[0]).toEqual({ words: '对账', tier: 'high' })
+  })
+
+  it('drops mid rules/packs in two-grade mode (mid coerces into the Worker fallback)', () => {
+    const rules = effectiveKeywordRules(
+      [{ words: '架构', tier: 'mid' }],
+      {
+        tierMode: 'two',
+        presets: [
+          { id: 'qaPack', tier: 'mid', words: '回归' },
+          { id: 'highPack', tier: 'high', words: '对账' },
+        ],
+      },
+    )
+    expect(rules).toHaveLength(1)
+    expect(rules[0]).toEqual({ words: '对账', tier: 'high' })
+    // Three-grade mode keeps mid rules alive (max(mid, phase) escalates).
+    const threeGrade = effectiveKeywordRules(
+      [{ words: '架构', tier: 'mid' }],
+      { tierMode: 'three' },
+    )
+    expect(threeGrade[0]).toEqual({ words: '架构', tier: 'mid' })
+  })
+
+  it('un-shadows escalations a legacy low rule used to swallow (first-match-wins)', () => {
+    // 「重构架构并实现函数」: the legacy low rule (函数) matched FIRST and
+    // returned a dead tier, hiding the builtin high pack's 架构/重构 — after
+    // the filter the escalation surfaces with OR without the legacy rule.
+    const legacy = [{ words: '函数', tier: 'low' }] as const
+    expect(resolveTaskTier('重构架构并实现函数', effectiveKeywordRules([...legacy])))
+      .toEqual({ tier: 'high', matched: '架构' })
+    expect(resolveTaskTier('重构架构并实现函数', effectiveKeywordRules([])))
+      .toEqual({ tier: 'high', matched: '架构' })
   })
 })

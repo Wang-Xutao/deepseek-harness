@@ -280,9 +280,13 @@ describe('SettingsPanel update dot', () => {
   const rowsWithUpdates: Row[] = [
     { id: 'general', order: 0, label: 'General' },
     { id: 'version-updates', order: 10, label: 'Version and updates' },
+    { id: 'featured-plugins', order: 20, label: 'Recommended plugins' },
   ]
 
-  afterEach(() => { delete (window as { bafDesktop?: unknown }).bafDesktop })
+  afterEach(() => {
+    delete (window as { bafDesktop?: unknown }).bafDesktop
+    delete (window as { __bafFeaturedPluginsUpdateAvailable?: boolean }).__bafFeaturedPluginsUpdateAvailable
+  })
 
   function stubBridge(result: { status: string } | null) {
     ;(window as { bafDesktop?: unknown }).bafDesktop = {
@@ -300,6 +304,17 @@ describe('SettingsPanel update dot', () => {
       const dot = document.querySelector('[class*=navDot]')
       expect(dot).toBeTruthy()
       expect(dot!.closest('button')!.textContent).toContain('Version and updates')
+    })
+  })
+
+  it('lights the dot on the featured-plugins cell when the nav signal is set', async () => {
+    ;(window as { __bafFeaturedPluginsUpdateAvailable?: boolean }).__bafFeaturedPluginsUpdateAvailable = true
+    window.dispatchEvent(new CustomEvent('baf-featured-plugins-update', { detail: true }))
+    mount({ rows: rowsWithUpdates })
+    openPanel()
+    await vi.waitFor(() => {
+      const dots = [...document.querySelectorAll('[class*=navDot]')]
+      expect(dots.some(dot => dot.closest('button')!.textContent!.includes('Recommended plugins'))).toBe(true)
     })
   })
 
@@ -326,6 +341,31 @@ describe('SettingsPanel update dot', () => {
     openPanel()
     await vi.waitFor(() => { expect(screen.getByRole('dialog')).toBeTruthy() })
     expect(document.querySelector('[class*=navDot]')).toBeNull()
+  })
+})
+
+// 【变更】2026-10-12 (问题 3): the baf superscript keys off the section id —
+// the feedback section registers as 'user-feedback' (ui-settings-updates),
+// and an entry keyed 'feedback' badges nothing (the bug this test pins).
+describe('SettingsPanel baf badge', () => {
+  const rowsWithFeedback: Row[] = [
+    { id: 'general', order: 0, label: 'General' },
+    { id: 'user-feedback', order: 27, label: 'User feedback' },
+  ]
+
+  it('badges the user-feedback nav cell with the baf superscript', () => {
+    mount({ rows: rowsWithFeedback })
+    openPanel()
+    const badge = document.querySelector('[class*=bafBadge]')
+    expect(badge).toBeTruthy()
+    expect(badge!.textContent).toBe('baf')
+    expect(badge!.closest('button')!.textContent).toContain('User feedback')
+  })
+
+  it('leaves shared product sections unsigned', () => {
+    mount({ rows: [{ id: 'general', order: 0, label: 'General' }] })
+    openPanel()
+    expect(document.querySelector('[class*=bafBadge]')).toBeNull()
   })
 })
 

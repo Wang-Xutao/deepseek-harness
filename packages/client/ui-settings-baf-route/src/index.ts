@@ -15,7 +15,8 @@
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
-  DEFAULT_PHASE_TIER, parseRouteTierConfig, resolveTaskTier, type RouteTierConfig,
+  DEFAULT_PHASE_TIER, DEFAULT_PHASE_TIER_TWO, applyTierMode, coerceTierForMode,
+  parseRouteTierConfig, resolveTaskTier, resolveTierMode, type RouteTierConfig,
 } from '@deepseek-ai/dsh-baf-core'
 import {
   effectiveRouteKeywordRules,
@@ -63,7 +64,13 @@ export class BafRouteConfigRemote extends TypertRemoteService {
   async get(): Promise<RouteTierConfig | null> {
     const config = readRouteTierConfigSync()
     if (config === undefined) return null
-    return { ...config, phaseTier: { ...DEFAULT_PHASE_TIER, ...config.phaseTier } }
+    const mode = resolveTierMode(config)
+    const phaseDefaults = mode === 'two' ? DEFAULT_PHASE_TIER_TWO : DEFAULT_PHASE_TIER
+    return {
+      ...config,
+      tierMode: mode,
+      phaseTier: { ...phaseDefaults, ...config.phaseTier },
+    }
   }
 
   /**
@@ -77,7 +84,9 @@ export class BafRouteConfigRemote extends TypertRemoteService {
     if (normalized === undefined) {
       return { ok: false, error: 'config failed schema validation (tiers/keywords/phaseTier)' }
     }
-    writeRouteTierConfigSync(undefined, normalized)
+    // Persist the demoted form so mid never lingers when the user chose two grades.
+    const toWrite = resolveTierMode(normalized) === 'two' ? applyTierMode(normalized) : normalized
+    writeRouteTierConfigSync(undefined, toWrite)
     this.ctx.emit('baf-route-config/changed')
     return { ok: true }
   }
@@ -120,18 +129,23 @@ export class BafRouteConfigRemote extends TypertRemoteService {
   ): Promise<BafRoutePreviewResult> {
     const fromDraft = draft === undefined ? undefined : parseRouteTierConfig(draft)
     const config = fromDraft ?? readRouteTierConfigSync()
+    const mode = resolveTierMode(config ?? { tierMode: 'two' })
     const hit = resolveTaskTier(summary, effectiveRouteKeywordRules(config))
-    let tier = hit?.tier
+    let tier = hit?.tier === undefined ? undefined : coerceTierForMode(hit.tier, mode)
     let escalated = false
-    if (options?.verifyRetry === true && tier !== 'mid' && tier !== 'high') {
-      tier = 'mid'
+    // Three-grade floor stays Reviewer; two-grade has no Reviewer — floor is Commander.
+    const floor = mode === 'two' ? 'high' as const : 'mid' as const
+    if (options?.verifyRetry === true && tier !== 'high' && tier !== floor) {
+      tier = floor
       escalated = true
     }
     if (tier === undefined) return { tier: null }
+    const spec = config?.tiers[tier]
     return {
       tier,
       ...(hit === undefined ? {} : { matched: hit.matched }),
-      ...(escalated ? { escalated } : {}),
+      ...(escalated ? { escalated: true } : {}),
+      ...(spec === undefined ? {} : { provider: spec.provider, model: spec.model }),
     }
   }
 
@@ -145,7 +159,12 @@ export class BafRouteConfigRemote extends TypertRemoteService {
    */
   @Remote
   async defaults(): Promise<BafRouteConfigDefaults> {
-    return { phaseTier: DEFAULT_PHASE_TIER, presets: readRoutePresetsSync().packs }
+    // Product default is two grades (Commander/Worker); three remains an opt-in.
+    return {
+      phaseTier: DEFAULT_PHASE_TIER_TWO,
+      presets: readRoutePresetsSync().packs,
+      tierMode: 'two',
+    }
   }
 }
 

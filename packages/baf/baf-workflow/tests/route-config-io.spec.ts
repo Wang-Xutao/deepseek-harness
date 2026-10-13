@@ -177,7 +177,7 @@ describe('effectiveRouteKeywordRules (file packs + config enable states)', () =>
     },
     keywords: [
       { words: '架构', tier: 'low', enabled: false },
-      { words: '对账', tier: 'low' },
+      { words: '对账', tier: 'mid' },
     ],
     packs: { builtin: false },
     presetWords: { 'filePack::typo': false },
@@ -189,21 +189,25 @@ describe('effectiveRouteKeywordRules (file packs + config enable states)', () =>
       schema: 1,
       packs: [
         { id: 'builtin', tier: 'mid', words: 'review|debug' },
-        { id: 'filePack', tier: 'low', words: 'typo|wording' },
+        { id: 'filePack', tier: 'mid', words: 'typo|wording' },
+        // 【变更】2026-10-13 (worker 关键词批): a version-skewed LOW pack — dead
+        // config under the dead-rule filter, dropped everywhere below.
+        { id: 'legacyLow', tier: 'low', words: '文案|rename' },
       ],
     })
     const rules = effectiveRouteKeywordRules(config, path)
-    // Disabled user rule (架构 low) dropped; enabled one (对账 low) leads.
-    expect(rules[0]).toEqual({ words: '对账', tier: 'low' })
-    // 'builtin' pack parked by packs{}; 'filePack' survives minus its parked word.
+    // Disabled user rule (架构 low) dropped; the enabled mid one (对账) leads.
+    expect(rules[0]).toEqual({ words: '对账', tier: 'mid' })
+    // 'builtin' pack parked by packs{}; 'filePack' survives minus its parked
+    // word; the low pack is filtered as dead config.
     expect(rules).toHaveLength(2)
-    expect(rules[1]).toEqual({ words: 'wording', tier: 'low' })
-    // No config at all → the file packs evaluate bare, unfiltered (fresh
-    // machine: no packs/presetWords state exists to apply).
+    expect(rules[1]).toEqual({ words: 'wording', tier: 'mid' })
+    // No config at all → the file packs evaluate bare (fresh machine: no
+    // packs/presetWords state exists to apply), low pack still filtered.
     const bare = effectiveRouteKeywordRules(undefined, path)
     expect(bare).toEqual([
       { words: 'review|debug', tier: 'mid' },
-      { words: 'typo|wording', tier: 'low' },
+      { words: 'typo|wording', tier: 'mid' },
     ])
   })
 })

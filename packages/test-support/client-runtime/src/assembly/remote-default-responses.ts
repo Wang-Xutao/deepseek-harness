@@ -47,7 +47,8 @@ export const remoteDefaultResponses: RemoteTable = {
           id: 'qualityAssurance', tier: 'mid',
           words: '单元测试|集成测试|测试用例|代码评审|回归|排查|复现|日志|边界|test|review|debug|regression',
         },
-        { id: 'routineEdits', tier: 'low', words: '文案|注释|文档|README|格式化|拼写|错别字|翻译|改名|版本号|typo|wording|docs|rename' },
+        // 【变更】2026-10-13 (worker 关键词批): the low-tier routineEdits pack is
+        // gone — Worker is the fallback grade; its keywords never decide a turn.
       ],
     }),
     // ui-settings-featured-plugins `FeaturedSectionController` first read at apply.

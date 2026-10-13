@@ -11,6 +11,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { setFeaturedPluginsUpdateAvailable } from './featured-update-signal.ts'
 import type {
   FeaturedInstallOptions,
   FeaturedPluginCard,
@@ -140,6 +141,9 @@ export class FeaturedSectionController {
       progress: undefined,
     })
     void this.load()
+    this.store.subscribe(() => {
+      this.publishNavUpdateDot()
+    })
   }
 
   /** Re-read the cards; the Host's change event calls this after every operation. */
@@ -285,6 +289,14 @@ export class FeaturedSectionController {
       draft.manifestError = response.value.manifestError
       draft.status = 'ready'
     })
+    this.publishNavUpdateDot()
+  }
+
+  /** Mirror card update flags into the settings nav red-dot signal. */
+  private publishNavUpdateDot(): void {
+    const { plugins, status } = this.store.getSnapshot()
+    const available = status === 'ready' && plugins.some(plugin => plugin.updateAvailable)
+    setFeaturedPluginsUpdateAvailable(available)
   }
 
   private async runChange(op: FeaturedOp, id: string, options?: FeaturedInstallOptions): Promise<void> {

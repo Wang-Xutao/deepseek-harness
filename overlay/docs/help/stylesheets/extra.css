@@ -222,6 +222,43 @@ body,
   background: transparent !important;
 }
 
+/* 【变更】2026-10-12: Level 3 — deeper in-page subsections. The RTD theme's
+   default paints these (and their .current state) as solid gray blocks; we
+   keep the same quiet tree look as level 2 instead: transparent background,
+   muted text, accent on the current entry, indent riding the parent's
+   tree-line. */
+.wy-menu-vertical li.toctree-l3,
+.wy-menu-vertical li.toctree-l3.current,
+.wy-menu-vertical li.toctree-l3.current > a,
+.wy-menu-vertical li.toctree-l3 > a,
+.wy-menu-vertical li.toctree-l3.on-page,
+.wy-menu-vertical li.toctree-l3.on-page > a {
+  background: transparent !important;
+}
+
+.wy-menu-vertical li.toctree-l3 > a {
+  display: block !important;
+  color: var(--baf-muted) !important;
+  font-size: 12.5px !important;
+  font-weight: 400 !important;
+  line-height: 1.35 !important;
+  padding: 4px 10px 4px 14px !important;
+  border-left: none !important;
+}
+
+.wy-menu-vertical li.toctree-l3 > a:hover {
+  color: var(--baf-text) !important;
+  background: var(--baf-hover) !important;
+}
+
+.wy-menu-vertical li.toctree-l3.current > a,
+.wy-menu-vertical li.toctree-l3.current > a.current,
+.wy-menu-vertical li.toctree-l3.on-page > a {
+  color: var(--baf-accent) !important;
+  font-weight: 500 !important;
+  background: transparent !important;
+}
+
 /* ========== Sidebar pager (prev / next) ========== */
 .baf-sidebar-pager {
   position: absolute !important;

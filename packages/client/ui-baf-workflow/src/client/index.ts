@@ -139,6 +139,7 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: (): GatesOverviewRowInjected => ({
       loadGateOverview: async () => unwrap(await ctx.remote.bafWorkflowView.gateOverview()),
+      embeddedInTab: true,
     }),
   }, GatesOverviewRow))
 

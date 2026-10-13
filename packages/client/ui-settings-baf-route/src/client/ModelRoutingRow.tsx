@@ -51,10 +51,19 @@
  * Commander/Reviewer/Worker (Chinese survives only in the one-line
  * descriptions); the 预演 hint explains the verify-retry floor in plain
  * words (the rule itself is unchanged).
+ * 【变更】2026-10-12 (挡位/高级批 1.1–1.3): the 挡位选择 label row is gone —
+ * the select (options now just 两档/三档) sits in the action row's left end
+ * (恢复默认's old seat); real tab pagination landed (`.block[hidden]`
+ * restores the hidden attribute against the flex display); a fourth 高级
+ * tab carries 恢复默认 with its blast radius spelled out.
+ * 【变更】2026-10-13 (下拉样式/worker 关键词批): the 挡位 dropdown is the same
+ * Menu-primitive selector pill 通用设置·语言 uses; keyword rules only cover
+ * the ESCALATION grades (Worker is the fallback — its keyword rules/packs
+ * were dead config and no longer render or can be added).
  */
 import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
 import {
-  IconChevronDownOutlineMedium as IconChevronDownOutline14, Menu, Switch,
+  IconChevronDownOutlineMedium as IconChevronDownOutline14, IconChevronDownOutlineRegular, Menu, Switch,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   InjectFace, PropsLocale, PropsRuntime,
@@ -66,8 +75,19 @@ import css from './ModelRoutingRow.module.css'
 
 const identity = <T,>(value: T): T => value
 
-/** The tiers in display order. */
-const TIERS: readonly RouteTier[] = ['high', 'mid', 'low']
+/** Grade-count mode mirrored from baf-core (client cannot value-import it). */
+type TierMode = 'two' | 'three'
+
+/** The tiers in display order for three-grade mode. */
+const TIERS_THREE: readonly RouteTier[] = ['high', 'mid', 'low']
+
+/** The tiers in display order for two-grade mode (Reviewer folded away). */
+const TIERS_TWO: readonly RouteTier[] = ['high', 'low']
+
+/** Visible grade cards for the active mode. */
+function displayTiers(mode: TierMode): readonly RouteTier[] {
+  return mode === 'two' ? TIERS_TWO : TIERS_THREE
+}
 
 /** One phase-mapping node: the workflow node and its locale key. */
 type PhaseNode = { readonly node: WorkflowNode; readonly key: `phase${Capitalize<WorkflowNode>}` }
@@ -202,8 +222,9 @@ function presetNameKey(id: KeywordPresetId): `preset${Capitalize<KeywordPresetId
   return `preset${id.charAt(0).toUpperCase()}${id.slice(1)}` as `preset${Capitalize<KeywordPresetId>}`
 }
 
-/** The next tier in the worker → reviewer → commander → worker cycle a click walks. */
-function nextTier(tier: RouteTier): RouteTier {
+/** The next tier a workflow-node click walks, honoring two- vs three-grade mode. */
+function nextTier(tier: RouteTier, mode: TierMode): RouteTier {
+  if (mode === 'two') return tier === 'high' ? 'low' : 'high'
   return tier === 'low' ? 'mid' : tier === 'mid' ? 'high' : 'low'
 }
 
@@ -245,7 +266,7 @@ const join = (...names: ReadonlyArray<string | undefined>): string =>
 const PREVIEW_DEBOUNCE_MS = 300
 
 /** Which of a row's three menus is open (one at a time across the section). */
-type OpenMenu = `${RouteTier}:model` | `${RouteTier}:provider` | `${RouteTier}:effort` | null
+type OpenMenu = `${RouteTier}:model` | `${RouteTier}:provider` | `${RouteTier}:effort` | 'tierMode' | null
 
 /** The keyword rule being inline-edited, with its tier selector's value. */
 interface KeywordEdit {
@@ -267,7 +288,8 @@ export type ModelRoutingRowProps =
 export function ModelRoutingRow({
   useRouteSection, setEnabled, setTierModel, setTierProvider, setTierEffort, setPhaseTier,
   addKeyword, removeKeyword, updateKeyword, setKeywordEnabled, setCategoryEnabled,
-  setPackEnabled, setPresetWordEnabled, setEscalateOnly, save, cancel, reset, runPreview, t,
+  setPackEnabled, setPresetWordEnabled, setEscalateOnly, setTierMode, save, cancel, reset,
+  runPreview, t,
 }: ModelRoutingRowProps) {
   const state = useRouteSection(identity)
   const keywordWordsId = useId()
@@ -277,6 +299,9 @@ export function ModelRoutingRow({
   const [keywordEdit, setKeywordEdit] = useState<KeywordEdit | null>(null)
   const [verifyRetry, setVerifyRetry] = useState(false)
   const [previewText, setPreviewText] = useState('')
+  /** 【变更】2026-10-12: restore tabbed layout; 高级 carries 恢复默认 (1.3). */
+  const [routeTab, setRouteTab] = useState<'tiers' | 'phase' | 'keywords' | 'advanced'>('tiers')
+  const tabsId = useId()
   const draft = state.draft
   // 1.6 热加载: while the box holds text, any draft edit (keyword add/remove,
   // tier re-point, switch flip) re-runs the dry-run on a short debounce — the
@@ -290,6 +315,14 @@ export function ModelRoutingRow({
     return <div className={css.section} data-testid="route-section">{t(state.status === 'failed' ? 'loadFailed' : 'loading')}</div>
   }
   const escalate = draft.escalateOnly ?? true
+  const tierMode: TierMode = draft.tierMode === 'three' ? 'three' : 'two'
+  const visibleTiers = displayTiers(tierMode)
+  // 【变更】2026-10-13 (worker 关键词批): keyword rules only ever ESCALATE —
+  // Worker is the fallback grade, so a 'low' keyword is dead config (and
+  // two-grade mode folds mid into low, killing mid rules there too). The
+  // adder/edit selectors offer only escalation grades; dead stored rules and
+  // packs no longer render (the host fold filters them at evaluation).
+  const keywordTiers: readonly RouteTier[] = tierMode === 'two' ? ['high'] : ['high', 'mid']
   const models = state.catalog?.models ?? []
   // 问题 3: the adder's optional 功能分类 rides the new rule when filled.
   const addKeywordFrom = (words: string, tier: RouteTier, category: string): void => {
@@ -326,7 +359,7 @@ export function ModelRoutingRow({
               setKeywordEdit({ ...keywordEdit, tier: event.currentTarget.value as RouteTier })
             }}
           >
-            {TIERS.map(option => (
+            {keywordTiers.map(option => (
               <option key={option} value={option}>{t(tierKey(option))}</option>
             ))}
           </select>
@@ -435,26 +468,55 @@ export function ModelRoutingRow({
   }
   return (
     <div className={css.section} data-testid="route-section">
+      {/* Title/intro match 版本与更新: 18px title + 13px tertiary description. */}
       <div className={css.head}>
         <div>
           <h2 className={css.title}>{t('title')}</h2>
-          <div className={css.description}>{t('description')}</div>
+          <p className={css.intro}>{t('description')}</p>
         </div>
         <Switch checked={draft.enabled} label={t('master')} onChange={setEnabled} />
       </div>
 
-      {/* 问题 5 (4.1): 恢复默认 parks at the LEFT end — far from the commit
-          cluster; 取消 joins 保存 at the right end and discards the draft. */}
+      {/* 【变更】2026-10-12 (问题 1.1/1.3): the 挡位 dropdown moved INTO the
+          action row's left end (the 恢复默认 button's old seat — that button
+          now lives in the 高级 tab) and the visible 挡位选择 label is gone;
+          the options read just 两档 / 三档.
+          【变更】2026-10-13 (下拉样式批): the native <select> became the same
+          Menu-primitive selector pill 通用设置·语言 uses (css.modeSelector —
+          a verbatim copy of locale/LanguageRow's .selector values, Regular
+          chevron), so the two dropdowns read as one control family. */}
       <div className={css.actions} data-testid="route-actions">
-        <button
-          type="button"
-          className={css.btn}
-          disabled={state.saving}
-          data-testid="route-reset"
-          onClick={() => { void reset() }}
-        >
-          {t('reset')}
-        </button>
+        <Menu
+          open={openMenu === 'tierMode'}
+          onClose={() => { setOpenMenu(null) }}
+          items={[
+            { id: 'two', label: t('tierModeTwo') },
+            { id: 'three', label: t('tierModeThree') },
+          ]}
+          selectedId={tierMode}
+          onSelect={(id) => {
+            setOpenMenu(null)
+            setTierMode(id as TierMode)
+          }}
+          align="end"
+          portal
+          anchor={(
+            <button
+              type="button"
+              className={css.modeSelector}
+              data-testid="route-tier-mode"
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'tierMode'}
+              aria-label={t('tierModeLabel')}
+              onClick={() => { setOpenMenu(openMenu === 'tierMode' ? null : 'tierMode') }}
+            >
+              <span className={css.selectorLabel}>
+                {tierMode === 'two' ? t('tierModeTwo') : t('tierModeThree')}
+              </span>
+              <IconChevronDownOutlineRegular className={css.chevron} />
+            </button>
+          )}
+        />
         <span className={css.actionsEnd}>
           {state.dirty ? <span className={css.dirty}>{t('dirty')}</span> : undefined}
           <button
@@ -478,13 +540,45 @@ export function ModelRoutingRow({
         </span>
       </div>
 
-      {/* 问题 2 (2026-10-06) — 模型分级: one role CARD per tier. The role
-          name + one-line description lead the card (主次分明), then the card
-          labels its own three fields — no shared header row remains. */}
-      <div className={css.block}>
-        <div className={css.blockTitle}>{t('tiersTitle')}</div>
+      <div className={css.tabs} role="tablist" aria-label={t('tabsAria')}>
+        {([
+          ['tiers', 'tiersTitle'],
+          ['phase', 'phaseTitle'],
+          ['keywords', 'keywordsTitle'],
+          ['advanced', 'advancedTitle'],
+        ] as const).map(([id, labelKey]) => {
+          const selected = routeTab === id
+          return (
+            <button
+              key={id}
+              id={`${tabsId}-tab-${id}`}
+              type="button"
+              role="tab"
+              className={css.tab}
+              aria-selected={selected}
+              aria-controls={`${tabsId}-panel-${id}`}
+              data-active={selected ? 'true' : undefined}
+              data-testid={`route-tab-${id}`}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => { setRouteTab(id) }}
+            >
+              {t(labelKey)}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* 问题 2 (2026-10-06) — 模型分级: one role CARD per tier. */}
+      <div
+        className={css.block}
+        id={`${tabsId}-panel-tiers`}
+        role="tabpanel"
+        aria-labelledby={`${tabsId}-tab-tiers`}
+        hidden={routeTab !== 'tiers'}
+        data-testid="route-panel-tiers"
+      >
         <div className={css.tiers}>
-          {TIERS.map((tier) => {
+          {visibleTiers.map((tier) => {
             const spec = draft.tiers[tier]
             // 1.1: the model menu follows the provider — only that provider's
             // models are offered. 问题 5 (4.3/4.4): the loaded draft is
@@ -625,13 +719,18 @@ export function ModelRoutingRow({
         </div>
       </div>
 
-      {/* 1.3 block 2 — 工作流模型绑定: the click-hint rides directly under the
-          title (1.2), the canvas follows, compact and overlap-free. */}
-      <div className={css.block}>
+      {/* 1.3 block 2 — 工作流模型绑定. */}
+      <div
+        className={css.block}
+        id={`${tabsId}-panel-phase`}
+        role="tabpanel"
+        aria-labelledby={`${tabsId}-tab-phase`}
+        hidden={routeTab !== 'phase'}
+        data-testid="route-panel-phase"
+      >
         <div className={css.flowHead}>
-          <div className={css.blockTitle}>{t('phaseTitle')}</div>
           <div className={css.legend}>
-            {TIERS.map(tier => (
+            {visibleTiers.map(tier => (
               <span key={tier} className={css.legendItem}>
                 <span className={join(css.dot, TIER_CLASS[tier])} aria-hidden="true" />
                 {t(tierKey(tier))}
@@ -639,7 +738,7 @@ export function ModelRoutingRow({
             ))}
           </div>
         </div>
-        <div className={css.description}>{t('flowHint')}</div>
+        <div className={css.description}>{t(tierMode === 'two' ? 'flowHintTwo' : 'flowHint')}</div>
         {/* point 3: compact + full-view — the wrapper frames the canvas, it no
             longer scrolls inside; the whole chain is visible at a glance. */}
         <div className={css.flowWrap}>
@@ -674,7 +773,8 @@ export function ModelRoutingRow({
               ))}
             </svg>
             {FLOW.map(({ node, key }) => {
-              const tier = draft.phaseTier?.[node] ?? 'mid'
+              const raw = draft.phaseTier?.[node] ?? (tierMode === 'two' ? 'low' : 'mid')
+              const tier = tierMode === 'two' && raw === 'mid' ? 'low' : raw
               const pos = flowPos(node)
               return (
                 <button
@@ -685,7 +785,7 @@ export function ModelRoutingRow({
                   data-testid="route-phase-row"
                   aria-label={`${t(key)} · ${t(tierKey(tier))}`}
                   title={`${t(key)} → ${t(tierKey(tier))} · ${draft.tiers[tier].model}`}
-                  onClick={() => { setPhaseTier(node, nextTier(tier)) }}
+                  onClick={() => { setPhaseTier(node, nextTier(tier, tierMode)) }}
                 >
                   <span className={css.nodeName}>{t(key)}</span>
                   <span className={css.nodeTier}>{t(tierKey(tier))}</span>
@@ -697,22 +797,29 @@ export function ModelRoutingRow({
         </div>
       </div>
 
-      {/* 1.3 block 3 — 关键词规则: preset packs already ARE rules (1.5), so
-          they render inside this block as 预设-badged tags with a master
-          switch beside each pack name (问题 3 类级一键开关) and a mini switch
-          inside every tag (问题 4 标签级开关), grouped by role then by pack;
-          the user's own tags stay editable and can carry a custom 功能分类
-          rendered as a labelled group with its own master switch. */}
-      <div className={css.block}>
-        <div className={css.blockTitle}>{t('keywordsTitle')}</div>
+      {/* 1.3 block 3 — 关键词规则 (+ 预演). */}
+      <div
+        className={css.block}
+        id={`${tabsId}-panel-keywords`}
+        role="tabpanel"
+        aria-labelledby={`${tabsId}-tab-keywords`}
+        hidden={routeTab !== 'keywords'}
+        data-testid="route-panel-keywords"
+      >
         <div className={css.description}>{t('keywordsHint')}</div>
         {/* 问题 4: the preset packs live in a user-editable file — say so. */}
         <div className={css.description}>{t('presetsFileHint')}</div>
-        {TIERS.map((tier) => {
+        {keywordTiers.map((tier) => {
+          const effectiveOf = (value: RouteTier): RouteTier =>
+            tierMode === 'two' && value === 'mid' ? 'low' : value
           const rules = (draft.keywords ?? [])
             .map((rule, index) => ({ rule, index }))
-            .filter(entry => entry.rule.tier === tier)
-          const packs = (state.presets ?? []).filter(preset => preset.tier === tier)
+            .filter(entry => effectiveOf(entry.rule.tier) === tier)
+          // 【变更】2026-10-13 (worker 关键词批): keyword groups cover only the
+          // escalation grades — Worker is the fallback (no keywords can land
+          // there), and in two-grade mode mid coerces into the fallback too,
+          // so mid rules/packs (e.g. qualityAssurance) simply don't render.
+          const packs = (state.presets ?? []).filter(preset => effectiveOf(preset.tier) === tier)
           if (rules.length === 0 && packs.length === 0) return undefined
           // 问题 3 自定义功能分类: rules sharing a category render inside one
           // labelled SEGMENT whose switch parks the whole category at once.
@@ -812,6 +919,7 @@ export function ModelRoutingRow({
         })}
         <KeywordAdder
           id={{ words: keywordWordsId, tier: keywordTierId, category: keywordCategoryId }}
+          tiers={keywordTiers}
           t={t}
           onAdd={addKeywordFrom}
         />
@@ -820,6 +928,7 @@ export function ModelRoutingRow({
 
         <div className={css.previewBlock}>
           <div className={css.blockTitle}>{t('previewTitle')}</div>
+          <div className={css.description}>{t('previewAutoHint')}</div>
           <div className={css.previewBar}>
             <input
               className={css.input}
@@ -827,24 +936,11 @@ export function ModelRoutingRow({
               placeholder={t('previewPlaceholder')}
               value={previewText}
               onChange={(event) => { setPreviewText(event.currentTarget.value) }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void runPreview(previewText, { verifyRetry })
-              }}
             />
-            <button
-              type="button"
-              className={css.btn}
-              data-testid="route-preview-run"
-              onClick={() => { void runPreview(previewText, { verifyRetry }) }}
-            >
-              {t('previewRun')}
-            </button>
           </div>
-          {/* 问题 5 说明: say WHAT the verify-retry checkbox simulates — the
-              M4 floor a real failed-verify turn retries at. */}
-          <div className={css.description}>{t('previewVerifyHint')}</div>
-          {/* 批次C: simulate the M4 verify-failed retry floor (a below-Reviewer
-              verdict runs at Reviewer) — 预演 reads the unsaved draft (批次A). */}
+          <div className={css.description}>
+            {t(tierMode === 'two' ? 'previewVerifyHintTwo' : 'previewVerifyHint')}
+          </div>
           <label className={css.previewOpt}>
             <input
               type="checkbox"
@@ -856,12 +952,58 @@ export function ModelRoutingRow({
           </label>
           {state.preview === undefined ? undefined : (
             <div className={css.preview} data-testid="route-preview">
-              {state.preview.tier === null
-                ? t('previewNone')
-                : `${t(tierKey(state.preview.tier))} · ${state.preview.matched ?? ''}`}
-              {state.preview.escalated === true ? ` · ${t('previewEscalated')}` : ''}
+              {state.preview.tier === null ? (
+                <div className={css.previewLine}>{t('previewNone')}</div>
+              ) : (
+                <>
+                  <div className={css.previewLine}>
+                    <span className={css.previewLabel}>{t('previewMatched')}</span>
+                    <span>{state.preview.matched ?? '—'}</span>
+                  </div>
+                  <div className={css.previewLine}>
+                    <span className={css.previewLabel}>{t('previewRole')}</span>
+                    <span>{t(tierKey(state.preview.tier))}</span>
+                  </div>
+                  <div className={css.previewLine}>
+                    <span className={css.previewLabel}>{t('previewModel')}</span>
+                    <span>
+                      {state.preview.provider !== undefined && state.preview.model !== undefined
+                        ? `${state.preview.provider} / ${state.preview.model}`
+                        : '—'}
+                    </span>
+                  </div>
+                  {state.preview.escalated === true
+                    ? <div className={css.previewNote}>{t('previewEscalated')}</div>
+                    : null}
+                </>
+              )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* 【变更】2026-10-12 (问题 1.3): 高级 tab — 恢复默认 moved here from the
+          action row, so the destructive reset sits behind an explicit hop
+          instead of beside the save cluster. */}
+      <div
+        className={css.block}
+        id={`${tabsId}-panel-advanced`}
+        role="tabpanel"
+        aria-labelledby={`${tabsId}-tab-advanced`}
+        hidden={routeTab !== 'advanced'}
+        data-testid="route-panel-advanced"
+      >
+        <div className={css.description}>{t('advancedHint')}</div>
+        <div>
+          <button
+            type="button"
+            className={css.btn}
+            disabled={state.saving}
+            data-testid="route-reset"
+            onClick={() => { void reset() }}
+          >
+            {t('reset')}
+          </button>
         </div>
       </div>
 
@@ -887,8 +1029,9 @@ export function ModelRoutingRow({
 }
 
 /** Uncontrolled words + optional category + tier inputs that append one rule. */
-function KeywordAdder({ id, t, onAdd }: {
+function KeywordAdder({ id, tiers, t, onAdd }: {
   id: { words: string; tier: string; category: string }
+  tiers: readonly RouteTier[]
   t: (key: 'keywordWords' | 'keywordCategory' | 'keywordTier' | 'keywordAdd'
     | 'tierHigh' | 'tierMid' | 'tierLow') => string
   onAdd: (words: string, tier: RouteTier, category: string) => void
@@ -929,7 +1072,7 @@ function KeywordAdder({ id, t, onAdd }: {
         placeholder={t('keywordCategory')}
       />
       <select id={id.tier} className={css.select} aria-label={t('keywordTier')} defaultValue="high">
-        {TIERS.map(option => (
+        {tiers.map(option => (
           <option key={option} value={option}>
             {t(tierKey(option))}
           </option>

@@ -1,8 +1,14 @@
 /**
- * BAF 工程规范 overview row (2026-10-06 问题 6 客户决策: 规范总览·只读):
- * one card per BAF plugin package quoting the baseline fields it owns, plus
- * the rules-document viewer. The row never edits — every value labels the
- * `.baf/baseline.yml` path it came from, and edits go to that file.
+ * BAF 工程规范 settings panels (2026-10-12 工作流设置 7): split across 项目工程 /
+ * 企业规范 / 质量监控 tabs — read-only baseline projections without workspace
+ * meta dumps; enterprise rules group by workflow stage.
+ *
+ * 【变更】2026-10-13 (问题 4 批, 客户决策): 企业规范's 8-domain structure and
+ * stage grouping are product constants and ALWAYS render — only the rules
+ * content needs the baseline (per-area body and the full document degrade
+ * with a /baf-scaffold pointer). 质量监控 gains an always-on gate-mechanism
+ * card (product-fixed knowledge); its stack card stays baseline-gated (the
+ * commands/thresholds ARE the project's git-managed baseline config).
  */
 import type {
   InjectFace, PropsLocale, PropsRuntime,
@@ -14,11 +20,6 @@ import css from './StandardsOverview.module.css'
 
 const identity = <T,>(value: T): T => value
 
-/**
- * 【变更】2026-10-07 (九点批 问题 8): per-domain locale keys (title + one-line
- * jurisdiction), keyed by area id — the host's `titleKey` resolves into this
- * table after its `${NS}.area.` prefix is stripped.
- */
 const AREA_META: Record<string, readonly [BafStandardKey, BafStandardKey]> = {
   'project-charter': ['area.project-charter', 'areaDesc.project-charter'],
   'coding-style': ['area.coding-style', 'areaDesc.coding-style'],
@@ -30,6 +31,24 @@ const AREA_META: Record<string, readonly [BafStandardKey, BafStandardKey]> = {
   'testing-discipline': ['area.testing-discipline', 'areaDesc.testing-discipline'],
 }
 
+/** Workflow stages → rule domains shown under 企业规范. */
+const STAGE_AREA_GROUPS: readonly {
+  stageKey: BafStandardKey
+  hintKey: BafStandardKey
+  areas: readonly string[]
+}[] = [
+  { stageKey: 'stage.intake', hintKey: 'stageHint.intake', areas: ['project-charter'] },
+  { stageKey: 'stage.open', hintKey: 'stageHint.open', areas: ['documentation'] },
+  { stageKey: 'stage.clarify', hintKey: 'stageHint.clarify', areas: ['interfaces'] },
+  { stageKey: 'stage.design', hintKey: 'stageHint.design', areas: ['coding-style', 'error-handling'] },
+  { stageKey: 'stage.plan', hintKey: 'stageHint.plan', areas: ['branch-commit', 'logging'] },
+  { stageKey: 'stage.verify', hintKey: 'stageHint.verify', areas: ['testing-discipline'] },
+]
+
+const PROJECT_CARD_IDS: readonly BafStandardCardId[] = ['workflow', 'route', 'openspec', 'guard']
+const QUALITY_CARD_IDS: readonly BafStandardCardId[] = ['quality']
+const STANDARD_CARD_IDS: readonly BafStandardCardId[] = ['standard']
+
 /** Resolve a host area's id from its `titleKey` (`<NS>.area.<id>`). */
 function areaIdOf(titleKey: string, fallbackId: string): string {
   const prefix = `${NS}.area.`
@@ -37,10 +56,7 @@ function areaIdOf(titleKey: string, fallbackId: string): string {
 }
 
 /**
- * Slice one rule domain's rules out of the rules document: the section from
- * its `## <anchor>…` heading up to the next `## ` heading (the scaffold's
- * headings carry a Chinese tail after the anchor — `## logging 日志` — so the
- * match is prefix-wise). Pure; exported for the client spec.
+ * Slice one rule domain's rules out of the rules document.
  * @param content - the rules document text.
  * @param anchor - the area's heading anchor (its id).
  * @returns the trimmed section, or undefined when the heading is absent.
@@ -59,7 +75,6 @@ export function sliceAreaContent(content: string, anchor: string): string | unde
   return lines.slice(start, end).join('\n').trim()
 }
 
-/** Locale keys per host card: title, one-line purpose, command entry. */
 const CARD_META: Record<BafStandardCardId, readonly [BafStandardKey, BafStandardKey, BafStandardKey]> = {
   workflow: ['cardTitleWorkflow', 'cardDescWorkflow', 'cardCommandWorkflow'],
   route: ['cardTitleRoute', 'cardDescRoute', 'cardCommandRoute'],
@@ -69,19 +84,20 @@ const CARD_META: Record<BafStandardCardId, readonly [BafStandardKey, BafStandard
   guard: ['cardTitleGuard', 'cardDescGuard', 'cardCommandGuard'],
 }
 
-/** The one field whose value is localized rather than quoted raw. */
 const AVAILABILITY_TEXT: Record<string, BafStandardKey> = {
   ready: 'stateAvailabilityReady',
   policy_missing: 'stateAvailabilityMissing',
 }
 
-/** Full component props for the BAF 工程规范 settings row. */
-export type StandardsOverviewProps =
+/** Shared inject + locale props for all standards panels. */
+export type StandardsPanelProps =
   PropsRuntime<'settings.workflow.item'>
   & PropsLocale<'baf.standard'>
   & InjectFace<StandardsOverviewFace>
 
-/** One card's field table: baseline path | current value (+ 企业待定 chip). */
+/** @deprecated Use StandardsEnterpriseOverview — kept for spec imports. */
+export type StandardsOverviewProps = StandardsPanelProps
+
 function FieldTable({ fields, t }: {
   fields: readonly BafStandardFieldRow[]
   t: PropsLocale<'baf.standard'>['t']
@@ -108,175 +124,295 @@ function FieldTable({ fields, t }: {
   )
 }
 
-/**
- * Render the BAF 工程规范 read-only overview inside the 工作流 settings
- * section.
- * @param props - composed slot + inject props.
- * @returns the overview row.
- */
-export function StandardsOverview({ useStandards, reload, loadRules, toggleRules, toggleArea, t }: StandardsOverviewProps) {
-  const state = useStandards(identity<StandardsOverviewState>)
-  const summary = state.summary
+function PanelHead({ titleKey, descKey, t }: {
+  titleKey: BafStandardKey
+  descKey: BafStandardKey
+  t: StandardsPanelProps['t']
+}) {
+  return (
+    <div className={css.head}>
+      <div>
+        <div className={css.title}>{t(titleKey)}</div>
+        <div className={css.description}>{t(descKey)}</div>
+      </div>
+    </div>
+  )
+}
+
+function StatusSurface({ state, summary, t }: {
+  state: StandardsOverviewState
+  summary: StandardsOverviewState['summary']
+  t: StandardsPanelProps['t']
+}) {
+  if (state.status === 'loading') return <div className={css.status}>{t('statusLoading')}</div>
+  if (state.status === 'failed') {
+    return (
+      <div className={css.statusError} data-testid="baf-standard-failed">
+        {t('statusFailed')}{summary?.error ?? 'unknown'}
+      </div>
+    )
+  }
+  // 【变更】2026-10-12 (问题 4.2): the no-workspace / no-baseline answers used
+  // to render NOTHING here — the tab body read as a blank page. Both now show
+  // their guidance copy (pointing at /baf-scaffold), so every tab always
+  // explains itself.
+  if (state.status === 'no-workspace') {
+    return <div className={css.status} data-testid="baf-standard-empty">{t('statusNoWorkspace')}</div>
+  }
+  if (state.status === 'no-baseline') {
+    return <div className={css.status} data-testid="baf-standard-empty">{t('statusNoBaseline')}</div>
+  }
+  return null
+}
+
+function PackageCard({ cardId, fields, t }: {
+  cardId: BafStandardCardId
+  fields: readonly BafStandardFieldRow[]
+  t: StandardsPanelProps['t']
+}) {
+  const [titleKey, descKey, commandKey] = CARD_META[cardId]
+  return (
+    <div className={css.card} data-testid={`baf-standard-card-${cardId}`}>
+      <div className={css.cardTitle}>{t(titleKey)}</div>
+      <div className={css.cardDesc}>{t(descKey)}</div>
+      <div className={css.cardCommand}>{t(commandKey)}</div>
+      <FieldTable fields={fields} t={t} />
+    </div>
+  )
+}
+
+function usePanelState(props: StandardsPanelProps) {
+  const state = props.useStandards(identity<StandardsOverviewState>)
+  return { state, summary: state.summary }
+}
+
+/** 项目工程 tab — plugin cards for workflow routing, openspec, guard, scaffold. */
+export function StandardsProjectOverview(props: StandardsPanelProps) {
+  const { state, summary } = usePanelState(props)
+  const { t } = props
+  const cards = (summary?.cards ?? []).filter(card => PROJECT_CARD_IDS.includes(card.id))
 
   return (
-    <section className={css.block} data-testid="baf-standard-overview">
-      <div className={css.head}>
-        <div>
-          <div className={css.title}>{t('rowTitle')}</div>
-          <div className={css.description}>{t('rowDescription')}</div>
-        </div>
-        <button
-          type="button"
-          className={css.refresh}
-          data-testid="baf-standard-refresh"
-          // Refresh re-reads both the summary and (when open) the document.
-          onClick={() => {
-            void reload()
-            if (state.rulesExpanded) void loadRules()
-          }}
-        >
-          {t('refresh')}
-        </button>
-      </div>
-
-      {state.status === 'loading' ? <div className={css.status}>{t('statusLoading')}</div> : null}
-      {state.status === 'no-workspace' ? <div className={css.status}>{t('statusNoWorkspace')}</div> : null}
-      {state.status === 'no-baseline' ? <div className={css.status}>{t('statusNoBaseline')}</div> : null}
-      {state.status === 'failed' ? (
-        <div className={css.statusError} data-testid="baf-standard-failed">
-          {t('statusFailed')}{summary?.error ?? 'unknown'}
-        </div>
-      ) : null}
-
+    <section className={css.block} data-testid="baf-standard-project">
+      <PanelHead titleKey="panelProjectTitle" descKey="panelProjectDescription" t={t} />
+      <StatusSurface state={state} summary={summary} t={t} />
       {summary?.status === 'ready' ? (
-        <>
-          <div className={css.meta} data-testid="baf-standard-meta">
-            <span>{t('baselineLabel')}：{summary.baselineId}</span>
-            <span>{t('compatLabel')}：{summary.compatibility?.min} ~ {summary.compatibility?.max}</span>
-            <span>{t('cwdLabel')}：{summary.cwd}</span>
-            <span className={css.path}>{t('configFileLabel')}：{summary.baselinePath}</span>
+        <div className={css.grid}>
+          {/* 【变更】2026-10-12 (问题 4.3 客户确认): 基线档案头卡 — the repo-tied,
+              git-managed anchor of every projection on this page: the baseline
+              id, its bafCompatibility window, and the actual baseline.yml path.
+              All three already ride the summary wire — zero new host reads. */}
+          <div className={css.card} data-testid="baf-standard-card-baseline">
+            <div className={css.cardTitle}>{t('cardTitleBaseline')}</div>
+            <div className={css.cardDesc}>{t('cardDescBaseline')}</div>
+            <FieldTable
+              fields={[
+                { field: t('baselineLabel'), value: summary.baselineId ?? '—', state: 'ok' },
+                {
+                  field: t('compatLabel'),
+                  value: summary.compatibility === undefined
+                    ? '—'
+                    : `${summary.compatibility.min} ~ ${summary.compatibility.max}`,
+                  state: 'ok',
+                },
+                { field: t('configFileLabel'), value: summary.baselinePath ?? '—', state: 'ok' },
+              ]}
+              t={t}
+            />
           </div>
-
-          <div className={css.grid}>
-            {(summary.cards ?? []).map((card) => {
-              const [titleKey, descKey, commandKey] = CARD_META[card.id]
-              return (
-                <div key={card.id} className={css.card} data-testid={`baf-standard-card-${card.id}`}>
-                  <div className={css.cardTitle}>{t(titleKey)}</div>
-                  <div className={css.cardDesc}>{t(descKey)}</div>
-                  <div className={css.cardCommand}>{t(commandKey)}</div>
-                  <FieldTable fields={card.fields} t={t} />
-                </div>
-              )
-            })}
-            <div className={css.card} data-testid="baf-standard-card-scaffold">
-              <div className={css.cardTitle}>{t('cardTitleScaffold')}</div>
-              <div className={css.cardDesc}>{t('cardDescScaffold')}</div>
-              <div className={css.cardCommand}>{t('cardCommandScaffold')}</div>
-              <ul className={css.scaffoldFiles}>
-                <li>{t('scaffoldFileBaseline')}</li>
-                <li>{t('scaffoldFileRules')}</li>
-                <li>{t('scaffoldFileOpenspec')}</li>
-              </ul>
-            </div>
+          {cards.map(card => (
+            <PackageCard key={card.id} cardId={card.id} fields={card.fields} t={t} />
+          ))}
+          <div className={css.card} data-testid="baf-standard-card-scaffold">
+            <div className={css.cardTitle}>{t('cardTitleScaffold')}</div>
+            <div className={css.cardDesc}>{t('cardDescScaffold')}</div>
+            <div className={css.cardCommand}>{t('cardCommandScaffold')}</div>
           </div>
-
-          {/* 【变更】2026-10-07 (九点批 问题 8): the 8 rule domains, one digest row
-              each — title + one-line jurisdiction + anchored pointer; expanding
-              slices the domain's rules out of the loaded rules document. */}
-          <div className={css.rules} data-testid="baf-standard-areas">
-            <div className={css.rulesHead}>
-              <div>
-                <div className={css.cardTitle}>{t('areasTitle')}</div>
-                <div className={css.cardDesc}>{t('areasHint')}</div>
-              </div>
-            </div>
-            <div className={css.areaList}>
-              {(summary.standardAreas ?? []).map((area) => {
-                const id = areaIdOf(area.titleKey, area.id)
-                const meta = AREA_META[id]
-                const expanded = state.areasExpanded[id] === true
-                const content = state.rules?.status === 'ready' && state.rules.content !== undefined
-                  ? sliceAreaContent(state.rules.content, id)
-                  : undefined
-                return (
-                  <div key={id} className={css.areaRow} data-testid={`baf-standard-area-${id}`}>
-                    <button
-                      type="button"
-                      className={css.areaHead}
-                      data-testid={`baf-standard-area-toggle-${id}`}
-                      onClick={() => { toggleArea(id) }}
-                    >
-                      <span className={css.areaTitle}>{meta === undefined ? id : t(meta[0])}</span>
-                      <span className={css.areaDesc}>{meta === undefined ? '' : t(meta[1])}</span>
-                      <span className={css.areaToggle}>{expanded ? t('areaCollapse') : t('areaExpand')}</span>
-                    </button>
-                    <span className={css.areaAnchor}>{area.sourceRef}</span>
-                    {expanded ? (
-                      content !== undefined ? (
-                        <pre className={css.areaBody} data-testid={`baf-standard-area-body-${id}`}>{content}</pre>
-                      ) : (
-                        <div className={css.status} data-testid={`baf-standard-area-missing-${id}`}>{t('areaNoContent')}</div>
-                      )
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* 【变更】2026-10-07 (九点批 问题 8): the provenance chain — where the
-              rules document comes from, who reads it, and how to swap it. */}
-          <div className={css.rules} data-testid="baf-standard-from">
-            <div className={css.cardTitle}>{t('fromTitle')}</div>
-            <ol className={css.fromSteps}>
-              <li data-testid="baf-standard-from-step-1">{t('fromStep1')}</li>
-              <li data-testid="baf-standard-from-step-2">{t('fromStep2')}</li>
-              <li data-testid="baf-standard-from-step-3">{t('fromStep3')}</li>
-              <li data-testid="baf-standard-from-step-4">{t('fromStep4')}</li>
-            </ol>
-            <div className={css.fromLiving}>{t('fromLiving')}</div>
-          </div>
-
-          <div className={css.rules} data-testid="baf-standard-rules">
-            <div className={css.rulesHead}>
-              <div>
-                <div className={css.cardTitle}>{t('rulesTitle')}</div>
-                <div className={css.cardDesc}>{t('rulesHint')}</div>
-              </div>
-              <button
-                type="button"
-                className={css.refresh}
-                data-testid="baf-standard-rules-toggle"
-                // The controller fetches the document on the first expand.
-                onClick={() => { toggleRules() }}
-              >
-                {state.rulesExpanded ? t('rulesCollapse') : t('rulesExpand')}
-              </button>
-            </div>
-            {state.rulesExpanded ? (
-              state.rules === undefined
-                ? <div className={css.status}>{t('statusLoading')}</div>
-                : state.rules.status === 'ready'
-                  ? (
-                    <div>
-                      <div className={css.path}>{t('rulesPathLabel')}：{state.rules.path}</div>
-                      <pre className={css.rulesBody} data-testid="baf-standard-rules-body">{state.rules.content}</pre>
-                    </div>
-                  )
-                  : state.rules.status === 'unreadable'
-                    ? <div className={css.statusError}>{t('rulesUnreadable')}{state.rules.reason}</div>
-                    : (
-                      <div className={css.status} data-testid="baf-standard-rules-unavailable">
-                        {summary.standardAvailability === 'policy_missing'
-                          ? t('rulesUnavailablePolicy')
-                          : t('rulesUnavailableNoWorkspace')}
-                      </div>
-                    )
-            ) : null}
-          </div>
-        </>
+        </div>
       ) : null}
     </section>
   )
 }
+
+/** 质量监控 tab — product-fixed gate mechanism + the baseline's stack card. */
+export function StandardsQualityOverview(props: StandardsPanelProps) {
+  const { state, summary } = usePanelState(props)
+  const { t } = props
+  const cards = (summary?.cards ?? []).filter(card => QUALITY_CARD_IDS.includes(card.id))
+
+  return (
+    <section className={css.blockQuality} data-testid="baf-standard-quality">
+      <PanelHead titleKey="panelQualityTitle" descKey="panelQualityDescription" t={t} />
+      <StatusSurface state={state} summary={summary} t={t} />
+      {/* 【变更】2026-10-13 (问题 4 批, 客户决策): the gate MECHANISM is product
+          knowledge and always shows — the per-project card below it (commands,
+          coverage floor, analyzers) is the baseline's stack section, i.e. the
+          same git-managed project config 项目工程 projects; without a baseline
+          there is nothing real to show and the banner above explains why. */}
+      <div className={css.mechanismCard} data-testid="baf-standard-quality-mechanism">
+        <div className={css.cardTitle}>{t('qualityMechanismTitle')}</div>
+        <div className={css.cardDesc}>{t('qualityMechanismBody')}</div>
+      </div>
+      {summary?.status === 'ready' ? (
+        <div className={css.qualityGrid}>
+          {cards.map(card => (
+            <PackageCard key={card.id} cardId={card.id} fields={card.fields} t={t} />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function AreaRow({ id, state, loadRules, toggleArea, t }: {
+  id: string
+  state: StandardsOverviewState
+  loadRules: () => Promise<void>
+  toggleArea: (id: string) => void
+  t: StandardsPanelProps['t']
+}) {
+  const meta = AREA_META[id]
+  const expanded = state.areasExpanded[id] === true
+  const content = state.rules?.status === 'ready' && state.rules.content !== undefined
+    ? sliceAreaContent(state.rules.content, id)
+    : undefined
+  return (
+    <div className={css.areaRow} data-testid={`baf-standard-area-${id}`}>
+      <button
+        type="button"
+        className={css.areaHead}
+        data-testid={`baf-standard-area-toggle-${id}`}
+        onClick={() => {
+          if (state.rules === undefined) void loadRules()
+          toggleArea(id)
+        }}
+      >
+        <span className={css.areaTitle}>{meta === undefined ? id : t(meta[0])}</span>
+        <span className={css.areaDesc}>{meta === undefined ? '' : t(meta[1])}</span>
+        <span className={css.areaToggle}>{expanded ? t('areaCollapse') : t('areaExpand')}</span>
+      </button>
+      {expanded ? (
+        state.rules === undefined ? (
+          <div className={css.status}>{t('statusLoading')}</div>
+        ) : state.rules.status === 'ready' ? (
+          content !== undefined ? (
+            <pre className={css.areaBody} data-testid={`baf-standard-area-body-${id}`}>{content}</pre>
+          ) : (
+            <div className={css.status} data-testid={`baf-standard-area-missing-${id}`}>{t('areaNoContent')}</div>
+          )
+        ) : (
+          // 【变更】2026-10-13 (问题 4 批): the rules document needs the baseline
+          // to locate it — the 8-domain STRUCTURE is a product constant, only
+          // the content degrades with a pointer at /baf-scaffold.
+          <div className={css.status} data-testid={`baf-standard-area-needs-${id}`}>{t('areaNeedsBaseline')}</div>
+        )
+      ) : null}
+    </div>
+  )
+}
+
+/** 企业规范 tab — rules grouped by workflow stage + optional full document. */
+export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
+  const { state, summary } = usePanelState(props)
+  const { loadRules, toggleRules, toggleArea, t } = props
+  const standardCards = (summary?.cards ?? []).filter(card => STANDARD_CARD_IDS.includes(card.id))
+  const areaById = new Map(
+    (summary?.standardAreas ?? []).map(area => [areaIdOf(area.titleKey, area.id), area]),
+  )
+
+  return (
+    <section className={css.block} data-testid="baf-standard-overview">
+      <PanelHead titleKey="panelStandardTitle" descKey="panelStandardDescription" t={t} />
+      <StatusSurface state={state} summary={summary} t={t} />
+      {summary?.status === 'ready' && standardCards.length > 0 ? (
+        <div className={css.grid}>
+          {standardCards.map(card => (
+            <PackageCard key={card.id} cardId={card.id} fields={card.fields} t={t} />
+          ))}
+        </div>
+      ) : null}
+
+      {/* 【变更】2026-10-13 (问题 4 批, 客户决策): the 8-domain structure and
+          stage grouping are PRODUCT CONSTANTS — they always render. Only the
+          rules-document CONTENT needs the baseline (to locate the file), and
+          the per-area body degrades with a /baf-scaffold pointer when the
+          rules fetch answers unavailable. */}
+      <div className={css.rules} data-testid="baf-standard-areas">
+        <div className={css.rulesHead}>
+          <div>
+            <div className={css.cardTitle}>{t('areasTitle')}</div>
+            <div className={css.cardDesc}>{t('areasHint')}</div>
+          </div>
+        </div>
+        <div className={css.stageList}>
+          {STAGE_AREA_GROUPS.map((group) => {
+            // The server list wins when present; without a baseline the static
+            // catalog ids render directly (same ids, same anchors).
+            const areas = group.areas.map(id => areaById.get(id) ?? { id, titleKey: `${NS}.area.${id}`, sourceRef: '' })
+            return (
+              <section key={group.stageKey} className={css.stageGroup} data-testid={`baf-standard-stage-${group.stageKey}`}>
+                <div className={css.stageTitle}>{t(group.stageKey)}</div>
+                <div className={css.stageHint}>{t(group.hintKey)}</div>
+                <div className={css.areaList}>
+                  {areas.map((area) => {
+                    const id = areaIdOf(area.titleKey, area.id)
+                    return (
+                      <AreaRow
+                        key={id}
+                        id={id}
+                        state={state}
+                        loadRules={loadRules}
+                        toggleArea={toggleArea}
+                        t={t}
+                      />
+                    )
+                  })}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+        <div className={css.fromLiving}>{t('fromLiving')}</div>
+      </div>
+
+      <div className={css.rules} data-testid="baf-standard-rules">
+        <div className={css.rulesHead}>
+          <div>
+            <div className={css.cardTitle}>{t('rulesTitle')}</div>
+            <div className={css.cardDesc}>{t('rulesHint')}</div>
+          </div>
+          <button
+            type="button"
+            className={css.refresh}
+            data-testid="baf-standard-rules-toggle"
+            onClick={() => { toggleRules() }}
+          >
+            {state.rulesExpanded ? t('rulesCollapse') : t('rulesExpand')}
+          </button>
+        </div>
+        {state.rulesExpanded ? (
+          state.rules === undefined
+            ? <div className={css.status}>{t('statusLoading')}</div>
+            : state.rules.status === 'ready'
+              ? (
+                <pre className={css.rulesBody} data-testid="baf-standard-rules-body">{state.rules.content}</pre>
+              )
+              : state.rules.status === 'unreadable'
+                ? <div className={css.statusError}>{t('rulesUnreadable')}{state.rules.reason}</div>
+                : (
+                  <div className={css.status} data-testid="baf-standard-rules-unavailable">
+                    {summary?.status === 'ready' && summary.standardAvailability === 'policy_missing'
+                      ? t('rulesUnavailablePolicy')
+                      : summary?.status === 'no-baseline'
+                        ? t('rulesUnavailableNoBaseline')
+                        : t('rulesUnavailableNoWorkspace')}
+                  </div>
+                )
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+/** @deprecated Alias for StandardsEnterpriseOverview. */
+export const StandardsOverview = StandardsEnterpriseOverview

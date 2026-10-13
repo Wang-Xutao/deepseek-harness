@@ -1,19 +1,13 @@
-/* Workflow settings section styles, mirroring the Versions & updates page:
- * the contributed `settings.workflow.item` rows stacked with an 8px gap. Row
- * chrome belongs to the contributing packages (see WorkflowTabRow in
- * ui-baf-workflow). All colors resolve through `--dsw-alias-*` tokens so
- * light/dark themes follow the system. */
+/* Workflow settings section — tabbed layout (Plugins settings precedent). */
 
 .section {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 720px;
+  max-width: 760px;
   color: var(--dsw-alias-label-primary);
 }
 
-/* 【变更】2026-09-30 (demo31 问题 3): title/intro match AgentPresetSection —
- * 18/600 title, 13px tertiary intro — so every settings page reads the same. */
 .title {
   margin: 0;
   font-size: 18px;
@@ -25,9 +19,67 @@
   font-size: 13px;
   color: var(--dsw-alias-label-tertiary);
 }
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 22px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  margin-top: 2px;
+  /* Never grow a scrollbar on the tab strip — wrap labels instead (问题 8). */
+  overflow: visible;
+}
+
+.tab {
+  position: relative;
+  flex: none;
+  border: 0;
+  padding: 7px 1px 9px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.tab:hover,
+.tab[data-active='true'] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tab[data-active='true']::after,
+.tab:focus-visible::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--dsw-alias-label-primary);
+  content: '';
+}
+
+.tab:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+  border-radius: 2px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.panel {
+  min-width: 0;
+  padding-top: 2px;
+}
+
 .rows {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 8px 0 0;
+  gap: 0;
+  margin: 0;
+}
+
+.rowSlot:empty {
+  display: none;
 }

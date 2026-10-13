@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-
-afterEach(cleanup)
 import { useSyncExternalStore } from 'react'
 import { FeaturedSection } from '../src/client/FeaturedSection.tsx'
 import {
@@ -10,6 +8,15 @@ import {
   type FeaturedSectionFace,
   type FeaturedSectionState,
 } from '../src/client/featured-store.ts'
+import {
+  getFeaturedPluginsUpdateAvailable,
+  setFeaturedPluginsUpdateAvailable,
+} from '../src/client/featured-update-signal.ts'
+
+afterEach(() => {
+  setFeaturedPluginsUpdateAvailable(false)
+  cleanup()
+})
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { FeaturedPluginCard, FeaturedResult } from '@deepseek-ai/dsh-api-remotes/client'
@@ -109,7 +116,7 @@ describe('FeaturedSection', () => {
     expect(screen.getByTestId('featured-install')).toBeTruthy()
     expect(screen.queryByTestId('featured-remove')).toBeNull()
     expect(within(screen.getByTestId('featured-card-dsh-feishu')).getByText('autoUpdate')).toBeTruthy()
-    expect(screen.getByText('homepage')).toBeTruthy()
+    expect(screen.getByTestId('featured-homepage-link').textContent).toBe('https://github.com/PGZXB/dsh-feishu')
   })
 
   it('renders an enabled card with disable, update, and remove when an update is available', () => {
@@ -121,7 +128,9 @@ describe('FeaturedSection', () => {
     expect(screen.getByTestId('featured-disable')).toBeTruthy()
     expect(screen.getByTestId('featured-update')).toBeTruthy()
     expect(screen.getByTestId('featured-remove')).toBeTruthy()
-    expect(screen.getByTestId('featured-update-chip')).toBeTruthy()
+    expect(screen.queryByTestId('featured-update-chip')).toBeNull()
+    expect(screen.getByTestId('featured-update-badge')).toBeTruthy()
+    expect(screen.getByTestId('featured-homepage-link').closest('[class*=cardHead]')).toBeTruthy()
     expect(screen.getByText('versionInstalled：0.3.5')).toBeTruthy()
     expect(screen.getByText('versionLatest：0.3.6')).toBeTruthy()
   })
@@ -330,6 +339,26 @@ describe('FeaturedSectionController', () => {
       expect(store.getSnapshot().plugins[0]?.autoUpdate).toBe(true)
       expect(store.getSnapshot().notice?.kind).toBe('failed')
     })
+  })
+
+  it('publishes the nav update signal when a loaded card has an update', async () => {
+    const ctx = fakeCtx({
+      list: async () => ({
+        ok: true,
+        value: {
+          plugins: [card({ state: 'enabled', updateAvailable: true, installedVersion: '0.1.0', latestKnown: '0.2.0' })],
+          revision: 2,
+        },
+      }),
+    })
+    const controller = new FeaturedSectionController(ctx)
+    await waitFor(() => { expect(getFeaturedPluginsUpdateAvailable()).toBe(true) })
+    ctx.remote.featuredPlugins.list = async () => ({
+      ok: true,
+      value: { plugins: [card({ state: 'enabled', updateAvailable: false })], revision: 3 },
+    }) as never
+    controller.reload()
+    await waitFor(() => { expect(getFeaturedPluginsUpdateAvailable()).toBe(false) })
   })
 
   it('reports a failed load as status failed', async () => {

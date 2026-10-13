@@ -20,8 +20,20 @@ import { WORKFLOW_NODES, type WorkflowNode } from './workflow.ts'
 /** One complexity tier. */
 export type RouteTier = 'high' | 'mid' | 'low'
 
+/**
+ * How many role grades the product exposes: three = Commander/Reviewer/Worker,
+ * two = Commander/Worker (Reviewer demoted into Worker).
+ */
+export type TierMode = 'two' | 'three'
+
 /** All tiers in escalating order. */
 export const ROUTE_TIERS = ['low', 'mid', 'high'] as const
+
+/** Display order for the settings grade cards (strongest first). */
+export const DISPLAY_TIERS_THREE: readonly RouteTier[] = ['high', 'mid', 'low']
+
+/** Display order when Reviewer is folded into Worker. */
+export const DISPLAY_TIERS_TWO: readonly RouteTier[] = ['high', 'low']
 
 /** Fallback preference order: try the strongest tier first, fall down. */
 const TIERS_FALLDOWN = ['high', 'mid', 'low'] as const
@@ -94,14 +106,10 @@ export const BUILTIN_KEYWORD_PRESETS: readonly BuiltinKeywordPreset[] = [
     tier: 'mid',
     words: '单元测试|集成测试|测试用例|代码评审|回归|排查|复现|日志|边界|test|review|debug|regression',
   },
-  {
-    // 【变更】2026-10-06 (问题 3): Worker repositioned as 日常代码实现+文案 —
-    // plain coding vocabulary joins the copy vocabulary at the low tier
-    // (architecture/QA vocabulary still escalates above it, first-match-wins).
-    id: 'routineEdits',
-    tier: 'low',
-    words: '实现|编码|写代码|改代码|函数|脚本|bug修复|修bug|implement|coding|文案|注释|文档|README|格式化|拼写|错别字|翻译|改名|版本号|typo|wording|docs|rename',
-  },
+  // 【变更】2026-10-13 (worker 关键词批): the low-tier pack `routineEdits` is
+  // GONE — Worker is the fallback grade (see effectiveKeywordRules' dead-rule
+  // filter): a 'low' keyword can never decide a turn, so the pack was dead
+  // configuration that could only shadow real escalations.
 ]
 
 /**
@@ -115,8 +123,17 @@ export const BUILTIN_KEYWORD_PRESETS: readonly BuiltinKeywordPreset[] = [
  * `enabled: false` user rules drop out, `packs[id] === false` parks a whole
  * pack (类级一键开关), `presetWords['id::word'] === false` parks one word
  * (标签级开关). A pack whose every word is disabled drops out entirely.
+ *
+ * 【变更】2026-10-13 (worker 关键词批): Worker-grade keywords are DEAD and are
+ * filtered out. A 'low' keyword can never decide a turn — with escalateOnly
+ * (the default) selection is `max(keyword, phase)` and the phase floor is
+ * already low; with escalateOnly=false keywords are ignored entirely. Worse,
+ * first-match-wins let an early low rule SHADOW a later high rule's escalation
+ * (「重构这个函数」 matching 函数 first), so dropping dead rules is strictly a
+ * behavior fix. In two-grade mode mid coerces into low, so mid rules die there
+ * too — the filter checks the COERCED tier against the active mode.
  * @param userKeywords - the user's saved keyword rules (may be empty/absent).
- * @param options - preset pack source + enable-state maps from the config.
+ * @param options - preset pack source + enable-state maps + tierMode from the config.
  */
 export function effectiveKeywordRules(
   userKeywords: readonly TierKeywordRule[] | undefined,
@@ -124,12 +141,16 @@ export function effectiveKeywordRules(
     presets?: readonly BuiltinKeywordPreset[]
     packs?: Record<string, boolean>
     presetWords?: Record<string, boolean>
+    tierMode?: TierMode
   },
 ): TierKeywordRule[] {
+  const mode = options?.tierMode ?? 'three'
+  // A rule whose tier coerces to Worker under the active mode is dead config.
+  const alive = (tier: RouteTier): boolean => coerceTierForMode(tier, mode) !== 'low'
   const presets = options?.presets ?? BUILTIN_KEYWORD_PRESETS
-  const userRules = (userKeywords ?? []).filter(rule => rule.enabled !== false)
+  const userRules = (userKeywords ?? []).filter(rule => rule.enabled !== false && alive(rule.tier))
   const packRules = presets
-    .filter(preset => options?.packs?.[preset.id] !== false)
+    .filter(preset => options?.packs?.[preset.id] !== false && alive(preset.tier))
     .map((preset) => {
       const words = preset.words
         .split('|')
@@ -150,6 +171,12 @@ export function effectiveKeywordRules(
 export interface RouteTierConfig {
   schema: 1
   enabled: boolean
+  /**
+   * 【变更】2026-10-12: grade count — `two` hides Reviewer (mid demotes to
+   * Worker); `three` keeps Commander/Reviewer/Worker. Fresh drafts default to
+   * `two`; legacy files without the field parse as `three`.
+   */
+  tierMode?: TierMode
   tiers: { high: TierModelSpec; mid: TierModelSpec; low: TierModelSpec }
   phaseTier?: Partial<Record<WorkflowNode, RouteTier>>
   keywords?: TierKeywordRule[]
@@ -165,7 +192,7 @@ export interface RouteTierConfig {
   presetWords?: Record<string, boolean>
 }
 
-/** Default phase→tier mapping; `phaseTier` overrides per node. */
+/** Default phase→tier mapping (three-grade); `phaseTier` overrides per node. */
 export const DEFAULT_PHASE_TIER: Readonly<Record<WorkflowNode, RouteTier>> = {
   design: 'high',
   plan: 'high',
@@ -176,6 +203,86 @@ export const DEFAULT_PHASE_TIER: Readonly<Record<WorkflowNode, RouteTier>> = {
   open: 'low',
   archive: 'low',
   drift: 'low',
+}
+
+/** Default phase→tier mapping when only Commander/Worker are active. */
+export const DEFAULT_PHASE_TIER_TWO: Readonly<Record<WorkflowNode, RouteTier>> = {
+  design: 'high',
+  plan: 'high',
+  clarify: 'low',
+  verify: 'low',
+  implement: 'low',
+  intake: 'low',
+  open: 'low',
+  archive: 'low',
+  drift: 'low',
+}
+
+/**
+ * Resolve the active grade mode.
+ * @param config - normalized config.
+ * @returns `three` when unset (legacy files keep Reviewer).
+ */
+export function resolveTierMode(config: Pick<RouteTierConfig, 'tierMode'>): TierMode {
+  return config.tierMode ?? 'three'
+}
+
+/**
+ * Grade cards shown in settings for a mode (strongest first).
+ * @param mode - two or three grades.
+ */
+export function activeDisplayTiers(mode: TierMode): readonly RouteTier[] {
+  return mode === 'two' ? DISPLAY_TIERS_TWO : DISPLAY_TIERS_THREE
+}
+
+/**
+ * Collapse Reviewer into Worker when the product is in two-grade mode.
+ * @param tier - a stored or matched tier.
+ * @param mode - active grade mode.
+ */
+export function coerceTierForMode(tier: RouteTier, mode: TierMode): RouteTier {
+  if (mode === 'two' && tier === 'mid') return 'low'
+  return tier
+}
+
+/**
+ * Cycle a workflow node's grade on click.
+ * @param tier - current tier.
+ * @param mode - active grade mode.
+ */
+export function nextTierInMode(tier: RouteTier, mode: TierMode): RouteTier {
+  if (mode === 'two') return tier === 'high' ? 'low' : 'high'
+  return tier === 'low' ? 'mid' : tier === 'mid' ? 'high' : 'low'
+}
+
+/**
+ * Demote every mid assignment to low and sync the mid model slot to low —
+ * the durable form of switching from three grades to two.
+ * @param config - normalized config (any tierMode).
+ * @returns a new config with `tierMode: 'two'` and no remaining mid uses.
+ */
+export function applyTierMode(config: RouteTierConfig): RouteTierConfig {
+  const mode = resolveTierMode(config)
+  if (mode !== 'two') return { ...config, tierMode: mode }
+  const demotedPhases: Partial<Record<WorkflowNode, RouteTier>> = {}
+  for (const [node, tier] of Object.entries(config.phaseTier ?? {})) {
+    demotedPhases[node as WorkflowNode] = coerceTierForMode(tier, 'two')
+  }
+  const demotedKeywords = (config.keywords ?? []).map(rule => ({
+    ...rule,
+    tier: coerceTierForMode(rule.tier, 'two'),
+  }))
+  return {
+    ...config,
+    tierMode: 'two',
+    tiers: {
+      high: { ...config.tiers.high },
+      low: { ...config.tiers.low },
+      mid: { ...config.tiers.low },
+    },
+    phaseTier: demotedPhases,
+    keywords: demotedKeywords,
+  }
 }
 
 /** Default capability tags per tier (PHASE_REQUIRED_CAPABILITIES coverage). */
@@ -206,6 +313,7 @@ const tierKeywordSchema = z.object({
 export const routeTierConfigSchema = z.object({
   schema: z.literal(1),
   enabled: z.boolean(),
+  tierMode: z.enum(['two', 'three']).optional(),
   tiers: z.object({ high: tierModelSchema, mid: tierModelSchema, low: tierModelSchema }),
   phaseTier: z.partialRecord(z.enum(WORKFLOW_NODES), z.enum(ROUTE_TIERS)).optional(),
   keywords: z.array(tierKeywordSchema).optional(),
@@ -256,6 +364,8 @@ export function parseRouteTierConfig(raw: unknown): RouteTierConfig | undefined 
   return {
     schema: 1,
     enabled: parsed.data.enabled,
+    // Legacy files omit the field — keep three grades so Reviewer bindings stay.
+    tierMode: parsed.data.tierMode ?? 'three',
     tiers: {
       high: spec(parsed.data.tiers.high),
       mid: spec(parsed.data.tiers.mid),
@@ -336,7 +446,9 @@ export function resolveTaskTier(
  * @param node - workflow node.
  */
 export function resolvePhaseTier(config: RouteTierConfig, node: WorkflowNode): RouteTier {
-  return config.phaseTier?.[node] ?? DEFAULT_PHASE_TIER[node]
+  const mode = resolveTierMode(config)
+  const fallback = mode === 'two' ? DEFAULT_PHASE_TIER_TWO[node] : DEFAULT_PHASE_TIER[node]
+  return coerceTierForMode(config.phaseTier?.[node] ?? fallback, mode)
 }
 
 /**
@@ -420,10 +532,12 @@ export function effectiveTier(
   taskTier: RouteTier | undefined,
   config: RouteTierConfig,
 ): { tier: RouteTier; reason: 'keyword' | 'phase' } {
+  const mode = resolveTierMode(config)
   const phaseTier = resolvePhaseTier(config, node)
+  const keyword = taskTier === undefined ? undefined : coerceTierForMode(taskTier, mode)
   const escalateOnly = config.escalateOnly !== false
-  if (escalateOnly && taskTier !== undefined && TIER_RANK[taskTier] > TIER_RANK[phaseTier]) {
-    return { tier: taskTier, reason: 'keyword' }
+  if (escalateOnly && keyword !== undefined && TIER_RANK[keyword] > TIER_RANK[phaseTier]) {
+    return { tier: keyword, reason: 'keyword' }
   }
   return { tier: phaseTier, reason: 'phase' }
 }
@@ -486,10 +600,14 @@ export function findTierByRef(config: RouteTierConfig, ref: ModelRef): RouteTier
  * @param config - normalized config.
  */
 export function compileTierRouteProfile(config: RouteTierConfig): RouteProfile {
-  const { allowed, groups } = tierAllowed(config)
-  const phase = (node: WorkflowNode): ModelRef => tierRef(config, resolvePhaseTier(config, node))
+  const mode = resolveTierMode(config)
+  const applied = mode === 'two' ? applyTierMode(config) : config
+  const { allowed, groups } = tierAllowed(applied)
+  const phase = (node: WorkflowNode): ModelRef => tierRef(applied, resolvePhaseTier(applied, node))
+  // Two-grade: default lands on Worker; three-grade keeps Reviewer as the mid default.
+  const defaultTier = mode === 'two' ? 'low' as const : 'mid' as const
   return {
-    default: tierRef(config, 'mid'),
+    default: tierRef(applied, defaultTier),
     allowed,
     phases: {
       intake: phase('intake'),
@@ -522,14 +640,17 @@ export function synthesizeTierPolicy(
   config: RouteTierConfig,
   ceiling?: Pick<EnterpriseRoutePolicy, 'allowSessionOverride' | 'allowed'>,
 ): EnterpriseRoutePolicy {
-  const { allowed, groups } = tierAllowed(config)
+  const mode = resolveTierMode(config)
+  const applied = mode === 'two' ? applyTierMode(config) : config
+  const { allowed, groups } = tierAllowed(applied)
+  const defaultTier = mode === 'two' ? 'low' as const : 'mid' as const
   if (ceiling === undefined) {
     return {
       schema: 1,
       policyId: 'baf-tier-route',
       version: 'local',
       allowSessionOverride: true,
-      default: tierRef(config, 'mid'),
+      default: tierRef(applied, defaultTier),
       allowed,
       fallbackPolicy: { mode: 'approved-only', groups },
     }
@@ -546,15 +667,15 @@ export function synthesizeTierPolicy(
     }]
   })
   const allowedKeys = new Set(restricted.map(modelKey))
-  const midRef = tierRef(config, 'mid')
-  const defaultEntry = restricted.find(entry => entry.provider === midRef.provider && entry.model === midRef.model)
+  const preferredRef = tierRef(applied, defaultTier)
+  const defaultEntry = restricted.find(entry => entry.provider === preferredRef.provider && entry.model === preferredRef.model)
     ?? restricted[0]
   return {
     schema: 1,
     policyId: 'baf-tier-route',
     version: 'local',
     allowSessionOverride: ceiling.allowSessionOverride,
-    default: defaultEntry === undefined ? midRef : { provider: defaultEntry.provider, model: defaultEntry.model },
+    default: defaultEntry === undefined ? preferredRef : { provider: defaultEntry.provider, model: defaultEntry.model },
     allowed: restricted,
     fallbackPolicy: {
       mode: 'approved-only',

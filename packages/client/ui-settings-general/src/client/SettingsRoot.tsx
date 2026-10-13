@@ -24,6 +24,7 @@ import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-con
 import css from './SettingsRoot.module.css'
 import { DesktopUpdateIndicator } from './DesktopUpdateIndicator.tsx'
 import { useBafUpdateAvailable } from './baf-update-dot.ts'
+import { useFeaturedPluginsUpdateAvailable } from './featured-plugins-nav-dot.ts'
 
 const RECOVERY_CONFIRMATION_MS = 2_000
 
@@ -34,8 +35,10 @@ const CONNECTING_MIN_VISIBLE_MS = 800
  * 【变更】2026-10-05 (baf 独占标识): the sections only the BAF build carries —
  * their nav label ends with a tiny `baf` superscript so customers can tell
  * BAF-exclusive surface from shared product surface at a glance.
+ * 【变更】2026-10-12 (问题 3): 用户反馈 joins the baf-signed set — its entry
+ * point, notice copy, and telemetry targets are all BAF-owned in this build.
  */
-const BAF_EXCLUSIVE = new Set(['workflow', 'model-routing', 'version-updates', 'featured-plugins'])
+const BAF_EXCLUSIVE = new Set(['workflow', 'model-routing', 'version-updates', 'featured-plugins', 'user-feedback'])
 
 /** Nav glyph by section id; unknown ids fall back to the settings gear. */
 function navIcon(id: string) {
@@ -80,6 +83,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
   // 【变更】2026-10-04 (用户问题 3): red dot on the 版本与更新 nav row while
   // the baf-dsh shell reports an available update (retained check + push).
   const updateAvailable = useBafUpdateAvailable()
+  const featuredUpdateAvailable = useFeaturedPluginsUpdateAvailable()
 
   const panel = useRef<HTMLDivElement>(null)
   useModalLayer(panel, true, onClose)
@@ -111,6 +115,9 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
                   {BAF_EXCLUSIVE.has(row.id) ? <sup className={css.bafBadge}>baf</sup> : null}
                 </span>
                 {row.id === 'version-updates' && updateAvailable
+                  ? <span className={css.navDot} aria-hidden="true" />
+                  : null}
+                {row.id === 'featured-plugins' && featuredUpdateAvailable
                   ? <span className={css.navDot} aria-hidden="true" />
                   : null}
               </button>
