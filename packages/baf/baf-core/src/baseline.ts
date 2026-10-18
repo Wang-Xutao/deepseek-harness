@@ -8,6 +8,8 @@ import { load as loadYaml } from 'js-yaml'
 import { z } from 'zod'
 import { BAF_VERSION, isBafVersionCompatible } from './compatibility.ts'
 import { BafError } from './errors.ts'
+import { userOverridePolicySchema } from './override-policy.ts'
+import { WORKFLOW_NODES } from './workflow.ts'
 
 const modelRefSchema = z.object({
   provider: z.string().min(1),
@@ -97,6 +99,30 @@ export const baselineManifestSchema = z.object({
     protectedPaths: z.array(z.string().min(1)),
     requireHumanConfirmation: z.array(z.enum(['scaffold', 'archive', 'abandon'])),
   }),
+  /**
+   * Enterprise map of which workspace prefs may appear in settings A and
+   * override baseline at runtime. Omitted → product default (see user-prefs).
+   */
+  userOverridePolicy: userOverridePolicySchema.optional(),
+  /**
+   * 【变更】2026-10-19 (六问题批 4.1b): per-node custom scripts. `enter` runs
+   * when the workflow enters the state (must pass before the transition is
+   * recorded); `exit` must pass before the state may advance forward. Scripts
+   * are workspace-relative file paths executed through the shell; an empty or
+   * omitted list means no hook. Omitted block → no hooks at all (the scaffold
+   * never writes one; only the settings UI does).
+   */
+  hooks: z.object({
+    // partialRecord, not record: a zod record keyed by an enum demands EVERY
+    // key present — the config is intentionally sparse (only configured nodes).
+    nodes: z.partialRecord(
+      z.enum(WORKFLOW_NODES),
+      z.object({
+        enter: z.array(z.string().min(1)).optional(),
+        exit: z.array(z.string().min(1)).optional(),
+      }),
+    ),
+  }).optional(),
 })
 
 /** Parsed and validated baseline manifest. */

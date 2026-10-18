@@ -13,6 +13,7 @@
     { "path": "../../../vendor/group" },
     { "path": "../baf-core" },
     { "path": "../baf-openspec" },
+    { "path": "../baf-quality" },
     { "path": "../baf-standard" },
     { "path": "../../boot/cmdline" },
     { "path": "../../core/session" },

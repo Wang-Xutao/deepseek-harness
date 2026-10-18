@@ -49,6 +49,9 @@
     "host": {
       "inject": [
         "@deepseek-ai/dsh-baf-core",
+        "@deepseek-ai/dsh-baf-guard",
+        "@deepseek-ai/dsh-baf-quality",
+        "@deepseek-ai/dsh-baf-scaffold",
         "@deepseek-ai/dsh-baf-standard",
         "@deepseek-ai/dsh-sandbox-policy",
         "@deepseek-ai/dsh-session",
@@ -65,6 +68,9 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-api-remotes": "workspace:^",
     "@deepseek-ai/dsh-baf-core": "workspace:^",
+    "@deepseek-ai/dsh-baf-guard": "workspace:^",
+    "@deepseek-ai/dsh-baf-quality": "workspace:^",
+    "@deepseek-ai/dsh-baf-scaffold": "workspace:^",
     "@deepseek-ai/dsh-baf-standard": "workspace:^",
     "@deepseek-ai/dsh-client-locale": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings": "workspace:*",
@@ -74,6 +80,9 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-api-remotes": "workspace:^",
     "@deepseek-ai/dsh-baf-core": "workspace:^",
+    "@deepseek-ai/dsh-baf-guard": "workspace:^",
+    "@deepseek-ai/dsh-baf-quality": "workspace:^",
+    "@deepseek-ai/dsh-baf-scaffold": "workspace:^",
     "@deepseek-ai/dsh-baf-standard": "workspace:^",
     "@deepseek-ai/dsh-client-locale": "workspace:^",
     "@deepseek-ai/dsh-client-store": "workspace:*",
@@ -102,6 +111,7 @@
   ],
   "dependencies": {
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
+    "js-yaml": "^4.1.0",
     "zod": "^4.4.3"
   }
 }

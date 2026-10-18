@@ -1,0 +1,43 @@
+{
+  "$schema_comment": "SORA baf-standard third-party / high-risk path whitelist. Edit for your project.",
+  "version": 1,
+  "description": "Paths listed here are treated as third-party/SDK/BSP: high-risk constructs (malloc/goto/recursion) are expected; writes are forbidden unless explicitly authorized.",
+  "paths": [
+    {
+      "glob": "third_party/**",
+      "kind": "third_party",
+      "allowHighRisk": true,
+      "writePolicy": "deny_by_default"
+    },
+    {
+      "glob": "vendor/**",
+      "kind": "third_party",
+      "allowHighRisk": true,
+      "writePolicy": "deny_by_default"
+    },
+    {
+      "glob": "sdk/**",
+      "kind": "sdk",
+      "allowHighRisk": true,
+      "writePolicy": "deny_by_default"
+    },
+    {
+      "glob": "bsp/**",
+      "kind": "bsp",
+      "allowHighRisk": true,
+      "writePolicy": "deny_by_default"
+    },
+    {
+      "glob": "Drivers/**",
+      "kind": "vendor_hal",
+      "allowHighRisk": true,
+      "writePolicy": "deny_by_default"
+    }
+  ],
+  "notes": [
+    "allowHighRisk=true: code under this path may contain malloc/goto/recursion without per-call HIGH-RISK comments in first-party style.",
+    "writePolicy=deny_by_default: Agent/hook must not Edit/Write here unless the user explicitly authorizes a named path and reason.",
+    "First-party code outside these globs: high-risk still needs user confirmation + HIGH-RISK comment + review checklist.",
+    "Hard enforcement: baf-guard hooks / CI (P2+). Soft guidance: sora-c-code-standards skill."
+  ]
+}

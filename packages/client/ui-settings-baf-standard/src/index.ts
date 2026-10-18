@@ -5,6 +5,12 @@
  * `standard.mattPocockRulesRef` points at (2026-10-06 问题 6 客户决策:
  * 规范总览·只读 — value edits go through the file itself, never this Remote).
  *
+ * 【变更】2026-10-18 (项目工程 1.3, 客户决策): ONE controlled exception —
+ * `saveProtectedPaths` writes the editable AI 禁改路径 list (`guard.
+ * protectedPaths`) into the git-managed baseline via a comment-preserving
+ * surgical rewrite, and installs the pre-commit commit 防线. Every other
+ * field remains strictly read-only.
+ *
  * The projection reuses the same one-source chain everything else reads:
  * baf-core `loadBaselineFile` for parse+semantics, baf-standard
  * `summarizeStandard` for the standard card's availability — so the overview
@@ -12,20 +18,46 @@
  * @module @deepseek-ai/dsh-client-ui-settings-baf-standard
  */
 
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import { load as loadYaml } from 'js-yaml'
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { loadBaselineFile, type BaselineManifest } from '@deepseek-ai/dsh-baf-core'
 import {
+  BAF_VERSION, BafError, loadBaselineFile, parseBaselineManifest,
+  rewriteBaselineNodeHooks, rewriteBaselineProtectedPaths,
+  validateNodeHooks, validateProtectedPaths, type BaselineManifest,
+} from '@deepseek-ai/dsh-baf-core'
+import { commitGuardHookInstalled, installCommitGuardHook } from '@deepseek-ai/dsh-baf-guard/commit-hook'
+import { collectStatusBlockers } from '@deepseek-ai/dsh-baf-quality'
+import { scaffoldWorkspace } from '@deepseek-ai/dsh-baf-scaffold'
+import {
+  detectAppliedEnterprisePacks,
   STANDARD_AREAS, STANDARD_PLACEHOLDER, summarizeStandard,
 } from '@deepseek-ai/dsh-baf-standard'
 // Type-only: pulls the session store's Context merge (ctx.sessions).
 import type {} from '@deepseek-ai/dsh-session'
 import type {
+  BafEnterpriseStandardsStatus, BafStandardGenerateResult,
+  BafStandardNodeHooks, BafStandardSaveNodeHooksResult,
+  BafStandardSaveProtectedResult,
   BafStandardFieldRow, BafStandardFieldState, BafStandardPackageCard,
   BafStandardRulesDocResult, BafStandardSummaryResult,
 } from './types.ts'
+
+/** Project workspace enterprise-pack + blockers readout (方案乙). */
+function projectEnterpriseStandards(cwd: string): BafEnterpriseStandardsStatus {
+  const appliedPacks = detectAppliedEnterprisePacks(cwd)
+  const blockers = collectStatusBlockers({ workspaceRoot: cwd })
+  const errors = blockers.blockers.filter(row => row.severity === 'error')
+  const warnings = blockers.blockers.filter(row => row.severity !== 'error')
+  return {
+    appliedPacks: [...appliedPacks],
+    blockerErrors: errors.length,
+    blockerWarnings: warnings.length,
+    blockerLines: blockers.blockers.slice(0, 8).map(row => `${row.id}: ${row.message}`),
+  }
+}
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -51,6 +83,21 @@ function fieldState(value: unknown): BafStandardFieldState {
 /** Build one field row. */
 function row(field: string, value: unknown): BafStandardFieldRow {
   return { field, value: fieldValue(value), state: fieldState(value) }
+}
+
+/**
+ * 【变更】2026-10-19 (六问题批 4.1b): project a manifest's hooks block into
+ * the wire map (only configured nodes, plain arrays). Absent block → `{}`.
+ */
+export function projectNodeHooks(manifest: BaselineManifest): BafStandardNodeHooks {
+  const out: Record<string, { enter?: string[]; exit?: string[] }> = {}
+  for (const [node, lists] of Object.entries(manifest.hooks?.nodes ?? {})) {
+    const mapped: { enter?: string[]; exit?: string[] } = {}
+    if (lists.enter !== undefined && lists.enter.length > 0) mapped.enter = [...lists.enter]
+    if (lists.exit !== undefined && lists.exit.length > 0) mapped.exit = [...lists.exit]
+    if (Object.keys(mapped).length > 0) out[node] = mapped
+  }
+  return out
 }
 
 /**
@@ -115,7 +162,8 @@ export function projectStandardCards(manifest: BaselineManifest): BafStandardPac
       id: 'guard',
       fields: [
         row('guard.secretScan', g.secretScan),
-        row('guard.protectedPaths', g.protectedPaths),
+        // 【变更】2026-10-18 (项目工程 1.3): guard.protectedPaths moved out of
+        // this read-only projection — the editable AI 禁改路径 card owns it.
         row('guard.requireHumanConfirmation', g.requireHumanConfirmation),
       ],
     },
@@ -197,7 +245,12 @@ export class BafStandardConfigRemote extends TypertRemoteService {
     try {
       await stat(baselinePath)
     } catch {
-      return { status: 'no-baseline', cwd, baselinePath }
+      return {
+        status: 'no-baseline',
+        cwd,
+        baselinePath,
+        enterpriseStandards: projectEnterpriseStandards(cwd),
+      }
     }
     let manifest: BaselineManifest
     try {
@@ -227,6 +280,14 @@ export class BafStandardConfigRemote extends TypertRemoteService {
         sourceRef: area.sourceRef,
       })),
       cards: projectStandardCards(manifest),
+      enterpriseStandards: projectEnterpriseStandards(cwd),
+      // 【变更】2026-10-18 (项目工程 1.3): raw protected-paths list + commit
+      // 防线 presence for the editable AI 禁改路径 card.
+      guardProtectedPaths: [...manifest.guard.protectedPaths],
+      commitGuardHookInstalled: await commitGuardHookInstalled(cwd),
+      // 【变更】2026-10-19 (六问题批 4.1b): per-node custom scripts for the
+      // 项目工程 状态脚本 editor.
+      nodeHooks: projectNodeHooks(manifest),
     }
   }
 
@@ -257,6 +318,191 @@ export class BafStandardConfigRemote extends TypertRemoteService {
       return { status: 'ready', path, content }
     } catch (error) {
       return { status: 'unreadable', path, reason: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /**
+   * 【变更】2026-10-18 (项目工程 1.3, 客户决策): save the editable AI 禁改路径
+   * list into the git-managed baseline — the ONE write this Remote owns
+   * (every other field stays read-only per the 2026-10-06 客户决策). The edit
+   * is surgical (`rewriteBaselineProtectedPaths` keeps every other byte —
+   * comments included), pre-validated as YAML BEFORE the atomic rename, and
+   * re-loaded after the swap with a restore-on-failure belt. A non-empty
+   * list also (re)installs the managed pre-commit commit 防线.
+   * @param paths - the UI's proposed relative entries (validated here).
+   * @returns save outcome; `hookInstalled` rides `ready`.
+   */
+  @Remote
+  async saveProtectedPaths(paths: readonly string[]): Promise<BafStandardSaveProtectedResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    const baselinePath = join(cwd, '.baf', 'baseline.yml')
+    try {
+      await stat(baselinePath)
+    } catch {
+      return { status: 'no-baseline' }
+    }
+    const validation = validateProtectedPaths(paths)
+    if (!validation.ok) return { status: 'invalid', message: validation.message }
+
+    let original: string
+    try {
+      original = await readFile(baselinePath, 'utf8')
+    } catch (error) {
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
+    let rewritten: string
+    try {
+      rewritten = rewriteBaselineProtectedPaths(original, validation.paths)
+    } catch (error) {
+      return {
+        status: 'error',
+        message: error instanceof BafError ? error.message : String(error),
+      }
+    }
+    // Validate the rewritten document as a whole BEFORE it reaches disk — a
+    // broken baseline would take the workflow down, so it never lands.
+    try {
+      parseBaselineManifest(loadYaml(rewritten), BAF_VERSION, baselinePath)
+    } catch (error) {
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : String(error),
+      }
+    }
+    const tmp = `${baselinePath}.baf-tmp`
+    try {
+      await writeFile(tmp, rewritten, 'utf8')
+      await rename(tmp, baselinePath)
+    } catch (error) {
+      await rm(tmp, { force: true }).catch(() => {})
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
+    // Post-swap reload is the belt to the pre-check; restore on any surprise.
+    try {
+      await loadBaselineFile(baselinePath)
+    } catch (error) {
+      await writeFile(baselinePath, original, 'utf8').catch(() => {})
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
+
+    const effective = validation.paths.filter(entry => entry !== '<enterprise-tbd>')
+    if (effective.length === 0) return { status: 'ready', paths: validation.paths }
+    const hook = await installCommitGuardHook(cwd)
+    if (!hook.ok) {
+      return {
+        status: 'ready',
+        paths: validation.paths,
+        hookInstalled: false,
+        ...(hook.message === undefined ? {} : { message: hook.message }),
+      }
+    }
+    return { status: 'ready', paths: validation.paths, hookInstalled: true }
+  }
+
+  /**
+   * 【变更】2026-10-19 (六问题批 4.1b): save the per-node custom-script map
+   * (baseline `hooks.nodes.<node>.enter/exit`) — the second controlled write,
+   * same discipline as {@link saveProtectedPaths}: surgical comment-preserving
+   * rewrite, whole-document YAML re-validation BEFORE the atomic rename, and a
+   * post-swap reload with restore-on-failure. An all-empty draft REMOVES the
+   * `hooks:` block (dead config never lingers).
+   * @param hooks - the UI's draft map (node → enter/exit lists).
+   * @returns save outcome with the normalized map on `ready`.
+   */
+  @Remote
+  async saveNodeHooks(
+    // The package's own types.ts mirror, not baf-core's NodeHookLists —
+    // typert requires Remote boundary types to ride the public ./types
+    // subpath of THIS package (they are structurally identical).
+    hooks: BafStandardNodeHooks,
+  ): Promise<BafStandardSaveNodeHooksResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    const baselinePath = join(cwd, '.baf', 'baseline.yml')
+    try {
+      await stat(baselinePath)
+    } catch {
+      return { status: 'no-baseline' }
+    }
+    const validation = validateNodeHooks(hooks)
+    if (!validation.ok) return { status: 'invalid', message: validation.message }
+
+    let original: string
+    try {
+      original = await readFile(baselinePath, 'utf8')
+    } catch (error) {
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
+    let rewritten: string
+    try {
+      rewritten = rewriteBaselineNodeHooks(original, validation.hooks)
+    } catch (error) {
+      return {
+        status: 'error',
+        message: error instanceof BafError ? error.message : String(error),
+      }
+    }
+    try {
+      parseBaselineManifest(loadYaml(rewritten), BAF_VERSION, baselinePath)
+    } catch (error) {
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : String(error),
+      }
+    }
+    const tmp = `${baselinePath}.baf-tmp`
+    try {
+      await writeFile(tmp, rewritten, 'utf8')
+      await rename(tmp, baselinePath)
+    } catch (error) {
+      await rm(tmp, { force: true }).catch(() => {})
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
+    try {
+      await loadBaselineFile(baselinePath)
+    } catch (error) {
+      await writeFile(baselinePath, original, 'utf8').catch(() => {})
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
+    return {
+      status: 'ready',
+      hooks: Object.fromEntries(Object.entries(validation.hooks).map(([node, lists]) => [
+        node,
+        {
+          ...(lists.enter === undefined ? {} : { enter: [...lists.enter] }),
+          ...(lists.exit === undefined ? {} : { exit: [...lists.exit] }),
+        },
+      ])),
+    }
+  }
+
+  /**
+   * 【变更】2026-10-19 (六问题批 4.1b): generate the missing baseline — the
+   * 项目工程 empty state's 生成配置文件 button. Runs the SAME scaffold the
+   * `/baf` command uses; the button click IS the human confirmation the
+   * scaffold gate demands (等同输入 baf 指令). No-overwrite + backup semantics
+   * come free, so the button is safe even on a half-initialized workspace.
+   * Zero-arg (typert arity is exact; see summary's 变更 note).
+   * @returns generate outcome; `createdCount`/`gitNote` ride `ready`.
+   */
+  @Remote
+  async generateBaseline(): Promise<BafStandardGenerateResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    try {
+      const outcome = scaffoldWorkspace({ workspaceRoot: cwd, humanConfirmed: true })
+      if (outcome.kind === 'refused') {
+        // Unreachable with humanConfirmed: true — kept for exhaustiveness.
+        return { status: 'error', message: outcome.reason }
+      }
+      return {
+        status: 'ready',
+        createdCount: outcome.changes.created.length,
+        ...(outcome.git === undefined ? {} : { gitNote: outcome.git.note }),
+      }
+    } catch (error) {
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
     }
   }
 }

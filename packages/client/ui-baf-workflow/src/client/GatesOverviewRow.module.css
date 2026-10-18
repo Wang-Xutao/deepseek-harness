@@ -20,25 +20,19 @@
   gap: 10px;
 }
 
-/* 【变更】2026-10-12 (问题 4.1): the 详细/简洁 density dropdown — same pill
-   shape the 多模型路由 action row uses. */
-.modeSelect {
+/* 【变更】2026-10-18 (工作流确认门 2.2): the 详细/简洁 density control is the
+   shared `Switch` primitive (the exact control the 轨迹图 row uses) with a
+   label on each side — the dropdown pill is gone. */
+.modeSwitch {
   display: inline-flex;
   align-items: center;
-  height: 36px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 18px;
-  background: var(--dsw-alias-bg-module-platform);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-primary);
-  cursor: pointer;
+  gap: 8px;
 }
 
-.modeSelect:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+.modeLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .title {
@@ -84,22 +78,6 @@
   font-size: 12px;
   line-height: 18px;
   word-break: break-all;
-}
-
-.section {
-  margin-top: 12px;
-}
-
-.sectionTitle {
-  font-size: 13px;
-  line-height: 19px;
-}
-
-.sectionHint {
-  margin-top: 4px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
 }
 
 .table {
@@ -264,24 +242,135 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.config {
+/* 【变更】2026-10-19 (六问题批 4.2): ONE complete vertical card flow — the
+ * pan/zoom canvas (and its fixed height + own scrollbar) is gone. The
+ * settings page scrolls; cards render at natural height, joined by a left
+ * spine connector; the「开关与阈值在配置文件」block is deleted. */
+
+.flow {
+  display: flex;
+  flex-direction: column;
   margin-top: 12px;
-  padding: 12px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
 }
 
-.configList {
-  margin: 8px 0 0;
-  padding-left: 18px;
+/* The between-card connector: a small arrow on the left spine, aligned
+   under the state cards' node icon. */
+.connector {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 3px 0 3px 17px;
+}
+
+.connectorArrow {
+  position: relative;
+  flex: none;
+  width: 2px;
+  height: 14px;
+  background: var(--dsw-alias-border-l2);
+}
+
+.connectorArrow::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: -4px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--dsw-alias-border-l2);
+}
+
+/* 详 prints the template edge conditions beside the arrow. */
+.connectorConditions {
+  display: flex;
+  flex-direction: column;
+  padding-top: 1px;
+}
+
+.connectorCondition {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 20px;
+  font-size: 11px;
+  line-height: 16px;
+  word-break: break-word;
 }
 
-.honesty {
-  margin-top: 8px;
+/* The node glyph on a state card's head. */
+.nodeIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Gate-count chip on a state card (accent when gates rest on the node). */
+.badge {
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.badgeGate {
+  color: var(--dsw-alias-text-warning, #7c5cff);
+  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 45%, transparent);
+}
+
+.badgeIdle {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* A between-state gate node — the dashed checkpoint card on the spine,
+   indented under it so it reads as sitting BETWEEN the two state cards. */
+.gateNode {
+  position: relative;
+  margin-left: 30px;
+  padding: 8px 10px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 35%, transparent);
+}
+
+/* The「一次性」badge at a gate node's top-right corner. */
+.onceBadge {
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  padding: 0 8px;
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 45%, transparent);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  color: var(--dsw-alias-text-warning, #7c5cff);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* The branch cards (漂移回归 / 已放弃) under the main chain. */
+.branch {
+  margin-top: 14px;
+}
+
+.branchTitle {
+  margin-bottom: 6px;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
+}
+
+.branchCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+/* Trailing group for unanchored gates this client cannot yet place. */
+.fallback {
+  margin-top: 14px;
 }

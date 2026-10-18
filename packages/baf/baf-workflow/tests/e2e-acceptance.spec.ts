@@ -45,7 +45,7 @@ function makeStubScaffold(): ScaffoldAdapter {
       return {
         kind: 'done',
         changes: {
-          created: ['.baf/baseline.yml', '.baf/standards/default-rules.md', 'openspec/changes/.gitkeep'],
+          created: ['.baf/baseline.yml', '.baf/standards/default-rules.md', '.baf/user-prefs.yml', 'openspec/changes/.gitkeep'],
           skipped: [],
           backedUp: [],
         },

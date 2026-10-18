@@ -176,6 +176,14 @@ guard:
     - scaffold
     - archive
     - abandon
+userOverridePolicy:
+  # true → 设置→工作流「用户可调偏好」可见，写入 .baf/user-prefs.yml 可 git 共享
+  bugFixPathAllowed: true
+  bugFixPathMaxScope: true
+  coverageMinimum: true
+  projectionGitignore: true
+  verifyNotes: true
+  changeSlugPrefix: true
 `
 }
 
@@ -267,6 +275,14 @@ export function planScaffold(options: { readonly baselineId?: string } = {}): Sc
     files: [
       { path: '.baf/baseline.yml', content: baselineTemplate(options.baselineId ?? 'baf-baseline-init') },
       { path: '.baf/standards/default-rules.md', content: defaultRulesTemplate() },
+      {
+        path: '.baf/user-prefs.yml',
+        content: `# BAF workspace user preferences (git-shareable).
+# Only keys whose userOverridePolicy.<id> is true in .baf/baseline.yml take effect.
+# Rules document body is NEVER edited here — see .baf/standards/.
+schema: 1
+`,
+      },
       { path: 'openspec/changes/.gitkeep', content: '' },
     ],
   }

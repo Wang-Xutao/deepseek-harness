@@ -1,0 +1,20 @@
+{
+  "threshold_line": 0.8,
+  "gate_mode": "shadow",
+  "source_filter": "source/.*",
+  "exclude": ["test/.*", "third_party/.*", "build/.*"],
+  "object_directory": "build/gcov",
+  "ceedling_test": "baf-quality check",
+  "ceedling_delta": "baf-quality check --delta",
+  "report_html": "build/coverage/coverage_report.html",
+  "report_cobertura": "build/coverage/coverage_report.xml",
+  "ut_coverage_json": ".baf/reports/ut-coverage.json",
+  "lint": {
+    "gate_mode": "shadow",
+    "static_analysis_json": ".baf/reports/static-analysis.json",
+    "cpplint_cfg": "CPPLINT.cfg",
+    "cppcheck_suppressions": ".baf/quality/cppcheck-suppressions.xml",
+    "include_paths": ["source"],
+    "exclude_globs": ["third_party/**", "test/**", "build/**", "sdk/**", "bsp/**", "vendor/**"]
+  }
+}

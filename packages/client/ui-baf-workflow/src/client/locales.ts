@@ -24,10 +24,7 @@ export type WorkflowTabKey =
   | 'card.current'
   | 'metrics.pending'
   | 'route.title'
-  | 'route.none'
   | 'route.noneAuto'
-  | 'route.nonePinnedPre'
-  | 'route.nonePinnedPost'
   | 'route.fallback'
   | 'route.keyword'
   | 'route.failed'
@@ -220,8 +217,8 @@ export type WorkflowTabKey =
   | 'settings.workflowTab.title'
   | 'settings.workflowTab.description'
   // 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 read-only row copy.
-  | 'gates.title'
-  | 'gates.description'
+  // 【变更】2026-10-18 (工作流确认门 2.1): gates.title + gates.description
+  // deleted — the tab title carries the meaning; the row head keeps controls.
   | 'gates.expand'
   | 'gates.collapse'
   | 'gates.loading'
@@ -241,21 +238,23 @@ export type WorkflowTabKey =
   | 'gates.sentinelNoop'
   | 'gates.sentinelContinued'
   | 'gates.dynamicOptions'
-  | 'gates.configTitle'
-  | 'gates.configIntro'
-  | 'gates.configBaseline'
-  | 'gates.configRoute'
-  | 'gates.configPresets'
-  | 'gates.honesty'
-  // 【变更】2026-10-12 (问题 4.1): the process-card flow + 详细/简洁 dropdown copy.
+  // 【变更】2026-10-19 (六问题批 4.2): the「开关与阈值在配置文件」block is
+  // deleted (configTitle/configIntro/configBaseline/configRoute/configPresets/
+  // honesty keys removed); the density control is renamed 详略.
   | 'gates.modeAria'
   | 'gates.modeDetail'
   | 'gates.modeConcise'
   | 'gates.onceTitle'
   | 'gates.onceHint'
+  | 'gates.onceBadge'
+  | 'gates.branchTitle'
   | 'gates.advancePrefix'
   | 'gates.conditionsCount'
   | 'gates.noGate'
+  // 【变更】2026-10-18 (工作流确认门 2.3): the flow copy (canvas since gone).
+  | 'gates.canvasAria'
+  | 'gates.confirmCount'
+  | 'gates.stageGate'
   | 'gates.node.intake'
   | 'gates.node.open'
   | 'gates.node.clarify'
@@ -333,12 +332,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'card.current': 'Current',
   'metrics.pending': 'Model tokens used during this stage',
   'route.title': 'Current routing',
-  'route.none': 'No routed dispatch yet',
-  // 【变更】2026-10-07 (九点批 问题 5): the empty state explains WHY it is
-  // empty — Auto engaged vs. the session pinned to a concrete model.
   'route.noneAuto': 'Auto is engaged · waiting for the first dispatch',
-  'route.nonePinnedPre': 'Session model ',
-  'route.nonePinnedPost': ' · auto routing is not engaged — switch to Auto and dispatches show up here',
   'route.fallback': 'fallback',
   'route.keyword': 'keyword',
   'route.failed': 'failed',
@@ -515,8 +509,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'settings.workflowTab.title': 'Workflow graph tab',
   'settings.workflowTab.description': 'Turn off to hide the Workflow graph tab on the conversation view.',
   // 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 read-only row.
-  'gates.title': 'Gates overview (read-only)',
-  'gates.description': 'Both gate layers in one list: the customer-confirm gates (the popup cards) and the per-stage completion gates (artifact conditions). Entries themselves are the product registry (code + test locked); switches and thresholds live in config files.',
+  // 【变更】2026-10-18 (工作流确认门 2.1): intro paragraph deleted (see union note).
   'gates.expand': 'Expand',
   'gates.collapse': 'Collapse',
   'gates.loading': 'Loading…',
@@ -536,20 +529,20 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.sentinelNoop': 'dismiss (runs nothing)',
   'gates.sentinelContinued': 'continued by the caller',
   'gates.dynamicOptions': 'options are filled at runtime (from the live workspace state)',
-  'gates.configTitle': 'Switches & thresholds live in config files',
-  'gates.configIntro': 'Gate entries cannot be added or removed from this UI (product registry, test-locked); the switches and thresholds below are file edits that take effect on the next run:',
-  'gates.configBaseline': '.baf/baseline.yml — workflow.requireOpenSpec (mandate OpenSpec), bugFixPath.requireRegressionTest (regression-test-first gate), guard.requireHumanConfirmation (which actions need your confirm), stack.coverage.minimum (coverage floor)',
-  'gates.configRoute': '~/.dsh/baf-route-config.json — multi-model routing (keyword rules, tier bindings, the floor-rule switch)',
-  'gates.configPresets': '~/.dsh/baf-route-presets.json — the preset keyword packs',
-  'gates.honesty': 'To change the gate entries themselves: edit the product code (GATE_REGISTRY / stages/gates.ts in packages/baf/baf-workflow) and its tests — this page stays read-only.',
   'gates.modeAria': 'Gate display density',
-  'gates.modeDetail': 'Detailed',
+  'gates.modeDetail': 'Detail',
   'gates.modeConcise': 'Concise',
   'gates.onceTitle': 'One-shot confirm gates',
-  'gates.onceHint': 'not tied to one stage — popped at flow start / wrap-up',
+  'gates.onceHint': 'not yet placed on the flow chart (a future release will anchor them)',
+  'gates.onceBadge': 'One-shot',
+  'gates.branchTitle': 'Branches',
   'gates.advancePrefix': 'advance gate: ',
   'gates.conditionsCount': 'pass conditions: ',
   'gates.noGate': 'no gate on this node',
+  // 【变更】2026-10-18 (工作流确认门 2.3): flow-canvas copy.
+  'gates.canvasAria': 'Workflow confirmation-gate flow chart',
+  'gates.confirmCount': 'confirm gates',
+  'gates.stageGate': 'stage gate:',
   'gates.node.intake': 'Intake',
   'gates.node.open': 'Open',
   'gates.node.clarify': 'Clarify',
@@ -621,12 +614,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'card.current': '当前',
   'metrics.pending': '本阶段消耗的模型用量',
   'route.title': '当前路由',
-  'route.none': '暂无派单路由',
-  // 【变更】2026-10-07 (九点批 问题 5): 空态说明为什么空 — Auto 已接管等待首单，
-  // 或会话停在具体模型、自动路由未接手。
   'route.noneAuto': 'Auto 已接管 · 等待首次派单',
-  'route.nonePinnedPre': '会话当前模型 ',
-  'route.nonePinnedPost': ' · 自动路由未接管 — 切到 Auto 模型后，派单会在此显示',
   'route.fallback': '回落',
   'route.keyword': '词',
   'route.failed': '失败',
@@ -813,8 +801,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'settings.workflowTab.title': '工作流图',
   'settings.workflowTab.description': '关闭后，对话 Tab 不再显示「工作流图」。',
   // 【变更】2026-10-07 (九点批 问题 9): 门禁总览·只读行。
-  'gates.title': '门禁总览（只读）',
-  'gates.description': '两层门禁一份清单：客户确认门（流程关键节点弹出的确认卡）与阶段完成门（各阶段产物必须满足的条件）。条目本身是产品注册表（代码级＋测试锁定）；开关与阈值在配置文件里改。',
+  // 【变更】2026-10-18 (工作流确认门 2.1): 首段说明文字删除（见 union 注）。
   'gates.expand': '展开',
   'gates.collapse': '收起',
   'gates.loading': '读取中…',
@@ -834,20 +821,20 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.sentinelNoop': '关闭（不执行命令）',
   'gates.sentinelContinued': '由调用方续接',
   'gates.dynamicOptions': '选项在运行时按现场状态动态生成',
-  'gates.configTitle': '开关与阈值在配置文件',
-  'gates.configIntro': '门禁条目不能在界面增删（产品注册表，测试锁定）；但下面的开关与阈值改配置文件即可，下次运行即生效：',
-  'gates.configBaseline': '.baf/baseline.yml — workflow.requireOpenSpec（是否强制 OpenSpec）、bugFixPath.requireRegressionTest（缺陷修复回归测试门）、guard.requireHumanConfirmation（哪些动作要人工确认）、stack.coverage.minimum（覆盖率底线）',
-  'gates.configRoute': '~/.dsh/baf-route-config.json — 多模型路由（关键词规则、档位绑定、保底规则开关）',
-  'gates.configPresets': '~/.dsh/baf-route-presets.json — 预设关键词词库',
-  'gates.honesty': '要增删改门禁条目本身：改产品代码（packages/baf/baf-workflow 的 GATE_REGISTRY 与 stages/gates.ts）并同步测试 — 本页只读。',
-  'gates.modeAria': '门禁显示密度',
-  'gates.modeDetail': '详细',
-  'gates.modeConcise': '简洁',
+  'gates.modeAria': '详略',
+  'gates.modeDetail': '详',
+  'gates.modeConcise': '略',
   'gates.onceTitle': '一次性确认门',
-  'gates.onceHint': '不挂在具体阶段 — 流程启动 / 收尾时弹出',
+  'gates.onceHint': '暂未在流程图上定位的确认门（后续版本会补上位置）',
+  'gates.onceBadge': '一次性',
+  'gates.branchTitle': '分支',
   'gates.advancePrefix': '推进确认门：',
   'gates.conditionsCount': '完成条件数：',
   'gates.noGate': '本节点无门禁',
+  // 【变更】2026-10-18 (工作流确认门 2.3): 流程图画布文案。
+  'gates.canvasAria': '工作流确认门流程图',
+  'gates.confirmCount': '确认门',
+  'gates.stageGate': '阶段门：',
   'gates.node.intake': '接单',
   'gates.node.open': '建立变更',
   'gates.node.clarify': '澄清',

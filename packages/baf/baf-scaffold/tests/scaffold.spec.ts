@@ -45,21 +45,26 @@ describe('baselineTemplate', () => {
 })
 
 describe('planScaffold', () => {
-  it('lays down baseline + default rules doc + openspec layout', () => {
+  it('lays down baseline + default rules doc + user-prefs + openspec layout', () => {
     const plan = planScaffold({ baselineId: 'plan-test' })
     expect(plan.files.map(f => f.path)).toEqual([
       '.baf/baseline.yml',
       '.baf/standards/default-rules.md',
+      '.baf/user-prefs.yml',
       'openspec/changes/.gitkeep',
     ])
-    const [baseline, rules] = plan.files
+    const [baseline, rules, prefs] = plan.files
     if (baseline === undefined) throw new Error('expected a baseline file')
     if (rules === undefined) throw new Error('expected a rules file')
+    if (prefs === undefined) throw new Error('expected a user-prefs file')
     expect(baseline.content).toContain('baselineId: plan-test')
+    expect(baseline.content).toContain('userOverridePolicy:')
+    expect(baseline.content).toContain('bugFixPathAllowed: true')
     // 问题 4 (2026-10-06): the shipped baseline points at the default rules doc
     // it lays down — the standard policy is effective out-of-the-box.
     expect(baseline.content).toContain('mattPocockRulesRef: .baf/standards/default-rules.md')
     expect(baseline.content).not.toContain('mattPocockRulesRef: <enterprise-tbd>')
+    expect(prefs.content).toContain('schema: 1')
     // The rules doc organizes all 8 stable rule areas as resolvable anchors.
     for (const anchor of [
       'project-charter', 'coding-style', 'interfaces', 'error-handling',
@@ -84,6 +89,7 @@ describe('applyScaffold', () => {
     expect(changes.created).toEqual([
       '.baf/baseline.yml',
       '.baf/standards/default-rules.md',
+      '.baf/user-prefs.yml',
       'openspec/changes/.gitkeep',
     ])
     expect(changes.skipped).toEqual([])
@@ -102,6 +108,7 @@ describe('applyScaffold', () => {
     expect(second.skipped).toEqual([
       '.baf/baseline.yml',
       '.baf/standards/default-rules.md',
+      '.baf/user-prefs.yml',
       'openspec/changes/.gitkeep',
     ])
     expect(second.backedUp).toEqual([])
@@ -116,7 +123,11 @@ describe('applyScaffold', () => {
       : f)
     const changes = applyScaffold(workspace, { files: divergent }, makeAt())
     expect(changes.created).toEqual([])
-    expect(changes.skipped).toEqual(['.baf/standards/default-rules.md', 'openspec/changes/.gitkeep'])
+    expect(changes.skipped).toEqual([
+      '.baf/standards/default-rules.md',
+      '.baf/user-prefs.yml',
+      'openspec/changes/.gitkeep',
+    ])
     expect(changes.backedUp).toEqual(['.baf/baseline.yml'])
     // template re-applied
     expect(readFileSync(join(workspace, '.baf/baseline.yml'), 'utf8'))

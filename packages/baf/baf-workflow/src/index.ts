@@ -79,6 +79,8 @@ export * from './stages/abandon.ts'
 export * from './stages/pipeline.ts'
 export * from './pipeline-factory.ts'
 export * from './gate-cards.ts'
+// 【变更】2026-10-19 (六问题批 4.1b): node-hooks adjudication + runner.
+export * from './node-hooks.ts'
 /**
  * Host-facing re-exports of selected drives and adapter contracts. Only
  * those entries the Tab Remote (or other host-plane consumers outside the

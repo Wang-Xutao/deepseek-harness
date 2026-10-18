@@ -23,5 +23,6 @@
 | `projection_corrupted` | projection 事件损坏，停在该 seq | `changeId`、`seq`、`cause` | projection replay 单条损坏（不静默丢弃） |
 | `scope_exceeded` | 实际修改超出 allowlist | `path`、`changeId` | implement / ToolGuard |
 | `writer_conflict` | 第二 writer 争用 projection（不可靠文件锁平台显式拒绝） | `changeId`、`workspace` | projection append 锁 |
+| `node_hook_failed` | 状态脚本（baseline `hooks.nodes.<node>.enter/exit`）未通过，转换被拦下 | `changeId`、`node`、`kind`、`entry`、`reasonCode`、`exitCode`、`output` | `StagePipeline.enterStage` 上 hook 执行超时/无法启动/非零退出（【变更】2026-10-19 六问题批 4.1b） |
 
 相关：`session/model-unavailable` 是 dsh session-controller 的 RemoteError，BAF route 层映射到上表 `model_route_*` 之一，不混用字符串。

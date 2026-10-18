@@ -1,0 +1,11 @@
+/**
+ * @mainpage 项目对外 API（Doxygen 生成站）
+ *
+ * 本站由源码 Doxygen 注释生成，入口为 `docs/api/site/index.html`。
+ *
+ * - **仓级模块清单**（人手维护）：`docs/api/README.md`
+ * - **模块 API 摘要 / 错误码等**：各 `<module>/README.md`（固定 9 节）
+ * - **逐符号契约**：源码 `/** … */`（见 `sora-c-code-standards`）
+ *
+ * 手写内容勿放入 `docs/api/site/`（下次生成会覆盖）。
+ */

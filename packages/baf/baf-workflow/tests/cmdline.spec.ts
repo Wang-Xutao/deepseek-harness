@@ -36,6 +36,7 @@ describe('baf-cli Commander tree', () => {
       'help',
       'list',
       'scaffold',
+      'standard-init',
       'status',
       'update',
       'update-rollback',

@@ -72,13 +72,13 @@ describe('RouteStatusRow (M3 批次C 当前路由行)', () => {
     expect(chips[1]?.textContent).toBe('node.verifymiddleroute.failed')
   })
 
-  it('shows the muted hint when routing is on but nothing dispatched yet', () => {
-    render(<RouteStatusRow status={statusOf([
+  // 【变更】2026-10-19 (六问题批 问题 2): an empty audit list renders the row
+  // ONLY when Auto is provably engaged — otherwise the whole row is gone.
+  it('renders nothing when nothing dispatched and Auto is not engaged', () => {
+    const { container } = render(<RouteStatusRow status={statusOf([
       { phase: 'design', preferredTier: 'high', preferred: { provider: 'p1', model: 'big-brain' } },
     ])} t={t as never} />)
-    const row = screen.getByTestId('route-status')
-    expect(row.textContent).toContain('route.none')
-    expect(screen.queryAllByTestId('route-chip')).toEqual([])
+    expect(container.firstChild).toBeNull()
   })
 
   it('M4: badges a verify-escalated turn (tierReason verify-escalation)', () => {
@@ -105,7 +105,7 @@ describe('RouteStatusRow (M3 批次C 当前路由行)', () => {
   })
 })
 
-describe('RouteStatusRow empty state (九点批 问题 5 动态提示)', () => {
+describe('RouteStatusRow empty state (九点批 问题 5 动态提示; 六问题批 问题 2 静默)', () => {
   it('says Auto is engaged when the session sits on the baf-route/auto pseudo entry', () => {
     render(<RouteStatusRow status={statusOf(
       [{ phase: 'design', preferredTier: 'high', preferred: { provider: 'p1', model: 'big-brain' } }],
@@ -114,20 +114,15 @@ describe('RouteStatusRow empty state (九点批 问题 5 动态提示)', () => {
     expect(screen.getByTestId('route-empty').textContent).toBe('route.noneAuto')
   })
 
-  it('names the pinned model and why routing is not engaged', () => {
-    render(<RouteStatusRow status={statusOf(
+  // 【变更】2026-10-19 (六问题批 问题 2): a session pinned to a concrete model
+  // is not using auto routing — the row (label included) is gone entirely,
+  // not explained with「会话当前模型 … 自动路由未接管」.
+  it('renders nothing at all for a pinned session model', () => {
+    const { container } = render(<RouteStatusRow status={statusOf(
       [{ phase: 'design', preferredTier: 'high', preferred: { provider: 'p1', model: 'big-brain' } }],
       { sessionModel: { provider: 'deepseek', model: 'chat-pro', auto: false } },
     )} t={t as never} />)
-    expect(screen.getByTestId('route-empty').textContent)
-      .toBe('route.nonePinnedPrechat-proroute.nonePinnedPost')
-  })
-
-  it('keeps the bare blank only when the log proves no session model either', () => {
-    render(<RouteStatusRow status={statusOf(
-      [{ phase: 'design', preferredTier: 'high', preferred: { provider: 'p1', model: 'big-brain' } }],
-    )} t={t as never} />)
-    expect(screen.getByTestId('route-empty').textContent).toBe('route.none')
+    expect(container.firstChild).toBeNull()
   })
 })
 

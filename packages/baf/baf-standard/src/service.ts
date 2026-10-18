@@ -1,12 +1,16 @@
 /**
- * BafStandard Cordis service: exposes the baseline standard summary on the
- * entry-local BAF domain realm.
+ * BafStandard Cordis service: baseline standard summary + enterprise asset apply.
  * @module @deepseek-ai/dsh-baf-standard/service
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { BaselineManifest } from '@deepseek-ai/dsh-baf-core'
+import {
+  applyEnterpriseStandards,
+  type ApplyEnterpriseStandardsOptions,
+  type EnterpriseStandardsChanges,
+} from './apply-enterprise-standards.ts'
 import {
   renderStandardPrompt,
   summarizeStandard,
@@ -24,7 +28,7 @@ declare module '@deepseek-ai/cordis' {
 export interface Config {}
 
 /**
- * Stateless projection service over loaded baselines. Callers pass the
+ * Stateless projection + enterprise-standards apply service. Callers pass the
  * baseline (typically from `ctx.bafCore.currentBaseline()`); the service
  * keeps no per-workspace state.
  */
@@ -54,11 +58,20 @@ export class BafStandard extends Service {
   }
 
   /**
+   * Apply bafplugin-aligned enterprise assets into a workspace (方案乙).
+   * @param options - workspace root + optional packs / pinStack.
+   * @returns created / skipped / backed-up / stackPinned report.
+   */
+  applyEnterprise(options: ApplyEnterpriseStandardsOptions): EnterpriseStandardsChanges {
+    return applyEnterpriseStandards(options)
+  }
+
+  /**
    * Help string for slash/CLI.
    * @returns summary.
    */
   help(): string {
-    return 'BAF standard: baseline standard-section summary for prompt/plan/guard (no embedded rule values).'
+    return 'BAF standard: baseline summary + /baf-standard-init enterprise asset apply (clang-format/commitlint/ceedling/…)。'
   }
 }
 

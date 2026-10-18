@@ -279,7 +279,17 @@ const DANGEROUS_COMMAND_PATTERNS: readonly { readonly label: string; readonly pa
   { label: 'git-force-push', pattern: /\bgit\s+push\b[^|;&\n]*(?:\s--force(?:-with-lease)?(?:=\S+)?|\s-f)(?:\s|$)/ },
 ]
 
-const INDIRECT_WRITE_PATTERNS: readonly { readonly label: string; readonly pattern: RegExp }[] = [
+/** 【变更】2026-10-18 (项目工程 1.3): `git commit --no-verify` / bare `-n`
+ * skips every pre-commit hook — while protected paths are configured the
+ * commit 防线 must actually run, so the escape hatch is denied for the model
+ * (the human owner keeps it in their own terminal). `git push -n` is a
+ * different flag (--dry-run) and stays legal. */
+const GIT_COMMIT_NO_VERIFY: RegExp = /\bgit\s+commit\b[^\n]*(?:\s--no-verify(?:=\S+)?|\s-n(?![\w-]))/
+
+/** Mutation-shaped shell patterns shared by the BAF tool guard and the
+ * global protected-paths guard (which denies them only when the command also
+ * references a protected path — standard-mode agents keep full shell use). */
+export const INDIRECT_WRITE_PATTERNS: readonly { readonly label: string; readonly pattern: RegExp }[] = [
   // Any output redirection to a file; fd duplication (`2>&1`) stays legal.
   { label: 'redirect', pattern: /(?<![<\w])>{1,2}(?![&<=])/ },
   { label: 'fd-redirect-to-file', pattern: /\d>(?![&<=])/ },
@@ -309,10 +319,16 @@ const INDIRECT_WRITE_PATTERNS: readonly { readonly label: string; readonly patte
  * @returns allow or a stable-code denial.
  */
 export function adjudicateShell(
-  _config: GuardPolicyConfig,
+  config: GuardPolicyConfig,
   _state: GuardWorkflowState,
   command: string,
 ): GuardDecision {
+  // 【变更】2026-10-18 (项目工程 1.3): see GIT_COMMIT_NO_VERIFY — gated on
+  // protected paths being configured so untouched baselines keep the old
+  // shell surface exactly.
+  if (config.protectedPaths.length > 0 && GIT_COMMIT_NO_VERIFY.test(command)) {
+    return deny('protected_path', 'git commit would skip the pre-commit protected-paths check (--no-verify); run git commit without it')
+  }
   for (const { label, pattern } of DANGEROUS_COMMAND_PATTERNS) {
     if (pattern.test(command)) {
       return deny('dangerous_command', `command matches ${label}`)

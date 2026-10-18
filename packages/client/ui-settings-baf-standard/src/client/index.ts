@@ -33,7 +33,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Required services (cordis fiber inject). */
 export const inject = [
-  'slots', 'locale', 'remote', 'remote.bafStandardConfig',
+  'slots', 'locale', 'remote', 'remote.bafStandardConfig', 'remote.session',
 ] as const
 
 export type { BafStandardKey } from './locales.ts'

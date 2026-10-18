@@ -24,6 +24,14 @@
       "types": "./lib/types/install.d.ts",
       "default": "./lib/install.js"
     },
+    "./global-install": {
+      "types": "./lib/types/global-install.d.ts",
+      "default": "./lib/global-install.js"
+    },
+    "./commit-hook": {
+      "types": "./lib/types/commit-hook.d.ts",
+      "default": "./lib/commit-hook.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },

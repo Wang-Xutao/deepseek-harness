@@ -13,11 +13,13 @@
   gap: 16px;
 }
 
-/* Match 版本与更新 section title/intro. */
+/* 【变更】2026-10-19 (六问题批 问题 3): weight 600 — every titled settings
+   section (版本与更新 / 工作流 / 精选插件) renders 18px/600; this page was the
+   lone 500 and read lighter than its siblings. */
 .title {
   margin: 0;
   font-size: 18px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .intro {

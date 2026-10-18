@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<suppressions>
+  <!-- Third-party / SDK / BSP: do not fail customer lint on vendor trees -->
+  <suppress>
+    <id>*</id>
+    <fileName>*/third_party/*</fileName>
+  </suppress>
+  <suppress>
+    <id>*</id>
+    <fileName>*/sdk/*</fileName>
+  </suppress>
+  <suppress>
+    <id>*</id>
+    <fileName>*/bsp/*</fileName>
+  </suppress>
+  <suppress>
+    <id>*</id>
+    <fileName>*/vendor/*</fileName>
+  </suppress>
+  <suppress>
+    <id>*</id>
+    <fileName>*/build/*</fileName>
+  </suppress>
+  <!-- Unity / Ceedling test noise -->
+  <suppress>
+    <id>*</id>
+    <fileName>*/test/*</fileName>
+  </suppress>
+</suppressions>

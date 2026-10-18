@@ -2512,7 +2512,7 @@ function FlowCanvas(props: {
                           onOpenArtifact(artifact)
                         }}
                       >
-                        {artifact.split('/').pop() ?? artifact}
+                        {artifactName(artifact)}
                       </button>
                     ))}
                   </div>

@@ -13,7 +13,15 @@
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { loadBaselineFile, type BaselineManifest, type GuardPolicy, type StackAdapter } from '@deepseek-ai/dsh-baf-core'
+import {
+  applyUserPrefsToBaseline,
+  loadBaselineFile,
+  loadUserPrefsFile,
+  resolveUserOverridePolicy,
+  type BaselineManifest,
+  type GuardPolicy,
+  type StackAdapter,
+} from '@deepseek-ai/dsh-baf-core'
 import { ProjectionStore } from './projection.ts'
 import { StagePipeline } from './stages/pipeline.ts'
 
@@ -71,13 +79,16 @@ export type ScaffoldAdapterOutcome =
   }
 
 /**
- * Load the workspace's governing baseline.
+ * Load the workspace's governing baseline with allowed user-prefs overrides
+ * applied (settings A layer → `.baf/user-prefs.yml`).
  * @param cwd - absolute workspace root.
- * @returns parsed baseline, or undefined when absent/unparseable.
+ * @returns effective baseline, or undefined when absent/unparseable.
  */
 export async function loadWorkspaceBaseline(cwd: string): Promise<BaselineManifest | undefined> {
   try {
-    return await loadBaselineFile(join(cwd, WORKSPACE_BASELINE_PATH))
+    const baseline = await loadBaselineFile(join(cwd, WORKSPACE_BASELINE_PATH))
+    const prefs = await loadUserPrefsFile(cwd)
+    return applyUserPrefsToBaseline(baseline, prefs, resolveUserOverridePolicy(baseline))
   } catch {
     return undefined
   }

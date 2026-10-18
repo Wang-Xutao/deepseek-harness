@@ -10,6 +10,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
 import { changeDir } from '@deepseek-ai/dsh-baf-openspec'
+import { collectStatusBlockers } from '@deepseek-ai/dsh-baf-quality'
 import type { StageContext } from './context.ts'
 import { CheckRunner, type CheckReportRow, type VerifyReport } from './check-runner.ts'
 import { verifyGate } from './gates.ts'
@@ -181,6 +182,32 @@ export function buildVerifyRunner(
       return {
         ok: report.allowed,
         diagnostics: report.reasonCodes.length === 0 ? ['no secrets detected'] : [...report.reasonCodes],
+      }
+    },
+  })
+  // 方案乙: machine-readable enterprise blockers (clang-format / coverage /
+  // static-analysis / commitlint presence). Errors gate; warnings annotate.
+  runner.register({
+    name: 'status-blockers',
+    required: true,
+    run: async (signal) => {
+      if (signal.aborted) {
+        return { ok: false, diagnostics: ['cancelled'] }
+      }
+      const report = collectStatusBlockers({ workspaceRoot: ctx.workspace.root })
+      const errors = report.blockers.filter(row => row.severity === 'error')
+      const warnings = report.blockers.filter(row => row.severity !== 'error')
+      if (errors.length === 0) {
+        return {
+          ok: true,
+          diagnostics: warnings.length === 0
+            ? ['status-blockers: clear']
+            : warnings.map(row => `${row.id}:${row.message}`),
+        }
+      }
+      return {
+        ok: false,
+        diagnostics: errors.map(row => `${row.id}:${row.message}`),
       }
     },
   })

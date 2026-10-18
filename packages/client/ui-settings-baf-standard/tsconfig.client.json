@@ -14,6 +14,7 @@
     "src/css-modules.d.ts",
     "src/client/index.ts",
     "src/client/locales.ts",
+    "src/client/NodeHooksCard.tsx",
     "src/client/remote-types.ts",
     "src/client/standards-store.ts",
     "src/client/StandardsOverview.tsx"

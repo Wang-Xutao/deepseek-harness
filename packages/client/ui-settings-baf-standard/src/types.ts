@@ -46,6 +46,18 @@ export interface BafStandardAreaRow {
   readonly sourceRef: string
 }
 
+/** One enterprise-pack presence / blockers readout (方案乙). */
+export interface BafEnterpriseStandardsStatus {
+  /** Packs whose marker files are present (`c` / `commitlint` / …). */
+  readonly appliedPacks: readonly string[]
+  /** Error-severity blocker count from collectStatusBlockers. */
+  readonly blockerErrors: number
+  /** Warning/info blocker count. */
+  readonly blockerWarnings: number
+  /** Short lines for the settings card (`id: message`). */
+  readonly blockerLines: readonly string[]
+}
+
 /** `summary()` outcome — every non-ready status carries its own empty state. */
 export interface BafStandardSummaryResult {
   readonly status: 'ready' | 'no-workspace' | 'no-baseline' | 'failed'
@@ -58,8 +70,68 @@ export interface BafStandardSummaryResult {
   /** 【变更】2026-10-07 (九点批 问题 8): the 8 rule areas, anchored. */
   readonly standardAreas?: readonly BafStandardAreaRow[]
   readonly cards?: readonly BafStandardPackageCard[]
+  /** 方案乙: enterprise asset pack presence + machine-readable blockers. */
+  readonly enterpriseStandards?: BafEnterpriseStandardsStatus
+  /**
+   * 【变更】2026-10-18 (项目工程 1.3): the raw AI 禁改路径 list (baseline
+   * `guard.protectedPaths`, verbatim including the enterprise placeholder) so
+   * the 项目工程 tab can render the editable list, plus whether the managed
+   * pre-commit commit 防线 is currently installed in this workspace.
+   */
+  readonly guardProtectedPaths?: readonly string[]
+  readonly commitGuardHookInstalled?: boolean
+  /**
+   * 【变更】2026-10-19 (六问题批 4.1b): the per-node custom-script map
+   * (baseline `hooks.nodes.<node>.enter/exit`) for the 项目工程 状态脚本
+   * editor. Only configured nodes ride the wire; absent block = `{}`.
+   */
+  readonly nodeHooks?: BafStandardNodeHooks
   /** Technical one-liner for `failed` only; never shown for the empty states. */
   readonly error?: string
+}
+
+/** One node's script lists on the wire (六问题批 4.1b). */
+export interface BafStandardNodeHookLists {
+  readonly enter?: readonly string[]
+  readonly exit?: readonly string[]
+}
+
+/** node id → hook lists; only configured nodes present. */
+export type BafStandardNodeHooks = Readonly<Record<string, BafStandardNodeHookLists>>
+
+/** `saveNodeHooks()` outcome — the 状态脚本 editor's save. */
+export interface BafStandardSaveNodeHooksResult {
+  readonly status: 'ready' | 'no-workspace' | 'no-baseline' | 'invalid' | 'error'
+  /** The normalized map actually persisted (ready only). */
+  readonly hooks?: BafStandardNodeHooks
+  /** Customer-readable problem line (invalid / error). */
+  readonly message?: string
+}
+
+/**
+ * `generateBaseline()` outcome — the 项目工程 empty state's 生成配置文件
+ * button runs the same scaffold `/baf` uses (button click IS the human
+ * confirmation).
+ */
+export interface BafStandardGenerateResult {
+  readonly status: 'ready' | 'no-workspace' | 'error'
+  /** How many files the scaffold created (ready only). */
+  readonly createdCount?: number
+  /** Best-effort Git anchor one-liner (ready only). */
+  readonly gitNote?: string
+  /** Customer-readable problem line (error). */
+  readonly message?: string
+}
+
+/** `saveProtectedPaths()` outcome — the editable AI 禁改路径 list's save. */
+export interface BafStandardSaveProtectedResult {
+  readonly status: 'ready' | 'no-workspace' | 'no-baseline' | 'invalid' | 'error'
+  /** The normalized list actually persisted (ready only). */
+  readonly paths?: readonly string[]
+  /** Whether the commit 防线 hook ended up installed (ready only). */
+  readonly hookInstalled?: boolean
+  /** Customer-readable problem line (invalid / error, or a hook warning). */
+  readonly message?: string
 }
 
 /** `rulesDoc()` outcome — the rules document viewer's payload. */

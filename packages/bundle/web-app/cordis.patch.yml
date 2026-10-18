@@ -50,6 +50,14 @@
     - id: featured-plugins
       name: '@deepseek-ai/dsh-baf-featured'
 
+    # 【变更】2026-10-18 (项目工程 1.3): preset-independent AI 禁改路径 light
+    # guard — installs on EVERY agent (host plane, base composition), so the
+    # baseline's guard.protectedPaths holds even outside the BAF preset's full
+    # tool guard. Deliberately unconditional (an unscoped host row cannot use
+    # presetCovers to filter; see global-guard.ts's module note).
+    - id: baf-guard-global-install
+      name: '@deepseek-ai/dsh-baf-guard/global-install'
+
     - id: desktop-product-telemetry
       name: '@deepseek-ai/dsh-host-product-telemetry-otel'
       disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"

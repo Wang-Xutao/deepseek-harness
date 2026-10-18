@@ -8,6 +8,8 @@
 | [release/](release/) | 发版 | 版本对照表 |
 | [enterprise-workflow.md](enterprise-workflow.md) | BAF 实现 / 企业落地 | 企业级 BAF 模式在 dsh 中的设计与分阶段实施（含评审结论） |
 | [baf/](baf/) | BAF 实现 / 企业落地 | Phase 0 合同：企业输入、错误码、兼容矩阵、route 核查 |
+| [baf/workflow-config-layering-audit.md](baf/workflow-config-layering-audit.md) | BAF 实现 | 方案甲：工作流配置 A/B 分层审计与对照表 |
+| [baf/plan-b-enterprise-standards-migration.md](baf/plan-b-enterprise-standards-migration.md) | BAF 实现 | 方案乙：bafplugin 规范资产与硬门迁入实施手册 |
 
 用户帮助站构建：
 

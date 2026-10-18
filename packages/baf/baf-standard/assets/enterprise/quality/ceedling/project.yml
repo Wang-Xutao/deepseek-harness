@@ -1,0 +1,118 @@
+# =========================================================================
+# SORA / baf-quality — 企业 Ceedling 预设
+# 布局：source/** 与 test/**（路径镜像；init 不预建空目录/.gitkeep）
+# 覆盖率 flags 仅挂 :flags.:gcov（日常 test: 不插桩）；报告由 gcovr 外置生成。
+# =========================================================================
+
+---
+:project:
+  :which_ceedling: gem
+  :ceedling_version: 1.0.1
+  :use_mocks: TRUE
+  :use_test_preprocessor: :all
+  :use_deep_preprocessor: :none
+  :use_backtrace: :simple
+  :use_decorators: :auto
+  :build_root: build
+  :test_file_prefix: test_
+  :default_tasks:
+    - test:all
+  :test_threads: :auto
+  :compile_threads: :auto
+  :release_build: FALSE
+
+:mixins:
+  :enabled: []
+  :load_paths: []
+
+:test_build:
+  :use_assembly: FALSE
+
+:plugins:
+  :load_paths: []
+  :enabled:
+    - module_generator
+    - gcov
+    - report_tests_pretty_stdout
+
+:extension:
+  :executable: .out
+
+:paths:
+  :test:
+    - +:test/**
+  :source:
+    - source/**
+  :include:
+    - source/**
+  :support:
+    - []
+  :libraries: []
+
+:files:
+  :test: []
+  :source: []
+
+:defines:
+  :test:
+    - TEST
+  :release: []
+  :use_test_definition: FALSE
+
+:flags:
+  :test:
+    :compile:
+      "*":
+        - -O0
+  # :gcov 上下文只接受 flag 列表（Ceedling 1.0.x）；"*": matcher 仅允许 :test
+  :gcov:
+    :compile:
+      - --coverage
+      - -O0
+    :link:
+      - --coverage
+
+:cmock:
+  :plugins:
+    - :ignore
+    - :callback
+  :verbosity: 2
+  :when_no_prototypes: :warn
+  :mock_prefix: "mock_"
+  :mock_suffix: ""
+  :treat_externs: :exclude
+  :treat_inlines: :exclude
+  :treat_as:
+    uint8: HEX8
+    uint16: HEX16
+    uint32: UINT32
+    int8: INT8
+    bool: UINT8
+  :memcmp_if_unknown: true
+  :when_ptr: :compare_data
+  :enforce_strict_ordering: true
+  :fail_on_unexpected_calls: true
+  :callback_include_count: true
+  :callback_after_arg_check: false
+  :exclude_setjmp_h: false
+
+:unity:
+  :defines:
+    - UNITY_EXCLUDE_FLOAT
+
+:environment: []
+
+:libraries:
+  :placement: :end
+  :flag: "-l${1}"
+  :path_flag: "-L ${1}"
+  :system: []
+  :test: []
+  :release: []
+
+:gcov:
+  :summaries: TRUE
+  :report_task: FALSE
+  :utilities:
+    - gcov
+  :reports: []

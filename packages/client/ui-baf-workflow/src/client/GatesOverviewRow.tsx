@@ -1,22 +1,35 @@
 /**
- * 【变更】2026-10-12 (问题 4.1): the 工作流确认门 tab renders the two gate
- * layers as ONE workflow process-card flow — a card per workflow node in
- * pipeline order carrying that node's stage gate (artifact / adjudicator /
- * conditions) plus the confirm gates resting on it, a leading card for the
- * one-shot gates, and a 详细/简洁 dropdown: 简洁 keeps one line per gate,
- * 详细 adds the options+commands, the stage conditions, and the config
- * honesty block. Still read-only throughout (2026-10-07 客户决策).
+ * 【变更】2026-10-19 (六问题批 4.2): the 确认门 tab is ONE complete vertical
+ * card flow — the pan/zoom canvas is gone, and with it the row's own
+ * scrollbar/fixed height: the settings page scrolls, every card renders at
+ * its natural height. State cards run the whole chain 接单 → … → 归档 →
+ * 完成, with the branch cards (漂移回归 / 已放弃) at the bottom. The
+ * one-shot gates that used to sit in the leading「一次性确认门」card are now
+ * BETWEEN-state gate nodes — 「工作区需要初始化」right after 接单, before the
+ * 分类 confirm, exactly where it pops — and each bootstrap gate carries the
+ *「一次性」badge at its top-right. Unanchored per-change gates get fixed
+ * client-side anchors: design-confirm rides 设计, verify-archive rides 验证,
+ * resume rides 漂移回归, abandon rides 已放弃. The 详略 switch keeps the
+ * shared `Switch` primitive (略 hides option lists + stage conditions behind
+ * a hover/focus Tooltip; 详 prints them, and the connectors list the template
+ * edge conditions). The「开关与阈值在配置文件」block is deleted.
+ * Still read-only throughout (2026-10-07 客户决策).
  * 【变更】2026-10-07 (九点批 问题 9): the row stays collapsed in list context
  * and loads the projection on first expand (cached client-side); embedded in
- * the 工作流确认门 tab it loads expanded on mount.
+ * the 确认门 tab it loads expanded on mount.
  */
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import type {
   InjectFace, PropsLocale, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
+import { Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   BafWorkflowGateConfirmRow, BafWorkflowGateOverview, BafWorkflowGateStageRow,
 } from '../types.ts'
+import { TEMPLATE_EDGES } from './graph-template.ts'
+import { NodeIcon } from './icons.tsx'
+import type { TerminalStateId, WorkflowNodeId } from './tab-types.ts'
 import css from './GatesOverviewRow.module.css'
 
 /** The inject face the slot registration hands the row. */
@@ -38,10 +51,24 @@ export type GatesOverviewRowProps =
 const NOOP_COMMAND = '__noop__'
 const CONTINUED_COMMAND = '__continued__'
 
-/** The 工作流流程卡片 pipeline order (matches the flow-canvas order). */
-const FLOW_ORDER: readonly string[] = [
-  'intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive', 'drift',
+/** The spine order (terminals ride after 归档; drift/abandoned are branches). */
+const MAIN_CHAIN: readonly string[] = [
+  'intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive',
 ]
+
+/** The bootstrap one-shot gates — they pop at flow start under special
+ * workspace conditions, not once per change, and become between-state gate
+ * nodes right after 接单 (before the 分类 confirm). */
+const ONCE_ENTRY: readonly string[] = ['scaffold', 'new-workflow', 'active-conflict', 'bind-workflow']
+
+/** Client-side anchors for per-change gates the projection cannot place
+ * (their `node` is undefined): each rides the state card it confirms. */
+const CLIENT_ANCHOR: Readonly<Record<string, string>> = {
+  'design-confirm': 'design',
+  'verify-archive': 'verify',
+  'resume': 'drift',
+  'abandon': 'abandoned',
+}
 
 /** Locale key per known node id; unknown ids keep their raw text. */
 const NODE_LABEL: Readonly<Record<string, GatesLocaleKey>> = {
@@ -54,6 +81,8 @@ const NODE_LABEL: Readonly<Record<string, GatesLocaleKey>> = {
   verify: 'gates.node.verify',
   archive: 'gates.node.archive',
   drift: 'gates.node.drift',
+  completed: 'node.completed',
+  abandoned: 'node.abandoned',
 }
 
 /** The locale key union this component's `t` accepts. */
@@ -74,8 +103,8 @@ function OptionLine({ option, t }: {
 }
 
 /**
- * One confirm gate inside a node card — 简洁 keeps the title + question on
- * one line; 详细 adds every option with the command a click runs (and the
+ * One confirm gate inside a card — 略 keeps the title + question on one
+ * line; 详 adds every option with the command a click runs (and the
  * runtime-dynamic marker for gates whose options are filled live).
  */
 function GateCard({ gate, detail, t }: {
@@ -106,29 +135,121 @@ function GateCard({ gate, detail, t }: {
   )
 }
 
+/** The localized command a hover line shows for one option. */
+function optionCommandText(option: BafWorkflowGateConfirmRow['options'][number], t: GatesOverviewRowProps['t']): string {
+  return option.command === NOOP_COMMAND
+    ? t('gates.sentinelNoop')
+    : option.command === CONTINUED_COMMAND
+      ? t('gates.sentinelContinued')
+      : option.command
+}
+
+/** The node's full detail as ONE pre-line string — the 略 hover Tooltip's
+ * label AND the node's aria-label, so hover, focus, and screen readers all
+ * read the same text the 详 flow would print inline. */
+function nodeDetailText(label: string, stage: BafWorkflowGateStageRow | undefined, gates: readonly BafWorkflowGateConfirmRow[], t: GatesOverviewRowProps['t']): string {
+  const lines: string[] = [label]
+  if (stage !== undefined) {
+    lines.push(`${t('gates.stageGate')} ${stage.artifact} · ${stage.gateFn}`)
+    for (const condition of stage.conditions) lines.push(`· ${condition}`)
+    if (stage.advanceGateId !== undefined) lines.push(`${t('gates.advancePrefix')}${stage.advanceGateId}`)
+    if (stage.note !== undefined) lines.push(stage.note)
+  } else {
+    lines.push(t('gates.noGate'))
+  }
+  for (const gate of gates) {
+    lines.push(`【${gate.title}${gate.bugFix === true ? ' · bug-fix' : ''}】${gate.question}`)
+    for (const option of gate.options) {
+      lines.push(`· ${option.label}（${optionCommandText(option, t)}）`)
+    }
+    if (gate.dynamicOptions !== undefined && gate.options.length === 0) {
+      lines.push(`· ${t('gates.dynamicOptions')}`)
+    }
+  }
+  return lines.join('\n')
+}
+
+/** Join CSS-module names without a clsx dependency (filters dropped keys). */
+const join = (...names: ReadonlyArray<string | undefined>): string =>
+  names.filter((name): name is string => name !== undefined && name !== '').join(' ')
+
+/** Template edge conditions for one state→state step — 详 prints them beside
+ * the connector (skip/loop edges to non-adjacent nodes are simply not
+ * between-state steps and stay unlisted). */
+function stepConditions(from: string, to: string): readonly string[] {
+  return TEMPLATE_EDGES
+    .filter(edge => edge.from === from && String(edge.to) === to)
+    .map(edge => `${edge.id} · ${edge.condition}`)
+}
+
+/** The between-card connector: a left-spine arrow; 详 lists the template
+ * edge conditions that govern the state-to-state step beside it. */
+function Connector({ conditions }: { conditions: readonly string[] | undefined }) {
+  return (
+    <div className={css.connector}>
+      <span className={css.connectorArrow} aria-hidden />
+      {conditions !== undefined && conditions.length > 0 ? (
+        <span className={css.connectorConditions}>
+          {conditions.map(line => <span key={line} className={css.connectorCondition}>{line}</span>)}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 /**
- * One workflow node's process card: the stage gate (artifact chip up top;
- * adjudicator + pass conditions in 详细) and the confirm gates that rest on
- * the node, in pipeline order down the flow.
+ * One between-state gate node — the dashed checkpoint card sitting on the
+ * spine between two state cards. Bootstrap gates carry the「一次性」badge at
+ * the top-right corner.
  */
-function NodeCard({ node, stage, gates, detail, t }: {
+function GateNodeCard({ gate, once, detail, t }: {
+  gate: BafWorkflowGateConfirmRow
+  once: boolean
+  detail: boolean
+  t: GatesOverviewRowProps['t']
+}) {
+  return (
+    <div className={css.gateNode} data-testid={`baf-gates-gate-node-${gate.id}`}>
+      {once ? <span className={css.onceBadge} data-testid={`baf-gates-once-badge-${gate.id}`}>{t('gates.onceBadge')}</span> : null}
+      <GateCard gate={gate} detail={detail} t={t} />
+    </div>
+  )
+}
+
+/**
+ * One state card on the spine — node icon + label + gate-count badge, the
+ * stage gate block, and every confirm gate resting on the node (详 prints
+ * them; 略 hides them behind the hover/focus Tooltip + aria-label).
+ */
+function StateCard({ node, stage, gates, detail, t }: {
   node: string
   stage: BafWorkflowGateStageRow | undefined
   gates: readonly BafWorkflowGateConfirmRow[]
   detail: boolean
   t: GatesOverviewRowProps['t']
 }) {
-  return (
-    <section className={css.nodeCard} data-testid={`baf-gate-node-${node}`}>
+  const label = NODE_LABEL[node] !== undefined ? t(NODE_LABEL[node]) : node
+  const detailText = nodeDetailText(label, stage, gates, t)
+  const badge = gates.length > 0
+    ? { text: `${t('gates.confirmCount')} ×${String(gates.length)}`, cls: css.badgeGate ?? '' }
+    : { text: t('gates.noGate'), cls: css.badgeIdle ?? '' }
+
+  const card = (
+    <div
+      className={css.nodeCard}
+      data-testid={`baf-gate-node-${node}`}
+      tabIndex={0}
+      role="group"
+      aria-label={detailText}
+    >
       <div className={css.nodeHead}>
-        <span className={css.nodeName}>{NODE_LABEL[node] !== undefined ? t(NODE_LABEL[node]) : node}</span>
-        {stage !== undefined ? <span className={join(css.nodeChip, css.mono)}>{stage.artifact}</span> : null}
-        {detail && stage?.advanceGateId !== undefined
-          ? <span className={css.nodeChip}>{t('gates.advancePrefix')}{stage.advanceGateId}</span>
-          : null}
+        <span className={css.nodeIcon}><NodeIcon id={node as WorkflowNodeId | TerminalStateId} /></span>
+        <span className={css.nodeName}>{label}</span>
+        <span className={join(css.badge, badge.cls)}>{badge.text}</span>
       </div>
       {stage !== undefined ? (
         <div className={css.stageLine} data-testid={`baf-gate-stage-${node}`}>
+          <div className={join(css.nodeChip, css.mono)}>{stage.artifact}</div>
           {detail ? (
             <>
               <div className={css.stageMeta}><span className={css.mono}>{stage.gateFn}</span></div>
@@ -144,28 +265,34 @@ function NodeCard({ node, stage, gates, detail, t }: {
           )}
         </div>
       ) : gates.length === 0 ? (
-        // 【变更】2026-10-12 (web 复核): gate-less nodes (intake / archive / drift in
-        // the default config) used to VANISH from the flow, so the pipeline read as
-        // a broken chain — they now keep their card with a quiet 无门禁 line.
-        <div className={css.stageMeta}>{t('gates.noGate')}</div>
+        // Gate-less nodes (intake / archive / drift / the terminals in the
+        // default config) keep their card with a quiet 无门禁 line — the
+        // pipeline never reads as a broken chain.
+        <div className={css.stageLine}>{t('gates.noGate')}</div>
       ) : null}
-      {gates.length > 0 ? (
+      {/* 略 keeps the flow quiet — the badge counts the gates and the
+          Tooltip (this node's aria-label string) carries their full text. */}
+      {gates.length > 0 && detail ? (
         <div className={css.gates}>
           {gates.map(gate => <GateCard key={gate.id} gate={gate} detail={detail} t={t} />)}
         </div>
       ) : null}
-    </section>
+    </div>
+  )
+
+  if (detail) return card
+  // 略: the whole detail rides a hover/focus Tooltip on the node.
+  return (
+    <Tooltip label={detailText} side="right" portal maxWidth={360} delayMs={120}>
+      {card}
+    </Tooltip>
   )
 }
 
-/** Join CSS-module names without a clsx dependency (filters dropped keys). */
-const join = (...names: ReadonlyArray<string | undefined>): string =>
-  names.filter((name): name is string => name !== undefined && name !== '').join(' ')
-
 /**
- * The whole projection as ONE process-card flow: one-shot gates card first,
- * then one card per workflow node in pipeline order; the config honesty
- * block rides only 详细.
+ * The whole projection as ONE vertical flow: 接单, the one-shot gate nodes,
+ * the 分类 confirm, the main chain down to 完成, the branch cards, and a
+ * trailing fallback for unanchored gates this client cannot yet place.
  */
 function GatesFlow({ data, mode, t }: {
   data: BafWorkflowGateOverview
@@ -175,59 +302,99 @@ function GatesFlow({ data, mode, t }: {
   const detail = mode === 'detail'
   const stageByNode = new Map(data.stageGates.map(row => [row.node, row]))
   const gatesByNode = new Map<string, BafWorkflowGateConfirmRow[]>()
-  const onceGates: BafWorkflowGateConfirmRow[] = []
-  for (const gate of data.confirmGates) {
-    if (gate.node === undefined) {
-      onceGates.push(gate)
-      continue
-    }
-    const bucket = gatesByNode.get(gate.node)
-    if (bucket === undefined) gatesByNode.set(gate.node, [gate])
+  const addGate = (node: string, gate: BafWorkflowGateConfirmRow): void => {
+    const bucket = gatesByNode.get(node)
+    if (bucket === undefined) gatesByNode.set(node, [gate])
     else bucket.push(gate)
   }
-  // 【变更】2026-10-12 (web 复核): gate-less nodes (intake / archive / drift in
-  // the default config) used to VANISH from the flow — keep every pipeline node.
-  const extraNodes = [...stageByNode.keys(), ...gatesByNode.keys()]
-    .filter(node => !FLOW_ORDER.includes(node))
-  const nodes = [...FLOW_ORDER, ...new Set(extraNodes)]
+  const entryGates: BafWorkflowGateConfirmRow[] = []
+  let classifyGate: BafWorkflowGateConfirmRow | undefined
+  const fallbackGates: BafWorkflowGateConfirmRow[] = []
+  for (const gate of data.confirmGates) {
+    if (gate.node !== undefined) {
+      addGate(gate.node, gate)
+      continue
+    }
+    if (ONCE_ENTRY.includes(gate.id)) {
+      entryGates.push(gate)
+      continue
+    }
+    if (gate.id === 'intake-classify') {
+      classifyGate = gate
+      continue
+    }
+    const anchor = CLIENT_ANCHOR[gate.id]
+    if (anchor !== undefined) {
+      addGate(anchor, gate)
+      continue
+    }
+    fallbackGates.push(gate)
+  }
+  // Registry extras (future nodes the projection learns before this client)
+  // still render — as state cards after 归档, before the 完成 terminal.
+  const known = new Set<string>([...MAIN_CHAIN, 'drift', 'completed', 'abandoned'])
+  const extraNodes = [...stageByNode.keys(), ...gatesByNode.keys()].filter(node => !known.has(node))
+
+  const stateCard = (node: string): ReactNode => (
+    <StateCard
+      node={node}
+      stage={stageByNode.get(node)}
+      gates={gatesByNode.get(node) ?? []}
+      detail={detail}
+      t={t}
+    />
+  )
+
   return (
-    <>
-      {onceGates.length > 0 ? (
-        <section className={css.nodeCard} data-testid="baf-gates-once">
+    <div className={css.flow} data-testid="baf-gates-flow" aria-label={t('gates.canvasAria')}>
+      {stateCard('intake')}
+      {entryGates.map(gate => (
+        <div key={gate.id}>
+          <Connector conditions={undefined} />
+          <GateNodeCard gate={gate} once detail={detail} t={t} />
+        </div>
+      ))}
+      {classifyGate !== undefined ? (
+        <div>
+          <Connector conditions={undefined} />
+          <GateNodeCard gate={classifyGate} once={false} detail={detail} t={t} />
+        </div>
+      ) : null}
+      {MAIN_CHAIN.slice(1).map((node, index) => (
+        <div key={node}>
+          <Connector conditions={detail ? stepConditions(MAIN_CHAIN[index] ?? node, node) : undefined} />
+          {stateCard(node)}
+        </div>
+      ))}
+      {extraNodes.map(node => (
+        <div key={node}>
+          <Connector conditions={undefined} />
+          {stateCard(node)}
+        </div>
+      ))}
+      <div>
+        <Connector conditions={detail ? stepConditions('archive', 'completed') : undefined} />
+        {stateCard('completed')}
+      </div>
+      <section className={css.branch} data-testid="baf-gates-branch">
+        <div className={css.branchTitle}>{t('gates.branchTitle')}</div>
+        <div className={css.branchCards}>
+          {stateCard('drift')}
+          {stateCard('abandoned')}
+        </div>
+      </section>
+      {fallbackGates.length > 0 ? (
+        <section className={css.fallback} data-testid="baf-gates-once">
           <div className={css.nodeHead}>
             <span className={css.nodeName}>{t('gates.onceTitle')}</span>
             <span className={css.nodeHint}>{t('gates.onceHint')}</span>
           </div>
           <div className={css.gates}>
-            {onceGates.map(gate => <GateCard key={gate.id} gate={gate} detail={detail} t={t} />)}
+            {fallbackGates.map(gate => <GateCard key={gate.id} gate={gate} detail={detail} t={t} />)}
           </div>
         </section>
       ) : null}
-      <div className={css.flowCards} data-testid="baf-gates-flow">
-        {nodes.map(node => (
-          <NodeCard
-            key={node}
-            node={node}
-            stage={stageByNode.get(node)}
-            gates={gatesByNode.get(node) ?? []}
-            detail={detail}
-            t={t}
-          />
-        ))}
-      </div>
-      {detail ? (
-        <div className={css.config} data-testid="baf-gates-config">
-          <div className={css.sectionTitle}>{t('gates.configTitle')}</div>
-          <div className={css.sectionHint}>{t('gates.configIntro')}</div>
-          <ul className={css.configList}>
-            <li className={css.mono}>{t('gates.configBaseline')}</li>
-            <li className={css.mono}>{t('gates.configRoute')}</li>
-            <li className={css.mono}>{t('gates.configPresets')}</li>
-          </ul>
-          <div className={css.honesty}>{t('gates.honesty')}</div>
-        </div>
-      ) : null}
-    </>
+    </div>
   )
 }
 
@@ -276,22 +443,22 @@ export function GatesOverviewRow({ loadGateOverview, embeddedInTab, t }: GatesOv
   return (
     <div className={css.block} data-testid="baf-gates-row" data-embedded={embedded ? 'true' : undefined}>
       <div className={css.head}>
-        <div>
-          <div className={css.title}>{t('gates.title')}</div>
-          <div className={css.description}>{t('gates.description')}</div>
-        </div>
+        {/* 【变更】2026-10-18 (工作流确认门 2.1/2.2): the intro paragraph is
+            deleted (the tab title carries the meaning); the density control is
+            the shared `Switch` primitive — the exact control the 轨迹图 row
+            uses, so the two switches on one settings page cannot drift.
+            【变更】2026-10-19 (六问题批 4.2): the labels are 详 / 略. */}
         <div className={css.headActions}>
           {showBody ? (
-            <select
-              className={css.modeSelect}
-              data-testid="baf-gates-mode"
-              aria-label={t('gates.modeAria')}
-              value={mode}
-              onChange={(event) => { setMode(event.currentTarget.value === 'concise' ? 'concise' : 'detail') }}
-            >
-              <option value="detail">{t('gates.modeDetail')}</option>
-              <option value="concise">{t('gates.modeConcise')}</option>
-            </select>
+            <div className={css.modeSwitch}>
+              <span className={css.modeLabel}>{t('gates.modeConcise')}</span>
+              <Switch
+                checked={mode === 'detail'}
+                label={t('gates.modeAria')}
+                onChange={(next) => { setMode(next ? 'detail' : 'concise') }}
+              />
+              <span className={css.modeLabel}>{t('gates.modeDetail')}</span>
+            </div>
           ) : null}
           {embedded ? null : (
             <button type="button" className={css.toggle} data-testid="baf-gates-toggle" onClick={expand}>

@@ -1,0 +1,53 @@
+# SORA baf-standard — C API docs site (committed under docs/api/site/).
+# Soft gate: run via `baf-standard docs-doxygen`. Open with `baf-standard docs-open`.
+# Do NOT set OUTPUT_DIRECTORY to docs/api (would collide with docs/api/README.md).
+# Do NOT use bare `doxygen -g` defaults (those emit repo-root html/ and latex/).
+
+# --- Project ---
+PROJECT_NAME           = "Project"
+PROJECT_BRIEF          = "对外 C API 文档"
+OUTPUT_LANGUAGE        = Chinese
+
+# --- Output (hard contract for docs-doxygen / status) ---
+OUTPUT_DIRECTORY       = docs/api/site
+HTML_OUTPUT            = .
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+
+# --- C-focused extraction ---
+OPTIMIZE_OUTPUT_FOR_C  = YES
+TYPEDEF_HIDES_STRUCT   = YES
+EXTRACT_ALL            = NO
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = NO
+HIDE_UNDOC_MEMBERS     = NO
+JAVADOC_AUTOBRIEF      = YES
+TAB_SIZE               = 4
+
+# --- Input ---
+INPUT                  = .
+FILE_PATTERNS          = *.c *.h *.dox
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */vendor/* */third_party/* */ThirdParty/* \
+                         */CMSIS/* */HAL/* */RTOS/* \
+                         */build/* */Build/* */out/* */.git/* \
+                         */docs/api/site/* */test/* */tests/* \
+                         */ceedling/* */unity/* */html/* */latex/*
+
+# --- HTML UX (browse / search / source; keep site lean) ---
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+FULL_PATH_NAMES        = NO
+DISABLE_INDEX          = NO
+
+# --- Warnings (soft; warn-as-error is P2) ---
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+QUIET                  = YES
+
+# --- Graphs (optional; needs Graphviz `dot` on PATH) ---
+HAVE_DOT               = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO

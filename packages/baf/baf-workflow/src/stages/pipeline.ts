@@ -72,6 +72,12 @@ import {
   type EscalateOptions,
   type EscalateStageResult,
 } from './escalate.ts'
+import {
+  NODE_LABELS_ZH,
+  planNodeHooks,
+  runNodeHooks,
+  type QualityExecutor,
+} from '../node-hooks.ts'
 
 /** Options for {@link StagePipeline}. */
 export interface StagePipelineOptions {
@@ -86,6 +92,10 @@ export interface StagePipelineOptions {
   readonly stack?: StackAdapter
   /** Phase 7 guard policy (wired rows gate verify). */
   readonly guard?: GuardPolicy
+  /** 【变更】2026-10-19 (六问题批 4.1b): node-hooks executor override (tests). */
+  readonly hookExecutor?: QualityExecutor
+  /** Per-hook-script timeout; defaults to DEFAULT_HOOK_TIMEOUT_MS. */
+  readonly hookTimeoutMs?: number
 }
 
 /** Result of {@link StagePipeline.driveDriftStage}. */
@@ -134,6 +144,8 @@ export type DriveResult =
 export class StagePipeline {
   private readonly store: ProjectionStore
   private readonly ctx: StageContext
+  private readonly hookExecutor: QualityExecutor | undefined
+  private readonly hookTimeoutMs: number | undefined
 
   constructor(options: StagePipelineOptions) {
     this.store = options.store
@@ -150,6 +162,8 @@ export class StagePipeline {
       ...(options.stack === undefined ? {} : { stack: options.stack }),
       ...(options.guard === undefined ? {} : { guard: options.guard }),
     })
+    this.hookExecutor = options.hookExecutor
+    this.hookTimeoutMs = options.hookTimeoutMs
   }
 
   /**
@@ -836,6 +850,36 @@ export class StagePipeline {
         ? null
         : status.current
       assertTransitionAccepted(decision, from, to)
+    }
+    // 【变更】2026-10-19 (六问题批 4.1b): node hooks — exit(from)+enter(to)
+    // scripts must pass BEFORE the stage-entered event is recorded, so a
+    // failing script leaves the change on the previous node with only a
+    // transition-rejected audit trail (same shape as a gate refusal).
+    const hookPlan = planNodeHooks(status, to, this.ctx.baseline)
+    if (hookPlan.length > 0) {
+      const outcome = await runNodeHooks(hookPlan, {
+        workspaceRoot: this.ctx.workspace.root,
+        ...(this.hookExecutor === undefined ? {} : { executor: this.hookExecutor }),
+        ...(this.hookTimeoutMs === undefined ? {} : { timeoutMs: this.hookTimeoutMs }),
+      })
+      const failure = outcome.failure
+      if (failure !== undefined) {
+        await this.recordRejection(changeId, status, to, 'node_hook_failed')
+        throw new BafError(
+          'node_hook_failed',
+          `${failure.kind === 'exit' ? '退出' : '进入'}「${NODE_LABELS_ZH[failure.node]}」状态的脚本未通过：${failure.entry}`
+            + `（${failure.reasonCode === 'timeout' ? '超时' : failure.reasonCode === 'cancelled' ? '已取消' : failure.reasonCode === 'spawn_error' ? '无法启动脚本' : `退出码 ${String(failure.exitCode)}`}）`,
+          {
+            changeId,
+            node: failure.node,
+            kind: failure.kind,
+            entry: failure.entry,
+            reasonCode: failure.reasonCode,
+            exitCode: failure.exitCode,
+            output: failure.output,
+          },
+        )
+      }
     }
     const { status: next } = await this.store.append(changeId, status.projectionVersion, meta => ({
       type: 'stage-entered',

@@ -33,6 +33,11 @@ async function setup(
 ) {
   const root = await mkdtemp(join(tmpdir(), 'baf-stage-'))
   const store = new ProjectionStore({ workspaceRoot: root })
+  // 方案乙 status-blockers gate: verify re-reads the baseline FROM DISK — a
+  // real scaffolded workspace always carries one, so the harness writes the
+  // fixture next to the projection instead of holding it in memory only.
+  await mkdir(join(root, '.baf'), { recursive: true })
+  await writeFile(join(root, '.baf', 'baseline.yml'), await readFile(FIXTURE_BASELINE, 'utf8'), 'utf8')
   const baseline = await loadBaselineFile(FIXTURE_BASELINE)
   const gitRevision = options.withGit === false ? undefined : (options.gitRevision ?? 'rev-1')
   const pipeline = new StagePipeline({

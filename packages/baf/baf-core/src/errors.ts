@@ -24,6 +24,8 @@ export const BAF_ERROR_CODES = [
   'scope_exceeded',
   'writer_conflict',
   'gate_confirmation_required',
+  // 【变更】2026-10-19 (六问题批 4.1b): enterStage 上 node hooks 脚本未通过。
+  'node_hook_failed',
 ] as const
 
 /** One stable BAF error code. */

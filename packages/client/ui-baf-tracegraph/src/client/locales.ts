@@ -241,7 +241,7 @@ export const zhWorkflow: Record<WorkflowKey, string> = {
   'tabs.aria': '工作流设置分类',
   'tabs.general': '通用',
   'tabs.project': '项目工程',
-  'tabs.gates': '工作流确认门',
+  'tabs.gates': '确认门',
   'tabs.standard': '企业规范',
   'tabs.quality': '质量监控',
   'traceGraph.title': '轨迹图',

@@ -141,6 +141,7 @@ const HELP_CORE = [
   '/baf-welcome        启动检查：工作区状态 + 环境体检 · ★★',
   '/baf-gate           重新弹出确认卡（如初始化确认） · ★★',
   '/baf-scaffold       初始化工作区（缺配置时用它） · ★★',
+  '/baf-standard-init  迁入企业规范资产（clang-format/commitlint/UT…） · ★★',
   '/baf-status         查看当前变更：模式/阶段/分类 · ★★★',
   '/baf-version        查看桌面/插件版本（对齐设置页） · ★',
   '/baf-doctor         工作流自检：工作区/环境/注册 · ★',
@@ -695,11 +696,86 @@ export function apply(ctx: Context): void {
         return guardedDrive('/baf-scaffold', () => driveScaffold(cwd, { scaffold: { scaffold: opts => scaffold.scaffold(opts) } }, baselineId))
       },
     }),
+    ctx.commands.register({
+      name: 'baf-standard-init',
+      description: '迁入企业规范资产（clang-format/commitlint/UT…） · ★★',
+      handler: async ({ agent, rawInput }: SlashHandlerArgs): Promise<CommandResult> => {
+        const cwd = agent.session.header.cwd
+        if (cwd === undefined || cwd === '') return missingCwd('/baf-standard-init')
+        const standard = resolveIsolateService<{
+          applyEnterprise(options: {
+            readonly workspaceRoot: string
+            readonly packs?: readonly string[]
+            readonly pinStack?: boolean
+          }): {
+            readonly created: readonly string[]
+            readonly skipped: readonly string[]
+            readonly backedUp: readonly string[]
+            readonly stackPinned: boolean
+          }
+        }>(ctx, agent, 'bafStandard')
+        if (standard === undefined) {
+          return {
+            kind: 'error',
+            text: formatCommandReport(false, '迁入企业规范资产 · ★★', [
+              { title: '原因', lines: ['baf-standard 服务没有加载到当前会话'] },
+              { title: '处理', lines: ['请在设置里启用 BAF 工作流预设后，重新打开本会话再试'] },
+            ]),
+          }
+        }
+        const packs = parseStandardInitPacks(rawInput)
+        return guardedDrive('/baf-standard-init', async () => {
+          const changes = standard.applyEnterprise({
+            workspaceRoot: cwd,
+            ...(packs === undefined ? {} : { packs }),
+            pinStack: true,
+          })
+          const lines = [
+            `新建 ${String(changes.created.length)} · 跳过 ${String(changes.skipped.length)} · 备份 ${String(changes.backedUp.length)}`,
+            changes.stackPinned ? '已钉扎 baseline.stack → Ceedling / cpplint / cppcheck' : '未改 baseline.stack（已是钉扎值或无基线）',
+          ]
+          if (changes.created.length > 0) {
+            lines.push(`新建：${changes.created.slice(0, 12).join(', ')}${changes.created.length > 12 ? '…' : ''}`)
+          }
+          return {
+            kind: 'success',
+            text: formatCommandReport(true, '企业规范资产已写入工作区', [
+              { title: '结果', lines },
+              {
+                title: '下一步',
+                lines: [
+                  '本机安装 clang-format / ceedling / cpplint / cppcheck / @commitlint/cli',
+                  'verify 会跑 collectStatusBlockers；也可看设置→工作流→企业规范',
+                ],
+              },
+            ]),
+          }
+        })
+      },
+    }),
   ]
 
   ctx.effect(() => () => {
     for (const off of offs) off()
   }, 'baf-commands: unregister')
+}
+
+/**
+ * Parse `/baf-standard-init` pack list (`c,commitlint` or empty = all).
+ * @param raw - slash raw input.
+ * @returns pack ids, or undefined for default-all.
+ */
+function parseStandardInitPacks(raw: string): readonly ('c' | 'commitlint' | 'constitution' | 'quality' | 'scripts' | 'skills')[] | undefined {
+  const trimmed = raw.trim()
+  if (trimmed === '') return undefined
+  const allowed = new Set(['c', 'commitlint', 'constitution', 'quality', 'scripts', 'skills'] as const)
+  const packs = trimmed.split(/[\s,]+/).map(part => part.trim()).filter(part => part !== '')
+  const out: Array<'c' | 'commitlint' | 'constitution' | 'quality' | 'scripts' | 'skills'> = []
+  for (const pack of packs) {
+    if (!allowed.has(pack as typeof out[number])) continue
+    out.push(pack as typeof out[number])
+  }
+  return out.length === 0 ? undefined : out
 }
 
 /** Standard missing-cwd error card for any /baf-* drive. */

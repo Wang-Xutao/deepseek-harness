@@ -1,8 +1,10 @@
 /**
  * 多模型路由 M3 批次C — the 工作流 Tab「当前路由」row: one chip per audited
  * phase (tier·model + 回落/词/失败 badges), nothing at all when routing is off
- * (M3 验收: enabled=false 与今天一致). Preferred-only phases stay silent — the
- * row answers "which model served each phase, and did it fall back".
+ * (M3 验收: enabled=false 与今天一致) or when Auto has not engaged (pinned
+ * session model — 2026-10-19 六问题批 问题 2: no「未接管」explanation either).
+ * Preferred-only phases stay silent — the row answers "which model served each
+ * phase, and did it fall back".
  */
 import type { WorkflowTabKey } from './locales.ts'
 import type { RouteTier, WorkflowTabRouteStatus } from './tab-types.ts'
@@ -46,20 +48,18 @@ export function routeBadgeText(
 export function RouteStatusRow({ status, t }: RouteStatusRowProps): React.ReactElement | null {
   if (status.state !== 'routed') return null
   const audited = status.phases.filter(row => row.actual !== undefined)
-  // 【变更】2026-10-07 (九点批 问题 5): an empty row now says WHY it is empty —
-  // Auto engaged (audits fill in as dispatches happen) vs. a session pinned
-  // to a concrete model (routing never engages at all). The bare
-  // 「暂无派单路由」survives only when the log proves no model either.
-  const emptyText = status.sessionModel?.auto === true
-    ? t('route.noneAuto')
-    : status.sessionModel !== undefined
-      ? `${t('route.nonePinnedPre')}${status.sessionModel.model}${t('route.nonePinnedPost')}`
-      : t('route.none')
+  // 【变更】2026-10-19 (六问题批 问题 2): an empty row renders ONLY when Auto is
+  // actually engaged (「Auto 已接管 · 等待首次派单」— the positive signal that
+  // dispatches will fill in). A session pinned to a concrete model — or one
+  // whose model the log cannot prove — is not using auto routing at all, and
+  // the old「会话当前模型 … 自动路由未接管」explanation is noise there: the row
+  // (label included) is gone entirely, matching routing-off's silence.
+  if (audited.length === 0 && status.sessionModel?.auto !== true) return null
   return (
     <div className={css.row} data-testid="route-status">
       <span className={css.label}>{t('route.title')}</span>
       {audited.length === 0
-        ? <span className={css.muted} data-testid="route-empty">{emptyText}</span>
+        ? <span className={css.muted} data-testid="route-empty">{t('route.noneAuto')}</span>
         : audited.map((row) => {
           const actual = row.actual
           if (actual === undefined) return undefined

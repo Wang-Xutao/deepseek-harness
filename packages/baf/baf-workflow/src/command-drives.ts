@@ -104,6 +104,8 @@ function resolveChange(index: IndexShape, explicit?: string): ChangeResolution {
  */
 const ERROR_REMEDIES: Partial<Record<string, string>> = {
   git_unavailable: '在工作区目录初始化仓库并提交一次（git init && git add -A && git commit -m "init"），或按 /baf-welcome 环境体检卡的指引处理；完成后输入 /baf-go 重试推进',
+  // 【变更】2026-10-19 (六问题批 4.1b): node hooks 卡点失败的处理行。
+  node_hook_failed: '查看原因里脚本的输出，修好脚本（或让它以退出码 0 结束）后在 设置→工作流→项目工程 调整「状态脚本」配置，然后重试推进',
 }
 
 /**
@@ -170,6 +172,7 @@ function translateErrorCode(code: string): string {
     case 'scope_exceeded': return '改动超出了允许范围'
     case 'verify_required': return '必须先完成验证阶段'
     case 'writer_conflict': return '其他进程正在写入同一变更'
+    case 'node_hook_failed': return '状态脚本未通过，流程停在原状态'
     default: return '执行失败'
   }
 }

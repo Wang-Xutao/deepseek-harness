@@ -149,3 +149,65 @@ properties:
         items:
           type: string
           enum: [scaffold, archive, abandon]
+  userOverridePolicy:
+    description: >
+      Enterprise map of which workspace prefs may be customized in the A
+      settings surface and override baseline values. Omitted → product defaults
+      (bugFixPath allowed/maxScope, coverage.minimum, projectionGitignore,
+      verifyNotes, changeSlugPrefix all true).
+    type: object
+    additionalProperties: false
+    required:
+      - bugFixPathAllowed
+      - bugFixPathMaxScope
+      - coverageMinimum
+      - projectionGitignore
+      - verifyNotes
+      - changeSlugPrefix
+    properties:
+      bugFixPathAllowed:
+        type: boolean
+      bugFixPathMaxScope:
+        type: boolean
+      coverageMinimum:
+        type: boolean
+      projectionGitignore:
+        type: boolean
+      verifyNotes:
+        type: boolean
+      changeSlugPrefix:
+        type: boolean
+  hooks:
+    description: >
+      [2026-10-19] Per-node custom scripts. enter runs when the workflow
+      enters the state (a failure blocks the transition); exit must pass
+      before the state may advance forward. Scripts are workspace-relative
+      file paths run through the shell (.sh via sh, .ps1 via powershell,
+      .js/.mjs/.cjs via node). Omitted block or empty list = no hook; the
+      scaffold never writes this block (the settings UI owns it).
+    type: object
+    additionalProperties: false
+    required: [nodes]
+    properties:
+      nodes:
+        type: object
+        propertyNames:
+          enum: [intake, open, clarify, design, plan, implement, verify, archive, drift]
+        additionalProperties: false
+        properties:
+          intake: &nodeHook
+            type: object
+            additionalProperties: false
+            properties:
+              enter: &scriptList
+                type: array
+                items: { type: string, minLength: 1 }
+              exit: *scriptList
+          open: *nodeHook
+          clarify: *nodeHook
+          design: *nodeHook
+          plan: *nodeHook
+          implement: *nodeHook
+          verify: *nodeHook
+          archive: *nodeHook
+          drift: *nodeHook

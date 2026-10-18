@@ -4,7 +4,7 @@
  * (§12 Phase 6 acceptance).
  */
 
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +27,9 @@ const FIX_FILE = 'src/parser.c'
 async function setupBugFixPath(options: { readonly withGit?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'baf-bug-fix-path-'))
   const store = new ProjectionStore({ workspaceRoot: root })
+  // 方案乙 status-blockers gate reads the baseline from disk (see stages.spec).
+  await mkdir(join(root, '.baf'), { recursive: true })
+  await writeFile(join(root, '.baf', 'baseline.yml'), await readFile(FIXTURE_BASELINE, 'utf8'), 'utf8')
   const baseline = await loadBaselineFile(FIXTURE_BASELINE)
   const gitRevision = options.withGit === false ? undefined : 'rev-fp-1'
   const pipeline = new StagePipeline({

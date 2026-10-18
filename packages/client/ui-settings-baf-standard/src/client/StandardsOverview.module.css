@@ -1,5 +1,6 @@
 /* BAF 工程规范 overview row chrome (2026-10-06 问题 6: 规范总览·只读).
- * Read-only by design: no inputs, no toggles — tables and text only. */
+ * 【变更】2026-10-18 (项目工程 1.1–1.3): the ONE input surface is the AI 禁改
+ * path card — everything else stays tables and text. */
 
 .block {
   padding: 16px 0;
@@ -328,4 +329,295 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
+}
+
+/* 【变更】2026-10-18 (项目工程 1.1–1.3): clickable path rows + AI 禁改路径 card. */
+
+.pathRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pathLabel {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.pathValueButton {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  word-break: break-all;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.pathValueButton:hover {
+  color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
+}
+
+.pathActions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.miniButton {
+  height: 22px;
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 11px;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.miniButton:hover:not(:disabled) {
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  color: var(--dsw-alias-label-primary);
+}
+
+.protectedList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.protectedRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.protectedEditor {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.protectedEmpty {
+  margin-top: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.addInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.addInput:focus-visible {
+  outline: none;
+  border-color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
+}
+
+.protectedFoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.saveButton {
+  flex: none;
+  height: 26px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 13px;
+  background: var(--dsw-alias-bg-module-platform);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.saveButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.saveButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hookLine {
+  flex: 1 1 auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* 【变更】2026-10-19 (六问题批 4.1): the two standalone readonly config rows
+ * (项目路径 / 配置文件) — label-over-mono-value in the 轨迹图 row style; the
+ * value itself is the click target (no copy/open buttons). */
+
+.configRow {
+  margin-top: 10px;
+}
+
+.configLabel {
+  display: block;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.configValue {
+  display: block;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  word-break: break-all;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.configValue:hover {
+  color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
+}
+
+/* 【变更】2026-10-19 (六问题批 4.1): the no-baseline error + 生成配置文件 row. */
+
+.generateRow {
+  margin-top: 12px;
+}
+
+.generateRow .statusError {
+  margin-top: 0;
+}
+
+.generateRow .saveButton {
+  margin-top: 8px;
+}
+
+/* 【变更】2026-10-19 (六问题批 4.1b): the 状态脚本 card — a vertical main-chain
+ * workflow graph, one row per node, enter/exit script lists under each. */
+
+.hooksGraph {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+.hooksNodeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+
+.hooksConnector {
+  width: 0;
+  height: 12px;
+  margin-left: 24px;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+}
+
+.hooksNodeHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.hooksNodeLabel {
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.hooksNodeId {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.hooksLists {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hooksKindRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hooksKind {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.hooksEntries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hooksEntryRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.hooksEntryPath {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  word-break: break-all;
+}
+
+.hooksEmpty {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
 }

@@ -49,7 +49,10 @@ import {
 import { driveGo } from './go-coordinator.ts'
 import { renderGate } from './gate-cards.ts'
 import { focusFor } from './session-focus.ts'
-import { probeMountFlags, probeToolchain, renderProbeLines, renderWelcomeCard, resolveScaffoldService, resolveStartupBinding } from './session-gate.ts'
+import {
+  probeMountFlags, probeToolchain, renderProbeLines, renderWelcomeCard,
+  resolveIsolateService, resolveScaffoldService, resolveStartupBinding,
+} from './session-gate.ts'
 import { ProjectionStore, resolveActiveChange } from './projection.ts'
 import { resolveBafProductVersions } from './product-versions.ts'
 import { runUpdate, runUpdateRollback } from './update-surface.ts'
@@ -94,6 +97,7 @@ const SLASH_DESC: Record<string, string> = {
   '/baf-update': '检查并升级桌面（有更新时弹窗选择） · ★',
   '/baf-update-rollback': '回滚上次升级（plugin/runtime，默认 plugin） · ★',
   '/baf-scaffold': '初始化工作区（缺配置时用它） · ★★',
+  '/baf-standard-init': '迁入企业规范资产（clang-format/commitlint/UT…） · ★★',
 }
 
 /**
@@ -118,6 +122,7 @@ const HELP_CORE = [
   'baf welcome    启动检查：工作区状态 + 环境体检 · ★★',
   'baf gate       重新弹出确认卡（如初始化确认） · ★★',
   'baf scaffold   初始化工作区（缺配置时用它） · ★★',
+  'baf standard-init  迁入企业规范资产（clang-format/commitlint/UT…） · ★★',
   'baf status     查看当前变更：模式/阶段/分类 · ★★★',
   'baf version    查看桌面/插件版本（对齐设置页） · ★',
   'baf doctor     工作流自检：工作区/环境/注册 · ★',
@@ -340,6 +345,54 @@ export function buildBafProgram(): Command {
         scaffold: { scaffold: opts => scaffoldService.scaffold(opts) },
       }, baselineId ?? 'baf-baseline-init'))
       emit(r.ok, r.text, r.ok ? 0 : 1)
+    })
+
+  program.command('standard-init')
+    .description(`${slashDesc('/baf-standard-init')}（与 /baf-standard-init 同源）`)
+    .argument('[packs]', 'optional pack list: c,commitlint,constitution,quality,scripts,skills')
+    .action(async (packsRaw: string | undefined) => {
+      const opts = program.opts<{ cwd?: string }>()
+      const cwd = readCwd(opts)
+      if (cwd === undefined) fromDrive(missingCwd('baf standard-init'))
+      const ctx = getCtx()
+      const standard = ctx === undefined
+        ? undefined
+        : resolveIsolateService<{
+          applyEnterprise(options: {
+            readonly workspaceRoot: string
+            readonly packs?: readonly string[]
+            readonly pinStack?: boolean
+          }): {
+            readonly created: readonly string[]
+            readonly skipped: readonly string[]
+            readonly backedUp: readonly string[]
+            readonly stackPinned: boolean
+          }
+        }>(ctx, cliAgentRealm(ctx), 'bafStandard')
+      if (standard === undefined) {
+        emit(false, formatCommandReport(false, cardTitle('/baf-standard-init', '标准服务没有加载'), [
+          { title: '原因', lines: ['baf-standard 服务没有加载到当前会话'] },
+          { title: '处理', lines: ['请在设置里启用 BAF 工作流预设后重试'] },
+        ]) + '\n', 1)
+        return
+      }
+      const packs = (packsRaw ?? '').trim() === ''
+        ? undefined
+        : (packsRaw ?? '').split(/[\s,]+/).map(part => part.trim()).filter(part => part !== '')
+      const changes = standard.applyEnterprise({
+        workspaceRoot: cwd,
+        ...(packs === undefined || packs.length === 0 ? {} : { packs }),
+        pinStack: true,
+      })
+      emit(true, formatCommandReport(true, cardTitle('/baf-standard-init', '完成'), [
+        {
+          title: '结果',
+          lines: [
+            `新建 ${String(changes.created.length)} · 跳过 ${String(changes.skipped.length)} · 备份 ${String(changes.backedUp.length)}`,
+            changes.stackPinned ? '已钉扎 baseline.stack' : '未改 baseline.stack',
+          ],
+        },
+      ]) + '\n', 0)
     })
 
   program.command('doctor')

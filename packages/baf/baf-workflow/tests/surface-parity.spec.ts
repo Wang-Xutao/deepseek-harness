@@ -62,6 +62,9 @@ const SLASH_NAMES = [
   'baf-list',
   'baf-doctor',
   'baf-scaffold',
+  // 方案乙: enterprise asset migration — CLI-/slash-direct like scaffold's
+  // update surfaces (talks to the bafStandard service, not a stage drive).
+  'baf-standard-init',
   'baf-workflow-open',
   'baf-workflow-classify',
   'baf-workflow-clarify',
@@ -157,7 +160,7 @@ describe('BAF surface parity (Phase 8.5)', () => {
     // the coordinator's chaining never looks like a transition of its own.
     // It composes drives; it owns none.
     const cliSubcommandSet = new Set(CLI_NAMES)
-    const direct = new Set(['list', 'help', 'version', 'doctor', 'status', 'welcome', 'gate', 'go', 'go-confirm', 'update', 'update-rollback'])
+    const direct = new Set(['list', 'help', 'version', 'doctor', 'status', 'welcome', 'gate', 'go', 'go-confirm', 'update', 'update-rollback', 'standard-init'])
     for (const sub of CLI_NAMES) {
       const slash = `baf-${sub}`
       const isDirect = direct.has(sub)
