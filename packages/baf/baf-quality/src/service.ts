@@ -6,6 +6,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import type { StackAdapter } from '@deepseek-ai/dsh-baf-core'
 import { createCStackAdapter, type CStackAdapterOptions } from './runner.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -42,7 +43,7 @@ export class BafQuality extends Service {
    * @param options - timeout/executor overrides (tests).
    * @returns a StackAdapter backed by the QualityRunner.
    */
-  adapter(options: CStackAdapterOptions = {}) {
+  adapter(options: CStackAdapterOptions = {}): StackAdapter {
     return createCStackAdapter({ timeoutMs: this.checkTimeoutMs, ...options })
   }
 

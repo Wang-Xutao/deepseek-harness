@@ -179,6 +179,11 @@ function harness(state: RouteSectionState) {
     ...actions,
     t: t as never,
     useRouteSection: useStore(hooks.routeSection),
+    // master's remote/session/workspace access hooks became required props;
+    // these specs exercise routing/standards faces, so open access stubs.
+    useRemoteAccess: () => true,
+    useSessionAccess: () => true,
+    useWorkspaceAccess: () => true,
   }
   return { store, face, props }
 }

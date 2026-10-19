@@ -22,10 +22,11 @@
  */
 
 import { stat } from 'node:fs/promises'
-import { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import { evaluate } from '@deepseek-ai/cordis-plugin-loader'
 import z from '@deepseek-ai/schemastery'
-import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { Service } from '@deepseek-ai/cordis'
+import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { bindScopeParent, createScope, scopeOf, type Scope, type ScopeKey, type ScopeParentBinding } from '@deepseek-ai/dsh-scope'
 // Type-only: resolves the `agent/created` lifecycle event this service watches.
 import type {} from '@deepseek-ai/dsh-agent'
@@ -105,7 +106,7 @@ declare module '@deepseek-ai/cordis' {
  * call so a preset authored while the process runs is visible immediately,
  * and a preset deleted underneath a picker disappears from the next read.
  */
-export class AgentPresets extends TypertRemoteService {
+export class AgentPresets extends Service {
   static inject = ['loader', 'sessionProjections']
 
   /** Runtime schema for the preset roster. */
@@ -267,7 +268,9 @@ export class AgentPresets extends TypertRemoteService {
    * capability, not a roster property — a caller needing both joins them.
    * @returns the rows and the authoring capability.
    */
-  @Remote('list')
+  // baf: endpoint surface removed post-merge — master's dsh-agent-preset-registry
+  // owns agentPresets/*; this package is a presets/ data carrier with no lib
+  // consumers (was @Remote'list')
   async remoteExportList(): Promise<AgentPresetRoster> {
     const defaultId = this.defaultId
     return {
@@ -520,7 +523,9 @@ export class AgentPresets extends TypertRemoteService {
    * @throws {RemoteError} `gateway/bad-request` for an empty id, or
    * `agent-preset/not-found` when no configured root supplies it.
    */
-  @Remote('read')
+  // baf: endpoint surface removed post-merge — master's dsh-agent-preset-registry
+  // owns agentPresets/*; this package is a presets/ data carrier with no lib
+  // consumers (was @Remote'read')
   async readDocument(agentPreset: string): Promise<AgentPresetDocument> {
     validatePresetId(agentPreset, 'agentPreset')
     const preset = await this.resolve(agentPreset)
@@ -572,7 +577,9 @@ export class AgentPresets extends TypertRemoteService {
    * @throws {RemoteError} with the corresponding stable preset code and
    * details when the copy is refused.
    */
-  @Remote('copy')
+  // baf: endpoint surface removed post-merge — master's dsh-agent-preset-registry
+  // owns agentPresets/*; this package is a presets/ data carrier with no lib
+  // consumers (was @Remote'copy')
   async remoteExportCopy(from: string, id: string, name?: string): Promise<void> {
     validatePresetId(from, 'from')
     validatePresetId(id, 'agentPreset')
@@ -610,7 +617,9 @@ export class AgentPresets extends TypertRemoteService {
    * @throws {RemoteError} with the corresponding stable preset code and
    * details when deletion is refused.
    */
-  @Remote('deletePreset')
+  // baf: endpoint surface removed post-merge — master's dsh-agent-preset-registry
+  // owns agentPresets/*; this package is a presets/ data carrier with no lib
+  // consumers (was @Remote'deletePreset')
   async remoteExportDelete(id: string): Promise<void> {
     validatePresetId(id, 'agentPreset')
     await this.remove(id)
@@ -702,7 +711,9 @@ export class AgentPresets extends TypertRemoteService {
    * @throws {RemoteError} with `gateway/bad-request`, `agent-preset/locked`,
    * `agent-preset/not-found`, or `agent-preset/invalid` when refused.
    */
-  @Remote('select')
+  // baf: endpoint surface removed post-merge — master's dsh-agent-preset-registry
+  // owns agentPresets/*; this package is a presets/ data carrier with no lib
+  // consumers (was @Remote'select')
   async select(agent: Agent, agentPreset: string): Promise<string> {
     validatePresetId(agentPreset, 'agentPreset')
     const queued = this.switches.get(agent.id) ?? Promise.resolve()

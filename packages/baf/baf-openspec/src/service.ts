@@ -6,6 +6,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import type { OpenSpecAdapter } from '@deepseek-ai/dsh-baf-core'
 import { createLocalOpenSpecAdapter, type LocalOpenSpecAdapterOptions } from './adapter.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -34,7 +35,7 @@ export class BafOpenspec extends Service {
    * @param options - workspace binding.
    * @returns adapter instance.
    */
-  adapter(options: LocalOpenSpecAdapterOptions) {
+  adapter(options: LocalOpenSpecAdapterOptions): OpenSpecAdapter {
     return createLocalOpenSpecAdapter(options)
   }
 

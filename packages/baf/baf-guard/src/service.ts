@@ -14,6 +14,7 @@ import type { GuardInput, GuardPolicy, GuardReport } from '@deepseek-ai/dsh-baf-
 import { adjudicateStructuralPath, scanTextSecrets } from './policy.ts'
 import { loadGuardConfig } from './projection-state.ts'
 import { createBafToolGuard, type BafToolGuardOptions } from './tool-guard.ts'
+import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -83,7 +84,7 @@ export class BafGuard extends Service {
    * @param options - workspace binding and test source overrides.
    * @returns ToolGuard returning denial strings.
    */
-  toolGuard(options: BafToolGuardOptions) {
+  toolGuard(options: BafToolGuardOptions): (execution: Readonly<ToolExecution>) => string | undefined {
     return createBafToolGuard(options)
   }
 

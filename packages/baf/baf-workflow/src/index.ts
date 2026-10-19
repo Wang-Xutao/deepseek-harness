@@ -16,6 +16,7 @@ import z from '@deepseek-ai/schemastery'
 // Type-only: the ctx.settings Context merge (SettingsForms) this plugin's
 // Config participates in.
 import type {} from '@deepseek-ai/dsh-settings'
+import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import {
   BafError,
   buildRouteStatusView,
@@ -30,6 +31,7 @@ import {
   type StackAdapter,
   type WorkflowNode,
   type WorkflowService,
+  type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { resolveRoute } from './route.ts'
@@ -311,7 +313,7 @@ export class BafWorkflow extends Service {
    * @param changeId - change id.
    * @returns updated status.
    */
-  async confirmIntake(changeId: string) {
+  async confirmIntake(changeId: string): Promise<WorkflowStatus> {
     const store = this.requireStore()
     return confirmIntake(store, changeId, 'user')
   }
@@ -321,7 +323,7 @@ export class BafWorkflow extends Service {
    * @param changeId - change id.
    * @returns updated status.
    */
-  async rejectIntake(changeId: string) {
+  async rejectIntake(changeId: string): Promise<WorkflowStatus> {
     const store = this.requireStore()
     return rejectIntake(store, changeId)
   }
@@ -471,7 +473,7 @@ export class BafWorkflow extends Service {
    * @param resolution - resolveRoute result.
    * @returns model selection.
    */
-  selectionForTurn(resolution: RouteResolution) {
+  selectionForTurn(resolution: RouteResolution): ModelSelection {
     return toModelSelection(resolution)
   }
 
@@ -480,7 +482,7 @@ export class BafWorkflow extends Service {
    * @param resolution - resolveRoute result.
    * @returns provider/model options.
    */
-  workerAgentOptions(resolution: RouteResolution) {
+  workerAgentOptions(resolution: RouteResolution): { provider: string; model: string } {
     return toWorkflowAgentOptions(resolution)
   }
 

@@ -67,7 +67,12 @@
     "packages/client/ui-sidebar-textpreview",
     // Baf-modified packages whose tests reference APIs master removed
     // or whose src files aren't listed in the package's tsconfig.
-    // - ui-conversation/chat-apply: 'conversation.hero.brand.trailing' slot
+    // - ui-conversation: chat-apply (stubSettingsScope + slot renames) and
+    //   conversation-registry (ensureOpen gone from ISessions) still target the
+    //   pre-merge API; the rest of the directory (incl. the shared
+    //   user-text-component-fixture master's ui-chat tests import) compiles.
+    "packages/client/ui-conversation/tests/chat-apply.client.spec.tsx",
+    "packages/client/ui-conversation/tests/conversation-registry.client.spec.ts",
     // - ui-deliverables: stubSettingsScope export gone, present-open.ts not listed
     // - ui-settings-updates: baf-only, not in master's build graph
     // - ui-settings-featured-plugins: baf-only, same reason
@@ -75,7 +80,6 @@
     // - ui-open-in-app: 'deliverables.file.actions' slot added by baf
     // - ui-sidebar-files: src/client/definition.tsx not listed
     // - connection: broken fixture, RpcFetch signature mismatch
-    "packages/client/ui-conversation/tests/**",
     "packages/client/ui-deliverables/**",
     "packages/client/ui-settings-updates/**",
     "packages/client/ui-settings-featured-plugins/**",
