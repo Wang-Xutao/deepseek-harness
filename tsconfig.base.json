@@ -263,6 +263,7 @@
       "@deepseek-ai/dsh-baf-featured/types": ["./packages/baf/baf-featured/src/types.ts"],
       "@deepseek-ai/dsh-baf-guard": ["./packages/baf/baf-guard/src"],
       "@deepseek-ai/dsh-baf-guard/install": ["./packages/baf/baf-guard/src/install.ts"],
+      "@deepseek-ai/dsh-baf-guard/commit-hook": ["./packages/baf/baf-guard/src/commit-hook.ts"],
       "@deepseek-ai/dsh-baf-openspec": ["./packages/baf/baf-openspec/src"],
       "@deepseek-ai/dsh-baf-quality": ["./packages/baf/baf-quality/src"],
       "@deepseek-ai/dsh-baf-scaffold": ["./packages/baf/baf-scaffold/src"],
