@@ -45,6 +45,13 @@ export const zh = {
   'desktopLaunch.title': '开机自启动',
   'desktopLaunch.description': '开启后，开机时在后台自动启动并最小化到托盘，不显示启动画面',
   'desktopLaunch.error': '设置开机自启动失败，请重试',
+  'hostRelease.title': '服务版本变化',
+  'hostRelease.description': '服务版本已变化，本页面已暂停热更新，刷新后加载新版本。',
+  'hostRelease.service': '服务',
+  'hostRelease.page': '页面',
+  'hostRelease.unknown': '未解析',
+  'hostRelease.reload': '刷新以加载新版本',
+  'hostRelease.later': '暂不刷新',
 } satisfies Record<string, string>
 
 /** The settings namespace key union. */
@@ -95,4 +102,11 @@ export const en = {
   'desktopLaunch.title': 'Launch at startup',
   'desktopLaunch.description': 'Start in the background at login, minimized to the tray, without the splash screen',
   'desktopLaunch.error': 'Could not set launch at startup, try again',
+  'hostRelease.title': 'Service version changed',
+  'hostRelease.description': 'The service version changed. This page paused live updates; reload to load the new version.',
+  'hostRelease.service': 'Service',
+  'hostRelease.page': 'Page',
+  'hostRelease.unknown': 'Unknown',
+  'hostRelease.reload': 'Reload to load the new version',
+  'hostRelease.later': 'Not now',
 } satisfies Record<SettingsKey, string>

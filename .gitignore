@@ -47,6 +47,7 @@ apps/web/.*.mjs
 logs/
 .artifacts/
 .dsh-build/
+.dsh-report/
 .playwright-mcp/
 .orig
 .worktrees/
