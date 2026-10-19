@@ -735,8 +735,8 @@ describe('StandardsProjectOverview · no-baseline 生成配置文件 (六问题�
   })
 })
 
-describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (六问题批 4.1b)', () => {
-  it('renders the 8-node main-chain graph in order, drift absent, save disabled while clean', () => {
+describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流程图样式对齐)', () => {
+  it('renders the 8-node route-style canvas in order, drift absent, save disabled while clean', () => {
     const { props } = harness(readyState())
     render(<StandardsProjectOverview {...props} />)
     const nodes = [...document.querySelectorAll('[data-testid^="baf-standard-hooks-node-"]')]
@@ -753,6 +753,10 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (六问题批 4
     // The engine never fires hooks on the drift parking lot — it must not be
     // configurable here either.
     expect(screen.queryByTestId('baf-standard-hooks-node-drift')).toBeNull()
+    // Route-parity canvas: the SVG chain edges carry arrowheads.
+    expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0)
+    // A clean draft selects the first node (接单) into the editor.
+    expect(screen.getByTestId('baf-standard-hooks-editor').getAttribute('data-node')).toBe('intake')
     expect((screen.getByTestId('baf-standard-hooks-save') as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -760,15 +764,20 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (六问题批 4
     const saveNodeHooks = vi.fn()
     const { props, store } = harness(readyState(), { saveNodeHooks })
     render(<StandardsProjectOverview {...props} />)
-    const node = screen.getByTestId('baf-standard-hooks-node-implement')
+    // Click the canvas card to select 实现 into the right-hand editor.
+    fireEvent.click(screen.getByTestId('baf-standard-hooks-node-implement'))
+    const editor = screen.getByTestId('baf-standard-hooks-editor')
+    expect(editor.getAttribute('data-node')).toBe('implement')
     // Two kind rows per node (enter then exit), each with one add input.
-    const inputs = node.querySelectorAll('input')
+    const inputs = editor.querySelectorAll('input')
     expect(inputs).toHaveLength(2)
     // Add into the EXIT list (退出实现状态 must pass).
     fireEvent.change(inputs[1] as HTMLElement, { target: { value: './scripts/build.sh' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-implement-exit'))
     expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/build.sh'] } })
-    // The add input cleared and the draft is dirty → save enabled.
+    // The canvas accent reflects the counts; the add input cleared and the
+    // draft is dirty → save enabled.
+    expect(screen.getByTestId('baf-standard-hooks-node-implement').textContent).toContain('hooksExitShort')
     expect((inputs[1] as HTMLInputElement).value).toBe('')
     const save = screen.getByTestId('baf-standard-hooks-save') as HTMLButtonElement
     expect(save.disabled).toBe(false)
@@ -778,36 +787,37 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (六问题批 4
     fireEvent.change(inputs[1] as HTMLElement, { target: { value: 'scripts/build.sh' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-implement-exit'))
     expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/build.sh'] } })
-    expect(node.textContent).toContain('protectedDuplicate')
+    expect(editor.textContent).toContain('protectedDuplicate')
     // Edit in place: the only entry row's 编辑 swaps in an InlineEditor.
-    fireEvent.click(withinRow('baf-standard-hooks-node-implement', 'editLabel'))
-    const editor = screen.getByLabelText('hooksEditLabel')
-    fireEvent.change(editor, { target: { value: 'scripts/lint.ps1' } })
-    fireEvent.keyDown(editor, { key: 'Enter' })
+    fireEvent.click(withinRow('baf-standard-hooks-editor', 'editLabel'))
+    const inline = screen.getByLabelText('hooksEditLabel')
+    fireEvent.change(inline, { target: { value: 'scripts/lint.ps1' } })
+    fireEvent.keyDown(inline, { key: 'Enter' })
     expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/lint.ps1'] } })
     // Deleting the last entry of BOTH-empty lists drops the node entirely.
-    fireEvent.click(withinRow('baf-standard-hooks-node-implement', 'deleteLabel'))
+    fireEvent.click(withinRow('baf-standard-hooks-editor', 'deleteLabel'))
     expect(store.getSnapshot().hooksDraft).toEqual({})
   })
 
   it('keeps the node when the other kind still has entries', () => {
     const { props, store } = harness(readyState())
     render(<StandardsProjectOverview {...props} />)
-    const node = screen.getByTestId('baf-standard-hooks-node-verify')
-    const inputs = node.querySelectorAll('input')
+    fireEvent.click(screen.getByTestId('baf-standard-hooks-node-verify'))
+    const editor = screen.getByTestId('baf-standard-hooks-editor')
+    const inputs = editor.querySelectorAll('input')
     fireEvent.change(inputs[0] as HTMLElement, { target: { value: 'scripts/enter-verify.mjs' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-verify-enter'))
     // Deleting it again: enter goes empty → the node leaves the draft.
-    fireEvent.click(withinRow('baf-standard-hooks-node-verify', 'deleteLabel'))
+    fireEvent.click(withinRow('baf-standard-hooks-editor', 'deleteLabel'))
     expect(store.getSnapshot().hooksDraft).toEqual({})
     // Re-add on BOTH kinds, delete one: the other kind's entry survives.
     fireEvent.change(inputs[0] as HTMLElement, { target: { value: 'e.mjs' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-verify-enter'))
-    fireEvent.change(node.querySelectorAll('input')[1] as HTMLElement, { target: { value: 'x.sh' } })
+    fireEvent.change(editor.querySelectorAll('input')[1] as HTMLElement, { target: { value: 'x.sh' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-verify-exit'))
     // Delete the EXIT entry (x.sh) specifically: its entry row is the div
     // parenting the x.sh span — the enter entry (e.mjs) must survive.
-    const entrySpan = [...screen.getByTestId('baf-standard-hooks-node-verify').querySelectorAll('span')]
+    const entrySpan = [...editor.querySelectorAll('span')]
       .find(span => span.textContent === 'x.sh')
     const exitRow = entrySpan?.parentElement
     const exitDelete = [...(exitRow?.querySelectorAll('button') ?? [])]

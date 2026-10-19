@@ -116,32 +116,9 @@
   word-break: break-word;
 }
 
-/* 【变更】2026-10-12 (问题 4.1): the process-card flow — one card per workflow
-   node (accent rail on the left, artifact chip beside the node name), the
-   confirm gates framed inside. Reads top-to-bottom as the pipeline. */
-.flowCards {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.nodeCard {
-  padding: 10px 12px 12px 14px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-left: 3px solid var(--dsw-alias-state-business-primary, #4f63e7);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1, transparent);
-}
-
-.nodeCard + .nodeCard {
-  margin-top: 8px;
-}
-
-.flowCards .nodeCard + .nodeCard {
-  margin-top: 0;
-}
-
+/* 【变更】2026-10-12 (问题 4.1): the process-card flow became the 2026-10-19
+   route-parity canvas below; nodeHead and its siblings survive as the 门禁明细
+   group vocabulary (详 mode). */
 .nodeHead {
   display: flex;
   align-items: center;
@@ -242,49 +219,15 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* 【变更】2026-10-19 (六问题批 4.2): ONE complete vertical card flow — the
- * pan/zoom canvas (and its fixed height + own scrollbar) is gone. The
- * settings page scrolls; cards render at natural height, joined by a left
- * spine connector; the「开关与阈值在配置文件」block is deleted. */
+/* 【变更】2026-10-19 (流程图样式对齐批): the flow adopts the 多模型路由
+ * canvas style — the framed wrapper, absolute node cards, SVG edges, and
+ * legend all mirror ModelRoutingRow.module.css's values; the 详-mode 门禁明细
+ * section lives inside the same frame under the canvas. */
 
 .flow {
   display: flex;
   flex-direction: column;
   margin-top: 12px;
-}
-
-/* The between-card connector: a small arrow on the left spine, aligned
-   under the state cards' node icon. */
-.connector {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 3px 0 3px 17px;
-}
-
-.connectorArrow {
-  position: relative;
-  flex: none;
-  width: 2px;
-  height: 14px;
-  background: var(--dsw-alias-border-l2);
-}
-
-.connectorArrow::after {
-  content: '';
-  position: absolute;
-  top: 14px;
-  left: -4px;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 6px solid var(--dsw-alias-border-l2);
-}
-
-/* 详 prints the template edge conditions beside the arrow. */
-.connectorConditions {
-  display: flex;
-  flex-direction: column;
-  padding-top: 1px;
 }
 
 .connectorCondition {
@@ -294,7 +237,7 @@
   word-break: break-word;
 }
 
-/* The node glyph on a state card's head. */
+/* The node glyph on a detail group's head. */
 .nodeIcon {
   display: inline-flex;
   flex: none;
@@ -307,7 +250,7 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* Gate-count chip on a state card (accent when gates rest on the node). */
+/* Gate-count chip on a detail group head (accent when gates rest on the node). */
 .badge {
   padding: 0 8px;
   border: 0.5px solid var(--dsw-alias-border-l2);
@@ -326,48 +269,264 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* A between-state gate node — the dashed checkpoint card on the spine,
-   indented under it so it reads as sitting BETWEEN the two state cards. */
-.gateNode {
-  position: relative;
-  margin-left: 30px;
-  padding: 8px 10px;
-  border: 1px dashed var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 35%, transparent);
+/* The framed canvas — the route flowWrap (the whole graph visible, the
+   settings page scrolls; never the canvas itself). */
+.flowWrap {
+  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-elevated, transparent);
 }
 
-/* The「一次性」badge at a gate node's top-right corner. */
-.onceBadge {
-  position: absolute;
-  top: -9px;
-  right: 10px;
-  padding: 0 8px;
+.legendBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 12px 0;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.legendDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tier-color, #7b8fc7);
+}
+
+.legendPillDot {
+  box-sizing: border-box;
+  width: 14px;
+  height: 8px;
+  border: 1px dashed var(--dsw-alias-label-tertiary, #8b949e);
+  border-radius: 999px;
+}
+
+.legendOnceChip {
+  box-sizing: border-box;
+  height: 14px;
+  padding: 0 6px;
   border: 0.5px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 45%, transparent);
   border-radius: 999px;
-  background: var(--dsw-alias-bg-layer-1, #fff);
   color: var(--dsw-alias-text-warning, #7c5cff);
+  font-size: 9px;
+  line-height: 13px;
+  white-space: nowrap;
+}
+
+.flowCanvas {
+  position: relative;
+  margin: 0 auto;
+}
+
+.flowEdges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.edge {
+  fill: none;
+  stroke: var(--dsw-alias-label-tertiary, #8b949e);
+  stroke-width: 1.6;
+  opacity: 0.55;
+}
+
+.edgeDashed {
+  stroke-dasharray: 4 5;
+  opacity: 0.4;
+}
+
+.arrowHead {
+  fill: var(--dsw-alias-label-tertiary, #8b949e);
+}
+
+/* Tier tints — the route's quiet low-saturation family: main chain blue,
+   drift red, the 完成 terminal green, 已放弃 gray. */
+.nodeMain {
+  --tier-color: #7b8fc7;
+}
+
+.nodeDrift {
+  --tier-color: #bc7a7e;
+}
+
+.nodeDone {
+  --tier-color: #7ba984;
+}
+
+.nodeTerminal {
+  --tier-color: var(--dsw-alias-label-tertiary, #8b949e);
+}
+
+/* The route flowNode card verbatim — minus the pointer cursor (read-only). */
+.flowNode {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  color: inherit;
+  text-align: left;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--tier-color) 10%, var(--dsw-alias-bg-elevated, transparent)),
+    var(--dsw-alias-bg-elevated, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--tier-color) 45%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
+  border-radius: 10px;
+  cursor: default;
+  outline: none;
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.flowNode:hover,
+.flowNode:focus-visible {
+  border-color: var(--tier-color);
+  transform: translateY(-2px);
+}
+
+.flowNode:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline-offset: 1px;
+}
+
+.canvasName {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+}
+
+.nodeIconInline {
+  display: inline-flex;
+  flex: none;
+  color: var(--tier-color);
+}
+
+.nodeAccent {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tier-color);
+}
+
+.nodeAccentIdle {
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.nodeMeta {
+  max-width: 170px;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* A gate pill centered ON the edge it guards — the dashed checkpoint chip;
+   its background covers the edge line so the pill reads as sitting on it. */
+.gatePill {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 55%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-elevated, #fff);
+}
+
+.pillTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+}
+
+.pillChip {
+  flex: none;
+  font-size: 9px;
+  line-height: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.pillOnce {
+  flex: none;
+  padding: 0 5px;
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 45%, transparent);
+  border-radius: 999px;
+  color: var(--dsw-alias-text-warning, #7c5cff);
+  font-size: 9px;
+  line-height: 13px;
+  white-space: nowrap;
+}
+
+/* The 分支 label riding above the column-1 branch nodes. */
+.branchLabel {
+  position: absolute;
+  color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   line-height: 16px;
   white-space: nowrap;
 }
 
-/* The branch cards (漂移回归 / 已放弃) under the main chain. */
-.branch {
-  margin-top: 14px;
+/* 详's 门禁明细 section — inside the canvas frame, under the graph. */
+.detail {
+  margin-top: 12px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.2));
 }
 
-.branchTitle {
-  margin-bottom: 6px;
-  color: var(--dsw-alias-label-secondary);
+.detailHead {
+  margin-bottom: 8px;
   font-size: 12px;
   line-height: 18px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
 }
 
-.branchCards {
+.detailGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.detailGroup {
+  padding: 8px 10px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 30%, transparent);
+}
+
+.edgeConditions {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
 }
 
 /* Trailing group for unanchored gates this client cannot yet place. */

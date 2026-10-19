@@ -44,7 +44,7 @@ apps/web/.*.mjs
 # Same convention at repo root (desktop/web CDP probes: .verify-desktop.mjs, …)
 /.*.mjs
 # Headless-Edge CDP probing profile (desktop/web verify probes)
-/.edge-verify-profile/
+/.edge-*/
 # Local dev-server logs (web host, build output captures)
 logs/
 .artifacts/

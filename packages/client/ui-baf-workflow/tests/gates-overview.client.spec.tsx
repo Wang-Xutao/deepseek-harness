@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 /**
- * 【变更】2026-10-19 (六问题批 4.2): the 确认门 tab renders the projection as
- * ONE complete vertical card flow — state cards down the whole chain
- * (接单 → … → 归档 → 完成, then the 漂移回归 / 已放弃 branch cards), with the
- * one-shot gates as BETWEEN-state gate nodes right after 接单 (「一次性」badge
- * at the top-right) and the unanchored per-change gates riding fixed
- * client-side anchors (design-confirm→设计, verify-archive→验证, resume→漂移,
- * abandon→已放弃). 详 (default, the shared `Switch` control) prints the gate
- * options + stage conditions + connector edge conditions inline; 略 keeps the
- * badge line and moves every detail into the node's aria-label (the hover
- * Tooltip reads the same string). No pan/zoom canvas, no config block.
+ * 【变更】2026-10-19 (流程图样式对齐批): the 确认门 tab renders the projection
+ * on the 多模型路由-parity canvas — absolute node cards down column 0
+ * (接单 → … → 归档 → 完成, 漂移回归 beside 实现, 已放弃 under it) joined by SVG
+ * bezier edges WITH arrowheads, and every confirm gate as a pill ON the edge
+ * it guards (entry gates + 分类 on 接单→建立变更; advance gates on their
+ * node's leaving edge; resume/abandon stacked under their branch node). The
+ * unanchored per-change gates ride fixed client-side anchors
+ * (design-confirm→设计, verify-archive→验证, resume→漂移, abandon→已放弃).
+ * 详 (default, the shared `Switch` control) adds the 门禁明细 section inside
+ * the frame (gate options + full stage conditions + template edge
+ * conditions); 略 keeps the canvas alone — pills carry titles +「一次性」
+ * badges, nodes carry counts with every detail in the aria-label (the hover
+ * Tooltip reads the same string). No config block.
  * Collapsed by default in list context with load-once caching; the row
  * fixtures mirror the real registry (15 confirm + 6 stage rows).
  */
@@ -103,14 +106,14 @@ function setMode(concise: boolean): void {
   }
 }
 
-/** Every flow card (state cards + between-state gate nodes) in DOM order. */
+/** Every canvas element (state node cards + gate pills) in DOM order. */
 function flowCardIds(): string[] {
   const root = screen.getByTestId('baf-gates-flow')
   return Array.from(root.querySelectorAll<HTMLElement>('[data-testid^="baf-gate-node-"], [data-testid^="baf-gates-gate-node-"]'))
     .map(el => el.getAttribute('data-testid') ?? '')
 }
 
-describe('GatesOverviewRow (六问题批 4.2 竖向完整流程 + 详略 Switch)', () => {
+describe('GatesOverviewRow (2026-10-19 流程图样式对齐 canvas + 详略 Switch)', () => {
   it('renders collapsed and fetches nothing until the customer expands', () => {
     const load = vi.fn()
     mount(load)
@@ -119,15 +122,15 @@ describe('GatesOverviewRow (六问题批 4.2 竖向完整流程 + 详略 Switch)
     expect(load).not.toHaveBeenCalled()
   })
 
-  it('renders the whole chain as one vertical flow with placed gates', async () => {
+  it('renders the whole chain as the route-style canvas with placed gates', async () => {
     const load = vi.fn().mockResolvedValue(overviewFixture())
     mount(load)
     fireEvent.click(screen.getByTestId('baf-gates-toggle'))
     expect(await screen.findByTestId('baf-gates-flow')).toBeDefined()
-    // The complete flow in order: 接单 → the one-shot gate nodes (registry
-    // order, wherever the payload listed them) → 分类 confirm → the main
-    // chain → 完成 → the branch cards. Nothing scrolls on its own and no
-    // node is ever dropped, gate-less or not.
+    // The canvas in DOM order: each column-0 node immediately followed by
+    // the pills guarding its leaving edge (entry gates + 分类 after 接单,
+    // advance gates after their node), then the branch column. No node is
+    // ever dropped, gate-less or not.
     expect(flowCardIds()).toEqual([
       'baf-gate-node-intake',
       'baf-gates-gate-node-scaffold',
@@ -136,49 +139,63 @@ describe('GatesOverviewRow (六问题批 4.2 竖向完整流程 + 详略 Switch)
       'baf-gates-gate-node-bind-workflow',
       'baf-gates-gate-node-intake-classify',
       'baf-gate-node-open',
+      'baf-gates-gate-node-open-advance',
+      'baf-gates-gate-node-bugfix-open-advance',
       'baf-gate-node-clarify',
+      'baf-gates-gate-node-clarify-advance',
       'baf-gate-node-design',
+      'baf-gates-gate-node-design-advance',
+      'baf-gates-gate-node-design-confirm',
       'baf-gate-node-plan',
+      'baf-gates-gate-node-plan-advance',
       'baf-gate-node-implement',
+      'baf-gates-gate-node-verify-advance',
       'baf-gate-node-verify',
+      'baf-gates-gate-node-verify-archive',
       'baf-gate-node-archive',
       'baf-gate-node-completed',
       'baf-gate-node-drift',
+      'baf-gates-gate-node-resume',
       'baf-gate-node-abandoned',
+      'baf-gates-gate-node-abandon',
     ])
     expect(screen.getByTestId('baf-gates-branch').textContent).toContain('gates.branchTitle')
-    // The bootstrap gates carry the「一次性」badge; the per-change 分类
-    // confirm does not.
+    // The bootstrap gate pills carry the「一次性」badge; the per-change 分类
+    // pill does not.
     for (const id of ['scaffold', 'new-workflow', 'active-conflict', 'bind-workflow']) {
       expect(screen.getByTestId(`baf-gates-once-badge-${id}`).textContent).toBe('gates.onceBadge')
     }
     expect(screen.queryByTestId('baf-gates-once-badge-intake-classify')).toBeNull()
-    // Unanchored per-change gates ride their fixed client-side anchors.
-    expect(screen.getByTestId('baf-gate-node-design').textContent).toContain('design-confirm 标题')
-    expect(screen.getByTestId('baf-gate-node-verify').textContent).toContain('verify-archive 标题')
-    expect(screen.getByTestId('baf-gate-node-drift').textContent).toContain('resume 标题')
-    expect(screen.getByTestId('baf-gate-node-abandoned').textContent).toContain('abandon 标题')
-    // Every confirm gate keeps its testid (gate nodes + per-node alike).
+    // Unanchored per-change gates ride their fixed client-side anchors —
+    // each pill sits on the anchored node's leaving edge / branch stack.
+    expect(screen.getByTestId('baf-gates-gate-node-design-confirm').textContent).toContain('design-confirm 标题')
+    expect(screen.getByTestId('baf-gates-gate-node-verify-archive').textContent).toContain('verify-archive 标题')
+    expect(screen.getByTestId('baf-gates-gate-node-resume').textContent).toContain('resume 标题')
+    expect(screen.getByTestId('baf-gates-gate-node-abandon').textContent).toContain('abandon 标题')
+    // Every confirm gate keeps a full card in 详's 门禁明细 section.
     for (const gate of ['scaffold', 'intake-classify', 'open-advance', 'bugfix-open-advance', 'abandon', 'resume']) {
       expect(screen.getByTestId(`baf-gate-confirm-${gate}`)).toBeDefined()
     }
-    // Stage rows render inside the state cards; the artifact chip shows.
+    // Stage rows render as the canvas nodes' meta line; the artifact shows.
     for (const node of ['open', 'clarify', 'design', 'plan', 'implement', 'verify']) {
       expect(screen.getByTestId(`baf-gate-stage-${node}`)).toBeDefined()
     }
     expect(screen.getByTestId('baf-gate-node-implement').textContent).toContain('plan.json')
-    // Gate-less nodes keep their card with the quiet 无门禁 line.
-    expect(screen.getByTestId('baf-gate-node-intake').textContent).toContain('gates.noGate')
+    // 接单 now guards the entry pills (确认门 ×5); gate-less nodes like 归档
+    // keep their card with the quiet 无门禁 accent line.
+    expect(screen.getByTestId('baf-gate-node-intake').textContent).toContain('gates.confirmCount')
+    expect(screen.getByTestId('baf-gate-node-archive').textContent).toContain('gates.noGate')
     expect(screen.getByTestId('baf-gate-node-completed').textContent).toContain('node.completed')
-    // 详 (default) prints the template edge conditions beside the connectors.
+    // 详 (default) prints the template edge conditions in the detail groups.
     expect(screen.getByTestId('baf-gates-flow').textContent).toContain('T2 ·')
-    // The「开关与阈值在配置文件」block is deleted in every mode; no dropdown,
-    // no canvas — the Switch stays the density control.
+    // The route-parity SVG edges carry arrowheads (marker-end on every path).
+    expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0)
+    // The「开关与阈值在配置文件」block is deleted in every mode; no dropdown —
+    // the Switch stays the density control.
     expect(screen.queryByTestId('baf-gates-config')).toBeNull()
     expect(screen.queryByTestId('baf-gates-once')).toBeNull()
     expect(screen.queryByRole('combobox')).toBeNull()
     expect(screen.getByRole('switch', { name: 'gates.modeAria' })).toBeDefined()
-    expect(document.querySelectorAll('svg path[marker-end]').length).toBe(0)
     expect(load).toHaveBeenCalledTimes(1)
     // collapse → re-expand must NOT refetch (client-side cache).
     fireEvent.click(screen.getByTestId('baf-gates-toggle'))
@@ -215,23 +232,23 @@ describe('GatesOverviewRow (六问题批 4.2 竖向完整流程 + 详略 Switch)
     expect(screen.getByTestId('baf-gate-dynamic-bind-workflow').textContent).toContain('gates.dynamicOptions')
   })
 
-  it('略 mode moves the detail into the node hover/aria text', async () => {
+  it('略 mode keeps the canvas alone and moves the detail into the node hover/aria text', async () => {
     const load = vi.fn().mockResolvedValue(overviewFixture())
     mount(load)
     fireEvent.click(screen.getByTestId('baf-gates-toggle'))
     await screen.findByTestId('baf-gates-flow')
     setMode(true)
-    // Node-bound gate titles leave the flow text — they ride the hover
-    // Tooltip's label string, which is ALSO the node's aria-label
-    // (hover/focus/screen reader read one and the same text). The gate
-    // NODES keep their title+question line (options still hidden).
+    // The 门禁明细 section is gone — full gate cards leave the flow; the
+    // pills keep their title lines, and every detail rides the node's
+    // aria-label (the hover Tooltip reads the same string).
     expect(screen.queryByTestId('baf-gate-confirm-open-advance')).toBeNull()
-    expect(screen.getByTestId('baf-gate-confirm-intake-classify').textContent).toContain('intake-classify 标题')
+    expect(screen.queryByTestId('baf-gates-detail-node-open')).toBeNull()
+    expect(screen.getByTestId('baf-gates-gate-node-intake-classify').textContent).toContain('intake-classify 标题')
     const openNode = screen.getByTestId('baf-gate-node-open')
     expect(openNode.getAttribute('aria-label')).toContain('open-advance 标题')
     expect(openNode.getAttribute('aria-label')).toContain('open 条件一')
     expect(openNode.textContent).not.toContain('/baf-workflow-confirm')
-    // The badge counts and stage condition counts stay visible.
+    // The gate-count accent and the stage condition count stay visible.
     expect(openNode.textContent).toContain('gates.confirmCount')
     const openStage = screen.getByTestId('baf-gate-stage-open')
     expect(openStage.textContent).toContain('gates.conditionsCount')

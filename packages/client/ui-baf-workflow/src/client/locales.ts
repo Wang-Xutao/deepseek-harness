@@ -255,6 +255,10 @@ export type WorkflowTabKey =
   | 'gates.canvasAria'
   | 'gates.confirmCount'
   | 'gates.stageGate'
+  // 【变更】2026-10-19 (流程图样式对齐批): route-parity canvas copy — legend dot
+  // label + the 详-mode detail section heading (canvas pills carry the summary).
+  | 'gates.legendState'
+  | 'gates.detailTitle'
   | 'gates.node.intake'
   | 'gates.node.open'
   | 'gates.node.clarify'
@@ -543,6 +547,8 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.canvasAria': 'Workflow confirmation-gate flow chart',
   'gates.confirmCount': 'confirm gates',
   'gates.stageGate': 'stage gate:',
+  'gates.legendState': 'state node',
+  'gates.detailTitle': 'Gate details',
   'gates.node.intake': 'Intake',
   'gates.node.open': 'Open',
   'gates.node.clarify': 'Clarify',
@@ -835,6 +841,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.canvasAria': '工作流确认门流程图',
   'gates.confirmCount': '确认门',
   'gates.stageGate': '阶段门：',
+  'gates.legendState': '状态节点',
+  'gates.detailTitle': '门禁明细',
   'gates.node.intake': '接单',
   'gates.node.open': '建立变更',
   'gates.node.clarify': '澄清',

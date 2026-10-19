@@ -534,29 +534,159 @@
   margin-top: 8px;
 }
 
-/* 【变更】2026-10-19 (六问题批 4.1b): the 状态脚本 card — a vertical main-chain
- * workflow graph, one row per node, enter/exit script lists under each. */
+/* 【变更】2026-10-19 (流程图样式对齐批): the 状态脚本 graph adopts the
+ * 多模型路由 canvas style — framed split layout: route-parity node cards
+ * (tier tint, hover lift, SVG bezier edges with arrowheads) on the left,
+ * the selected node's editor on the right. */
 
-.hooksGraph {
-  display: flex;
-  flex-direction: column;
+.hooksFlowWrap {
   margin-top: 10px;
+  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-elevated, transparent);
 }
 
-.hooksNodeRow {
+.hooksLegend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 12px 0;
+}
+
+.hooksLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.hooksLegendDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7ba984;
+}
+
+.hooksLegendDotIdle {
+  background: var(--dsw-alias-label-tertiary, #8b949e);
+}
+
+.hooksSplit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 14px;
+  padding: 10px 12px 12px;
+}
+
+.hooksFlowCanvas {
+  position: relative;
+  flex: none;
+}
+
+.hooksEdges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.hooksEdge {
+  fill: none;
+  stroke: var(--dsw-alias-label-tertiary, #8b949e);
+  stroke-width: 1.6;
+  opacity: 0.55;
+}
+
+.hooksArrow {
+  fill: var(--dsw-alias-label-tertiary, #8b949e);
+}
+
+/* Tier tints — configured nodes take the route family's quiet green, bare
+   nodes stay gray (the legend explains both). */
+.hooksNodeSet {
+  --tier-color: #7ba984;
+}
+
+.hooksNodeIdle {
+  --tier-color: var(--dsw-alias-label-tertiary, #8b949e);
+}
+
+/* The route flowNode card verbatim. */
+.hooksNode {
+  position: absolute;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  align-items: flex-start;
+  gap: 1px;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  color: inherit;
+  text-align: left;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--tier-color) 10%, var(--dsw-alias-bg-elevated, transparent)),
+    var(--dsw-alias-bg-elevated, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--tier-color) 45%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
+  border-radius: 10px;
+  cursor: pointer;
+  outline: none;
+  transition: transform 160ms ease, border-color 160ms ease;
 }
 
-.hooksConnector {
-  width: 0;
-  height: 12px;
-  margin-left: 24px;
-  border-left: 1px solid var(--dsw-alias-border-l2);
+.hooksNode:hover,
+.hooksNode:focus-visible {
+  border-color: var(--tier-color);
+  transform: translateY(-2px);
+}
+
+.hooksNode:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline-offset: 1px;
+}
+
+/* The selected canvas node reads as the editor's anchor. */
+.hooksNodeSelected {
+  border-color: var(--tier-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tier-color) 25%, transparent);
+}
+
+.hooksNodeName {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+}
+
+.hooksNodeAccent {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tier-color);
+}
+
+.hooksNodeAccentIdle {
+  font-weight: 400;
+}
+
+/* The right-hand editor for the selected node. */
+.hooksEditor {
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 10px 2px 2px 14px;
+  border-left: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.2));
+}
+
+.hooksEditorBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .hooksNodeHead {
@@ -568,6 +698,7 @@
 .hooksNodeLabel {
   font-size: 13px;
   line-height: 19px;
+  font-weight: 600;
 }
 
 .hooksNodeId {
@@ -580,7 +711,7 @@
 .hooksLists {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .hooksKindRow {
