@@ -153,3 +153,28 @@ export interface BafStandardRulesDocResult {
   /** Why it is unavailable/unreadable (`no-workspace` / `policy_missing` / IO). */
   readonly reason?: string
 }
+
+/**
+ * 【变更】2026-10-20 (批次六 5): `enterpriseDoc()` outcome — one REAL enterprise
+ * standard document read from the package assets (bafplugin-migrated; a
+ * product constant, never workspace- or baseline-dependent). The client
+ * mirror catalog carries the list; this carries the clicked document's text.
+ * A discriminated union (like BafStandardSummaryResult) so consumers narrow
+ * on `status` instead of probing optional fields.
+ */
+export type BafEnterpriseDocResult =
+  | {
+    readonly status: 'ready'
+    readonly id: string
+    readonly titleZh: string
+    readonly titleEn: string
+    /** Absolute asset path the content came from. */
+    readonly path: string
+    readonly content: string
+  }
+  | { readonly status: 'unknown' }
+  | {
+    readonly status: 'unreadable'
+    /** IO reason. */
+    readonly reason: string
+  }

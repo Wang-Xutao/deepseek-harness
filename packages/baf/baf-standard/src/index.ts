@@ -5,6 +5,7 @@
 
 export * from './provider.ts'
 export * from './apply-enterprise-standards.ts'
+export * from './enterprise-docs.ts'
 export { BafStandard } from './service.ts'
 import { BafStandard } from './service.ts'
 export default BafStandard

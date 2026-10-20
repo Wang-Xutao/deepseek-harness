@@ -100,17 +100,32 @@
 /* 【变更】2026-10-12 (问题 4.1): the process-card flow became the 2026-10-19
    route-parity canvas below; nodeHead and its siblings survive as the 门禁明细
    group vocabulary (详 mode). */
+/* 【变更】2026-10-20 (批次六 4): the head row takes a bottom hairline so the
+   node identity separates from the labelled 明细 layers beneath it. */
 .nodeHead {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 8px;
+  padding-bottom: 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .nodeName {
   font-size: 13px;
   line-height: 19px;
   font-weight: 600;
+}
+
+/* 【变更】2026-10-20 (批次六 3): the English name rides inline after the zh
+   label in both the canvas card and the 明细 head — same anatomy as the
+   状态脚本 graph's hooksNodeEn (secondary ink, quieter weight). */
+.nodeNameEn {
+  margin-left: 5px;
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .nodeHint {
@@ -131,9 +146,13 @@
 
 /* 【变更】2026-10-20 (批次五 2.1): the stage/gates blocks sit under a small
    section label so the 明细 reads in labelled layers (阶段门禁 / 进入下一步的
-   条件 / 确认门). */
+   条件 / 确认门).
+   【变更】2026-10-20 (批次六 4): a 2px brand accent bar leads the label so the
+   layers scan vertically without extra chrome. */
 .sectionLabel {
   margin: 10px 0 4px;
+  padding-left: 7px;
+  border-left: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 55%, transparent);
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   line-height: 16px;
@@ -163,12 +182,21 @@
 
 /* 【变更】2026-10-20 (批次五 2.1): the gate card re-layers — title / question /
    option rows with breathing room and a hairline, replacing the single
-   run-on line (the bug-fix chip left with the reader-side de-dup). */
+   run-on line (the bug-fix chip left with the reader-side de-dup).
+   【变更】2026-10-20 (批次六 4): hover quietly brightens the hairline and the
+   fill so scanning tracks the card under the cursor — no motion, the card is
+   not clickable, so it must not promise a press. */
 .gateCard {
   padding: 9px 12px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 45%, transparent);
+  transition: border-color 150ms var(--ds-ease-in-out, ease), background-color 150ms var(--ds-ease-in-out, ease);
+}
+
+.gateCard:hover {
+  border-color: var(--dsw-alias-border-l3);
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 70%, transparent);
 }
 
 .gateTitle {
@@ -210,16 +238,26 @@
   word-break: break-word;
 }
 
+/* 【变更】2026-10-20 (批次六 4): the command a click runs reads as a quiet
+   mono chip trailing its label — auto-margin parks it at the row's right on
+   single-line rows; a long command still wraps as a chip rather than
+   overflowing the card. */
 .optionCommand {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 11px;
+  font-size: 10.5px;
+  line-height: 16px;
   overflow-wrap: anywhere;
 }
 
 .conditions {
   margin: 0;
   padding-left: 16px;
+  line-height: 1.6;
   word-break: break-word;
 }
 

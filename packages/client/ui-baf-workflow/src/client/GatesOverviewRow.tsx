@@ -107,6 +107,23 @@ const NODE_LABEL: Readonly<Record<string, GatesLocaleKey>> = {
   abandoned: 'node.abandoned',
 }
 
+/** 【变更】2026-10-20 (批次六 3): the English name rides INLINE after the zh
+ * label on every canvas card — 中文在前，英文在后，one name line (the 状态脚本
+ * graph's card anatomy). */
+const NODE_EN: Readonly<Record<string, string>> = {
+  intake: 'Intake',
+  open: 'Open change',
+  clarify: 'Clarify',
+  design: 'Design',
+  plan: 'Plan',
+  implement: 'Implement',
+  verify: 'Verify',
+  archive: 'Archive',
+  drift: 'Drift',
+  completed: 'Completed',
+  abandoned: 'Abandoned',
+}
+
 /** The locale key union this component's `t` accepts. */
 type GatesLocaleKey = PropsLocale<'baf.go-workflow'>['t'] extends (key: infer K) => string ? K : never
 
@@ -312,6 +329,7 @@ function CanvasNode({ node, pos, stage, gates, selected, onSelect, t }: {
       <span className={css.canvasName}>
         <span className={css.nodeIconInline}><NodeIcon id={node as WorkflowNodeId | TerminalStateId} /></span>
         {label}
+        {NODE_EN[node] !== undefined ? <span className={css.nodeNameEn}>{NODE_EN[node]}</span> : null}
       </span>
       <span className={join(css.nodeAccent, gates.length === 0 ? css.nodeAccentIdle : undefined)}>
         {gates.length > 0 ? `${t('gates.confirmCount')} ×${String(gates.length)}` : t('gates.noGate')}
@@ -497,7 +515,12 @@ function GatesFlow({ data, t }: {
         <div className={css.detailGroup} data-testid={`baf-gates-detail-node-${selectedSpec.node}`}>
           <div className={css.nodeHead}>
             <span className={css.nodeIcon}><NodeIcon id={selectedSpec.node as WorkflowNodeId | TerminalStateId} /></span>
-            <span className={css.nodeName}>{nodeLabelOf(selectedSpec.node, t)}</span>
+            <span className={css.nodeName}>
+              {nodeLabelOf(selectedSpec.node, t)}
+              {NODE_EN[selectedSpec.node] !== undefined
+                ? <span className={css.nodeNameEn}>{NODE_EN[selectedSpec.node]}</span>
+                : null}
+            </span>
             <span className={join(css.badge, selectedSpec.gates.length > 0 ? css.badgeGate : css.badgeIdle)}>
               {selectedSpec.gates.length > 0
                 ? `${t('gates.confirmCount')} ×${String(selectedSpec.gates.length)}`

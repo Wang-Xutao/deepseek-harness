@@ -1,7 +1,13 @@
 /**
  * The BAF 工程规范 overview row's state and controller: one read-only load of
- * the `bafStandardConfig` Remote (`summary` now, `rulesDoc` on demand) plus
- * the viewer's expand/collapse flag.
+ * the `bafStandardConfig` Remote (`summary` now) plus the 企业规范 tab's
+ * real-document viewer (`enterpriseDoc` on demand).
+ *
+ * 【变更】2026-10-20 (批次六 5): the rules-doc digest machinery (rules /
+ * rulesExpanded / areasExpanded / loadRules / toggleRules / toggleArea) is
+ * RETIRED — the 企业规范 tab now renders the REAL bafplugin-migrated
+ * documents (a product constant) as a workflow flow chart + viewer, so there
+ * is no baseline-located rules document left to fetch or slice.
  *
  * 【变更】2026-10-18 (项目工程 1.3, 客户决策): ONE editable exception — the AI
  * 禁改路径 list (`guard.protectedPaths`) carries a local draft the 项目工程
@@ -14,7 +20,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
-  BafStandardNodeHooks, BafStandardRulesDocResult, BafStandardSummaryResult,
+  BafEnterpriseDocResult, BafStandardNodeHooks, BafStandardSummaryResult,
 } from '../types.ts'
 
 /** What the row renders; `summary` carries the status it loaded with. */
@@ -23,15 +29,20 @@ export interface StandardsOverviewState {
   status: 'loading' | BafStandardSummaryResult['status']
   /** The Host's summary projection; undefined only while loading. */
   summary: BafStandardSummaryResult | undefined
-  /** The rules document viewer payload; loaded on demand (undefined = not yet). */
-  rules: BafStandardRulesDocResult | undefined
-  /** Whether the rules document viewer shows the full text. */
-  rulesExpanded: boolean
   /**
-   * 【变更】2026-10-07 (九点批 问题 8): which of the 8 rule domains are
-   * expanded in the digest section (keyed by area id).
+   * 【变更】2026-10-20 (批次六 5): the 企业规范 viewer's open document id
+   * (undefined = viewer closed). The docs are product constants, so this
+   * survives summary reloads and workspace switches.
    */
-  areasExpanded: Record<string, boolean>
+  enterpriseDocId: string | undefined
+  /** The open document's payload; undefined while the fetch is in flight. */
+  enterpriseDoc: BafEnterpriseDocResult | undefined
+  /**
+   * 【变更】2026-10-20 (批次六 5): the active locale id (the 企业规范 canvas
+   * picks its doc chip tags by it; tracked here because slot components only
+   * receive `t`, not the locale service).
+   */
+  localeActive: string
   /** 【变更】2026-10-18 (项目工程 1.3): the AI 禁改路径 draft (undefined until
    * the first ready summary; the enterprise placeholder never lists). */
   protectedDraft: readonly string[] | undefined
@@ -67,12 +78,14 @@ export interface StandardsOverviewFace {
    * Skipped whenever either draft is mid-edit (a refresh must never clobber).
    */
   refreshIfClean(): void
-  /** Fetch the rules document into the viewer (first expand). */
-  loadRules(): Promise<void>
-  /** Toggle the rules document viewer's expanded flag. */
-  toggleRules(): void
-  /** 【变更】2026-10-07 (九点批 问题 8): toggle one rule domain in the digest. */
-  toggleArea(id: string): void
+  /**
+   * 【变更】2026-10-20 (批次六 5): open one real enterprise document in the
+   * 企业规范 viewer (fetches its text through the Remote; re-clicking the
+   * open id is a no-op).
+   */
+  openEnterpriseDoc(id: string): Promise<void>
+  /** Close the 企业规范 viewer. */
+  closeEnterpriseDoc(): void
   /** 【变更】2026-10-18 (项目工程 1.3): replace the local AI 禁改路径 draft. */
   updateProtectedDraft(paths: readonly string[]): void
   /** Persist the draft through the Remote's surgical baseline write. */
@@ -105,9 +118,9 @@ export interface StandardsOverviewFace {
 const INITIAL: StandardsOverviewState = {
   status: 'loading',
   summary: undefined,
-  rules: undefined,
-  rulesExpanded: false,
-  areasExpanded: {},
+  enterpriseDocId: undefined,
+  enterpriseDoc: undefined,
+  localeActive: 'zh',
   protectedDraft: undefined,
   protectedSaving: false,
   protectedNotice: undefined,
@@ -148,6 +161,17 @@ export class StandardsController {
    */
   constructor(private readonly ctx: ClientContext) {
     this.store = createSnapshotStore<StandardsOverviewState>(INITIAL)
+    // 【变更】2026-10-20 (批次六 5): mirror the active locale into state so the
+    // 企业规范 canvas can pick its doc chip tags by language (slot props only
+    // carry `t`). Initial read + the locale/change event keep it current.
+    try {
+      this.store.update((state) => { state.localeActive = this.ctx.locale.getSnapshot().active })
+      this.ctx.on('locale/change', (snapshot) => {
+        this.store.update((state) => { state.localeActive = snapshot.active })
+      })
+    } catch {
+      // Locale service absent (bare test harness): the 'zh' default stands.
+    }
     void this.reload()
   }
 
@@ -157,9 +181,8 @@ export class StandardsController {
       hooks: { standards: this.store },
       reload: () => this.reload(),
       refreshIfClean: () => this.refreshIfClean(),
-      loadRules: () => this.loadRules(),
-      toggleRules: () => this.toggleRules(),
-      toggleArea: (id: string) => this.toggleArea(id),
+      openEnterpriseDoc: (id: string) => this.openEnterpriseDoc(id),
+      closeEnterpriseDoc: () => this.closeEnterpriseDoc(),
       updateProtectedDraft: (paths: readonly string[]) => this.updateProtectedDraft(paths),
       saveProtectedPaths: () => this.saveProtectedPaths(),
       clearProtectedNotice: () => this.clearProtectedNotice(),
@@ -237,10 +260,9 @@ export class StandardsController {
           state.hooksNotice = undefined
         }
       } else {
-        // A different workspace story invalidates the viewer's payload.
-        state.rules = undefined
-        state.rulesExpanded = false
-        state.areasExpanded = {}
+        // A different workspace story invalidates the editable drafts. The
+        // 企业规范 document viewer survives — its docs are product constants,
+        // not workspace state (批次六 5).
         state.protectedDraft = undefined
         state.hooksDraft = undefined
         state.hooksNotice = undefined
@@ -248,50 +270,38 @@ export class StandardsController {
     })
   }
 
-  /** @inheritdoc */
-  async loadRules(): Promise<void> {
-    const summary = this.store.getSnapshot().summary
-    // 【变更】2026-10-13 (问题 4 批): without a baseline the rules document
-    // cannot be located — SETTLE the viewer to `unavailable` instead of
-    // returning with `rules` still undefined. Undefined meant "fetch in
-    // flight", so every area body rendered an eternal「正在读取工作区基线…」
-    // spinner after the summary landed no-baseline (web-verified stuck state).
-    if (summary !== undefined && summary.status !== 'ready') {
-      this.store.update((state) => {
-        state.rules = { status: 'unavailable', reason: summary.status }
-      })
-      return
-    }
-    try {
-      const response = await this.ctx.remote.bafStandardConfig.rulesDoc()
-      this.store.update((state) => {
-        state.rules = response.ok ? response.value : { status: 'unreadable', reason: response.error.message }
-      })
-    } catch (error) {
-      this.store.update((state) => {
-        state.rules = { status: 'unreadable', reason: error instanceof Error ? error.message : String(error) }
-      })
-    }
-  }
-
-  /** @inheritdoc */
-  toggleRules(): void {
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-20 (批次六 5): fetch one real enterprise document into the
+   * viewer. A stale answer for a superseded click is dropped by id compare;
+   * transport failures settle as `unreadable` (never left hanging).
+   */
+  async openEnterpriseDoc(id: string): Promise<void> {
+    if (this.store.getSnapshot().enterpriseDocId === id) return
     this.store.update((state) => {
-      state.rulesExpanded = !state.rulesExpanded
-      if (state.rulesExpanded && state.rules === undefined) void this.loadRules()
+      state.enterpriseDocId = id
+      state.enterpriseDoc = undefined
+    })
+    let result: BafEnterpriseDocResult
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.enterpriseDoc(id)
+      result = response.ok
+        ? response.value
+        : { status: 'unreadable', reason: response.error.message }
+    } catch (error) {
+      result = { status: 'unreadable', reason: error instanceof Error ? error.message : String(error) }
+    }
+    this.store.update((state) => {
+      if (state.enterpriseDocId !== id) return
+      state.enterpriseDoc = result
     })
   }
 
-  /**
-   * 【变更】2026-10-07 (九点批 问题 8): flip one rule domain's digest row;
-   * the first expand anywhere in the digest also pulls the rules document
-   * (the digest slices its content from it).
-   * @param id - the area id (`project-charter` … `testing-discipline`).
-   */
-  toggleArea(id: string): void {
+  /** @inheritdoc */
+  closeEnterpriseDoc(): void {
     this.store.update((state) => {
-      state.areasExpanded[id] = !state.areasExpanded[id]
-      if (state.areasExpanded[id] && state.rules === undefined) void this.loadRules()
+      state.enterpriseDocId = undefined
+      state.enterpriseDoc = undefined
     })
   }
 

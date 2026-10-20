@@ -1,13 +1,17 @@
 // @vitest-environment jsdom
 /**
- * BAF 工程规范 settings panels — stage-grouped enterprise rules and domain
- * slicing, plus 【变更】2026-10-18 (项目工程 1.1–1.3): the clickable project
- * path / config file readouts, the editable AI 禁改路径 card, and the
- * controller's save / desktop-gesture / directory-picker faces.
+ * BAF 工程规范 settings panels — 【变更】2026-10-18 (项目工程 1.1–1.3): the
+ * clickable project path / config file readouts, the editable AI 禁改路径
+ * card, and the controller's save / desktop-gesture / directory-picker faces.
  * 【变更】2026-10-19 (六问题批 4.1): the path rows are the tab-top readonly
  * config items (the VALUE is the click target — no copy/open buttons), the
  * no-baseline state gains the 生成配置文件 button, and the 状态脚本 (NodeHooks)
  * card rides the ready branch; 4.3 drops the 企业规范 head + banner.
+ * 【变更】2026-10-20 (批次六 5): the rules-digest / area-slicing specs RETIRE
+ * with the machinery — the 企业规范 tab renders the REAL bafplugin-migrated
+ * standards as a workflow flow chart (canvas → per-node doc list → in-card
+ * document viewer through `enterpriseDoc`), plus the client/host catalog
+ * parity guard.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,9 +20,12 @@ import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 afterEach(cleanup)
 import { useSyncExternalStore } from 'react'
 import {
-  StandardsEnterpriseOverview, StandardsProjectOverview, StandardsQualityOverview, sliceAreaContent,
+  StandardsEnterpriseOverview, StandardsProjectOverview, StandardsQualityOverview,
   toRelativeEntry,
 } from '../src/client/StandardsOverview.tsx'
+import { ENTERPRISE_DOC_ROWS } from '../src/client/enterprise-docs-catalog.ts'
+// Host source of truth for the parity guard (vitest runs in node — node:fs OK).
+import { ENTERPRISE_DOCS } from '@deepseek-ai/dsh-baf-standard/src/enterprise-docs.ts'
 import {
   StandardsController, type StandardsOverviewFace, type StandardsOverviewState,
 } from '../src/client/standards-store.ts'
@@ -35,24 +42,6 @@ class ResizeObserverStub {
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
 })
-
-/** A rules document whose headings carry the Chinese tail the scaffold emits. */
-const RULES = `# BAF 工程规范（产品默认）
-
-本文件是 BAF 自带的默认工程规则。
-
-## project-charter 项目章程
-
-- 章程规则行。
-
-## coding-style 编码风格
-
-- 风格规则行。
-
-## testing-discipline 测试纪律
-
-- 回归测试先行。
-`
 
 const AREA_IDS = [
   'project-charter', 'coding-style', 'interfaces', 'error-handling',
@@ -104,13 +93,8 @@ function harness(initial: StandardsOverviewState, faceOverrides: Partial<Standar
     hooks: { standards: store },
     reload: vi.fn(),
     refreshIfClean: vi.fn(),
-    loadRules: vi.fn(),
-    toggleRules: vi.fn(),
-    toggleArea: (id: string) => {
-      store.update((state) => {
-        state.areasExpanded[id] = !state.areasExpanded[id]
-      })
-    },
+    openEnterpriseDoc: vi.fn(),
+    closeEnterpriseDoc: vi.fn(),
     updateProtectedDraft: (paths: readonly string[]) => {
       store.update((state) => {
         state.protectedDraft = [...paths]
@@ -165,9 +149,9 @@ function readyState(overrides: Partial<StandardsOverviewState> = {}): StandardsO
   return {
     status: 'ready',
     summary: readySummary(),
-    rules: { status: 'ready', path: '/ws/.baf/standards/default-rules.md', content: RULES },
-    rulesExpanded: false,
-    areasExpanded: {},
+    enterpriseDocId: undefined,
+    enterpriseDoc: undefined,
+    localeActive: 'zh',
     protectedDraft: [],
     protectedSaving: false,
     protectedNotice: undefined,
@@ -185,9 +169,9 @@ function notReadyState(status: StandardsOverviewState['status'], summary: BafSta
   return {
     status,
     summary,
-    rules: undefined,
-    rulesExpanded: false,
-    areasExpanded: {},
+    enterpriseDocId: undefined,
+    enterpriseDoc: undefined,
+    localeActive: 'zh',
     protectedDraft: undefined,
     protectedSaving: false,
     protectedNotice: undefined,
@@ -198,26 +182,6 @@ function notReadyState(status: StandardsOverviewState['status'], summary: BafSta
     generateNotice: undefined,
   }
 }
-
-describe('sliceAreaContent (anchor slicing)', () => {
-  it('slices from the anchored heading (Chinese tail tolerated) to the next ## heading', () => {
-    const section = sliceAreaContent(RULES, 'coding-style')
-    expect(section).toContain('## coding-style 编码风格')
-    expect(section).toContain('风格规则行')
-    expect(section).not.toContain('章程规则行')
-    expect(section).not.toContain('testing-discipline')
-  })
-
-  it('runs the LAST section to end-of-document and matches a bare anchor heading', () => {
-    expect(sliceAreaContent(RULES, 'testing-discipline')).toContain('回归测试先行')
-    expect(sliceAreaContent('## docs\n- line', 'docs')).toContain('## docs')
-  })
-
-  it('answers undefined when the document has no such heading', () => {
-    expect(sliceAreaContent(RULES, 'nope')).toBeUndefined()
-    expect(sliceAreaContent('', 'logging')).toBeUndefined()
-  })
-})
 
 describe('StandardsProjectOverview · ready branch layout (批次三 4.2)', () => {
   it('renders ONLY the 受保护路径 + 状态脚本 cards — the archive / scaffold cards are gone', () => {
@@ -297,102 +261,200 @@ describe('StandardsProjectOverview · ready branch layout (批次三 4.2)', () =
   })
 })
 
-describe('StandardsEnterpriseOverview · stage-grouped rules', () => {
-  it('does not render baseline meta row or provenance dump blocks', () => {
+describe('StandardsEnterpriseOverview · real-standards flow chart (批次六 5)', () => {
+  it('renders the route-parity canvas — 8 nodes, zh key + en name one line, arrowhead edges, accent chip tags', () => {
     const { props } = harness(readyState())
     render(<StandardsEnterpriseOverview {...props} />)
-    expect(screen.queryByTestId('baf-standard-meta')).toBeNull()
-    expect(screen.queryByTestId('baf-standard-from')).toBeNull()
+    const nodes = [...document.querySelectorAll('[data-testid^="baf-enterprise-node-"]')]
+    expect(nodes.map(node => node.getAttribute('data-testid'))).toEqual([
+      'baf-enterprise-node-intake',
+      'baf-enterprise-node-open',
+      'baf-enterprise-node-clarify',
+      'baf-enterprise-node-design',
+      'baf-enterprise-node-plan',
+      'baf-enterprise-node-implement',
+      'baf-enterprise-node-verify',
+      'baf-enterprise-node-archive',
+    ])
+    // One name line per card: the locale-keyed zh label with the en name
+    // riding inline (the t stub answers keys, so both key and name assert).
+    const intake = screen.getByTestId('baf-enterprise-node-intake')
+    expect(intake.textContent).toContain('hooksNodeIntake')
+    expect(intake.textContent).toContain('Intake')
+    // The SVG chain edges carry arrowheads (route-canvas parity).
+    expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0)
+    // The accent line carries the applying standards' SHORT tags (zh locale).
+    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('编码 · SRI · 高风险')
+    expect(screen.getByTestId('baf-enterprise-node-implement').textContent).toContain('编码 · SRI · 静态 · UT')
   })
 
-  it('groups rule domains under workflow stage sections', () => {
+  it('defaults the detail column to the first node WITH standards and swaps it on click; archive is honestly bare', () => {
     const { props } = harness(readyState())
     render(<StandardsEnterpriseOverview {...props} />)
-    expect(screen.getByTestId('baf-standard-stage-stage.intake')).toBeDefined()
-    expect(screen.getByTestId('baf-standard-area-project-charter')).toBeDefined()
-    expect(screen.getByTestId('baf-standard-area-documentation')).toBeDefined()
-    expect(screen.getByText('fromLiving')).toBeDefined()
-  })
-
-  it('expands a domain into its sliced rules; collapsing hides them again', () => {
-    const { props } = harness(readyState())
-    render(<StandardsEnterpriseOverview {...props} />)
-    expect(screen.queryByTestId('baf-standard-area-body-coding-style')).toBeNull()
-    fireEvent.click(screen.getByTestId('baf-standard-area-toggle-coding-style'))
-    const body = screen.getByTestId('baf-standard-area-body-coding-style')
-    expect(body.textContent).toContain('风格规则行')
-    fireEvent.click(screen.getByTestId('baf-standard-area-toggle-coding-style'))
-    expect(screen.queryByTestId('baf-standard-area-body-coding-style')).toBeNull()
-  })
-
-  it('degrades per area: unavailable doc points at the baseline, a ready doc without the section says so', () => {
-    // 【变更】2026-10-13 (问题 4 批): the doc being UNAVAILABLE (no baseline to
-    // locate it) renders the /baf-scaffold pointer; a readable doc that simply
-    // lacks the section keeps the areaNoContent line.
-    const unavailable = harness(readyState({
-      rules: { status: 'unavailable', reason: 'no-workspace' },
-    }))
-    render(<StandardsEnterpriseOverview {...unavailable.props} />)
-    fireEvent.click(screen.getByTestId('baf-standard-area-toggle-logging'))
-    expect(screen.getByTestId('baf-standard-area-needs-logging').textContent).toContain('areaNeedsBaseline')
+    expect(screen.getByTestId('baf-enterprise-docs-detail').getAttribute('data-node')).toBe('intake')
+    expect(screen.getByTestId('baf-enterprise-doc-overview')).toBeDefined()
+    // The bare node (no standards anywhere) renders the idle accent + the
+    // none-apply line instead of an empty list.
+    fireEvent.click(screen.getByTestId('baf-enterprise-node-archive'))
+    expect(screen.getByTestId('baf-enterprise-docs-detail').getAttribute('data-node')).toBe('archive')
+    expect(screen.getByTestId('baf-enterprise-node-archive').textContent).toContain('enterpriseNodeNone')
+    expect(screen.getByTestId('baf-enterprise-node-none-archive').textContent).toContain('enterpriseNodeNone')
     cleanup()
-    const readyNoLogging = harness(readyState())
-    render(<StandardsEnterpriseOverview {...readyNoLogging.props} />)
-    fireEvent.click(screen.getByTestId('baf-standard-area-toggle-logging'))
-    expect(screen.getByTestId('baf-standard-area-missing-logging').textContent).toContain('areaNoContent')
+    // The implement node lists its standards in catalog order.
+    const again = harness(readyState())
+    render(<StandardsEnterpriseOverview {...again.props} />)
+    fireEvent.click(screen.getByTestId('baf-enterprise-node-implement'))
+    const rows = [...document.querySelectorAll('[data-testid^="baf-enterprise-doc-"]')]
+    expect(rows.map(row => row.getAttribute('data-testid'))).toEqual([
+      'baf-enterprise-doc-code',
+      'baf-enterprise-doc-sri',
+      'baf-enterprise-doc-static',
+      'baf-enterprise-doc-ut',
+    ])
   })
 
-  it('renders the static 8-domain structure before ready — only the CONTENT needs the baseline (2026-10-13 问题 4 批)', () => {
-    const { props } = harness(notReadyState('no-baseline', { status: 'no-baseline' }))
+  it('routes doc clicks through the face and renders every viewer payload state', () => {
+    const openEnterpriseDoc = vi.fn()
+    const { props } = harness(readyState(), { openEnterpriseDoc })
     render(<StandardsEnterpriseOverview {...props} />)
-    // The product-constant structure is always there…
-    expect(screen.getByTestId('baf-standard-areas')).toBeDefined()
-    expect(screen.getByTestId('baf-standard-stage-stage.intake')).toBeDefined()
-    expect(screen.getByTestId('baf-standard-area-project-charter')).toBeDefined()
-    // 【变更】2026-10-19 (六问题批 4.3): the top-level no-baseline banner is
-    // gone with the panel head — the per-area degradation carries the story.
-    expect(screen.queryByTestId('baf-standard-empty')).toBeNull()
-    // …and expanding an area fetches the doc and degrades to the pointer copy.
-    fireEvent.click(screen.getByTestId('baf-standard-area-toggle-logging'))
-    expect(props.loadRules).toHaveBeenCalled()
+    // branch applies at plan — select that node first, then click its row.
+    fireEvent.click(screen.getByTestId('baf-enterprise-node-plan'))
+    fireEvent.click(screen.getByTestId('baf-enterprise-doc-branch'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('branch')
+    // No id in state → no viewer at all.
+    expect(screen.queryByTestId('baf-enterprise-doc-viewer')).toBeNull()
+    cleanup()
+
+    // Fetch in flight → the loading viewer.
+    const loading = harness(readyState({ enterpriseDocId: 'code' }))
+    render(<StandardsEnterpriseOverview {...loading.props} />)
+    expect(screen.getByTestId('baf-enterprise-doc-viewer').textContent).toContain('enterpriseDocLoading')
+    cleanup()
+
+    // Ready → the document body + the open row highlighted + 打开文件 gesture.
+    const openPath = vi.fn()
+    const ready = harness(readyState({
+      enterpriseDocId: 'code',
+      enterpriseDoc: {
+        status: 'ready', id: 'code', titleZh: 'SORA C 语言编码规范', titleEn: 'C coding standards',
+        path: 'D:/assets/skills/sora-c-code-standards/SKILL.md', content: '# SORA C 语言编码规范\n\n- 规则行。',
+      },
+    }), { openPath })
+    render(<StandardsEnterpriseOverview {...ready.props} />)
+    expect(screen.getByTestId('baf-enterprise-doc-body').textContent).toContain('规则行')
+    // code applies at design — select that node so its row is listed.
+    fireEvent.click(screen.getByTestId('baf-enterprise-node-design'))
+    expect(screen.getByTestId('baf-enterprise-doc-code').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByTestId('baf-enterprise-doc-open-file'))
+    expect(openPath).toHaveBeenCalledWith('D:/assets/skills/sora-c-code-standards/SKILL.md')
+    cleanup()
+
+    // Unknown id and unreadable doc → their own error lines.
+    const unknown = harness(readyState({ enterpriseDocId: 'ghost', enterpriseDoc: { status: 'unknown' } }))
+    render(<StandardsEnterpriseOverview {...unknown.props} />)
+    expect(screen.getByTestId('baf-enterprise-doc-viewer').textContent).toContain('enterpriseDocUnknown')
+    cleanup()
+    const closeEnterpriseDoc = vi.fn()
+    const unreadable = harness(readyState({
+      enterpriseDocId: 'ut',
+      enterpriseDoc: { status: 'unreadable', reason: 'ENOENT: gone' },
+    }), { closeEnterpriseDoc })
+    render(<StandardsEnterpriseOverview {...unreadable.props} />)
+    expect(screen.getByTestId('baf-enterprise-doc-viewer').textContent).toContain('ENOENT: gone')
+    // 关闭 routes through the close face.
+    fireEvent.click(screen.getByTestId('baf-enterprise-doc-close'))
+    expect(closeEnterpriseDoc).toHaveBeenCalledTimes(1)
+  })
+
+  it('picks the accent chip tags by the tracked locale (zh shorts vs en shorts)', () => {
+    const zh = harness(readyState())
+    render(<StandardsEnterpriseOverview {...zh.props} />)
+    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('编码 · SRI · 高风险')
+    cleanup()
+    const en = harness(readyState({ localeActive: 'en' }))
+    render(<StandardsEnterpriseOverview {...en.props} />)
+    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('Coding · SRI · High-risk')
+    expect(screen.getByTestId('baf-enterprise-node-design').textContent).not.toContain('编码')
   })
 })
 
-describe('StandardsController · loadRules settle (2026-10-13 问题 4 批)', () => {
-  /** Minimal client ctx: only the bafStandardConfig namespace the controller touches. */
-  function controller(summary: () => Promise<unknown>, rulesDoc: () => Promise<unknown>) {
+describe('enterprise-docs catalog parity (批次六 5)', () => {
+  it('mirrors the host ENTERPRISE_DOCS catalog — ids in order, titles, and node sets', () => {
+    expect(ENTERPRISE_DOC_ROWS.map(row => row.id)).toEqual(ENTERPRISE_DOCS.map(entry => entry.id))
+    for (const row of ENTERPRISE_DOC_ROWS) {
+      const entry = ENTERPRISE_DOCS.find(candidate => candidate.id === row.id)
+      if (entry === undefined) throw new Error(`client row without a host entry: ${row.id}`)
+      expect(row.titleZh, row.id).toBe(entry.titleZh)
+      expect(row.titleEn, row.id).toBe(entry.titleEn)
+      expect([...row.nodes].sort(), row.id).toEqual([...entry.nodes].sort())
+    }
+    // Every node the mirror marks is a main-chain node the canvas renders.
+    for (const row of ENTERPRISE_DOC_ROWS) {
+      for (const node of row.nodes) {
+        expect(['intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive'], `${row.id}:${node}`)
+          .toContain(node)
+      }
+    }
+  })
+})
+
+describe('StandardsController · enterpriseDoc viewer (批次六 5)', () => {
+  /** Minimal client ctx: summary + the enterpriseDoc namespace (locale service
+   * absent → the try/catch leaves the 'zh' default standing). */
+  function controller(enterpriseDoc: (id: string) => Promise<unknown>) {
     const remote = {
-      bafStandardConfig: { summary: vi.fn(summary), rulesDoc: vi.fn(rulesDoc) },
+      bafStandardConfig: {
+        summary: vi.fn(() => Promise.resolve({ ok: true, value: { status: 'no-baseline', cwd: '/ws' } })),
+        enterpriseDoc: vi.fn(enterpriseDoc),
+      },
     }
     const c = new StandardsController({ remote } as never)
     return { c, remote }
   }
   const tick = () => new Promise(r => setTimeout(r, 0))
 
-  it('settles the viewer to unavailable WITHOUT an RPC once the summary lands no-baseline', async () => {
-    const { c, remote } = controller(
-      () => Promise.resolve({ ok: true, value: { status: 'no-baseline', cwd: '/ws' } }),
-      () => Promise.resolve({ ok: true, value: { status: 'ready', content: RULES } }),
-    )
+  it('opens a document — id first, payload when the RPC answers; re-click is a no-op; close clears', async () => {
+    const { c, remote } = controller((id: string) => Promise.resolve({
+      ok: true,
+      value: {
+        status: 'ready', id, titleZh: 'SORA C 语言编码规范', titleEn: 'C coding standards',
+        path: '/p/SKILL.md', content: '# SORA C 语言编码规范',
+      },
+    }))
     await tick()
-    await c.loadRules()
-    // The old early-return left rules undefined here — every area body then
-    // spun at statusLoading forever. The settle degrades both viewers instead.
-    expect(c.face().hooks.standards.getSnapshot().rules).toEqual({ status: 'unavailable', reason: 'no-baseline' })
-    expect(remote.bafStandardConfig.rulesDoc).not.toHaveBeenCalled()
+    await c.openEnterpriseDoc('code')
+    expect(remote.bafStandardConfig.enterpriseDoc).toHaveBeenCalledWith('code')
+    const state = c.face().hooks.standards.getSnapshot()
+    expect(state.enterpriseDocId).toBe('code')
+    expect(state.enterpriseDoc).toMatchObject({ status: 'ready', id: 'code' })
+    // Same id again → no second fetch.
+    await c.openEnterpriseDoc('code')
+    expect(remote.bafStandardConfig.enterpriseDoc).toHaveBeenCalledTimes(1)
+    c.closeEnterpriseDoc()
+    const closed = c.face().hooks.standards.getSnapshot()
+    expect(closed.enterpriseDocId).toBeUndefined()
+    expect(closed.enterpriseDoc).toBeUndefined()
   })
 
-  it('still fetches while the summary is loading (summary undefined falls through)', async () => {
-    const { c, remote } = controller(
-      () => new Promise(() => {}),
-      () => Promise.resolve({ ok: true, value: { status: 'ready', path: '/ws/.baf/standards/default-rules.md', content: RULES } }),
-    )
+  it('drops a stale answer superseded by a newer click, and settles transport failures as unreadable', async () => {
+    let release: ((value: unknown) => void) | undefined
+    const { c } = controller((id: string) => (id === 'slow'
+      ? new Promise((resolve) => { release = resolve })
+      : Promise.resolve({ ok: true, value: { status: 'unknown' } })))
     await tick()
-    await c.loadRules()
-    expect(remote.bafStandardConfig.rulesDoc).toHaveBeenCalledTimes(1)
-    expect(c.face().hooks.standards.getSnapshot().rules).toEqual({
-      status: 'ready', path: '/ws/.baf/standards/default-rules.md', content: RULES,
-    })
+    void c.openEnterpriseDoc('slow')
+    await tick()
+    await c.openEnterpriseDoc('ut')
+    // The slow answer lands AFTER ut answered — it must not overwrite.
+    release?.({ ok: true, value: { status: 'ready', id: 'slow', content: 'late' } })
+    await tick()
+    expect(c.face().hooks.standards.getSnapshot().enterpriseDoc).toMatchObject({ status: 'unknown' })
+    // A rejected transport settles as unreadable with the message.
+    const thrown = controller(() => Promise.reject(new Error('rpc down')))
+    await tick()
+    await thrown.c.openEnterpriseDoc('code')
+    expect(thrown.c.face().hooks.standards.getSnapshot().enterpriseDoc)
+      .toMatchObject({ status: 'unreadable', reason: 'rpc down' })
   })
 })
 

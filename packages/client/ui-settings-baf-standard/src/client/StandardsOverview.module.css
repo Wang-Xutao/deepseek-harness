@@ -26,23 +26,9 @@
   line-height: 18px;
 }
 
-.refresh {
-  flex: none;
-  height: 36px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 18px;
-  background: var(--dsw-alias-bg-module-platform);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-primary);
-  cursor: pointer;
-}
-
-.refresh:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
+/* 【变更】2026-10-20 (批次六 5): .refresh and the .stage* digest families are
+ * deleted — the rules digest (their only consumer) retired with the real
+ * enterprise standards flow chart taking the tab. */
 
 .blockQuality {
   padding: 8px 0 16px;
@@ -68,35 +54,6 @@
   border-radius: 10px;
   background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
   margin-top: 12px;
-}
-
-.stageList {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 12px;
-}
-
-.stageGroup {
-  padding: 10px 0 0;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-}
-
-.stageGroup:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-.stageTitle {
-  font-size: 13px;
-  line-height: 19px;
-}
-
-.stageHint {
-  margin-top: 2px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
 }
 
 .status {
@@ -205,21 +162,107 @@
   white-space: nowrap;
 }
 
-.rules {
-  margin-top: 12px;
-  padding: 12px;
+/* 【变更】2026-10-20 (批次六 5): the REAL enterprise standards — the doc rows in
+ * the selected node's detail column and the in-card document viewer replace
+ * the retired rules digest + rules-doc viewer (whose .rules/.stage/.area/.from
+ * families are deleted with it). */
+
+.docList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* One standard's row — title line (zh + en inline) over the applies-at meta. */
+.docRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 10px 8px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 45%, transparent);
 }
 
-.rulesHead {
+.docRow:hover,
+.docRow:focus-visible {
+  border-color: var(--dsw-alias-border-l3);
+}
+
+/* The open document's row carries the 状态脚本 selected-node ring family. */
+.docRowSelected {
+  border-color: #7b8fc7;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #7b8fc7 25%, transparent);
+}
+
+.docRow:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline-offset: 1px;
+}
+
+.docRowMain {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.docRowEn {
+  margin-left: 5px;
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.docRowMeta {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.docHint {
+  margin-top: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* The in-card document viewer — head (title + open/close) over the full text. */
+.docViewer {
+  margin: 0 12px 12px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.docViewerHead {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
-.rulesBody {
+.docViewerTitle {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docBody {
   max-height: 360px;
   margin: 8px 0 0;
   padding: 8px;
@@ -231,96 +274,6 @@
   line-height: 18px;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-/* 【变更】2026-10-07 (九点批 问题 8): the 8-domain digest + provenance chain. */
-
-.areaList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.areaRow {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.areaHead {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 4px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.areaHead:hover {
-  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
-}
-
-.areaTitle {
-  flex: none;
-  font-size: 13px;
-  line-height: 19px;
-}
-
-.areaDesc {
-  flex: 1 1 auto;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.areaToggle {
-  flex: none;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.areaAnchor {
-  padding-left: 8px;
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 11px;
-  line-height: 16px;
-  word-break: break-all;
-}
-
-.areaBody {
-  width: 100%;
-  margin: 0;
-  padding: 8px;
-  overflow: auto;
-  border-radius: 6px;
-  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.fromSteps {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.fromLiving {
-  margin-top: 8px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
 }
 
 /* 【变更】2026-10-18 (项目工程 1.1–1.3): clickable path rows + AI 禁改路径 card. */
@@ -745,16 +698,13 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* 【变更】2026-10-20 (批次四 3.6): the English name rides under the zh label —
- * quiet secondary text, so the card reads zh-first but bilingual. */
+/* 【变更】2026-10-20 (批次四 3.6 → 批次六 2): the English name rides INLINE
+ * after the zh label — one name line per card, zh first. */
 .hooksNodeEn {
-  max-width: 100%;
-  overflow: hidden;
+  margin-left: 5px;
   font-size: 9.5px;
-  line-height: 12px;
+  font-weight: 400;
   letter-spacing: 0.2px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--dsw-alias-label-secondary);
 }
 

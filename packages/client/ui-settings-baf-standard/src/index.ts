@@ -33,12 +33,13 @@ import { collectStatusBlockers } from '@deepseek-ai/dsh-baf-quality'
 import { scaffoldWorkspace } from '@deepseek-ai/dsh-baf-scaffold'
 import {
   detectAppliedEnterprisePacks,
+  readEnterpriseDoc,
   STANDARD_AREAS, STANDARD_PLACEHOLDER, summarizeStandard,
 } from '@deepseek-ai/dsh-baf-standard'
 // Type-only: pulls the session store's Context merge (ctx.sessions).
 import type {} from '@deepseek-ai/dsh-session'
 import type {
-  BafEnterpriseStandardsStatus, BafStandardGenerateResult,
+  BafEnterpriseDocResult, BafEnterpriseStandardsStatus, BafStandardGenerateResult,
   BafStandardNodeHooks, BafStandardSaveNodeHooksResult,
   BafStandardSaveProtectedResult,
   BafStandardFieldRow, BafStandardFieldState, BafStandardPackageCard,
@@ -318,6 +319,30 @@ export class BafStandardConfigRemote extends TypertRemoteService {
       return { status: 'ready', path, content }
     } catch (error) {
       return { status: 'unreadable', path, reason: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /**
+   * 【变更】2026-10-20 (批次六 5): serve one REAL enterprise standard document
+   * from the package assets (the bafplugin-migrated catalog — a product
+   * constant, so unlike {@link rulesDoc} this needs no workspace and never
+   * degrades to a placeholder). Unknown id → `unknown`; IO trouble →
+   * `unreadable` with the reason.
+   * @param id - catalog id (`overview` / `code` / `sri` / …).
+   * @returns the document's absolute path + full text.
+   */
+  @Remote
+  async enterpriseDoc(id: string): Promise<BafEnterpriseDocResult> {
+    const read = readEnterpriseDoc(id)
+    if (read.status === 'unknown') return { status: 'unknown' }
+    if (read.status === 'unreadable') return { status: 'unreadable', reason: read.reason }
+    return {
+      status: 'ready',
+      id: read.entry.id,
+      titleZh: read.entry.titleZh,
+      titleEn: read.entry.titleEn,
+      path: read.path,
+      content: read.content,
     }
   }
 

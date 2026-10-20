@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
+import { ENTERPRISE_DOCS } from '@deepseek-ai/dsh-baf-standard/src/enterprise-docs.ts'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   BafStandardConfigRemote, projectStandardCards, resolveWorkspaceCwd, type CwdSessionStore,
@@ -224,6 +225,27 @@ describe('BafStandardConfigRemote (mounted)', () => {
       path: join(cwd, '.baf', 'standards', 'default-rules.md'),
     })
     expect(doc.content).toContain('testing-discipline')
+  })
+
+  // 【变更】2026-10-20 (批次六 5): the REAL enterprise documents — product
+  // constants bundled under assets/enterprise, so the read needs no
+  // workspace; this also guards that every cataloged asset actually ships
+  // (a missing migration would fail here, not in the UI).
+  it('serves every cataloged enterprise document as a real shipped asset', async () => {
+    const { remote } = await workspace(true, true)
+    for (const entry of ENTERPRISE_DOCS) {
+      const doc = await remote.enterpriseDoc(entry.id)
+      expect(doc.status, entry.id).toBe('ready')
+      if (doc.status !== 'ready') continue
+      expect(doc.id, entry.id).toBe(entry.id)
+      expect(doc.titleZh, entry.id).toBe(entry.titleZh)
+      expect(doc.path, entry.id).toContain('assets')
+      // Real markdown (an H1 somewhere; SKILL.md files front it with YAML),
+      // not a placeholder stub.
+      expect((doc.content ?? '').length, entry.id).toBeGreaterThan(200)
+      expect(doc.content, entry.id).toMatch(/(^|\n)# /)
+    }
+    expect(await remote.enterpriseDoc('nope')).toEqual({ status: 'unknown' })
   })
 
   // 【变更】2026-10-20 (批次三 4.4): the 状态脚本 editor's add-time existence

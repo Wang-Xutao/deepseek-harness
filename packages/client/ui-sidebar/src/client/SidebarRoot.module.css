@@ -537,19 +537,20 @@
 
 /* 【变更】2026-10-20 (批次四 3.1): registrant-pinned corner tag on the panel
  * LABEL's top-right (the 工作流 row's baf mark) — brand-tinted mini superscript,
- * same visual family as the desktop footer's baf chip. */
+ * same visual family as the desktop footer's baf chip.
+ * 【变更】2026-10-20 (批次六 1): pixel-identical to the Settings nav's baf
+ * badge (ui-settings-general .bafBadge) — same padding/radius/type scale, no
+ * letter-spacing, no background tint. */
 .panelBadge {
   margin-left: 4px;
-  padding: 0 4px;
+  padding: 0 3px;
   border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 55%, transparent);
-  border-radius: 6px;
+  border-radius: 4px;
   vertical-align: super;
-  font-size: 9px;
-  line-height: 12px;
+  font-size: 8px;
+  line-height: 10px;
   font-weight: 700;
-  letter-spacing: 0.06em;
   color: var(--dsw-alias-brand-primary, #4a78d2);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 10%, transparent);
 }
 
 .collapsed .panelList {

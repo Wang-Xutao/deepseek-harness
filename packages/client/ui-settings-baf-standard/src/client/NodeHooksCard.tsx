@@ -55,10 +55,10 @@ const NODES: readonly ('intake' | 'open' | 'clarify' | 'design' | 'plan' | 'impl
   'archive',
 ]
 
-/** Canvas geometry — the 确认门 node card box and row pitch (64px: the card
- * now stacks three lines — zh label / en label / accent, 批次四 3.6). */
+/** Canvas geometry — the 确认门 node card box and row pitch (48px: the card
+ * stacks two lines — 「中文 En」 one name line + accent, 批次六 2). */
 const NODE_W = 192
-const NODE_H = 64
+const NODE_H = 48
 const NODE_GAP = 16
 const NODE_X = 16
 const CANVAS_TOP = 16
@@ -82,8 +82,8 @@ const KIND_LABEL_KEYS: Record<'enter' | 'exit', BafStandardKey> = {
   exit: 'hooksExitLabel',
 }
 
-/** 【变更】2026-10-20 (批次四 3.6): every canvas card carries both languages —
- * the English name rides under the zh label (确认门 flow-card parity). */
+/** 【变更】2026-10-20 (批次四 3.6 → 批次六 2): every canvas card carries both
+ * languages on ONE line — 中文 first, the English name rides inline after it. */
 const NODE_EN: Record<(typeof NODES)[number], string> = {
   intake: 'Intake',
   open: 'Open change',
@@ -563,8 +563,10 @@ export function NodeHooksCard({ state, summary, t, openPath, statWorkspacePath, 
                     setEditing(null)
                   }}
                 >
-                  <span className={css.hooksNodeName}>{label}</span>
-                  <span className={css.hooksNodeEn}>{NODE_EN[node]}</span>
+                  <span className={css.hooksNodeName}>
+                    {label}
+                    <span className={css.hooksNodeEn}>{NODE_EN[node]}</span>
+                  </span>
                   <span className={join(css.hooksNodeAccent, accent.set ? undefined : css.hooksNodeAccentIdle)}>
                     {accent.text}
                   </span>

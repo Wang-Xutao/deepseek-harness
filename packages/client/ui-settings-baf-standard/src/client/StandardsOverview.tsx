@@ -1,13 +1,13 @@
 /**
  * BAF 工程规范 settings panels (2026-10-12 工作流设置 7): split across 项目工程 /
  * 企业规范 / 质量监控 tabs — read-only baseline projections without workspace
- * meta dumps; enterprise rules group by workflow stage.
+ * meta dumps.
  *
- * 【变更】2026-10-13 (问题 4 批, 客户决策): 企业规范's 8-domain structure and
- * stage grouping are product constants and ALWAYS render — only the rules
- * content needs the baseline (per-area body and the full document degrade
- * with a /baf-scaffold pointer). 质量监控 gains an always-on gate-mechanism
- * card (product-fixed knowledge); its stack card stays baseline-gated (the
+ * 【变更】2026-10-20 (批次六 5, 客户决策): 企业规范 renders the REAL bafplugin
+ * standards on a 确认门-parity workflow flow chart (which standard applies at
+ * which state; click to read the document) — the placeholder-driven rules
+ * digest and rules-doc viewer are retired. 质量监控 keeps its always-on
+ * gate-mechanism card; its stack card stays baseline-gated (the
  * commands/thresholds ARE the project's git-managed baseline config).
  *
  * 【变更】2026-10-18 (项目工程 1.1–1.3, 客户决策): 项目工程 is no longer purely
@@ -22,7 +22,8 @@ import type {
 import type { BafStandardCardId, BafStandardFieldRow, BafStandardSummaryResult } from '../types.ts'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import { NodeHooksCard } from './NodeHooksCard.tsx'
-import { NS, type BafStandardKey } from './locales.ts'
+import { EnterpriseDocsCard } from './EnterpriseDocsCard.tsx'
+import { type BafStandardKey } from './locales.ts'
 import css from './StandardsOverview.module.css'
 
 const identity = <T,>(value: T): T => value
@@ -68,59 +69,8 @@ export function joinEntry(cwd: string, entry: string): string {
   return `${cwd.replace(/\/+$/, '')}/${cleaned}`
 }
 
-const AREA_META: Record<string, readonly [BafStandardKey, BafStandardKey]> = {
-  'project-charter': ['area.project-charter', 'areaDesc.project-charter'],
-  'coding-style': ['area.coding-style', 'areaDesc.coding-style'],
-  interfaces: ['area.interfaces', 'areaDesc.interfaces'],
-  'error-handling': ['area.error-handling', 'areaDesc.error-handling'],
-  logging: ['area.logging', 'areaDesc.logging'],
-  documentation: ['area.documentation', 'areaDesc.documentation'],
-  'branch-commit': ['area.branch-commit', 'areaDesc.branch-commit'],
-  'testing-discipline': ['area.testing-discipline', 'areaDesc.testing-discipline'],
-}
-
-/** Workflow stages → rule domains shown under 企业规范. */
-const STAGE_AREA_GROUPS: readonly {
-  stageKey: BafStandardKey
-  hintKey: BafStandardKey
-  areas: readonly string[]
-}[] = [
-  { stageKey: 'stage.intake', hintKey: 'stageHint.intake', areas: ['project-charter'] },
-  { stageKey: 'stage.open', hintKey: 'stageHint.open', areas: ['documentation'] },
-  { stageKey: 'stage.clarify', hintKey: 'stageHint.clarify', areas: ['interfaces'] },
-  { stageKey: 'stage.design', hintKey: 'stageHint.design', areas: ['coding-style', 'error-handling'] },
-  { stageKey: 'stage.plan', hintKey: 'stageHint.plan', areas: ['branch-commit', 'logging'] },
-  { stageKey: 'stage.verify', hintKey: 'stageHint.verify', areas: ['testing-discipline'] },
-]
-
 const QUALITY_CARD_IDS: readonly BafStandardCardId[] = ['quality']
 const STANDARD_CARD_IDS: readonly BafStandardCardId[] = ['standard']
-
-/** Resolve a host area's id from its `titleKey` (`<NS>.area.<id>`). */
-function areaIdOf(titleKey: string, fallbackId: string): string {
-  const prefix = `${NS}.area.`
-  return titleKey.startsWith(prefix) ? titleKey.slice(prefix.length) : fallbackId
-}
-
-/**
- * Slice one rule domain's rules out of the rules document.
- * @param content - the rules document text.
- * @param anchor - the area's heading anchor (its id).
- * @returns the trimmed section, or undefined when the heading is absent.
- */
-export function sliceAreaContent(content: string, anchor: string): string | undefined {
-  const lines = content.split('\n')
-  const start = lines.findIndex(line => line.startsWith(`## ${anchor} `) || line.trim() === `## ${anchor}`)
-  if (start === -1) return undefined
-  let end = lines.length
-  for (let index = start + 1; index < lines.length; index += 1) {
-    if (lines[index]?.startsWith('## ') === true) {
-      end = index
-      break
-    }
-  }
-  return lines.slice(start, end).join('\n').trim()
-}
 
 const CARD_META: Record<BafStandardCardId, readonly [BafStandardKey, BafStandardKey, BafStandardKey]> = {
   workflow: ['cardTitleWorkflow', 'cardDescWorkflow', 'cardCommandWorkflow'],
@@ -652,61 +602,11 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
   )
 }
 
-function AreaRow({ id, state, loadRules, toggleArea, t }: {
-  id: string
-  state: StandardsOverviewState
-  loadRules: () => Promise<void>
-  toggleArea: (id: string) => void
-  t: StandardsPanelProps['t']
-}) {
-  const meta = AREA_META[id]
-  const expanded = state.areasExpanded[id] === true
-  const content = state.rules?.status === 'ready' && state.rules.content !== undefined
-    ? sliceAreaContent(state.rules.content, id)
-    : undefined
-  return (
-    <div className={css.areaRow} data-testid={`baf-standard-area-${id}`}>
-      <button
-        type="button"
-        className={css.areaHead}
-        data-testid={`baf-standard-area-toggle-${id}`}
-        onClick={() => {
-          if (state.rules === undefined) void loadRules()
-          toggleArea(id)
-        }}
-      >
-        <span className={css.areaTitle}>{meta === undefined ? id : t(meta[0])}</span>
-        <span className={css.areaDesc}>{meta === undefined ? '' : t(meta[1])}</span>
-        <span className={css.areaToggle}>{expanded ? t('areaCollapse') : t('areaExpand')}</span>
-      </button>
-      {expanded ? (
-        state.rules === undefined ? (
-          <div className={css.status}>{t('statusLoading')}</div>
-        ) : state.rules.status === 'ready' ? (
-          content !== undefined ? (
-            <pre className={css.areaBody} data-testid={`baf-standard-area-body-${id}`}>{content}</pre>
-          ) : (
-            <div className={css.status} data-testid={`baf-standard-area-missing-${id}`}>{t('areaNoContent')}</div>
-          )
-        ) : (
-          // 【变更】2026-10-13 (问题 4 批): the rules document needs the baseline
-          // to locate it — the 8-domain STRUCTURE is a product constant, only
-          // the content degrades with a pointer at /baf-scaffold.
-          <div className={css.status} data-testid={`baf-standard-area-needs-${id}`}>{t('areaNeedsBaseline')}</div>
-        )
-      ) : null}
-    </div>
-  )
-}
-
-/** 企业规范 tab — rules grouped by workflow stage + optional full document. */
+/** 企业规范 tab — REAL bafplugin standards on a workflow flow chart + packs. */
 export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
-  const { loadRules, toggleRules, toggleArea, t } = props
+  const { openEnterpriseDoc, closeEnterpriseDoc, openPath, t } = props
   const standardCards = (summary?.cards ?? []).filter(card => STANDARD_CARD_IDS.includes(card.id))
-  const areaById = new Map(
-    (summary?.standardAreas ?? []).map(area => [areaIdOf(area.titleKey, area.id), area]),
-  )
 
   const enterprise = summary?.enterpriseStandards
 
@@ -714,9 +614,22 @@ export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
     <section className={css.block} data-testid="baf-standard-overview">
       {/* 【变更】2026-10-19 (六问题批 4.3): the tab-head title + description and
           the no-baseline banner are gone — the tab label already says 企业规范,
-          and the 8-domain structure (a product constant) renders regardless of
-          baseline state, degrading per-area instead of explaining itself. */}
+          and the content below (a product constant) renders regardless of
+          baseline state instead of explaining itself. */}
       <StatusSurface state={state} summary={summary} t={t} suppressNoBaseline />
+
+      {/* 【变更】2026-10-20 (批次六 5, 客户决策): the placeholder-driven rules
+          digest + rules-doc viewer are REPLACED by the REAL enterprise
+          standards (bafplugin-migrated package assets) rendered as the
+          确认门-parity flow chart — which standard applies at which state,
+          click to read the document itself. */}
+      <EnterpriseDocsCard
+        state={state}
+        t={t}
+        openEnterpriseDoc={openEnterpriseDoc}
+        closeEnterpriseDoc={closeEnterpriseDoc}
+        openPath={openPath}
+      />
       {enterprise !== undefined ? (
         <div className={css.card} data-testid="baf-enterprise-packs">
           <div className={css.cardTitle}>{t('enterprisePacksTitle')}</div>
@@ -753,85 +666,6 @@ export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
           ))}
         </div>
       ) : null}
-
-      {/* 【变更】2026-10-13 (问题 4 批, 客户决策): the 8-domain structure and
-          stage grouping are PRODUCT CONSTANTS — they always render. Only the
-          rules-document CONTENT needs the baseline (to locate the file), and
-          the per-area body degrades with a /baf-scaffold pointer when the
-          rules fetch answers unavailable. */}
-      <div className={css.rules} data-testid="baf-standard-areas">
-        <div className={css.rulesHead}>
-          <div>
-            <div className={css.cardTitle}>{t('areasTitle')}</div>
-            <div className={css.cardDesc}>{t('areasHint')}</div>
-          </div>
-        </div>
-        <div className={css.stageList}>
-          {STAGE_AREA_GROUPS.map((group) => {
-            // The server list wins when present; without a baseline the static
-            // catalog ids render directly (same ids, same anchors).
-            const areas = group.areas.map(id => areaById.get(id) ?? { id, titleKey: `${NS}.area.${id}`, sourceRef: '' })
-            return (
-              <section key={group.stageKey} className={css.stageGroup} data-testid={`baf-standard-stage-${group.stageKey}`}>
-                <div className={css.stageTitle}>{t(group.stageKey)}</div>
-                <div className={css.stageHint}>{t(group.hintKey)}</div>
-                <div className={css.areaList}>
-                  {areas.map((area) => {
-                    const id = areaIdOf(area.titleKey, area.id)
-                    return (
-                      <AreaRow
-                        key={id}
-                        id={id}
-                        state={state}
-                        loadRules={loadRules}
-                        toggleArea={toggleArea}
-                        t={t}
-                      />
-                    )
-                  })}
-                </div>
-              </section>
-            )
-          })}
-        </div>
-        <div className={css.fromLiving}>{t('fromLiving')}</div>
-      </div>
-
-      <div className={css.rules} data-testid="baf-standard-rules">
-        <div className={css.rulesHead}>
-          <div>
-            <div className={css.cardTitle}>{t('rulesTitle')}</div>
-            <div className={css.cardDesc}>{t('rulesHint')}</div>
-          </div>
-          <button
-            type="button"
-            className={css.refresh}
-            data-testid="baf-standard-rules-toggle"
-            onClick={() => { toggleRules() }}
-          >
-            {state.rulesExpanded ? t('rulesCollapse') : t('rulesExpand')}
-          </button>
-        </div>
-        {state.rulesExpanded ? (
-          state.rules === undefined
-            ? <div className={css.status}>{t('statusLoading')}</div>
-            : state.rules.status === 'ready'
-              ? (
-                <pre className={css.rulesBody} data-testid="baf-standard-rules-body">{state.rules.content}</pre>
-              )
-              : state.rules.status === 'unreadable'
-                ? <div className={css.statusError}>{t('rulesUnreadable')}{state.rules.reason}</div>
-                : (
-                  <div className={css.status} data-testid="baf-standard-rules-unavailable">
-                    {summary?.status === 'ready' && summary.standardAvailability === 'policy_missing'
-                      ? t('rulesUnavailablePolicy')
-                      : summary?.status === 'no-baseline'
-                        ? t('rulesUnavailableNoBaseline')
-                        : t('rulesUnavailableNoWorkspace')}
-                  </div>
-                )
-        ) : null}
-      </div>
     </section>
   )
 }
