@@ -31,9 +31,15 @@ export type DshReleaseNotes = { tag: string; name: string; publishedAt: string; 
  * hidden <input type="file">; this turns its File into the absolute path so the
  * client can prefill the workspace-relative script path. Plain web has no
  * bridge — the client falls back to the bare file name.
+ * 【变更】2026-10-20 (批次五 1.3): `pickFile(defaultPath)` opens the NATIVE
+ * file dialog through the main process with the workspace root as its
+ * default directory (an `<input type="file">` cannot preset one); it answers
+ * the picked absolute path, or null on cancel. When present, the client
+ * prefers it over the hidden input.
  */
 contextBridge.exposeInMainWorld('__BAF_FILE_PICKER__', {
   pathFor: (file: File) => webUtils.getPathForFile(file),
+  pickFile: (defaultPath: string) => ipcRenderer.invoke('baf:pickScriptFile', defaultPath) as Promise<string | null>,
 })
 
 contextBridge.exposeInMainWorld('bafDesktop', {

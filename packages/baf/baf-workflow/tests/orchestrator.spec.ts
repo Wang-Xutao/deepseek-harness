@@ -233,11 +233,11 @@ describe('§22.19 orchestrator: turn-end gate popping', () => {
     const root = await setup()
     try {
       const changeId = await reachGateA(root)
-      const service = serviceWith([selected('确认设计，进入计划')])
+      const service = serviceWith([selected('确认 · 进入计划')])
       const { emit, logs } = install(service)
       emit({ header: { id: 'sess-orch', cwd: root } }, turnEnd(1))
       await waitFor(async () => service.calls.length >= 1, logs, 'design-confirm pop')
-      expect(service.calls[0]?.questions[0]?.question).toBe('设计已完成，请确认')
+      expect(service.calls[0]?.questions[0]?.question).toBe('设计已完成 · 请确认进入计划')
       await waitFor(async () =>
         (await new ProjectionStore({ workspaceRoot: root }).readStatus(changeId)).current === 'plan',
       logs, 'plan entry after the confirm click')
@@ -405,7 +405,7 @@ describe('§22.19 orchestrator: turn-end gate popping', () => {
       await settle()
       // One ask reached the service; the second same-key entry dropped.
       expect(service.calls).toHaveLength(1)
-      service.release('确认设计，进入计划')
+      service.release('确认 · 进入计划')
     } finally {
       await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
     }

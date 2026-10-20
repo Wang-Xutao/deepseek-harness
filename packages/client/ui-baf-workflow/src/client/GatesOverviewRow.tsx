@@ -23,6 +23,14 @@
  * 【变更】2026-10-07 (九点批 问题 9): the row stays collapsed in list context
  * and loads the projection on first expand (cached client-side); embedded in
  * the 确认门 tab it loads expanded on mount.
+ * 【变更】2026-10-20 (批次五 2.1–2.6): the projection is de-duplicated for the
+ * READER — gates whose only difference is an internal routing variant stop
+ * rendering (bug-fix twins like bugfix-open-advance, and design-confirm whose
+ * decision design-advance already shows); the runtime gates themselves are
+ * untouched. Internal vocabulary leaves the display copy: no T-edge ids (the
+ * plain-zh CONDITION_ZH rides in from graph-template), no bug-fix chips, no
+ * 一次性 badges or legend item, and the gate cards re-layer as title /
+ * question / option rows with section labels.
  */
 import { Fragment, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -32,7 +40,7 @@ import type {
 import type {
   BafWorkflowGateConfirmRow, BafWorkflowGateOverview, BafWorkflowGateStageRow,
 } from '../types.ts'
-import { TEMPLATE_EDGES } from './graph-template.ts'
+import { TEMPLATE_EDGES, conditionTextOf } from './graph-template.ts'
 import { NodeIcon } from './icons.tsx'
 import type { TerminalStateId, WorkflowNodeId } from './tab-types.ts'
 import css from './GatesOverviewRow.module.css'
@@ -66,10 +74,19 @@ const MAIN_CHAIN: readonly string[] = [
  * nodes right after 接单 (before the 分类 confirm). */
 const ONCE_ENTRY: readonly string[] = ['scaffold', 'new-workflow', 'active-conflict', 'bind-workflow']
 
+/**
+ * 【变更】2026-10-20 (批次五 2.2/2.4): reader-side de-duplication — gates whose
+ * decision another visible gate already shows are SKIPPED by the client
+ * projection (pills, 明细, aria alike). `bugFix === true` gates are bug-fix
+ * twins of a full-path gate (bugfix-open-advance ≙ open-advance); the parked
+ * re-pop design-confirm ≙ the first-pop design-advance. The RUNTIME registry
+ * and pop logic are untouched — only this overview stops printing the twin.
+ */
+const READER_SKIPPED_GATES: ReadonlySet<string> = new Set(['design-confirm'])
+
 /** Client-side anchors for per-change gates the projection cannot place
  * (their `node` is undefined): each rides the state card it confirms. */
 const CLIENT_ANCHOR: Readonly<Record<string, string>> = {
-  'design-confirm': 'design',
   'verify-archive': 'verify',
   'resume': 'drift',
   'abandon': 'abandoned',
@@ -93,8 +110,9 @@ const NODE_LABEL: Readonly<Record<string, GatesLocaleKey>> = {
 /** The locale key union this component's `t` accepts. */
 type GatesLocaleKey = PropsLocale<'baf.go-workflow'>['t'] extends (key: infer K) => string ? K : never
 
-/** Render one option line: label + the command a click runs (sentinels map
- * to their localized meaning — they dispatch nothing). */
+/** Render one option line — 【变更】2026-10-20 (批次五 2.1): a two-part row
+ * (label, then the command a click runs in mono; sentinels map to their
+ * localized meaning — they dispatch nothing). */
 function OptionLine({ option, t }: {
   option: BafWorkflowGateConfirmRow['options'][number]
   t: GatesOverviewRowProps['t']
@@ -104,14 +122,19 @@ function OptionLine({ option, t }: {
     : option.command === CONTINUED_COMMAND
       ? t('gates.sentinelContinued')
       : option.command
-  return <div className={css.option}>· {option.label}（{command}）</div>
+  return (
+    <div className={css.option}>
+      <span className={css.optionLabel}>{option.label}</span>
+      <span className={css.optionCommand}>{command}</span>
+    </div>
+  )
 }
 
 /**
- * One confirm gate inside a card — the title + question line, then every
- * option with the command a click runs (and the runtime-dynamic marker for
- * gates whose options are filled live). Always full (the 略 half-mode left
- * with the 详略 switch).
+ * One confirm gate inside a card — 【变更】2026-10-20 (批次五 2.1/2.3): layered
+ * as title → question → option rows (no inline bug-fix chip; the reader-side
+ * de-dup means a twin never renders), with the runtime-dynamic marker for
+ * gates whose options are filled live.
  */
 function GateCard({ gate, t }: {
   gate: BafWorkflowGateConfirmRow
@@ -119,18 +142,15 @@ function GateCard({ gate, t }: {
 }) {
   return (
     <div className={css.gateCard} data-testid={`baf-gate-confirm-${gate.id}`}>
-      <div className={css.gateLine}>
-        <span className={css.gateTitle}>{gate.title}</span>
-        {gate.bugFix === true ? <span className={css.chip}>bug-fix</span> : null}
-        <span className={css.gateQuestion}>{gate.question}</span>
-      </div>
+      <div className={css.gateTitle}>{gate.title}</div>
+      <div className={css.gateQuestion}>{gate.question}</div>
       <div className={css.gateOptions}>
         {gate.options.map(option => (
           <OptionLine key={option.id} option={option} t={t} />
         ))}
         {gate.dynamicOptions !== undefined && gate.options.length === 0 && (
           <div className={css.option} data-testid={`baf-gate-dynamic-${gate.id}`}>
-            · {t('gates.dynamicOptions')}
+            <span className={css.optionLabel}>{t('gates.dynamicOptions')}</span>
           </div>
         )}
       </div>
@@ -149,19 +169,20 @@ function optionCommandText(option: BafWorkflowGateConfirmRow['options'][number],
 
 /** The node's full detail as ONE pre-line string — the node's aria-label, so
  * focus and screen readers read the same text the selected node's 门禁明细
- * group prints inline. */
+ * group prints inline. 【变更】2026-10-20 (批次五 2.3): internal ids drop out
+ * here too (no gateFn / advance-gate id / bug-fix tag — the reader-side
+ * de-dup already keeps twins out of `gates`). */
 function nodeDetailText(label: string, stage: BafWorkflowGateStageRow | undefined, gates: readonly BafWorkflowGateConfirmRow[], t: GatesOverviewRowProps['t']): string {
   const lines: string[] = [label]
   if (stage !== undefined) {
-    lines.push(`${t('gates.stageGate')} ${stage.artifact} · ${stage.gateFn}`)
+    lines.push(`${t('gates.stageGate')} ${stage.artifact}`)
     for (const condition of stage.conditions) lines.push(`· ${condition}`)
-    if (stage.advanceGateId !== undefined) lines.push(`${t('gates.advancePrefix')}${stage.advanceGateId}`)
     if (stage.note !== undefined) lines.push(stage.note)
   } else {
     lines.push(t('gates.noGate'))
   }
   for (const gate of gates) {
-    lines.push(`【${gate.title}${gate.bugFix === true ? ' · bug-fix' : ''}】${gate.question}`)
+    lines.push(`【${gate.title}】${gate.question}`)
     for (const option of gate.options) {
       lines.push(`· ${option.label}（${optionCommandText(option, t)}）`)
     }
@@ -183,11 +204,13 @@ function nodeLabelOf(node: string, t: GatesOverviewRowProps['t']): string {
 
 /** Template edge conditions for one state→state step — 详 prints them beside
  * the connector (skip/loop edges to non-adjacent nodes are simply not
- * between-state steps and stay unlisted). */
+ * between-state steps and stay unlisted). 【变更】2026-10-20 (批次五 2.3): the
+ * plain-zh rendering (CONDITION_ZH via conditionTextOf) — the T-edge id is
+ * internal vocabulary and no longer prefixes the line. */
 function stepConditions(from: string, to: string): readonly string[] {
   return TEMPLATE_EDGES
     .filter(edge => edge.from === from && String(edge.to) === to)
-    .map(edge => `${edge.id} · ${edge.condition}`)
+    .map(edge => conditionTextOf(edge))
 }
 
 /* ── Canvas geometry (route parity: the 多模型路由 flow constants) ───────── */
@@ -217,8 +240,8 @@ const pillGap = (count: number): number => (count === 0 ? 18 : count * PILL_STEP
 /** One canvas position (top-left pixel origin inside the canvas). */
 interface Pos { x: number; y: number }
 
-/** One pill spec: the gate plus whether it is a bootstrap one-shot. */
-interface PillSpec { gate: BafWorkflowGateConfirmRow; once: boolean }
+/** 【变更】2026-10-20 (批次五 2.6): the PillSpec `once` flag left with the
+ * 一次性 badge — a pill is just its gate row now. */
 
 /** The tier tint per node family — the route's quiet low-saturation family:
  * main chain blue, drift red, the green 完成 terminal, gray 已放弃. */
@@ -237,14 +260,13 @@ function vEdgePath(from: Pos, to: Pos): string {
   return `M ${x} ${y1} C ${x} ${mid}, ${x} ${mid}, ${x} ${y2}`
 }
 
-/** A pill row on the canvas — title + bug-fix chip +「一次性」badge; the
- * native title attr carries the question (略 has no detail section). */
-function GatePill({ pill, pos, t }: {
-  pill: PillSpec
+/** A pill row on the canvas — 【变更】2026-10-20 (批次五 2.3/2.6): just the
+ * title (the bug-fix chip and 一次性 badge are gone; the native title attr
+ * still carries the question). */
+function GatePill({ gate, pos }: {
+  gate: BafWorkflowGateConfirmRow
   pos: Pos
-  t: GatesOverviewRowProps['t']
 }) {
-  const { gate } = pill
   return (
     <div
       className={css.gatePill}
@@ -253,10 +275,6 @@ function GatePill({ pill, pos, t }: {
       title={gate.question}
     >
       <span className={css.pillTitle}>{gate.title}</span>
-      {gate.bugFix === true ? <span className={css.pillChip}>bug-fix</span> : null}
-      {pill.once ? (
-        <span className={css.pillOnce} data-testid={`baf-gates-once-badge-${gate.id}`}>{t('gates.onceBadge')}</span>
-      ) : null}
     </div>
   )
 }
@@ -329,6 +347,10 @@ function GatesFlow({ data, t }: {
   let classifyGate: BafWorkflowGateConfirmRow | undefined
   const fallbackGates: BafWorkflowGateConfirmRow[] = []
   for (const gate of data.confirmGates) {
+    // 【变更】2026-10-20 (批次五 2.2/2.4): reader-side de-dup — skip the
+    // bug-fix twins and the parked design-confirm re-pop (see
+    // READER_SKIPPED_GATES); the runtime gate itself still pops.
+    if (gate.bugFix === true || READER_SKIPPED_GATES.has(gate.id)) continue
     if (gate.node !== undefined) {
       addGate(gate.node, gate)
       continue
@@ -356,23 +378,23 @@ function GatesFlow({ data, t }: {
   // The pills each node owns: chain nodes guard their LEAVING edge (a gate
   // anchored on X pops while advancing out of X); the col-1 branch nodes
   // stack their gates right under the card.
-  const chainPills = (node: string): PillSpec[] => {
+  const chainPills = (node: string): BafWorkflowGateConfirmRow[] => {
     if (node === 'intake') {
-      const pills: PillSpec[] = entryGates.map(gate => ({ gate, once: true }))
-      if (classifyGate !== undefined) pills.push({ gate: classifyGate, once: false })
-      for (const gate of gatesByNode.get('intake') ?? []) pills.push({ gate, once: false })
+      const pills = [...entryGates]
+      if (classifyGate !== undefined) pills.push(classifyGate)
+      pills.push(...(gatesByNode.get('intake') ?? []))
       return pills
     }
-    return (gatesByNode.get(node) ?? []).map(gate => ({ gate, once: false }))
+    return gatesByNode.get(node) ?? []
   }
-  const stackPills = (node: string): PillSpec[] =>
-    (gatesByNode.get(node) ?? []).map(gate => ({ gate, once: false }))
+  const stackPills = (node: string): BafWorkflowGateConfirmRow[] =>
+    gatesByNode.get(node) ?? []
 
   // Column 0 layout: walk the chain, growing each gap with its pill count;
   // the chain verticals are collected on the same walk.
   const chainOrder = [...MAIN_CHAIN, ...extraNodes, 'completed']
   const pos = new Map<string, Pos>()
-  const chainPillList = new Map<string, PillSpec[]>()
+  const chainPillList = new Map<string, BafWorkflowGateConfirmRow[]>()
   const edgeList: Array<{ d: string; dashed?: boolean }> = []
   let y = CANVAS_TOP
   let lastY = y
@@ -415,7 +437,7 @@ function GatesFlow({ data, t }: {
   })
 
   const nodeGates = (node: string): BafWorkflowGateConfirmRow[] =>
-    (chainPillList.get(node) ?? []).map(pill => pill.gate)
+    chainPillList.get(node) ?? []
 
   // 【变更】2026-10-20 (批次三 4.5): the 门禁明细 column prints exactly ONE
   // node — the selected canvas card's. picked stays null until the first
@@ -449,26 +471,25 @@ function GatesFlow({ data, t }: {
           node={node}
           pos={nodePos}
           stage={stageByNode.get(node)}
-          gates={pills.map(pill => pill.gate)}
+          gates={pills}
           selected={node === selected}
           onSelect={() => { setPicked(node) }}
           t={t}
         />
-        {pills.map((pill, index) => (
+        {pills.map((gate, index) => (
           <GatePill
-            key={pill.gate.id}
-            pill={pill}
+            key={gate.id}
+            gate={gate}
             pos={{ x: nodePos.x, y: nodePos.y + NODE_H + 10 + index * PILL_STEP }}
-            t={t}
           />
         ))}
       </Fragment>
     )
   }
 
-  // The right-hand 门禁明细 column — the SELECTED node's group: the stage
-  // gate's full conditions, the leaving-edge template conditions, and every
-  // option's command.
+  // The right-hand 门禁明细 column — 【变更】2026-10-20 (批次五 2.1/2.3): the
+  // selected node's group re-layers under section labels (阶段门禁 / 进入下一
+  // 步的条件 / 确认门); the internal gateFn id no longer prints.
   const detailSection = (
     <section className={css.detail} data-testid="baf-gates-detail">
       <div className={css.detailHead}>{t('gates.detailTitle')}</div>
@@ -485,8 +506,10 @@ function GatesFlow({ data, t }: {
           </div>
           {selectedSpec.stage !== undefined ? (
             <div className={css.stageLine}>
-              <div className={join(css.nodeChip, css.mono)}>{selectedSpec.stage.artifact}</div>
-              <div className={css.stageMeta}><span className={css.mono}>{selectedSpec.stage.gateFn}</span></div>
+              <div className={css.sectionLabel}>{t('gates.sectionStage')}</div>
+              <div className={css.stageArtifactRow}>
+                <div className={join(css.nodeChip, css.mono)}>{selectedSpec.stage.artifact}</div>
+              </div>
               {selectedSpec.stage.conditions.length > 0 ? (
                 <ul className={css.conditions}>
                   {selectedSpec.stage.conditions.map((line, conditionIndex) => <li key={conditionIndex}>{line}</li>)}
@@ -497,11 +520,13 @@ function GatesFlow({ data, t }: {
           ) : null}
           {selectedSpec.conditions.length > 0 ? (
             <div className={css.edgeConditions}>
+              <div className={css.sectionLabel}>{t('gates.sectionEdge')}</div>
               {selectedSpec.conditions.map(line => <span key={line} className={css.connectorCondition}>{line}</span>)}
             </div>
           ) : null}
           {selectedSpec.gates.length > 0 ? (
             <div className={css.gates}>
+              <div className={css.sectionLabel}>{t('gates.sectionConfirm')}</div>
               {selectedSpec.gates.map(gate => <GateCard key={gate.id} gate={gate} t={t} />)}
             </div>
           ) : null}
@@ -513,10 +538,11 @@ function GatesFlow({ data, t }: {
   return (
     <div className={css.flow} data-testid="baf-gates-flow" aria-label={t('gates.canvasAria')}>
       <div className={css.flowWrap}>
+        {/* 【变更】2026-10-20 (批次五 2.6): the 一次性 legend item left with the
+            once badges (state node + 确认门 pill remain). */}
         <div className={css.legendBar}>
           <span className={css.legendItem}><span className={join(css.legendDot, css.nodeMain)} aria-hidden />{t('gates.legendState')}</span>
           <span className={css.legendItem}><span className={css.legendPillDot} aria-hidden />{t('gates.confirmCount')}</span>
-          <span className={css.legendItem}><span className={css.legendOnceChip} aria-hidden />{t('gates.onceBadge')}</span>
         </div>
         {/* 【变更】2026-10-20 (批次三 4.5): the canvas and the 门禁明细 split
             the frame left-right (the 状态脚本 split layout); clicking a canvas

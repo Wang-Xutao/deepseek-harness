@@ -101,6 +101,14 @@ const FOOTER = '点工作流页签的按钮，或输入对应命令'
  * The canonical registry. Every gate the workflow ever offers must be
  * listed here. The model has read-only access to this map; it can never
  * add or remove options on its own.
+ *
+ * 【变更】2026-10-20 (批次五 2.5): one grammar for every advance-family title —
+ * 「{from}已完成 · 请确认进入{to}」 — and one option grammar — 「确认 · 进入X /
+ * 开始验证 / 归档」 with the back option always 「暂不推进」. The 推进 gates'
+ * titles no longer lead with the verb (进入设计 · 请确认 read as an instruction
+ * before naming what finished); design-confirm's title/question now match
+ * design-advance exactly (they are the same decision — first pop vs parked
+ * re-pop), so the customer cannot see them as two different gates.
  */
 export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
   'scaffold': {
@@ -182,7 +190,7 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
   // the advance family has no parked state.
   'open-advance': {
     id: 'open-advance',
-    title: '提案已完成 · 请确认推进',
+    title: '提案已完成 · 请确认进入澄清',
     // 【变更】2026-09-22 (user report #1/#4): this card pops only after
     // proposal.md passes its gate — it is the customer confirming the open
     // stage's artifact, not a bare "next step" nod.
@@ -193,7 +201,7 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
     // 「再敲一次 /baf-go 继续」 sentence moved into the 暂不推进 option's hint.
     question: '【状态变化】提案（已完成，通过完成门）→ 澄清（待开始）\n\n【完成情况】\n- Why / Scope / Impact 均已填写\n\n【确认后】\n- 系统装好澄清文档模板，模型填写\n- 填好后自动弹下一次确认卡',
     options: [
-      { id: 'advance', label: '确认提案 · 进入澄清', command: '/baf-go-confirm' },
+      { id: 'advance', label: '确认 · 进入澄清', command: '/baf-go-confirm' },
       { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
@@ -209,42 +217,42 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
   // (root cause / regression-first).
   'bugfix-open-advance': {
     id: 'bugfix-open-advance',
-    title: '提案已完成 · 请确认推进',
+    title: '提案已完成 · 请确认进入实施',
     question: '【状态变化】提案（已完成，通过完成门）→ 实施（待开始）\n\n【完成情况】\n- 根因 / 影响文件 / 回归测试均已填写\n\n【确认后】\n- 先写回归测试，再修复根因（改动须在 plan.json 白名单内）',
     options: [
-      { id: 'advance', label: '确认提案 · 进入实施', command: '/baf-go-confirm' },
+      { id: 'advance', label: '确认 · 进入实施', command: '/baf-go-confirm' },
       { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
   'clarify-advance': {
     id: 'clarify-advance',
-    title: '进入设计 · 请确认',
+    title: '澄清已完成 · 请确认进入设计',
     // 【变更】2026-09-28 (用户问题 1.1/1.3): segmented copy; the 再敲一次
     // /baf-go sentence moved into the 暂不推进 hint.
     question: '【状态变化】澄清（已完成）→ 设计（待开始）\n\n【完成情况】\n- 澄清文档已经齐了\n\n【确认后】\n- 系统装好设计文档模板，模型填写\n- 填好后自动弹下一次确认卡',
     options: [
-      { id: 'advance', label: '确认进入设计', command: '/baf-go-confirm' },
+      { id: 'advance', label: '确认 · 进入设计', command: '/baf-go-confirm' },
       { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
   'design-advance': {
     id: 'design-advance',
-    title: '进入计划 · 请确认',
+    title: '设计已完成 · 请确认进入计划',
     // 【变更】2026-09-28 (用户问题 1.1/1.3): segmented copy; the 再敲一次
     // /baf-go sentence moved into the 暂不推进 hint.
     question: '【状态变化】设计（已完成）→ 计划（待开始）\n\n【完成情况】\n- 设计文档已经齐了\n\n【确认后】\n- 系统装好计划文档模板，模型填写\n- 填好后自动弹下一次确认卡',
     options: [
-      { id: 'advance', label: '确认进入计划', command: '/baf-go-confirm' },
+      { id: 'advance', label: '确认 · 进入计划', command: '/baf-go-confirm' },
       { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
   'plan-advance': {
     id: 'plan-advance',
-    title: '进入实现 · 请确认',
+    title: '计划已完成 · 请确认进入实现',
     // 【变更】2026-09-28 (用户问题 1.1): segmented copy.
     question: '【状态变化】计划（已完成）→ 实现（待开始）\n\n【完成情况】\n- 计划已经齐了\n\n【确认后】\n- 进入实现阶段，模型按计划修改白名单内的文件',
     options: [
-      { id: 'advance', label: '确认进入实现', command: '/baf-go-confirm' },
+      { id: 'advance', label: '确认 · 进入实现', command: '/baf-go-confirm' },
       { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
@@ -259,7 +267,7 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
   // gate B releases only when every box is `[x]`.
   'verify-advance': {
     id: 'verify-advance',
-    title: '实现完成 · 请确认验证检查单',
+    title: '实现已完成 · 请确认开始验证',
     // 【变更】2026-09-23 (demo1 十问题 8): verify entry is a customer-gated
     // transition — implement finishing used to auto-run verification. The
     // confirm names the checklist the run will execute and the acceptance
@@ -272,36 +280,37 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
     // 【变更】2026-09-28 (用户问题 1.1): segmented copy.
     question: '【状态变化】实现（已完成）→ 验证（待开始）\n\n【完成情况】\n- 计划内任务全部完成，改动均在白名单内\n- 验证检查单 checklist.md 已生成\n\n【确认后】\n- 系统按检查单运行验证并生成验收文档 verify.md\n- 模型逐项确认打勾，全勾且通过后弹归档确认',
     options: [
-      { id: 'advance', label: '确认检查单 · 开始验证', command: '/baf-go-confirm' },
-      { id: 'back', label: '暂不验证', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
+      { id: 'advance', label: '确认 · 开始验证', command: '/baf-go-confirm' },
+      { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },
+  // 【变更】2026-10-20 (批次五 2.4): this is the parked re-pop of design-advance
+  // (the same decision re-offered after a requirement park), so its title and
+  // question now read EXACTLY like design-advance — the two cards can no longer
+  // present as different gates. The options stay: confirm dispatches /baf-go
+  // (parked confirm path), back returns to clarify.
   'design-confirm': {
     id: 'design-confirm',
-    title: '设计已完成，请确认',
-    // 【变更】2026-09-28 (用户问题 1.1): segmented copy — the multi-surface
-    // confirmation litany is gone (the card IS the dialog now; the 三表面等价
-    // principle means the litany was teaching the customer surfaces they
-    // already have).
-    question: '【状态变化】设计（已完成）→ 计划（待开始）\n\n【完成情况】\n- 设计文档已经写好\n\n【确认后】\n- 进入计划阶段，系统装好计划模板',
+    title: '设计已完成 · 请确认进入计划',
+    question: '【状态变化】设计（已完成）→ 计划（待开始）\n\n【完成情况】\n- 设计文档已经齐了\n\n【确认后】\n- 系统装好计划文档模板，模型填写\n- 填好后自动弹下一次确认卡',
     options: [
-      { id: 'confirm', label: '确认设计，进入计划', command: '/baf-go' },
+      { id: 'confirm', label: '确认 · 进入计划', command: '/baf-go' },
       { id: 'back', label: '退回，继续澄清需求', command: '/baf-workflow-clarify' },
     ],
   },
   'verify-archive': {
     id: 'verify-archive',
-    title: '检查已通过，请确认归档',
+    title: '验证已完成 · 请确认归档',
     // 【变更】2026-09-28 (用户问题 1.1): segmented copy.
     question: '【状态变化】验证（已完成，全部检查通过）→ 归档（待开始）\n\n【完成情况】\n- 检查全部通过，验证检查单已全部勾选\n\n【确认后】\n- 归档本次变更（产物移入归档目录，流程结束）',
     options: [
-      { id: 'confirm', label: '确认归档', command: '/baf-go' },
+      { id: 'confirm', label: '确认 · 归档', command: '/baf-go' },
       { id: 'back', label: '退回，继续修改实现', command: '/baf-workflow-implement' },
     ],
   },
   'abandon': {
     id: 'abandon',
-    title: '请确认：放弃当前变更',
+    title: '放弃当前变更 · 请确认',
     question: '即将放弃当前正在进行的变更。放弃后变更结束，只保留操作记录，已完成的阶段不会继续。',
     options: [
       { id: 'confirm', label: '确认放弃', command: '/baf-workflow-abandon', args: ['confirm'] },
@@ -310,7 +319,7 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
   },
   'resume': {
     id: 'resume',
-    title: '流程出现偏差，请选择回退位置',
+    title: '流程出现偏差 · 请选择回退位置',
     question: '工作流检测到实际改动和流程记录对不上。请选择要退回的阶段，从那里重新开始（它之后的阶段会重跑）。',
     options: [], // populated dynamically from `ctx.resumeCandidates`
     dynamicOptions: 'resume-targets',

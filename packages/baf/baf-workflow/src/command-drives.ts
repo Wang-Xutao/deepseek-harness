@@ -575,7 +575,9 @@ export async function driveImplement(cwd: string, rawInput: string, source: Tran
       const status = await store.readStatus(resolution.changeId)
       return {
         kind: 'success',
-        text: formatCommandReport(true, cardTitle('/baf-workflow-implement', 'T15 已升级 full-go-path · 当前 clarify'), [
+        // 【变更】2026-10-20 (批次五 2.3): no T-edge id in customer copy — the
+        // escalation card names what happened in plain words.
+        text: formatCommandReport(true, cardTitle('/baf-workflow-implement', '已升级为完整流程 · 当前澄清'), [
           { title: '原因', lines: [result.result.escalated.cause] },
           { title: '状态', lines: statusLines(status) },
           { title: '下一步', lines: ['/baf-workflow-clarify → /baf-workflow-design → /baf-workflow-plan 补走'] },

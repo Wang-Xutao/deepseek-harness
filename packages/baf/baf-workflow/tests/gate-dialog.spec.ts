@@ -151,12 +151,12 @@ async function setupToolWorkspace(): Promise<string> {
 
 describe('§22.17 gate-dialog answer mapping', () => {
   it('maps a clicked label to the registry option id', async () => {
-    const service = fakeService(answered('确认设计，进入计划'))
+    const service = fakeService(answered('确认 · 进入计划'))
     const outcome = await askGateDialog(service, undefined, { gateId: 'design-confirm' })
     expect(outcome).toEqual({
       kind: 'answered',
       optionId: 'confirm',
-      label: '确认设计，进入计划',
+      label: '确认 · 进入计划',
     })
   })
 
@@ -191,7 +191,7 @@ describe('§22.17 gate-dialog answer mapping', () => {
   })
 
   it('2026-09-28 用户问题 1.2/1.5: revisable gates carry the change chip first line + the 【产物】 links', async () => {
-    const service = fakeService(answered('确认提案 · 进入澄清'))
+    const service = fakeService(answered('确认 · 进入澄清'))
     await askGateDialog(service, undefined, { gateId: 'open-advance', changeId: 'CHG-7' })
     const detail = service.calls[0]?.questions[0]?.detail ?? ''
     expect(detail.startsWith('{{change:CHG-7}}')).toBe(true)
@@ -305,7 +305,7 @@ describe('§22.17 gate-dialog answer mapping', () => {
 
 describe('【变更】2026-10-02 (demo31 问题 2) reAskGateAfterRefusal — the refused click gets its card back', () => {
   it('re-asks the SAME gate with the refusal headline and keeps prior note lines', async () => {
-    const service = fakeService(answered('确认归档'))
+    const service = fakeService(answered('确认 · 归档'))
     const refusal = [
       '✗ /baf-go · 检查单未全部确认 · 不能归档',
       '────────────────────────────────',
@@ -321,7 +321,7 @@ describe('【变更】2026-10-02 (demo31 问题 2) reAskGateAfterRefusal — the
     }, refusal)
     expect(outcome.kind).toBe('answered')
     const question = service.calls[0]?.questions[0]
-    expect(question?.question).toBe('检查已通过，请确认归档')
+    expect(question?.question).toBe('验证已完成 · 请确认归档')
     const detail = question?.detail ?? ''
     // The refusal is quoted (headline, not the whole card) beside the
     // gate's own context — the customer sees WHY the click died.
@@ -346,7 +346,7 @@ describe('【变更】2026-10-02 (demo31 问题 2) reAskGateAfterRefusal — the
       },
     }
     const held = askGateDialogQueued(holding, undefined, { gateId: 'verify-archive', changeId: 'CHG-9' }, { sessionId: 'sess-reask-holder' })
-    const service = fakeService(answered('确认归档'))
+    const service = fakeService(answered('确认 · 归档'))
     const outcome = await reAskGateAfterRefusal(service, undefined, {
       gateId: 'verify-archive',
       changeId: 'CHG-9',

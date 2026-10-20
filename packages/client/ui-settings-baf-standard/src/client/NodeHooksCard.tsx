@@ -21,13 +21,20 @@
  * config the product silently ignores.
  *
  * 【变更】2026-10-20 (批次四 3.4/3.6): save/cancel move to the card-title row's
- * end; every canvas card carries zh + English names; edges between two
- * configured nodes light up green (确认门 tier-color parity — configured
- * green / idle gray); and the add row's 选择脚本文件 opens the OS FILE picker
- * (desktop: the preload bridge resolves the File to an absolute path →
- * workspace-relative prefill; web: the bare file NAME prefills).
+ * end; every canvas card carries zh + English names; and the add row's
+ * 选择脚本文件 opens the OS FILE picker (desktop: the preload bridge resolves
+ * the File to an absolute path → workspace-relative prefill; web: the bare
+ * file NAME prefills).
+ *
+ * 【变更】2026-10-20 (批次五 1.3/1.4): the two kind rows get SEPARATE add
+ * inputs (a picked/typed path lands only in the row whose button was
+ * clicked); the desktop picker becomes a native dialog whose defaultPath is
+ * the WORKSPACE root (the hidden <input type="file"> stays as the plain-web
+ * fallback); the canvas drops the configured-green node/edge tint for the
+ * 确认门 main-chain blue; and a card with NO scripts carries no hover
+ * Tooltip (nothing to detail — configured cards keep theirs).
  */
-import { useRef, useState, type ChangeEvent } from 'react'
+import { Fragment, useRef, useState, type ChangeEvent } from 'react'
 import { InlineEditor, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BafStandardNodeHooks, BafStandardNodeHookLists, BafStandardSummaryResult } from '../types.ts'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
@@ -89,11 +96,17 @@ const NODE_EN: Record<(typeof NODES)[number], string> = {
 }
 
 /**
- * 【变更】2026-10-20 (批次四 3.6): the desktop preload bridge that turns a
- * picked File into its ABSOLUTE path (Electron webUtils) — plain web has no
- * equivalent, so the picker falls back to pre-filling the file NAME.
+ * 【变更】2026-10-20 (批次四 3.6 → 批次五 1.3): the desktop preload bridge.
+ * `pickFile(defaultPath)` (批次五) opens the NATIVE Electron file dialog with
+ * the workspace root as its default directory and answers the picked
+ * ABSOLUTE path; `pathFor` remains for the plain-web `<input type="file">`
+ * fallback (Electron webUtils turns its File into an absolute path — plain
+ * web has no equivalent, so that picker falls back to the file NAME).
  */
-type FilePickerBridge = { pathFor: (file: File) => string }
+type FilePickerBridge = {
+  pathFor: (file: File) => string
+  pickFile?: (defaultPath: string) => Promise<string | null>
+}
 const filePickerBridge = (): FilePickerBridge | undefined =>
   (globalThis as { __BAF_FILE_PICKER__?: FilePickerBridge }).__BAF_FILE_PICKER__
 
@@ -190,12 +203,19 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
   openPath: StandardsOverviewFace['openPath']
   t: StandardsPanelProps['t']
 }) {
-  const [input, setInput] = useState('')
+  // 【变更】2026-10-20 (批次五 1.3): SEPARATE add inputs per kind — a picked
+  // or typed path pre-fills ONLY the row whose 选择脚本文件/添加 was used (the
+  // old single shared input mirrored one path into BOTH rows).
+  const [inputs, setInputs] = useState<Record<'enter' | 'exit', string>>({ enter: '', exit: '' })
   const [localMessage, setLocalMessage] = useState<string | undefined>(undefined)
-  // 【变更】2026-10-20 (批次四 3.6): the picker is a script FILE picker — one
-  // hidden file input shared by both kind rows (it only pre-fills the add
-  // input; 添加 still runs the existence check before anything lands).
+  // The hidden file input is still shared (one element), so the kind whose
+  // button clicked it is remembered here to route the answer back.
+  const pickKind = useRef<'enter' | 'exit'>('enter')
   const fileRef = useRef<HTMLInputElement | null>(null)
+
+  const setKindInput = (kind: 'enter' | 'exit', value: string): void => {
+    setInputs(previous => ({ ...previous, [kind]: value }))
+  }
 
   const addEntry = (kind: 'enter' | 'exit', raw: string): void => {
     const entry = normalizeEntry(raw)
@@ -216,15 +236,33 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
         ? { ...lists, enter: [...existing, entry] }
         : { ...lists, exit: [...existing, entry] }
       updateDraft({ ...draft, [node]: next })
-      setInput('')
+      setKindInput(kind, '')
       setLocalMessage(undefined)
     })
   }
 
-  /** Open the OS file chooser; the chosen script pre-fills the add input as a
-   * workspace-relative path (file NAME on plain web — no path bridge there). */
-  const onPickFile = (): void => {
+  /**
+   * 【变更】2026-10-20 (批次五 1.3): the 选择脚本文件 click — on desktop the
+   * native dialog opens WITH THE WORKSPACE ROOT as its default directory
+   * (`pickFile`), and its absolute answer folds into THIS kind's input; plain
+   * web (no `pickFile`) falls back to the hidden `<input type="file">`.
+   */
+  const onPickFile = (kind: 'enter' | 'exit'): void => {
     setLocalMessage(undefined)
+    const bridge = filePickerBridge()
+    if (bridge?.pickFile !== undefined) {
+      void bridge.pickFile(cwd).then((picked) => {
+        if (picked === null) return
+        const entry = toRelativeEntry(cwd, picked)
+        if (entry === undefined) {
+          setLocalMessage(t('protectedPickOutside'))
+          return
+        }
+        setKindInput(kind, entry)
+      })
+      return
+    }
+    pickKind.current = kind
     fileRef.current?.click()
   }
 
@@ -233,9 +271,10 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
     // Reset so picking the SAME file twice still fires onChange.
     event.currentTarget.value = ''
     if (file === undefined) return
+    const kind = pickKind.current
     const bridge = filePickerBridge()
     if (bridge === undefined) {
-      setInput(file.name)
+      setKindInput(kind, file.name)
       return
     }
     const entry = toRelativeEntry(cwd, bridge.pathFor(file))
@@ -243,7 +282,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
       setLocalMessage(t('protectedPickOutside'))
       return
     }
-    setInput(entry)
+    setKindInput(kind, entry)
   }
 
   const commitEdit = (): void => {
@@ -334,12 +373,12 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                   className={css.addInput}
                   aria-label={t('hooksAddPlaceholder')}
                   placeholder={t('hooksAddPlaceholder')}
-                  value={input}
-                  onChange={(event) => { setInput(event.currentTarget.value) }}
+                  value={inputs[kind]}
+                  onChange={(event) => { setKindInput(kind, event.currentTarget.value) }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault()
-                      addEntry(kind, input)
+                      addEntry(kind, inputs[kind])
                     }
                   }}
                 />
@@ -347,7 +386,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                   type="button"
                   className={css.miniButton}
                   data-testid={`baf-standard-hooks-add-${node}-${kind}`}
-                  onClick={() => { addEntry(kind, input) }}
+                  onClick={() => { addEntry(kind, inputs[kind]) }}
                 >
                   {t('hooksAdd')}
                 </button>
@@ -355,7 +394,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                   type="button"
                   className={css.miniButton}
                   data-testid={`baf-standard-hooks-pick-${node}-${kind}`}
-                  onClick={onPickFile}
+                  onClick={() => { onPickFile(kind) }}
                 >
                   {t('hooksPick')}
                 </button>
@@ -365,9 +404,11 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
         })}
       </div>
       {localMessage !== undefined ? <div className={css.statusError}>{localMessage}</div> : null}
-      {/* The shared OS file chooser (display:none, rendered LAST so the two
-          add inputs stay the editor's first two inputs) both 选择脚本文件
-          buttons programmatic-click; choosing pre-fills the add input above. */}
+      {/* The plain-web OS file chooser (display:none, rendered LAST so the two
+          add inputs stay the editor's first two inputs) — both 选择脚本文件
+          buttons programmatic-click it; the answer routes back to the row that
+          clicked (pickKind), pre-filling ONLY that row's add input. Desktop
+          (pickFile) never touches this element. */}
       <input
         ref={fileRef}
         type="file"
@@ -481,23 +522,18 @@ export function NodeHooksCard({ state, summary, t, openPath, statWorkspacePath, 
               {NODES.slice(0, -1).map((node, index) => {
                 // The 确认门 same-column vertical bezier, bottom-center →
                 // top-center, with the arrowhead landing on the next card.
-                // 【变更】2026-10-20 (批次四 3.6): an edge bridging two CONFIGURED
-                // nodes lights up in the configured green — the configured
-                // chain reads as one colored path through the graph.
+                // 【变更】2026-10-20 (批次五 1.4): every edge stays the same
+                // quiet gray — the 确认门 canvas has no lit-edge variant.
                 const x = NODE_X + NODE_W / 2
                 const y1 = CANVAS_TOP + index * (NODE_H + NODE_GAP) + NODE_H
                 const y2 = CANVAS_TOP + (index + 1) * (NODE_H + NODE_GAP)
                 const mid = (y1 + y2) / 2
-                const downstream = NODES[index + 1]
-                const lit = downstream !== undefined
-                  && accentOf(node).set
-                  && accentOf(downstream).set
                 return (
                   <path
                     key={node}
                     d={`M ${x} ${y1} C ${x} ${mid}, ${x} ${mid}, ${x} ${y2}`}
                     markerEnd="url(#baf-standard-hooks-arrow)"
-                    className={join(css.hooksEdge, lit ? css.hooksEdgeSet : undefined)}
+                    className={css.hooksEdge}
                   />
                 )
               })}
@@ -505,7 +541,39 @@ export function NodeHooksCard({ state, summary, t, openPath, statWorkspacePath, 
             {NODES.map((node, index) => {
               const accent = accentOf(node)
               const label = t(NODE_LABEL_KEYS[node])
-              return (
+              const card = (
+                <button
+                  type="button"
+                  className={join(
+                    css.hooksNode,
+                    css.hooksNodeMain,
+                    node === selected ? css.hooksNodeSelected : undefined,
+                  )}
+                  data-testid={`baf-standard-hooks-node-${node}`}
+                  aria-pressed={node === selected}
+                  aria-label={`${label} · ${accent.text}`}
+                  style={{
+                    left: NODE_X,
+                    top: CANVAS_TOP + index * (NODE_H + NODE_GAP),
+                    width: NODE_W,
+                    height: NODE_H,
+                  }}
+                  onClick={() => {
+                    setPicked(node)
+                    setEditing(null)
+                  }}
+                >
+                  <span className={css.hooksNodeName}>{label}</span>
+                  <span className={css.hooksNodeEn}>{NODE_EN[node]}</span>
+                  <span className={join(css.hooksNodeAccent, accent.set ? undefined : css.hooksNodeAccentIdle)}>
+                    {accent.text}
+                  </span>
+                </button>
+              )
+              // 【变更】2026-10-20 (批次五 1.4): a card with NO scripts carries
+              // no hover Tooltip (未配置 has nothing to detail); configured
+              // cards keep theirs.
+              return accent.set ? (
                 <Tooltip
                   key={node}
                   label={nodePathsText(label, draft[node], t)}
@@ -514,34 +582,10 @@ export function NodeHooksCard({ state, summary, t, openPath, statWorkspacePath, 
                   maxWidth={360}
                   delayMs={120}
                 >
-                  <button
-                    type="button"
-                    className={join(
-                      css.hooksNode,
-                      accent.set ? css.hooksNodeSet : css.hooksNodeIdle,
-                      node === selected ? css.hooksNodeSelected : undefined,
-                    )}
-                    data-testid={`baf-standard-hooks-node-${node}`}
-                    aria-pressed={node === selected}
-                    aria-label={`${label} · ${accent.text}`}
-                    style={{
-                      left: NODE_X,
-                      top: CANVAS_TOP + index * (NODE_H + NODE_GAP),
-                      width: NODE_W,
-                      height: NODE_H,
-                    }}
-                    onClick={() => {
-                      setPicked(node)
-                      setEditing(null)
-                    }}
-                  >
-                    <span className={css.hooksNodeName}>{label}</span>
-                    <span className={css.hooksNodeEn}>{NODE_EN[node]}</span>
-                    <span className={join(css.hooksNodeAccent, accent.set ? undefined : css.hooksNodeAccentIdle)}>
-                      {accent.text}
-                    </span>
-                  </button>
+                  {card}
                 </Tooltip>
+              ) : (
+                <Fragment key={node}>{card}</Fragment>
               )
             })}
           </div>

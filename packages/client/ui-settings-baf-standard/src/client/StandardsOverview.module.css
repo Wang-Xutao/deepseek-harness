@@ -339,28 +339,26 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* 【变更】2026-10-20 (批次四 3.2): the mono path values drop the dotted
- * underline — hover is a quiet tinted pill (padding + negative margin keep
- * the text in place), matching .configValue / .hooksEntryButton. */
+/* 【变更】2026-10-20 (批次五 1.2/1.3): hover is a plain UNDERLINE — no tinted
+ * pill, no shadow (customer decision: the path values read as links). */
 .pathValueButton {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 3px 8px;
-  margin: -3px -8px;
   border: none;
-  border-radius: 6px;
   background: none;
   font: inherit;
   font-family: var(--dsw-alias-font-mono, monospace);
   color: var(--dsw-alias-label-primary);
   text-align: left;
   word-break: break-all;
+  text-decoration: underline transparent;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
 .pathValueButton:hover {
   color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
-  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  text-decoration-color: currentColor;
 }
 
 .pathActions {
@@ -518,11 +516,9 @@
   border-color: var(--dsw-alias-brand-primary, #4a78d2);
 }
 
-/* 【变更】2026-10-20 (批次四 3.7): the 项目信息 card body — the two config rows
- * keep their hairlines between them; the last one drops its bottom border. */
-.projectInfoRows .configRow:last-child {
-  border-bottom: none;
-}
+/* 【变更】2026-10-20 (批次五 1.1): the two config rows are one quiet group —
+ * NO hairline between 项目路径 / 配置文件 anymore, and the rows tighten to a
+ * grouped 10px pitch (the old 16px pitch read as separated blocks). */
 
 .saveButton {
   flex: none;
@@ -549,16 +545,17 @@
 
 /* 【变更】2026-10-20 (批次三 4.1): the two readonly config rows (项目路径 /
  * 配置文件) adopt the 通用 tab's 轨迹图/工作流图 row anatomy — full-width
- * label-left / control-right, 16px 0 padding, bottom hairline. The value
- * itself is the click target (no copy/open buttons). */
+ * label-left / control-right. The value itself is the click target (no
+ * copy/open buttons).
+ * 【变更】2026-10-20 (批次五 1.1): the bottom hairline is gone and hover is a
+ * plain UNDERLINE (customer decision — no tinted pill, no shadow). */
 
 .configRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 16px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  padding: 10px 0;
 }
 
 .configTitle {
@@ -567,15 +564,11 @@
   line-height: 20px;
 }
 
-/* 【变更】2026-10-20 (批次四 3.2/3.7): no underline — hover is a quiet tinted
- * pill (padding + negative margin keep the right edge aligned). */
+/* 【变更】2026-10-20 (批次五 1.1): hover is a plain underline on the value. */
 .configValue {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 3px 8px;
-  margin: -3px -8px;
   border: none;
-  border-radius: 6px;
   background: none;
   font: inherit;
   font-family: var(--dsw-alias-font-mono, monospace);
@@ -584,12 +577,14 @@
   color: var(--dsw-alias-label-primary);
   text-align: right;
   word-break: break-all;
+  text-decoration: underline transparent;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
 .configValue:hover {
   color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
-  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  text-decoration-color: currentColor;
 }
 
 /* 【变更】2026-10-20 (批次三 4.2): the ready branch is a plain vertical stack —
@@ -643,11 +638,13 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* 【变更】2026-10-20 (批次五 1.4): the legend dots follow the 确认门 palette —
+ * the main-chain blue for 已配置, quiet gray for 未配置. */
 .hooksLegendDot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #7ba984;
+  background: #7b8fc7;
 }
 
 .hooksLegendDotIdle {
@@ -681,26 +678,20 @@
   opacity: 0.55;
 }
 
-/* 【变更】2026-10-20 (批次四 3.6): an edge bridging two CONFIGURED nodes takes
- * the configured green (opacity keeps it calm) — the configured chain reads
- * as one lit path through the graph. */
-.hooksEdgeSet {
-  stroke: #7ba984;
-  opacity: 0.8;
-}
+/* 【变更】2026-10-20 (批次五 1.4): the lit (configured-green) edge variant is
+ * deleted — the 确认门 canvas keeps every edge the same quiet gray, so this
+ * one does too (node accents alone carry the configured count). */
 
 .hooksArrow {
   fill: var(--dsw-alias-label-tertiary, #8b949e);
 }
 
-/* Tier tints — configured nodes take the route family's quiet green, bare
-   nodes stay gray (the legend explains both). */
-.hooksNodeSet {
-  --tier-color: #7ba984;
-}
-
-.hooksNodeIdle {
-  --tier-color: var(--dsw-alias-label-tertiary, #8b949e);
+/* Tier tints — 【变更】2026-10-20 (批次五 1.4): EVERY node takes the 确认门
+ * main-chain blue (nodeMain parity); the configured / 未配置 distinction
+ * lives in the accent line's color, exactly like the 确认门 确认门 ×N /
+ * 无门禁 accent. */
+.hooksNodeMain {
+  --tier-color: #7b8fc7;
 }
 
 /* The route flowNode card verbatim. */
@@ -849,16 +840,14 @@
   word-break: break-all;
 }
 
-/* 【变更】2026-10-20 (批次三 4.4 → 批次四 3.2): the entry itself is the click
- * target; the dotted underline is gone — hover is the same quiet tinted pill
- * as .pathValueButton; hover title carries the absolute path. */
+/* 【变更】2026-10-20 (批次五 1.3): the entry itself is the click target; hover
+ * is the SAME plain underline as .pathValueButton / .configValue (customer
+ * decision — no tinted pill, no shadow); hover title carries the absolute
+ * path. */
 .hooksEntryButton {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 3px 8px;
-  margin: -3px -8px;
   border: none;
-  border-radius: 6px;
   background: none;
   font: inherit;
   font-family: var(--dsw-alias-font-mono, monospace);
@@ -867,12 +856,14 @@
   color: var(--dsw-alias-label-primary);
   text-align: left;
   word-break: break-all;
+  text-decoration: underline transparent;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
 .hooksEntryButton:hover {
   color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
-  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  text-decoration-color: currentColor;
 }
 
 .hooksEmpty {

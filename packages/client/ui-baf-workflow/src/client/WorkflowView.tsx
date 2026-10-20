@@ -28,7 +28,7 @@ import type {
 } from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
 import { CATALOG_ZH } from './catalog-i18n.ts'
-import { buildClientTemplateTabView, withRenderableGraph } from './graph-template.ts'
+import { buildClientTemplateTabView, withRenderableGraph, CONDITION_ZH, conditionTextOf } from './graph-template.ts'
 import { NodeIcon } from './icons.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
 import { RouteStatusRow, routeBadgeText } from './RouteStatusRow.tsx'
@@ -1521,9 +1521,18 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         && advanceDismissed !== advanceKey && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('action.advance')} data-advance-dialog="">
           <div className={css.cardTitle}>
+            {/* 【变更】2026-10-20 (批次五 2.5): the title states BOTH ends —
+                「{from}已完成 · 请确认进入{to}」 — the same grammar the gate
+                registry titles now use. */}
             {nextEdge !== null
-              ? fillTemplate(t('advanceDialog.title'), { to: t(`node.${nextEdge.to}`) })
-              : fillTemplate(t('advanceDialog.title'), { to: '' })}
+              ? fillTemplate(t('advanceDialog.title'), {
+                from: t(`node.${view.current}`),
+                to: t(`node.${nextEdge.to}`),
+              })
+              : fillTemplate(t('advanceDialog.title'), {
+                from: t(`node.${view.current}`),
+                to: '',
+              })}
           </div>
           {fillTemplate(t('advanceDialog.body'), {
             from: t(`node.${view.current}`),
@@ -2388,7 +2397,8 @@ function FlowCanvas(props: {
                   )}
                   markerEnd="url(#wf-arrow)"
                 >
-                  <title>{`${edge.id}: ${edge.condition}`}</title>
+                  {/* 【变更】2026-10-20 (批次五 2.3): plain-zh condition, no T-id prefix. */}
+                  <title>{conditionTextOf(edge)}</title>
                 </path>
               )
             })}
@@ -2963,31 +2973,9 @@ function StageChecklist(props: {
 }
 
 /**
- * 【变更】2026-09-25 (demo8 问题 2.4): plain-zh renderings of the workflow
- * edges' English conditions, keyed by the stable edge id (T1–T16, baf-core
- * workflow.ts). The raw condition string stays the fallback for an edge this
- * table has not covered.
+ * 【变更】2026-10-20 (批次五 2.3): CONDITION_ZH moved to graph-template.ts
+ * (shared with the 确认门 GatesFlow 门禁明细) — import it from there.
  */
-const CONDITION_ZH: Readonly<Record<string, string>> = {
-  T1: '任何 BAF 输入都从这里开始',
-  T2: '分类确认为新需求或高风险缺陷',
-  T3: '分类确认为低风险缺陷，且基线允许走快速路径',
-  T4: '变更档案已建立，澄清单独进行',
-  T4a: '澄清并入建立变更阶段（已记录理由）',
-  T5: '根因和影响范围已记录',
-  T6: '卡进度的问题已回答或明确延后；验收标准可检验',
-  T7: '设计已确认，计划单独进行',
-  T7a: '设计并入计划（任务和回退点已记录）',
-  T8: '计划已包含文件白名单、验证命令和回退点',
-  T9: '全部任务有结果，且没有越权改动',
-  T10: '必需检查全部通过，且无漂移',
-  T11: '有必需检查未通过',
-  T12: '进行中的变更，其依据的文件 / 基线 / 报告发生了变化',
-  T13: '最早受影响的阶段已恢复或重新确认',
-  T14: '你确认后，归档一次完成',
-  T15: '缺陷修复升级为完整流程，回头补澄清 / 设计 / 计划',
-  T16: '你确认放弃进行中的变更',
-}
 
 /**
  * 【变更】2026-09-25 (demo8 问题 2.4): the former standalone 通俗说明 section

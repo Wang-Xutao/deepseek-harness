@@ -19,7 +19,6 @@ import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { advanceGateIdForNode } from '../src/gate-dialog.ts'
 import { gateOverviewIds, projectGateOverview } from '../src/gate-overview.ts'
 import { IMPLEMENT_REQUIREMENTS_ZH } from '../src/go-dispatch.ts'
-import { BUG_FIX_PATH_LEDGER_FILE } from '../src/stages/bug-fix-path.ts'
 import { CHECKLIST_FILE, CHECKLIST_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH } from '../src/stages/gates.ts'
 
 /** The client's DISPATCH_NODE_OF_GATE ids (ui-baf-workflow/src/client/gate-ask.ts). */
@@ -91,12 +90,16 @@ describe('projectGateOverview (九点批 问题 9 只读总览)', () => {
     expect(byNode.get('clarify')?.conditions).toBe(DOC_REQUIREMENTS_ZH.clarify)
     expect(byNode.get('design')?.conditions).toBe(DOC_REQUIREMENTS_ZH.design)
     expect(byNode.get('plan')?.conditions).toBe(DOC_REQUIREMENTS_ZH.plan)
-    // implement quotes the ledger requirements, not the doc gates
+    // implement quotes the ledger requirements, not the doc gates.
+    // 【变更】2026-10-20 (批次五 2.2/2.3): the bug-fix path notes are gone from
+    // the projection — the overview shows the full flow only; the bugFix flag
+    // on the twin gate stays (the reader-side client de-dups on it).
     expect(byNode.get('implement')).toMatchObject({
       conditions: IMPLEMENT_REQUIREMENTS_ZH,
       advanceGateId: 'verify-advance',
     })
-    expect(byNode.get('implement')?.note).toContain(BUG_FIX_PATH_LEDGER_FILE)
+    expect(byNode.get('implement')?.note).toBeUndefined()
+    expect(byNode.get('open')?.note).toBeUndefined()
     expect(byNode.get('verify')).toMatchObject({
       artifact: CHECKLIST_FILE,
       conditions: CHECKLIST_REQUIREMENTS_ZH,

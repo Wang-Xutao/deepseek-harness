@@ -245,9 +245,7 @@ export type WorkflowTabKey =
   // the flow is always 详 with a selected-node detail column.
   | 'gates.onceTitle'
   | 'gates.onceHint'
-  | 'gates.onceBadge'
   | 'gates.branchTitle'
-  | 'gates.advancePrefix'
   | 'gates.conditionsCount'
   | 'gates.noGate'
   // 【变更】2026-10-18 (工作流确认门 2.3): the flow copy (canvas since gone).
@@ -258,6 +256,11 @@ export type WorkflowTabKey =
   // label + the 详-mode detail section heading (canvas pills carry the summary).
   | 'gates.legendState'
   | 'gates.detailTitle'
+  // 【变更】2026-10-20 (批次五 2.1): the 门禁明细 section labels (阶段门禁 /
+  // 进入下一步的条件 / 确认门) layering the selected node's group.
+  | 'gates.sectionStage'
+  | 'gates.sectionEdge'
+  | 'gates.sectionConfirm'
   | 'gates.node.intake'
   | 'gates.node.open'
   | 'gates.node.clarify'
@@ -437,15 +440,15 @@ export const en: Record<WorkflowTabKey, string> = {
   // §22.14 — abandon change-level gate button label.
   'action.abandon': 'Abandon this change',
   'abandon.confirmHelp': 'Abandoning ends this change and keeps only the audit trail. The slash form /baf-workflow-abandon confirm has the same effect.',
-  'gate.designDone': 'Design is done — confirm to enter plan',
-  'gate.verifyPassed': 'Verify passed — confirm to archive',
+  'gate.designDone': 'Design done · confirm to enter plan',
+  'gate.verifyPassed': 'Verification done · confirm to archive',
   'gate.confirmIntoPlan': 'Confirm and continue',
   'gate.confirmArchive': 'Confirm archive',
   'gate.replyToContinue': 'Run /baf-go again to continue',
   'lane.bugFixPath': 'Bug fix path (before the upgrade)',
   'lane.fullGoPath': 'Full-go (after the upgrade)',
   'lane.help': 'A fast-path change that escalated keeps both paths: the earlier lane is greyed but never deleted.',
-  'edge.upgraded': 'T15 upgrade: {from} → {to}',
+  'edge.upgraded': 'Upgraded to the full flow: {from} → {to}',
   'edge.cause': 'Cause',
   'edge.at': 'When',
   'edge.preserved': 'Pre-upgrade artifacts (no OpenSpec)',
@@ -465,7 +468,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'action.startStage': 'Start stage',
   'action.confirmArchive': 'Confirm archive',
   'action.advance': 'Advance',
-  'advanceDialog.title': 'Enter {to} · please confirm',
+  'advanceDialog.title': '{from} done · confirm to enter {to}',
   'advanceDialog.body': '【Status change】{from} (completed, passed its gate) → {to} (not started)\n\n【After confirming】\n- The workflow advances to {to} and the system dispatches the next work order',
   'advanceDialog.confirm': 'Confirm · enter {to}',
   'advanceDialog.dismiss': 'Not now',
@@ -534,9 +537,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.dynamicOptions': 'options are filled at runtime (from the live workspace state)',
   'gates.onceTitle': 'One-shot confirm gates',
   'gates.onceHint': 'not yet placed on the flow chart (a future release will anchor them)',
-  'gates.onceBadge': 'One-shot',
   'gates.branchTitle': 'Branches',
-  'gates.advancePrefix': 'advance gate: ',
   'gates.conditionsCount': 'pass conditions: ',
   'gates.noGate': 'no gate on this node',
   // 【变更】2026-10-18 (工作流确认门 2.3): flow-canvas copy.
@@ -545,6 +546,9 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.stageGate': 'stage gate:',
   'gates.legendState': 'state node',
   'gates.detailTitle': 'Gate details',
+  'gates.sectionStage': 'Stage gate',
+  'gates.sectionEdge': 'Condition to advance',
+  'gates.sectionConfirm': 'Confirm gates',
   'gates.node.intake': 'Intake',
   'gates.node.open': 'Open',
   'gates.node.clarify': 'Clarify',
@@ -726,8 +730,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   // §22.14 — abandon change-level gate button label.
   'action.abandon': '放弃此变更',
   'abandon.confirmHelp': '放弃将结束此变更并仅保留审计轨迹。slash 形式 /baf-workflow-abandon confirm 效果相同。',
-  'gate.designDone': '设计文档已实现 · 请确认是否进入 plan',
-  'gate.verifyPassed': 'verify 已通过 · 请确认是否归档',
+  'gate.designDone': '设计已完成 · 请确认进入计划',
+  'gate.verifyPassed': '验证已完成 · 请确认归档',
   'gate.confirmIntoPlan': '确认进入下一阶段',
   'gate.confirmArchive': '确认归档',
   'gate.replyToContinue': '再敲一次 /baf-go 继续',
@@ -735,7 +739,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'lane.bugFixPath': '缺陷修复路径（升级前）',
   'lane.fullGoPath': '完整流程（升级后）',
   'lane.help': '缺陷修复路径中途升级后，两条路径都保留：升级前那条置灰，但不删除。',
-  'edge.upgraded': 'T15 升级：{from} → {to}',
+  'edge.upgraded': '升级为完整流程：{from} → {to}',
   'edge.cause': '原因',
   'edge.at': '时间',
   'edge.preserved': '升级前产物（未走 OpenSpec）',
@@ -757,7 +761,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'action.advance': '推进',
   // 【变更】2026-09-25 (用户需求 工作流 1): 常驻推进按钮改为顶部推进对话框，
   // 需要推进时才弹出；确认即推进（advanceDialog 即确认，不再二次弹窗）。
-  'advanceDialog.title': '进入{to} · 请确认',
+  'advanceDialog.title': '{from}已完成 · 请确认进入{to}',
   'advanceDialog.body': '【状态变化】{from}（已完成，通过完成门）→ {to}（待开始）\n\n【确认后】\n- 工作流推进到 {to}，系统自动派单给模型继续',
   'advanceDialog.confirm': '确认推进 · 进入{to}',
   'advanceDialog.dismiss': '暂不推进',
@@ -825,9 +829,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.dynamicOptions': '选项在运行时按现场状态动态生成',
   'gates.onceTitle': '一次性确认门',
   'gates.onceHint': '暂未在流程图上定位的确认门（后续版本会补上位置）',
-  'gates.onceBadge': '一次性',
   'gates.branchTitle': '分支',
-  'gates.advancePrefix': '推进确认门：',
   'gates.conditionsCount': '完成条件数：',
   'gates.noGate': '本节点无门禁',
   // 【变更】2026-10-18 (工作流确认门 2.3): 流程图画布文案。
@@ -836,6 +838,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.stageGate': '阶段门：',
   'gates.legendState': '状态节点',
   'gates.detailTitle': '门禁明细',
+  'gates.sectionStage': '阶段门禁',
+  'gates.sectionEdge': '进入下一步的条件',
+  'gates.sectionConfirm': '确认门',
   'gates.node.intake': '接单',
   'gates.node.open': '建立变更',
   'gates.node.clarify': '澄清',

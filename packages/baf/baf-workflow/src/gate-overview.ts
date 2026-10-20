@@ -24,7 +24,6 @@ import { advanceGateIdForNode } from './gate-dialog.ts'
 import {
   CHECKLIST_FILE, CHECKLIST_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH,
 } from './stages/gates.ts'
-import { BUG_FIX_PATH_LEDGER_FILE } from './stages/bug-fix-path.ts'
 import { IMPLEMENT_REQUIREMENTS_ZH } from './go-dispatch.ts'
 
 /** One option of a confirm gate: its label and the command a click runs. */
@@ -108,13 +107,15 @@ export function projectGateOverview(): GateOverview {
     }
   })
   const stageGates: GateOverviewStageRow[] = [
+    // 【变更】2026-10-20 (批次五 2.2/2.3): the open/implement bug-fix path notes
+    // are gone — the overview shows the full flow (the bug-fix variant is an
+    // internal routing detail; the reader-side client de-dups its twin gates).
     {
       node: 'open',
       gateFn: 'openGate / proposalGate',
       artifact: ARTIFACT_FILES.proposal,
       conditions: DOC_REQUIREMENTS_ZH.open,
       advanceGateId: 'open-advance',
-      note: 'bug-fix 模式引 BUG_RECORD_REQUIREMENTS_ZH（裁剪模板），确认门为 bugfix-open-advance',
     },
     {
       node: 'clarify',
@@ -143,7 +144,6 @@ export function projectGateOverview(): GateOverview {
       artifact: ARTIFACT_FILES.planJson,
       conditions: IMPLEMENT_REQUIREMENTS_ZH,
       advanceGateId: 'verify-advance',
-      note: `账本在 bug-fix 模式为 ${BUG_FIX_PATH_LEDGER_FILE}`,
     },
     {
       node: 'verify',

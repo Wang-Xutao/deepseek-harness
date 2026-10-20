@@ -314,7 +314,7 @@ describe('demo31 问题 1 — the sticky home session owns the pops', () => {
       // The customer stated the requirement in sess-home; the work order ran
       // in sess-task. The pop must land back in the customer's conversation.
       homeSessionFor(root).set('sess-home')
-      const service = serviceWith([selected('确认设计，进入计划')])
+      const service = serviceWith([selected('确认 · 进入计划')])
       const { emit, logs } = installMulti(service, ['sess-home', 'sess-task'])
       emit({ header: { id: 'sess-task', cwd: root } }, turnEnd(1))
       await waitFor(async () => service.calls.length >= 1, logs, 'design-confirm pop in home')
@@ -333,7 +333,7 @@ describe('demo31 问题 1 — the sticky home session owns the pops', () => {
     try {
       await reachGateA(root)
       expect(homeSessionFor(root).get()).toBeUndefined()
-      const service = serviceWith([selected('确认设计，进入计划')])
+      const service = serviceWith([selected('确认 · 进入计划')])
       const { emit, logs } = installMulti(service, ['sess-first'])
       emit({ header: { id: 'sess-first', cwd: root } }, turnEnd(1))
       await waitFor(async () => service.calls.length >= 1, logs, 'design-confirm pop in triggering session')
@@ -350,7 +350,7 @@ describe('demo31 问题 1 — the sticky home session owns the pops', () => {
     try {
       await reachGateA(root)
       homeSessionFor(root).set('sess-closed')
-      const service = serviceWith([selected('确认设计，进入计划')])
+      const service = serviceWith([selected('确认 · 进入计划')])
       // sess-closed has NO live agent — the retarget must not strand the pop.
       const { emit, logs } = installMulti(service, ['sess-task'])
       emit({ header: { id: 'sess-task', cwd: root } }, turnEnd(1))

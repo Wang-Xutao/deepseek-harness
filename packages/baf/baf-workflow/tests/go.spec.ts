@@ -667,7 +667,7 @@ describe('routing table (§18.4.2)', () => {
       ].join('\n'), 'utf8')
       const parked = await driveGo({ cwd: root, focus })
       expect(parked.kind).toBe('success')
-      expect(parked.text).toContain('检查已通过，请确认归档')
+      expect(parked.text).toContain('验证已完成 · 请确认归档')
       const card = await driveGo({ cwd: root, focus })
       expect(card.kind).toBe('success')
       expect(card.text).toContain('检查已确认 · 已归档')
@@ -766,7 +766,7 @@ describe('confirmation gates (§18.5)', () => {
       // token — it is the registered `设计确认门` card itself.
       expect(gateA.kind).toBe('success')
       expect(gateA.text).toContain('等待你的确认')
-      expect(gateA.text).toContain('设计文档已经写好')
+      expect(gateA.text).toContain('设计文档已经齐了')
       expect(gateA.text).toContain('【选项】')
       expect(gateA.text).toContain('/baf-go')
     } finally {
@@ -782,7 +782,7 @@ describe('explicit gate re-pop (/baf-go gate=<id>)', () => {
       const changeId = await reachGateA(root, focus)
       const card = await driveGo({ cwd: root, rawInput: `gate=design-confirm change=${changeId}`, focus })
       // No ask channel (CLI shape): the plain §22 card + the revive hint.
-      expect(card.text).toContain('设计已完成，请确认')
+      expect(card.text).toContain('设计已完成 · 请确认进入计划')
       expect(card.text).toContain('/baf-go 重新弹出确认框')
       const status = await statusOf(root, changeId)
       expect(status.current).toBe('design')
@@ -803,7 +803,7 @@ describe('explicit gate re-pop (/baf-go gate=<id>)', () => {
       }
       const card = await driveGo({ cwd: root, rawInput: `gate=design-confirm change=${changeId}`, focus, ask })
       expect(pops).toEqual([{ gateId: 'design-confirm' }])
-      expect(card.text).toContain('设计已完成，请确认')
+      expect(card.text).toContain('设计已完成 · 请确认进入计划')
       expect((await statusOf(root, changeId)).current).toBe('design')
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -892,7 +892,7 @@ describe('interactive gate dialog (§22.17)', () => {
       // re-paint) — same source code path, two gate ids, matching the §22
       // user-facing vs machine-checked split.
       const pops: PopRecord[] = []
-      const card = await driveGo({ cwd: root, focus, ask: askAnswer('advance', '确认进入计划', pops) })
+      const card = await driveGo({ cwd: root, focus, ask: askAnswer('advance', '确认 · 进入计划', pops) })
       expect(pops).toEqual([{ gateId: 'design-advance', changeId }])
       expect(card.text).toContain('设计已确认 · 已进入计划阶段')
       expect((await statusOf(root, changeId)).current).toBe('plan')
@@ -928,7 +928,7 @@ describe('interactive gate dialog (§22.17)', () => {
       // Second /baf-go must POP AGAIN (the customer revives the dialog), and
       // this time the confirm click continues the workflow.
       const pops: PopRecord[] = []
-      const card = await driveGo({ cwd: root, focus, ask: askAnswer('confirm', '确认设计，进入计划', pops) })
+      const card = await driveGo({ cwd: root, focus, ask: askAnswer('confirm', '确认 · 进入计划', pops) })
       expect(pops).toEqual([{ gateId: 'design-confirm', changeId }])
       expect(card.text).toContain('设计已确认 · 已进入计划阶段')
       expect((await statusOf(root, changeId)).current).toBe('plan')
@@ -942,7 +942,7 @@ describe('interactive gate dialog (§22.17)', () => {
     try {
       const changeId = await reachGateB(root, focus)
       const pops: PopRecord[] = []
-      const card = await driveGo({ cwd: root, focus, ask: askAnswer('confirm', '确认归档', pops) })
+      const card = await driveGo({ cwd: root, focus, ask: askAnswer('confirm', '确认 · 归档', pops) })
       expect(pops).toEqual([{ gateId: 'verify-archive', changeId }])
       expect(card.text).toContain('检查已确认 · 已归档')
       expect((await statusOf(root, changeId)).terminal).toBe('completed')
@@ -1004,7 +1004,7 @@ describe('interactive gate dialog (§22.17)', () => {
         cwd: root,
         focus,
         confirm: true,
-        ask: askAnswer('confirm', '确认设计，进入计划', pops), // must never be consulted
+        ask: askAnswer('confirm', '确认 · 进入计划', pops), // must never be consulted
       })
       expect(pops).toEqual([])
       expect(card.text).toContain('设计已确认 · 已进入计划阶段')
@@ -1336,14 +1336,14 @@ describe('/baf-go work-order dispatch (§18.4.2, 2026-09-22 客户决策)', () =
       const { signals, dispatch } = recorder()
       const ask: GateAsk = async (gate) => {
         expect(gate.gateId).toBe('clarify-advance')
-        return { kind: 'answered', optionId: 'advance', label: '确认进入设计' }
+        return { kind: 'answered', optionId: 'advance', label: '确认 · 进入设计' }
       }
       // Hop 1: the open-advance dialog (startChange authored the proposal) —
       // its click installs the clarify template AND dispatches the clarify
       // order in the same breath.
       const askOpen: GateAsk = async (gate) => {
         expect(gate.gateId).toBe('open-advance')
-        return { kind: 'answered', optionId: 'advance', label: '确认提案 · 进入澄清' }
+        return { kind: 'answered', optionId: 'advance', label: '确认 · 进入澄清' }
       }
       const intoClarify = await driveGo({ cwd: root, focus, ask: askOpen, dispatch, dispatchOrigin: 'customer' })
       expect(intoClarify.text).toContain('clarify 已进入 · 模板已装')
@@ -1428,7 +1428,7 @@ describe('/baf-go work-order dispatch (§18.4.2, 2026-09-22 客户决策)', () =
       // implement with the regression-first work order.
       const ask: GateAsk = async (gate) => {
         expect(gate.gateId).toBe('bugfix-open-advance')
-        return { kind: 'answered', optionId: 'advance', label: '确认提案 · 进入实施' }
+        return { kind: 'answered', optionId: 'advance', label: '确认 · 进入实施' }
       }
       const intoImplement = await driveGo({ cwd: root, focus, ask, dispatch, dispatchOrigin: 'customer', rawInput: `change=${changeId}` })
       expect(intoImplement.text).toContain('已进入 implement')

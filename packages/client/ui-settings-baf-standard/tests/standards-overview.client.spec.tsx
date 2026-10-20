@@ -924,46 +924,66 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     expect((screen.getByTestId('baf-standard-hooks-save') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  // 【变更】2026-10-20 (批次四 3.6): the picker selects a script FILE through a
-  // hidden <input type="file">. jsdom cannot open the OS dialog — the probe
-  // drives the input's change event directly, covering all three answers:
-  // desktop bridge under the root, bridge outside the root, and web fallback
-  // (no bridge → bare file name).
-  it('pre-fills the add input from a chosen script file (批次四 3.6)', async () => {
-    const bridge = { pathFor: vi.fn() }
+  // 【变更】2026-10-20 (批次四 3.6 → 批次五 1.3): the picker selects a script
+  // FILE, PER ROW. Desktop (`pickFile`) opens the NATIVE dialog with the
+  // workspace root as its default directory and folds the absolute answer
+  // into the row whose 选择脚本文件 was clicked; plain web falls back to the
+  // hidden <input type="file"> (jsdom cannot open the OS dialog — the probe
+  // drives its change event), routed by pickKind to THAT row only — the other
+  // row's input stays clean.
+  it('pre-fills only the row whose 选择脚本文件 was clicked (批次五 1.3)', async () => {
+    const bridge = { pathFor: vi.fn(), pickFile: vi.fn() }
     ;(globalThis as { __BAF_FILE_PICKER__?: typeof bridge }).__BAF_FILE_PICKER__ = bridge
     try {
       const { props } = harness(readyState())
       render(<StandardsProjectOverview {...props} />)
       fireEvent.click(screen.getByTestId('baf-standard-hooks-node-implement'))
       const editor = screen.getByTestId('baf-standard-hooks-editor')
-      // The editor's LAST input is the shared hidden file chooser.
       const inputs = editor.querySelectorAll('input')
+      const enterInput = inputs[0] as HTMLInputElement
+      const exitInput = inputs[1] as HTMLInputElement
+      // The editor's LAST input is the shared hidden file chooser.
       const fileInput = inputs[inputs.length - 1] as HTMLInputElement
       expect(fileInput.type).toBe('file')
-      const exitInput = inputs[1] as HTMLInputElement
       const choose = (name: string): void => {
         const file = new File(['x'], name, { type: 'text/plain' })
         Object.defineProperty(fileInput, 'files', { value: [file], configurable: true })
         fireEvent.change(fileInput)
       }
-      // The fixture workspace root is /ws — the bridge answers inside it.
-      bridge.pathFor.mockReturnValueOnce('/ws/scripts/build.sh')
-      choose('build.sh')
-      // Desktop: the bridge resolved the absolute path → relative FILE path.
-      expect(bridge.pathFor).toHaveBeenCalled()
+      // Desktop native dialog: the fixture workspace root (/ws) rides as the
+      // default directory; the absolute answer folds into the clicked row.
+      bridge.pickFile.mockResolvedValueOnce('/ws/scripts/build.sh')
+      fireEvent.click(screen.getByTestId('baf-standard-hooks-pick-implement-exit'))
+      await tick()
+      expect(bridge.pickFile).toHaveBeenCalledWith('/ws')
       expect(exitInput.value).toBe('scripts/build.sh')
-      // Outside the workspace root: the prefill stays and the notice says why.
-      bridge.pathFor.mockReturnValueOnce('/elsewhere/build.sh')
-      choose('build.sh')
-      expect(editor.textContent).toContain('protectedPickOutside')
-      expect(exitInput.value).toBe('scripts/build.sh')
-      // Web (no bridge): the bare file NAME prefills.
-      delete (globalThis as { __BAF_FILE_PICKER__?: typeof bridge }).__BAF_FILE_PICKER__
+      expect(enterInput.value).toBe('')
+      // Cancel (null) prefills nothing.
+      bridge.pickFile.mockResolvedValueOnce(null)
+      fireEvent.click(screen.getByTestId('baf-standard-hooks-pick-implement-enter'))
+      await tick()
+      expect(enterInput.value).toBe('')
+      // Plain web bridge (pathFor only, no pickFile): the hidden chooser
+      // routes by pickKind — exit's button was last clicked.
+      const webBridge = { pathFor: vi.fn() }
+      ;(globalThis as { __BAF_FILE_PICKER__?: typeof webBridge }).__BAF_FILE_PICKER__ = webBridge
+      fireEvent.click(screen.getByTestId('baf-standard-hooks-pick-implement-exit'))
+      webBridge.pathFor.mockReturnValueOnce('/ws/scripts/lint.ps1')
       choose('lint.ps1')
-      expect(exitInput.value).toBe('lint.ps1')
+      expect(exitInput.value).toBe('scripts/lint.ps1')
+      expect(enterInput.value).toBe('')
+      // Outside the workspace root: the prefill stays and the notice says why.
+      webBridge.pathFor.mockReturnValueOnce('/elsewhere/clean.sh')
+      choose('clean.sh')
+      expect(editor.textContent).toContain('protectedPickOutside')
+      expect(exitInput.value).toBe('scripts/lint.ps1')
+      // No bridge at all: the bare file NAME prefills.
+      delete (globalThis as { __BAF_FILE_PICKER__?: typeof webBridge }).__BAF_FILE_PICKER__
+      choose('audit.mjs')
+      expect(exitInput.value).toBe('audit.mjs')
+      expect(enterInput.value).toBe('')
     } finally {
-      delete (globalThis as { __BAF_FILE_PICKER__?: typeof bridge }).__BAF_FILE_PICKER__
+      delete (globalThis as { __BAF_FILE_PICKER__?: unknown }).__BAF_FILE_PICKER__
     }
   })
 

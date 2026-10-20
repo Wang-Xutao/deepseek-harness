@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
 /**
+ * 【变更】2026-10-20 (批次五 2.2/2.3/2.6): the reader-side de-dup — the
+ * bugfix-open-advance twin and the parked design-confirm re-pop no longer
+ * render anywhere (pills, 明细, aria), the edge conditions print their
+ * plain-zh text (no T-id prefix), and the 一次性 badges + legend item are
+ * gone. The fixture still carries the twins so the assertions prove the
+ * FILTER, not an empty input.
  * 【变更】2026-10-20 (批次三 4.5): the 详/略 switch is deleted — the flow is
  * always 详 as a left-right split: the route-parity canvas on the left, the
  * SELECTED node's 门禁明细 on the right (click a canvas card to select; the
@@ -13,7 +19,7 @@
  * it guards (entry gates + 分类 on 接单→建立变更; advance gates on their
  * node's leaving edge; resume/abandon stacked under their branch node). The
  * unanchored per-change gates ride fixed client-side anchors
- * (design-confirm→设计, verify-archive→验证, resume→漂移, abandon→已放弃).
+ * (verify-archive→验证, resume→漂移, abandon→已放弃).
  * No config block.
  * Collapsed by default in list context with load-once caching; the row
  * fixtures mirror the real registry (15 confirm + 6 stage rows).
@@ -121,12 +127,10 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
       'baf-gates-gate-node-intake-classify',
       'baf-gate-node-open',
       'baf-gates-gate-node-open-advance',
-      'baf-gates-gate-node-bugfix-open-advance',
       'baf-gate-node-clarify',
       'baf-gates-gate-node-clarify-advance',
       'baf-gate-node-design',
       'baf-gates-gate-node-design-advance',
-      'baf-gates-gate-node-design-confirm',
       'baf-gate-node-plan',
       'baf-gates-gate-node-plan-advance',
       'baf-gate-node-implement',
@@ -141,15 +145,17 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
       'baf-gates-gate-node-abandon',
     ])
     expect(screen.getByTestId('baf-gates-branch').textContent).toContain('gates.branchTitle')
-    // The bootstrap gate pills carry the「一次性」badge; the per-change 分类
-    // pill does not.
-    for (const id of ['scaffold', 'new-workflow', 'active-conflict', 'bind-workflow']) {
-      expect(screen.getByTestId(`baf-gates-once-badge-${id}`).textContent).toBe('gates.onceBadge')
-    }
-    expect(screen.queryByTestId('baf-gates-once-badge-intake-classify')).toBeNull()
+    // 【变更】2026-10-20 (批次五 2.6): no 一次性 badge renders anywhere (the
+    // fixture's bootstrap gates still exist — the badge is what vanished), and
+    // the legend bar carries no once chip either.
+    expect(document.querySelectorAll('[data-testid^="baf-gates-once-badge-"]')).toHaveLength(0)
+    expect(screen.getByTestId('baf-gates-flow').textContent).not.toContain('一次性')
+    // 【变更】2026-10-20 (批次五 2.2): the bugfix twin (bugFix: true) and the
+    // parked design-confirm re-pop are filtered from every surface.
+    expect(screen.queryByTestId('baf-gates-gate-node-bugfix-open-advance')).toBeNull()
+    expect(screen.queryByTestId('baf-gates-gate-node-design-confirm')).toBeNull()
     // Unanchored per-change gates ride their fixed client-side anchors —
     // each pill sits on the anchored node's leaving edge / branch stack.
-    expect(screen.getByTestId('baf-gates-gate-node-design-confirm').textContent).toContain('design-confirm 标题')
     expect(screen.getByTestId('baf-gates-gate-node-verify-archive').textContent).toContain('verify-archive 标题')
     expect(screen.getByTestId('baf-gates-gate-node-resume').textContent).toContain('resume 标题')
     expect(screen.getByTestId('baf-gates-gate-node-abandon').textContent).toContain('abandon 标题')
@@ -162,13 +168,14 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
       expect(screen.getByTestId(`baf-gate-confirm-${gate}`)).toBeDefined()
     }
     // Clicking a canvas card selects it — that node's gates render, and the
-    // previous detail group leaves.
+    // previous detail group leaves. 【变更】2026-10-20 (批次五 2.2): only the
+    // de-duplicated open-advance prints (the bugfix twin never reaches the
+    // 明细).
     fireEvent.click(screen.getByTestId('baf-gate-node-open'))
     expect(screen.getByTestId('baf-gates-detail-node-open')).toBeDefined()
     expect(screen.queryByTestId('baf-gates-detail-node-intake')).toBeNull()
-    for (const gate of ['open-advance', 'bugfix-open-advance']) {
-      expect(screen.getByTestId(`baf-gate-confirm-${gate}`)).toBeDefined()
-    }
+    expect(screen.getByTestId('baf-gate-confirm-open-advance')).toBeDefined()
+    expect(screen.queryByTestId('baf-gate-confirm-bugfix-open-advance')).toBeNull()
     expect(screen.getByTestId('baf-gate-node-open').getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByTestId('baf-gate-node-intake').getAttribute('aria-pressed')).toBe('false')
     // Stage rows render as the canvas nodes' meta line; the artifact shows.
@@ -182,9 +189,10 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
     expect(screen.getByTestId('baf-gate-node-archive').textContent).toContain('gates.noGate')
     expect(screen.getByTestId('baf-gate-node-completed').textContent).toContain('node.completed')
     // The selected node's group prints the leaving-edge template conditions
-    // — re-select 接单 and its guarded edge's T2 line shows in the column.
+    // — 【变更】2026-10-20 (批次五 2.3): the plain-zh line, no T-id prefix.
     fireEvent.click(screen.getByTestId('baf-gate-node-intake'))
-    expect(screen.getByTestId('baf-gates-detail').textContent).toContain('T2 ·')
+    expect(screen.getByTestId('baf-gates-detail').textContent).toContain('分类确认为新需求或高风险缺陷')
+    expect(screen.getByTestId('baf-gates-detail').textContent).not.toContain('T2')
     // The route-parity SVG edges carry arrowheads (marker-end on every path).
     expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0)
     // The「开关与阈值在配置文件」block stays deleted; the 详/略 switch is gone

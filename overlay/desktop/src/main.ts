@@ -892,6 +892,22 @@ ipcMain.handle('shell:openExternal', async (_event, raw: unknown) => {
   }
 })
 
+// 【变更】2026-10-20 (批次五 1.3): the 状态脚本 script-file picker's native
+// dialog (设置 → 工作流 → 项目工程). The renderer's hidden <input type="file">
+// cannot preset an initial directory, so the preload bridge routes the click
+// here: `defaultPath` is the workspace root the settings page reports, and
+// the answer is the picked absolute path (null on cancel).
+ipcMain.handle('baf:pickScriptFile', async (_event, defaultPath: unknown) => {
+  const initial = typeof defaultPath === 'string' && defaultPath.trim() !== '' ? defaultPath : undefined
+  const options = { properties: ['openFile'] as Array<'openFile'>, defaultPath: initial }
+  // Modal to the main window when it exists; a windowless call still opens.
+  const picked = mainWindow !== undefined && !mainWindow.isDestroyed()
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options)
+  if (picked.canceled) return null
+  return picked.filePaths[0] ?? null
+})
+
 ipcMain.on('close-dialog:choice', (_event, payload: { action?: string, remember?: boolean }) => {
   const action = payload.action
   const remember = payload.remember === true

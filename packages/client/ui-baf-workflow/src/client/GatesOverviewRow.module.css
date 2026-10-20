@@ -97,10 +97,6 @@
   word-break: break-word;
 }
 
-.option {
-  word-break: break-word;
-}
-
 /* 【变更】2026-10-12 (问题 4.1): the process-card flow became the 2026-10-19
    route-parity canvas below; nodeHead and its siblings survive as the 门禁明细
    group vocabulary (详 mode). */
@@ -133,64 +129,92 @@
   white-space: nowrap;
 }
 
-.stageLine {
-  margin-top: 6px;
+/* 【变更】2026-10-20 (批次五 2.1): the stage/gates blocks sit under a small
+   section label so the 明细 reads in labelled layers (阶段门禁 / 进入下一步的
+   条件 / 确认门). */
+.sectionLabel {
+  margin: 10px 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
 }
 
-.stageMeta {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
+.sectionLabel:first-child {
+  margin-top: 2px;
+}
+
+.stageLine {
+  margin-top: 2px;
+}
+
+.stageArtifactRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .gates {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
+/* 【变更】2026-10-20 (批次五 2.1): the gate card re-layers — title / question /
+   option rows with breathing room and a hairline, replacing the single
+   run-on line (the bug-fix chip left with the reader-side de-dup). */
 .gateCard {
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
-}
-
-.gateLine {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 8px;
+  padding: 9px 12px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 45%, transparent);
 }
 
 .gateTitle {
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 19px;
   font-weight: 600;
+  color: var(--dsw-alias-label-primary);
 }
 
 .gateQuestion {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.gateOptions {
   margin-top: 2px;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
 }
 
-.chip {
-  margin-left: 6px;
-  padding: 0 6px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
-  color: var(--dsw-alias-label-secondary);
+.gateOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* One option row — the label leads, the command a click runs trails in
+   mono (批次五 2.1). */
+.option {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.optionLabel {
+  color: var(--dsw-alias-label-primary);
+  word-break: break-word;
+}
+
+.optionCommand {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--dsw-alias-font-mono, monospace);
   font-size: 11px;
-  line-height: 16px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .conditions {
@@ -293,17 +317,8 @@
   border-radius: 999px;
 }
 
-.legendOnceChip {
-  box-sizing: border-box;
-  height: 14px;
-  padding: 0 6px;
-  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 45%, transparent);
-  border-radius: 999px;
-  color: var(--dsw-alias-text-warning, #7c5cff);
-  font-size: 9px;
-  line-height: 13px;
-  white-space: nowrap;
-}
+/* 【变更】2026-10-20 (批次五 2.6): legendOnceChip left with the 一次性 legend
+   item / once badges. */
 
 .flowCanvas {
   position: relative;
@@ -460,24 +475,8 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.pillChip {
-  flex: none;
-  font-size: 9px;
-  line-height: 12px;
-  color: var(--dsw-alias-label-tertiary);
-  white-space: nowrap;
-}
-
-.pillOnce {
-  flex: none;
-  padding: 0 5px;
-  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 45%, transparent);
-  border-radius: 999px;
-  color: var(--dsw-alias-text-warning, #7c5cff);
-  font-size: 9px;
-  line-height: 13px;
-  white-space: nowrap;
-}
+/* 【变更】2026-10-20 (批次五 2.3/2.6): pillChip / pillOnce left with the
+   bug-fix chips and 一次性 badges — a pill is its title only. */
 
 /* The 分支 label riding above the column-1 branch nodes. */
 .branchLabel {

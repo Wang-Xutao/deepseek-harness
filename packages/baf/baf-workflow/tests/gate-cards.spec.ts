@@ -158,10 +158,12 @@ describe('renderGateCard (§22)', () => {
   it('renders the bugfix-open-advance card with the unified 提案 wording', () => {
     const result = renderGate('bugfix-open-advance', { cwd: '/tmp/ws', changeId: 'CHG-BUG' })
     expect(result.kind).toBe('success')
-    expect(result.text).toContain('提案已完成 · 请确认推进')
+    // 【变更】2026-10-20 (批次五 2.5): unified title grammar 「X已完成 · 请确认进入Y」
+    // and option grammar 「确认 · 进入X」.
+    expect(result.text).toContain('提案已完成 · 请确认进入实施')
     expect(result.text).toContain('【状态变化】提案（已完成，通过完成门）→ 实施（待开始）')
     expect(result.text).toContain('先写回归测试')
-    expect(result.text).toContain('确认提案 · 进入实施')
+    expect(result.text).toContain('确认 · 进入实施')
     // The confirm takes the same positive path open-advance takes.
     expect(result.text).toContain('/baf-go-confirm')
     expect(result.text).toContain('暂不推进')
@@ -205,7 +207,11 @@ describe('renderGateCard (§22)', () => {
     const result = renderGate('design-confirm', { cwd: '/tmp/ws', changeId: 'CHG-003' })
     expect(result.kind).toBe('success')
     expect(result.text).toContain('/baf-go')
-    expect(result.text).toContain('确认设计，进入计划')
+    // 【变更】2026-10-20 (批次五 2.4/2.5): the title/question now read exactly
+    // like design-advance (same decision, parked re-pop) under the unified
+    // grammar.
+    expect(result.text).toContain('设计已完成 · 请确认进入计划')
+    expect(result.text).toContain('确认 · 进入计划')
     expect(result.text).toContain('退回，继续澄清需求')
   })
 
@@ -213,7 +219,7 @@ describe('renderGateCard (§22)', () => {
     const result = renderGate('verify-archive', { cwd: '/tmp/ws', changeId: 'CHG-004' })
     expect(result.kind).toBe('success')
     expect(result.text).toContain('/baf-go')
-    expect(result.text).toContain('确认归档')
+    expect(result.text).toContain('确认 · 归档')
   })
 
   it('renders the abandon gate with confirm + cancel', () => {

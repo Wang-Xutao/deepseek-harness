@@ -352,7 +352,7 @@ describe('§22.19 askGateDialogQueued — outcome mapping', () => {
   /** Minimal userQuestions double that answers after one tick. */
   const service = {
     async ask() {
-      return { answers: [{ id: 'design-confirm', selected: ['确认设计，进入计划'] }] }
+      return { answers: [{ id: 'design-confirm', selected: ['确认 · 进入计划'] }] }
     },
   }
 
