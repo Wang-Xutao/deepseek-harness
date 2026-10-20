@@ -19,7 +19,6 @@ import { useEffect, useState } from 'react'
 import type {
   InjectFace, PropsLocale, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { InlineEditor, useCopyFeedback } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BafStandardCardId, BafStandardFieldRow, BafStandardSummaryResult } from '../types.ts'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import { NodeHooksCard } from './NodeHooksCard.tsx'
@@ -62,9 +61,9 @@ function normalizeEntry(entry: string): string {
   return entry.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '').trim()
 }
 
-/** Join a workspace root and one relative entry for a reveal gesture (Node
- * accepts mixed separators on Windows; the host resolves natively). */
-function joinEntry(cwd: string, entry: string): string {
+/** Join a workspace root and one relative entry for an open/reveal gesture
+ * (Node accepts mixed separators on Windows; the host resolves natively). */
+export function joinEntry(cwd: string, entry: string): string {
   const cleaned = entry.replace(/\/\*\*$/, '')
   return `${cwd.replace(/\/+$/, '')}/${cleaned}`
 }
@@ -94,7 +93,6 @@ const STAGE_AREA_GROUPS: readonly {
   { stageKey: 'stage.verify', hintKey: 'stageHint.verify', areas: ['testing-discipline'] },
 ]
 
-const PROJECT_CARD_IDS: readonly BafStandardCardId[] = ['workflow', 'route', 'openspec', 'guard']
 const QUALITY_CARD_IDS: readonly BafStandardCardId[] = ['quality']
 const STANDARD_CARD_IDS: readonly BafStandardCardId[] = ['standard']
 
@@ -235,12 +233,12 @@ function PackageCard({ cardId, fields, t }: {
 }
 
 /**
- * 【变更】2026-10-19 (六问题批 4.1): the project path + config file are TWO
- * standalone config items at the top of the tab (no card chrome) — read-only
- * mono readouts in the 轨迹图's label-over-value row style, with NO copy/open
- * buttons: the value itself is the click target (folder reveal / default-app
- * open). The config-file row shows only the file NAME; its hover title keeps
- * the absolute path.
+ * 【变更】2026-10-20 (批次三 4.1): the project path + config file rows adopt
+ * the 通用 tab's 轨迹图/工作流图 row anatomy EXACTLY — one full-width
+ * label-left / control-right line with 16px 0 padding and the bottom hairline.
+ * The control side is the read-only mono value itself (folder reveal /
+ * default-app open, hover title keeps the absolute path; the config row shows
+ * only the file NAME).
  */
 function ProjectPathRows({ summary, t, onReveal, onOpen }: {
   summary: StandardsOverviewState['summary']
@@ -270,7 +268,7 @@ function ProjectPathRows({ summary, t, onReveal, onOpen }: {
   </>)
 }
 
-/** One read-only config row: small secondary label over a mono clickable value. */
+/** One config row: label left, mono clickable value right (通用 row parity). */
 function ConfigPathRow({ testid, label, text, title, onClick }: {
   testid: string
   label: string
@@ -282,7 +280,7 @@ function ConfigPathRow({ testid, label, text, title, onClick }: {
 }) {
   return (
     <div className={css.configRow} data-testid={testid}>
-      <span className={css.configLabel}>{label}</span>
+      <span className={css.configTitle}>{label}</span>
       <button type="button" className={css.configValue} title={title} onClick={onClick}>
         {text}
       </button>
@@ -290,9 +288,14 @@ function ConfigPathRow({ testid, label, text, title, onClick }: {
   )
 }
 
-/** One editable AI 禁改路径 entry (per-row hook + one-edit-at-a-time state). */
+/**
+ * 【变更】2026-10-20 (批次四 3.5): one 受保护路径 entry — the copy/open row
+ * buttons are GONE (the path text itself is the reveal click); 编辑 swaps in a
+ * bare autoFocus input that commits on blur/Enter and reverts on Esc, so the
+ * row always leaves edit state when focus moves away.
+ */
 function ProtectedPathRow({
-  index, entry, cwd, editingValue, onEditChange, onCommitEdit, onCancelEdit, onBeginEdit, onRemove, onReveal, t,
+  index, entry, cwd, editingValue, onEditChange, onFinishEdit, onCancelEdit, onBeginEdit, onRemove, onReveal, t,
 }: {
   index: number
   entry: string
@@ -300,24 +303,37 @@ function ProtectedPathRow({
   /** The in-flight edit's text (undefined ⇒ this row is not being edited). */
   editingValue: string | undefined
   onEditChange: (value: string) => void
-  onCommitEdit: () => void
+  /** Commit-or-revert — invalid/duplicate text reverts with a notice. */
+  onFinishEdit: () => void
   onCancelEdit: () => void
   onBeginEdit: () => void
   onRemove: () => void
   onReveal: () => void
   t: StandardsPanelProps['t']
 }) {
-  const { copied, onCopy } = useCopyFeedback(entry)
   return (
     <div className={css.protectedRow} data-testid={`baf-standard-protected-row-${String(index)}`}>
       {editingValue !== undefined ? (
-        <InlineEditor
+        <input
+          type="text"
+          className={css.rowEditInput}
+          aria-label={t('protectedEditLabel')}
           value={editingValue}
-          label={t('protectedEditLabel')}
-          onChange={onEditChange}
-          onSave={onCommitEdit}
-          onCancel={onCancelEdit}
-          className={css.protectedEditor ?? ''}
+          autoFocus
+          onChange={(event) => { onEditChange(event.currentTarget.value) }}
+          onBlur={onFinishEdit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              // Commit directly (blur alone won't fire on an unfocused input
+              // under test; the null-guard makes the double path idempotent).
+              event.preventDefault()
+              onFinishEdit()
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onCancelEdit()
+            }
+          }}
         />
       ) : (
         <>
@@ -330,10 +346,6 @@ function ProtectedPathRow({
             {entry}
           </button>
           <span className={css.pathActions}>
-            <button type="button" className={css.miniButton} onClick={onCopy}>
-              {copied ? t('copiedLabel') : t('copyLabel')}
-            </button>
-            <button type="button" className={css.miniButton} onClick={onReveal}>{t('openLabel')}</button>
             <button type="button" className={css.miniButton} onClick={onBeginEdit}>{t('editLabel')}</button>
             <button type="button" className={css.miniButton} onClick={onRemove}>{t('deleteLabel')}</button>
           </span>
@@ -393,14 +405,18 @@ function ProtectedPathsCard({ state, summary, t, updateProtectedDraft, saveProte
     })
   }
 
-  const commitEdit = (): void => {
+  /** 【变更】2026-10-20 (批次四 3.5): blur/Enter finisher — valid text commits,
+   * anything else reverts with a notice; the row ALWAYS leaves edit state. */
+  const finishEdit = (): void => {
     if (editing === null) return
     const entry = normalizeEntry(editing.value)
     if (entry === '') {
+      setEditing(null)
       setLocalMessage(t('protectedInvalidEntry'))
       return
     }
     if (draft.some((existing, index) => index !== editing.index && existing === entry)) {
+      setEditing(null)
       setLocalMessage(t('protectedDuplicate'))
       return
     }
@@ -414,8 +430,37 @@ function ProtectedPathsCard({ state, summary, t, updateProtectedDraft, saveProte
 
   return (
     <div className={css.card} data-testid="baf-standard-protected-card">
-      <div className={css.cardTitle}>{t('protectedTitle')}</div>
-      <div className={css.cardDesc}>{t('protectedDesc')}</div>
+      {/* 【变更】2026-10-20 (批次四 3.4): save/cancel move to the title row's
+          end (取消 quiet / 保存 brand-filled) — the bottom footer and the
+          提交防线 hook line are gone. */}
+      <div className={css.cardTitleRow}>
+        <span className={css.cardTitle}>{t('protectedTitle')}</span>
+        <span className={css.titleActions}>
+          <button
+            type="button"
+            className={css.titleCancel}
+            data-testid="baf-standard-protected-cancel"
+            disabled={state.protectedSaving || !dirty}
+            onClick={() => {
+              setEditing(null)
+              setEntryInput('')
+              setLocalMessage(undefined)
+              updateProtectedDraft([...persisted])
+            }}
+          >
+            {t('protectedCancel')}
+          </button>
+          <button
+            type="button"
+            className={css.titleSave}
+            data-testid="baf-standard-protected-save"
+            disabled={state.protectedSaving || !dirty}
+            onClick={() => { void saveProtectedPaths() }}
+          >
+            {state.protectedSaving ? t('protectedSaving') : t('protectedSave')}
+          </button>
+        </span>
+      </div>
       {draft.length === 0 ? (
         <div className={css.protectedEmpty} data-testid="baf-standard-protected-empty">
           {t('protectedEmpty')}
@@ -430,7 +475,7 @@ function ProtectedPathsCard({ state, summary, t, updateProtectedDraft, saveProte
               cwd={summary.cwd ?? ''}
               editingValue={editing !== null && editing.index === index ? editing.value : undefined}
               onEditChange={(value) => { setEditing({ index, value }) }}
-              onCommitEdit={commitEdit}
+              onFinishEdit={finishEdit}
               onCancelEdit={() => { setEditing(null) }}
               onBeginEdit={() => { setEditing({ index, value: entry }) }}
               onRemove={() => {
@@ -475,23 +520,6 @@ function ProtectedPathsCard({ state, summary, t, updateProtectedDraft, saveProte
           {t('protectedPick')}
         </button>
       </div>
-      <div className={css.protectedFoot}>
-        <button
-          type="button"
-          className={css.saveButton}
-          data-testid="baf-standard-protected-save"
-          disabled={state.protectedSaving || !dirty}
-          onClick={() => { void saveProtectedPaths() }}
-        >
-          {state.protectedSaving ? t('protectedSaving') : t('protectedSave')}
-        </button>
-        <span
-          className={css.hookLine}
-          data-testid="baf-standard-protected-hook"
-        >
-          {summary.commitGuardHookInstalled === true ? t('protectedHookOn') : t('protectedHookOff')}
-        </span>
-      </div>
       {notice !== undefined ? (
         <div className={css.statusError} data-testid="baf-standard-protected-notice">
           {noticeKey !== undefined ? t(noticeKey) : notice}
@@ -512,15 +540,14 @@ function usePanelState(props: StandardsPanelProps) {
   return { state, summary: state.summary }
 }
 
-/** 项目工程 tab — workspace path/config rows + plugin cards + node hooks. */
+/** 项目工程 tab — the three config items, one full-width row each. */
 export function StandardsProjectOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
   const { t } = props
   const {
     openPath, revealPath, updateProtectedDraft, saveProtectedPaths, pickDirectory,
-    generateBaseline,
+    generateBaseline, statWorkspacePath,
   } = props
-  const cards = (summary?.cards ?? []).filter(card => PROJECT_CARD_IDS.includes(card.id))
 
   return (
     <section className={css.block} data-testid="baf-standard-project">
@@ -528,15 +555,23 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
           is deleted — the tab label already says 项目工程; the no-baseline banner
           yields to the dedicated error + 生成配置文件 button below. */}
       <StatusSurface state={state} summary={summary} t={t} suppressNoBaseline />
-      {/* The two standalone config items lead the tab in BOTH states (the
-          server returns cwd/baselinePath even without a baseline): readonly
-          mono readouts, click = reveal folder / open file, no buttons. */}
-      <ProjectPathRows
-        summary={summary}
-        t={t}
-        onReveal={(path) => { void revealPath(path) }}
-        onOpen={(path) => { void openPath(path) }}
-      />
+      {/* 【变更】2026-10-20 (批次四 3.7): the two config rows share a 项目信息
+          card (still rendered in BOTH states — the server returns
+          cwd/baselinePath even without a baseline); inside it, the 通用
+          轨迹图 row anatomy — label left, mono value right, click opens. */}
+      {summary?.cwd !== undefined || summary?.baselinePath !== undefined ? (
+        <div className={css.card} data-testid="baf-standard-project-info">
+          <div className={css.cardTitle}>{t('projectInfoTitle')}</div>
+          <div className={css.projectInfoRows}>
+            <ProjectPathRows
+              summary={summary}
+              t={t}
+              onReveal={(path) => { void revealPath(path) }}
+              onOpen={(path) => { void openPath(path) }}
+            />
+          </div>
+        </div>
+      ) : null}
       {summary?.status === 'no-baseline' ? (
         <div className={css.generateRow} data-testid="baf-standard-generate">
           <div className={css.statusError}>{t('noBaselineError')}</div>
@@ -557,31 +592,12 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
         </div>
       ) : null}
       {summary?.status === 'ready' ? (
-        <div className={css.grid}>
-          {/* 【变更】2026-10-12 (问题 4.3 客户确认): 基线档案头卡 — the repo-tied,
-              git-managed anchor of every projection on this page: the baseline
-              id and its bafCompatibility window. The project path / config
-              file rows moved OUT to the tab top (2026-10-19 六问题批 4.1). */}
-          <div className={css.card} data-testid="baf-standard-card-baseline">
-            <div className={css.cardTitle}>{t('cardTitleBaseline')}</div>
-            <div className={css.cardDesc}>{t('cardDescBaseline')}</div>
-            <FieldTable
-              fields={[
-                { field: t('baselineLabel'), value: summary.baselineId ?? '—', state: 'ok' },
-                {
-                  field: t('compatLabel'),
-                  value: summary.compatibility === undefined
-                    ? '—'
-                    : `${summary.compatibility.min} ~ ${summary.compatibility.max}`,
-                  state: 'ok',
-                },
-              ]}
-              t={t}
-            />
-          </div>
-          {cards.map(card => (
-            <PackageCard key={card.id} cardId={card.id} fields={card.fields} t={t} />
-          ))}
+        /* 【变更】2026-10-20 (批次三 4.2): the multi-column grid is gone, and
+            with it the baseline archive card, the per-package projection cards,
+            and the scaffold card — the tab keeps ONLY 受保护路径 and 状态脚本,
+            each a full-width card on its own row (the path rows above are the
+            first item). */
+        <div className={css.stack}>
           <ProtectedPathsCard
             state={state}
             summary={summary}
@@ -593,15 +609,13 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
           />
           <NodeHooksCard
             state={state}
+            summary={summary}
             t={t}
+            openPath={openPath}
+            statWorkspacePath={statWorkspacePath}
             updateHooksDraft={props.updateHooksDraft}
             saveNodeHooks={props.saveNodeHooks}
           />
-          <div className={css.card} data-testid="baf-standard-card-scaffold">
-            <div className={css.cardTitle}>{t('cardTitleScaffold')}</div>
-            <div className={css.cardDesc}>{t('cardDescScaffold')}</div>
-            <div className={css.cardCommand}>{t('cardCommandScaffold')}</div>
-          </div>
         </div>
       ) : null}
     </section>

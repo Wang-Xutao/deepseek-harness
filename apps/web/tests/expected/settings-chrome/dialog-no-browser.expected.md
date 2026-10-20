@@ -5,6 +5,18 @@
     - button "Models"
     - button "Built-in plugins"
     - button "Agent presets"
+    - button "Multi-model routingbaf":
+      - text: Multi-model routing
+      - superscript: baf
+    - button "Version & updatesbaf":
+      - text: Version & updates
+      - superscript: baf
+    - button "Recommended pluginsbaf":
+      - text: Recommended plugins
+      - superscript: baf
+    - button "User feedbackbaf":
+      - text: User feedback
+      - superscript: baf
   - button "Open configuration file"
   - button "Close"
   - text: Permission Choose the default permission mode for new sessions

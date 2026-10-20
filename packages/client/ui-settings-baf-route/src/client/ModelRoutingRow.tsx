@@ -60,8 +60,17 @@
  * Menu-primitive selector pill 通用设置·语言 uses; keyword rules only cover
  * the ESCALATION grades (Worker is the fallback — its keyword rules/packs
  * were dead config and no longer render or can be added).
+ * 【变更】2026-10-20 (批次二 2.x): title/intro gap fixed via .headText (2.1);
+ * keywordsHint rewritten, presetsFileHint gone (2.2/2.3 — intro copy lives in
+ * locales); the escalate-only switch is gone — the raise-only floor is now
+ * unconditional behavior (2.4); zh/en tag segments merged into ONE line,
+ * CJK words first, no divider labels (2.5); the adder became a framed
+ * composer strip whose tier picker is the same Menu pill as 挡位 (2.6); the
+ * previewAutoHint and the verify-retry simulation switch + hints are gone
+ * (2.7/2.8), the preview card is tier-colored (2.8), and the 高级 tab lost
+ * its reset blast-radius paragraph (2.9).
  */
-import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
   IconChevronDownOutlineMedium as IconChevronDownOutline14, IconChevronDownOutlineRegular, Menu, Switch,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -237,24 +246,6 @@ function isCjkWord(word: string): boolean {
 }
 
 /**
- * 问题 5 (4.5): one labelled 中文/英文 line of tags inside a group — the
- * caption only rides along when the group holds BOTH languages (a single
- * language needs no divider).
- */
-function TagLine({ label, showLabel, children }: {
-  label: string
-  showLabel: boolean
-  children: ReactNode
-}): ReactElement {
-  return (
-    <span className={css.segLine}>
-      {showLabel ? <span className={css.segLabel}>{label}</span> : null}
-      {children}
-    </span>
-  )
-}
-
-/**
  * Join CSS-module class names without a clsx dependency. The ambient
  * css-module type reads as `string | undefined` under noUncheckedIndexedAccess,
  * so dropped names (undefined and '') are filtered by a narrowing guard.
@@ -288,33 +279,30 @@ export type ModelRoutingRowProps =
 export function ModelRoutingRow({
   useRouteSection, setEnabled, setTierModel, setTierProvider, setTierEffort, setPhaseTier,
   addKeyword, removeKeyword, updateKeyword, setKeywordEnabled, setCategoryEnabled,
-  setPackEnabled, setPresetWordEnabled, setEscalateOnly, setTierMode, save, cancel, reset,
+  setPackEnabled, setPresetWordEnabled, setTierMode, save, cancel, reset,
   runPreview, t,
 }: ModelRoutingRowProps) {
   const state = useRouteSection(identity)
-  const keywordWordsId = useId()
-  const keywordTierId = useId()
-  const keywordCategoryId = useId()
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null)
   const [keywordEdit, setKeywordEdit] = useState<KeywordEdit | null>(null)
-  const [verifyRetry, setVerifyRetry] = useState(false)
   const [previewText, setPreviewText] = useState('')
   /** 【变更】2026-10-12: restore tabbed layout; 高级 carries 恢复默认 (1.3). */
   const [routeTab, setRouteTab] = useState<'tiers' | 'phase' | 'keywords' | 'advanced'>('tiers')
   const tabsId = useId()
   const draft = state.draft
   // 1.6 热加载: while the box holds text, any draft edit (keyword add/remove,
-  // tier re-point, switch flip) re-runs the dry-run on a short debounce — the
-  // preview always reflects the current draft, no re-click needed.
+  // tier re-point) re-runs the dry-run on a short debounce — the preview
+  // always reflects the current draft, no re-click needed.
+  // 【变更】2026-10-20 (批次二 2.8): the verify-retry simulation switch is gone;
+  // the dry-run always runs without it.
   useEffect(() => {
     if (previewText === '') return
-    const timer = setTimeout(() => { void runPreview(previewText, { verifyRetry }) }, PREVIEW_DEBOUNCE_MS)
+    const timer = setTimeout(() => { void runPreview(previewText, { verifyRetry: false }) }, PREVIEW_DEBOUNCE_MS)
     return () => { clearTimeout(timer) }
-  }, [previewText, verifyRetry, draft, runPreview])
+  }, [previewText, draft, runPreview])
   if (state.status !== 'ready' || draft === undefined) {
     return <div className={css.section} data-testid="route-section">{t(state.status === 'failed' ? 'loadFailed' : 'loading')}</div>
   }
-  const escalate = draft.escalateOnly ?? true
   const tierMode: TierMode = draft.tierMode === 'three' ? 'three' : 'two'
   const visibleTiers = displayTiers(tierMode)
   // 【变更】2026-10-13 (worker 关键词批): keyword rules only ever ESCALATE —
@@ -468,9 +456,11 @@ export function ModelRoutingRow({
   }
   return (
     <div className={css.section} data-testid="route-section">
-      {/* Title/intro match 版本与更新: 18px title + 13px tertiary description. */}
+      {/* Title/intro match 版本与更新: 18px title + 13px tertiary description
+          — 【变更】2026-10-20 (批次二 2.1): .headText supplies the 12px title→intro
+          gap the bare wrapper div dropped. */}
       <div className={css.head}>
-        <div>
+        <div className={css.headText}>
           <h2 className={css.title}>{t('title')}</h2>
           <p className={css.intro}>{t('description')}</p>
         </div>
@@ -807,8 +797,6 @@ export function ModelRoutingRow({
         data-testid="route-panel-keywords"
       >
         <div className={css.description}>{t('keywordsHint')}</div>
-        {/* 问题 4: the preset packs live in a user-editable file — say so. */}
-        <div className={css.description}>{t('presetsFileHint')}</div>
         {keywordTiers.map((tier) => {
           const effectiveOf = (value: RouteTier): RouteTier =>
             tierMode === 'two' && value === 'mid' ? 'low' : value
@@ -828,9 +816,10 @@ export function ModelRoutingRow({
               .filter((category): category is string => category !== undefined && category !== ''),
           )]
           const bare = rules.filter(entry => entry.rule.category === undefined || entry.rule.category === '')
-          // 问题 5 (4.5): 中文/英文 split — CJK-carrying words one line, the
-          // rest another; the caption rides only when both languages exist.
-          const bothLanguages = (zh: number, en: number): boolean => zh > 0 && en > 0
+          // 【变更】2026-10-20 (批次二 2.5): zh and en merged into ONE line —
+          // CJK-carrying words first, the rest after; no divider labels.
+          const merged = (zh: ReadonlyArray<{ rule: TierKeywordRule; index: number }>,
+            en: ReadonlyArray<{ rule: TierKeywordRule; index: number }>) => [...zh, ...en]
           return (
             <div key={tier} className={css.ruleTier} data-testid="route-keyword-group">
               <span className={join(css.ruleTierLabel, TIER_CLASS[tier])}>{t(tierKey(tier))}</span>
@@ -855,12 +844,9 @@ export function ModelRoutingRow({
                           />
                         </span>
                       </span>
-                      <TagLine label={t('tagsZh')} showLabel={bothLanguages(zh.length, en.length)}>
-                        {zh.map(({ rule, index }) => renderUserRule(rule, index))}
-                      </TagLine>
-                      <TagLine label={t('tagsEn')} showLabel={bothLanguages(zh.length, en.length)}>
-                        {en.map(({ rule, index }) => renderUserRule(rule, index))}
-                      </TagLine>
+                      <span className={css.segLine}>
+                        {merged(zh, en).map(({ rule, index }) => renderUserRule(rule, index))}
+                      </span>
                     </span>
                   )
                 })}
@@ -870,12 +856,9 @@ export function ModelRoutingRow({
                   if (zh.length === 0 && en.length === 0) return undefined
                   return (
                     <span className={css.ruleBare}>
-                      <TagLine label={t('tagsZh')} showLabel={bothLanguages(zh.length, en.length)}>
-                        {zh.map(({ rule, index }) => renderUserRule(rule, index))}
-                      </TagLine>
-                      <TagLine label={t('tagsEn')} showLabel={bothLanguages(zh.length, en.length)}>
-                        {en.map(({ rule, index }) => renderUserRule(rule, index))}
-                      </TagLine>
+                      <span className={css.segLine}>
+                        {merged(zh, en).map(({ rule, index }) => renderUserRule(rule, index))}
+                      </span>
                     </span>
                   )
                 })()}
@@ -904,12 +887,9 @@ export function ModelRoutingRow({
                           />
                         </span>
                       </span>
-                      <TagLine label={t('tagsZh')} showLabel={bothLanguages(zhWords.length, enWords.length)}>
-                        {zhWords.map(word => renderPresetWord(preset, word, tier, packName))}
-                      </TagLine>
-                      <TagLine label={t('tagsEn')} showLabel={bothLanguages(zhWords.length, enWords.length)}>
-                        {enWords.map(word => renderPresetWord(preset, word, tier, packName))}
-                      </TagLine>
+                      <span className={css.segLine}>
+                        {[...zhWords, ...enWords].map(word => renderPresetWord(preset, word, tier, packName))}
+                      </span>
                     </span>
                   )
                 })}
@@ -918,17 +898,13 @@ export function ModelRoutingRow({
           )
         })}
         <KeywordAdder
-          id={{ words: keywordWordsId, tier: keywordTierId, category: keywordCategoryId }}
           tiers={keywordTiers}
           t={t}
           onAdd={addKeywordFrom}
         />
-        <Switch checked={escalate} label={t('escalateOnly')} onChange={setEscalateOnly} />
-        <div className={css.description}>{t('escalateOnlyHint')}</div>
 
         <div className={css.previewBlock}>
           <div className={css.blockTitle}>{t('previewTitle')}</div>
-          <div className={css.description}>{t('previewAutoHint')}</div>
           <div className={css.previewBar}>
             <input
               className={css.input}
@@ -938,20 +914,14 @@ export function ModelRoutingRow({
               onChange={(event) => { setPreviewText(event.currentTarget.value) }}
             />
           </div>
-          <div className={css.description}>
-            {t(tierMode === 'two' ? 'previewVerifyHintTwo' : 'previewVerifyHint')}
-          </div>
-          <label className={css.previewOpt}>
-            <input
-              type="checkbox"
-              data-testid="route-preview-verify"
-              checked={verifyRetry}
-              onChange={(event) => { setVerifyRetry(event.currentTarget.checked) }}
-            />
-            {t('previewVerify')}
-          </label>
+          {/* 【变更】2026-10-20 (批次二 2.7/2.8): the auto-run hint and the
+              verify-retry simulation switch + hints are gone; the result card
+              carries the matched grade's tier accent (border, dot, role text). */}
           {state.preview === undefined ? undefined : (
-            <div className={css.preview} data-testid="route-preview">
+            <div
+              className={join(css.preview, state.preview.tier === null ? '' : TIER_CLASS[state.preview.tier])}
+              data-testid="route-preview"
+            >
               {state.preview.tier === null ? (
                 <div className={css.previewLine}>{t('previewNone')}</div>
               ) : (
@@ -962,7 +932,10 @@ export function ModelRoutingRow({
                   </div>
                   <div className={css.previewLine}>
                     <span className={css.previewLabel}>{t('previewRole')}</span>
-                    <span>{t(tierKey(state.preview.tier))}</span>
+                    <span className={join(css.previewTier, TIER_CLASS[state.preview.tier])}>
+                      <span className={join(css.dot, TIER_CLASS[state.preview.tier])} aria-hidden="true" />
+                      {t(tierKey(state.preview.tier))}
+                    </span>
                   </div>
                   <div className={css.previewLine}>
                     <span className={css.previewLabel}>{t('previewModel')}</span>
@@ -984,7 +957,9 @@ export function ModelRoutingRow({
 
       {/* 【变更】2026-10-12 (问题 1.3): 高级 tab — 恢复默认 moved here from the
           action row, so the destructive reset sits behind an explicit hop
-          instead of beside the save cluster. */}
+          instead of beside the save cluster.
+          【变更】2026-10-20 (批次二 2.9): the blast-radius paragraph is gone;
+          the button text now reads 恢复默认配置. */}
       <div
         className={css.block}
         id={`${tabsId}-panel-advanced`}
@@ -993,7 +968,6 @@ export function ModelRoutingRow({
         hidden={routeTab !== 'advanced'}
         data-testid="route-panel-advanced"
       >
-        <div className={css.description}>{t('advancedHint')}</div>
         <div>
           <button
             type="button"
@@ -1028,36 +1002,38 @@ export function ModelRoutingRow({
   }
 }
 
-/** Uncontrolled words + optional category + tier inputs that append one rule. */
-function KeywordAdder({ id, tiers, t, onAdd }: {
-  id: { words: string; tier: string; category: string }
+/**
+ * 【变更】2026-10-20 (批次四 1): the composer is ONE calm segmented strip —
+ * a muted ＋ leads, the two inputs sit BORDERLESS on the shared surface
+ * (thin vertical seams mark the 关键词/功能分类 zones), the tier zone carries
+ * its tier-colored dot on a compact transparent Menu anchor, and 添加 stays
+ * the brand pill. Commit = the button or Enter in the words field; an empty
+ * words field adds nothing.
+ */
+function KeywordAdder({ tiers, t, onAdd }: {
   tiers: readonly RouteTier[]
   t: (key: 'keywordWords' | 'keywordCategory' | 'keywordTier' | 'keywordAdd'
     | 'tierHigh' | 'tierMid' | 'tierLow') => string
   onAdd: (words: string, tier: RouteTier, category: string) => void
 }) {
-  // The row reads its own inputs by id on commit (Enter or the button) — an
-  // empty 功能分类 adds a bare rule, a filled one labels it for 类级 grouping.
-  const readRow = (): { words: string; tier: RouteTier; category: string } => {
-    const words = document.getElementById(id.words) as HTMLInputElement | null
-    const tier = document.getElementById(id.tier) as HTMLSelectElement | null
-    const category = document.getElementById(id.category) as HTMLInputElement | null
-    return {
-      words: words?.value ?? '',
-      tier: (tier?.value ?? 'high') as RouteTier,
-      category: category?.value ?? '',
-    }
-  }
+  const [tier, setTier] = useState<RouteTier>(tiers[0] ?? 'high')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const wordsRef = useRef<HTMLInputElement>(null)
+  const categoryRef = useRef<HTMLInputElement>(null)
+  // Two-grade mode folds mid away — a stored 'mid' pick falls back to the
+  // first offered grade so the anchor never names a dead option.
+  const effectiveTier = tiers.includes(tier) ? tier : (tiers[0] ?? 'high')
   const commit = (): void => {
-    const { words, tier, category } = readRow()
-    onAdd(words, tier, category)
-    const wordsInput = document.getElementById(id.words) as HTMLInputElement | null
-    if (wordsInput !== null) wordsInput.value = ''
+    const words = wordsRef.current?.value ?? ''
+    if (words === '') return
+    onAdd(words, effectiveTier, categoryRef.current?.value ?? '')
+    if (wordsRef.current !== null) wordsRef.current.value = ''
   }
   return (
     <div className={css.keywordRow} data-testid="route-keyword-adder">
+      <span className={css.keywordAddGlyph} aria-hidden="true">＋</span>
       <input
-        id={id.words}
+        ref={wordsRef}
         className={css.input}
         data-testid="route-keyword-add-words"
         placeholder={t('keywordWords')}
@@ -1065,22 +1041,45 @@ function KeywordAdder({ id, tiers, t, onAdd }: {
           if (event.key === 'Enter') commit()
         }}
       />
+      <span className={css.keywordDivider} aria-hidden="true" />
       <input
-        id={id.category}
+        ref={categoryRef}
         className={css.input}
         data-testid="route-keyword-add-category"
         placeholder={t('keywordCategory')}
       />
-      <select id={id.tier} className={css.select} aria-label={t('keywordTier')} defaultValue="high">
-        {tiers.map(option => (
-          <option key={option} value={option}>
-            {t(tierKey(option))}
-          </option>
-        ))}
-      </select>
+      <span className={css.keywordDivider} aria-hidden="true" />
+      <Menu
+        open={menuOpen}
+        onClose={() => { setMenuOpen(false) }}
+        items={tiers.map(option => ({ id: option, label: t(tierKey(option)) }))}
+        selectedId={effectiveTier}
+        onSelect={(id) => {
+          setMenuOpen(false)
+          setTier(id as RouteTier)
+        }}
+        align="start"
+        portal
+        anchor={(
+          <button
+            type="button"
+            className={css.modeSelector}
+            data-testid="route-keyword-add-tier"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label={t('keywordTier')}
+            onClick={() => { setMenuOpen(menuOpen ? false : true) }}
+          >
+            <span className={join(css.dot, TIER_CLASS[effectiveTier])} aria-hidden="true" />
+            <span className={css.selectorLabel}>{t(tierKey(effectiveTier))}</span>
+            <IconChevronDownOutlineRegular className={css.chevron} />
+          </button>
+        )}
+      />
       <button
         type="button"
-        className={css.btn}
+        className={css.btnPrimary}
+        data-testid="route-keyword-add-btn"
         onClick={() => { commit() }}
       >
         {t('keywordAdd')}

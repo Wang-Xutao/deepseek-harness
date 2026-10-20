@@ -771,21 +771,21 @@ describe('ModelRoutingRow', () => {
     expect(packToggles).toHaveLength(3)
     fireEvent.click(within(packToggles[0]!).getByRole('switch'))
     expect(face.setPackEnabled).toHaveBeenCalledWith('complexEngineering', false)
-    // 4.5 中文/英文分段: a mixed-language pack splits its words into a 中文
-    // line and an 英文 line, each labelled. (rulePackName → ruleHead → rulePack
-    // — walked explicitly, the hashed class names substring-collide.)
+    // 【变更】2026-10-20 (批次二 2.5): zh/en merged into ONE segment line — CJK
+    // words first, the rest after, no 中文/英文 divider labels. (rulePackName →
+    // ruleHead → rulePack — walked explicitly, the hashed class names
+    // substring-collide.)
     const pack = screen.getByText('presetComplexEngineering').parentElement?.parentElement
     expect(pack?.className).toContain('rulePack')
     const lines = pack?.querySelectorAll('[class*="segLine"]')
-    expect(lines?.length).toBe(2)
+    expect(lines?.length).toBe(1)
     expect(lines?.[0]?.textContent).toContain('架构')
     expect(lines?.[0]?.textContent).toContain('重构')
-    expect(lines?.[0]?.textContent).not.toContain('refactor')
-    expect(lines?.[0]?.textContent).toContain('tagsZh')
-    expect(lines?.[1]?.textContent).toContain('refactor')
-    expect(lines?.[1]?.textContent).toContain('tagsEn')
-    // 问题 4 配置文件: the block points at the user-editable preset file.
-    expect(screen.getByText('presetsFileHint')).toBeTruthy()
+    expect(lines?.[0]?.textContent).toContain('refactor')
+    expect(pack?.textContent).not.toContain('tagsZh')
+    expect(pack?.textContent).not.toContain('tagsEn')
+    // 【变更】2026-10-20 (批次二 2.2): the preset-file pointer paragraph is gone.
+    expect(screen.queryByText('presetsFileHint')).toBeNull()
   })
 
   it('a preset word parked via draft.presetWords renders checked off (问题 5/4.5)', () => {
@@ -863,6 +863,11 @@ describe('ModelRoutingRow', () => {
     fireEvent.change(within(adder).getByTestId('route-keyword-add-category'), { target: { value: '数据导出' } })
     fireEvent.click(within(adder).getByRole('button', { name: 'keywordAdd' }))
     expect(face.addKeyword).toHaveBeenCalledWith({ words: '导出', tier: 'high', category: '数据导出' })
+    // 【变更】2026-10-20 (批次二 2.4/2.6): the escalate-only switch is gone and
+    // the tier picker is a Menu anchor button, not a native combobox.
+    expect(screen.queryByRole('switch', { name: 'escalateOnly' })).toBeNull()
+    expect(within(adder).queryByRole('combobox')).toBeNull()
+    expect(within(adder).getByTestId('route-keyword-add-tier').getAttribute('aria-haspopup')).toBe('menu')
     // The inline edit carries the existing category through untouched.
     fireEvent.click(within(screen.getByTestId('route-keyword-tag')).getByTestId('route-keyword-edit-btn'))
     fireEvent.change(screen.getByTestId('route-keyword-edit-input'), { target: { value: '导出|export' } })
@@ -870,14 +875,6 @@ describe('ModelRoutingRow', () => {
     expect(face.updateKeyword).toHaveBeenCalledWith(0, {
       words: '导出|export', tier: 'high', category: '复杂任务',
     })
-  })
-
-  it('explains the verify-retry floor under the switch (问题 5 说明)', () => {
-    const { props } = harness(READY)
-    render(<ModelRoutingRow {...props} />)
-    const hint = screen.getByText('previewVerifyHint')
-    const toggle = screen.getByTestId('route-preview-verify')
-    expect(hint.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('user keyword tags edit inline and delete', () => {
@@ -916,10 +913,9 @@ describe('ModelRoutingRow', () => {
       draft: { ...CONFIG, keywords: [...(CONFIG.keywords ?? []), { words: 'readme', tier: 'high' }] },
     })
     await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: false }) })
-    // The verify-retry switch rides every hot reload too.
-    vi.mocked(props.runPreview).mockClear()
-    fireEvent.click(screen.getByTestId('route-preview-verify'))
-    await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: true }) })
+    // 【变更】2026-10-20 (批次二 2.8): the verify-retry simulation switch is
+    // gone — every hot reload runs without it, forever.
+    expect(screen.queryByTestId('route-preview-verify')).toBeNull()
   })
 
   it('shows the preview verdict, escalated flag, and auto-runs on typing (no run button)', async () => {
@@ -936,14 +932,13 @@ describe('ModelRoutingRow', () => {
     expect(screen.getByTestId('route-preview').textContent).toContain('readme')
     expect(screen.getByTestId('route-preview').textContent).toContain('previewEscalated')
     expect(screen.getByTestId('route-preview').textContent).toContain('p / mid')
+    // 【变更】2026-10-20 (批次二 2.8): the verdict card carries the matched
+    // grade's tier accent (TIER_CLASS key in the class list).
+    expect(screen.getByTestId('route-preview').className).toContain('tierMid')
     expect(screen.getByTestId('route-error').textContent).toContain('bad tiers')
     fireEvent.change(screen.getByTestId('route-preview-input'), { target: { value: '重构模块' } })
     await waitFor(() => {
       expect(props.runPreview).toHaveBeenCalledWith('重构模块', { verifyRetry: false })
-    })
-    fireEvent.click(screen.getByTestId('route-preview-verify'))
-    await waitFor(() => {
-      expect(props.runPreview).toHaveBeenLastCalledWith('重构模块', { verifyRetry: true })
     })
   })
 

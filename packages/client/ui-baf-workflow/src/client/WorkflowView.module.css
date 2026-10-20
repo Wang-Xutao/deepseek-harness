@@ -57,6 +57,24 @@
   padding: 0.16rem 0.38rem;
 }
 
+/* 【变更】2026-10-20 (批次四 4): the active change id as an accent-tinted mono
+   chip right after the brand — one step louder than gateChangeChip (bolder,
+   accent-inked) so change-xx reads at a glance across the whole tab. */
+.stripChange {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.14rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-accent) 14%, var(--wf-card));
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  color: var(--wf-ink);
+}
+
 .stripItem {
   display: inline-flex;
   gap: 0.3rem;
@@ -338,28 +356,30 @@
   align-self: flex-start;
 }
 
-/* 【变更】2026-10-07 (九点批 问题 4): the node's real artifact files as
-   click-to-open chips (the rail's openArtifact channel). */
+/* 【变更】2026-10-07 (九点批 问题 4 → 批次四 4): the node's real artifact
+   files as click-to-open names — the chip BOX is gone (plain muted text on
+   the card; hover re-inks + underlines so the click target still reads). */
 .flowNodeArtifacts {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.24rem;
+  gap: 0.14rem 0.5rem;
   margin-top: 0.32rem;
 }
 
 .flowNodeArtifactChip {
-  padding: 0.08rem 0.32rem;
-  border: 1px solid color-mix(in srgb, var(--wf-muted) 30%, transparent);
-  border-radius: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--wf-muted);
-  font-size: 0.56rem;
+  font-size: 0.58rem;
   cursor: pointer;
 }
 
 .flowNodeArtifactChip:hover {
   color: inherit;
-  border-color: var(--wf-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview line inside the
@@ -538,6 +558,46 @@
 .cardAccent {
   border-color: color-mix(in srgb, var(--wf-accent) 40%, var(--wf-line));
   background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 10%, var(--wf-card)), var(--wf-card));
+}
+
+/* 【变更】2026-10-20 (批次四 4): the rail's opening 变更 banner — the id in bold
+   mono with the current node underneath, accent-tinted so the sidebar reader
+   sees change-xx without hunting for it. */
+.changeBannerCard {
+  border-color: color-mix(in srgb, var(--wf-accent) 45%, var(--wf-line));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 12%, var(--wf-card)), var(--wf-card));
+}
+
+.changeBannerRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.changeBannerLabel {
+  flex: none;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--wf-muted);
+}
+
+.changeBannerId {
+  min-width: 0;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  word-break: break-all;
+  text-align: right;
+}
+
+.changeBannerMeta {
+  margin-top: 0.2rem;
+  font-size: 0.68rem;
+  color: var(--wf-muted);
 }
 
 /* §22.14 P3 — workspace-level pendingGate card highlight (scaffold today). */

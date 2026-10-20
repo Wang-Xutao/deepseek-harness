@@ -496,12 +496,14 @@ describe('SettingsPanel navigation', () => {
     expect(glyphs[6]).toBe(glyphs[0])
   })
 
-  it('tags the four BAF-only sections with a baf superscript badge, others none (baf 独占标识)', () => {
+  it('tags the three BAF-only sections with a baf superscript badge, others none (baf 独占标识)', () => {
+    // 【变更】2026-10-19 (主页面三改 3): 工作流 left Settings for a first-level
+    // main panel — its baf marking moved onto that sidebar button, so the
+    // badge set here is down to the sections that remain in the modal.
     mount({
       rows: [
         { id: 'general', order: 0, label: 'General' },
         { id: 'models', order: 10, label: 'Models' },
-        { id: 'workflow', order: 20, label: 'Workflow' },
         { id: 'model-routing', order: 21, label: 'Multi-model routing' },
         { id: 'version-updates', order: 25, label: 'Version & updates' },
         { id: 'featured-plugins', order: 30, label: 'Featured plugins' },
@@ -510,8 +512,7 @@ describe('SettingsPanel navigation', () => {
     openPanel()
     const badgeOf = (name: RegExp): Element | null =>
       screen.getByRole('button', { name }).querySelector('sup')
-    // The four BAF-exclusive sections carry the sup-badge at the label's end…
-    expect(badgeOf(/^Workflow/)?.textContent).toBe('baf')
+    // The three BAF-exclusive sections carry the sup-badge at the label's end…
     expect(badgeOf(/^Multi-model routing/)?.textContent).toBe('baf')
     expect(badgeOf(/^Version & updates/)?.textContent).toBe('baf')
     expect(badgeOf(/^Featured plugins/)?.textContent).toBe('baf')

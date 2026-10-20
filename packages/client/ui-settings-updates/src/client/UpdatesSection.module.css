@@ -59,6 +59,20 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* 【变更】2026-10-20 (批次二 3.2): the upstream release-notes block under the
+   DeepSeek Harness row — the same card recipe as the version rows, one line
+   per release bullet. */
+/* 【变更】2026-10-20 (批次四 2): the standalone upstream panel is gone — the
+ * upstream release notes render inside the DeepSeek Harness row; this caption
+ * names the release they came from, one step louder than the note lines. */
+.rowCaption {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
 /* 【变更】2026-10-05 (插件包说明): the packages heading carries a one-line
  * hint, and every package row a plain-language description — what the package
  * IS, secondary-tone so release notes stay the tertiary voice. */

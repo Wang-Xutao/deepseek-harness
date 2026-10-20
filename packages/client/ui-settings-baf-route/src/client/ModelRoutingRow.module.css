@@ -13,6 +13,14 @@
   gap: 16px;
 }
 
+/* 【变更】2026-10-20 (批次二 2.1): the title→intro gap 版本与更新 gets from its
+   flex-column `.section` gap — the bare wrapper div here dropped it to 0. */
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 /* 【变更】2026-10-19 (六问题批 问题 3): weight 600 — every titled settings
    section (版本与更新 / 工作流 / 精选插件) renders 18px/600; this page was the
    lone 500 and read lighter than its siblings. */
@@ -471,18 +479,14 @@
   border-radius: 9px;
 }
 
-/* 问题 5 (4.5): one language's line of tags inside a segment, captioned
-   中文/英文 only when the segment holds BOTH languages. */
+/* 问题 5 (4.5): one language's line of tags inside a segment.
+   【变更】2026-10-20 (批次二 2.5): the 中文/英文 caption class is gone — the
+   segment is now ONE merged line (CJK words first). */
 .segLine {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 5px;
-}
-
-.segLabel {
-  font-size: 10px;
-  color: var(--dsw-alias-label-tertiary);
 }
 
 .rulePackName {
@@ -616,10 +620,86 @@
   width: 100%;
 }
 
+/* 【变更】2026-10-20 (批次四 1): the composer is ONE calm segmented strip —
+   a quiet bordered surface (focus-within lights the brand border), the two
+   inputs sit BORDERLESS on it, thin vertical seams divide the zones, a muted
+   ＋ badge leads, the tier anchor is a compact transparent pill carrying the
+   tier-colored dot, and 添加 stays the brand pill at the end. */
 .keywordRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  padding: 6px 6px 6px 8px;
+  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-primary));
+  transition: border-color 140ms ease;
+}
+
+.keywordRow:focus-within {
+  border-color: var(--dsw-alias-brand-primary, #4a78d2);
+}
+
+.keywordAddGlyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.12));
+}
+
+.keywordDivider {
+  flex: none;
+  align-self: stretch;
+  width: 1px;
+  margin: 5px 2px;
+  background: var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+}
+
+.keywordRow .input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.keywordRow .input:focus-visible {
+  outline: none;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+}
+
+/* The tier zone: compact quiet pill on the shared surface — the tier-colored
+   dot is the zone's anchor cue; hover/focus-within tints it. */
+.keywordRow .modeSelector {
+  flex: none;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 13px;
+  background: transparent;
+}
+
+.keywordRow .modeSelector:hover,
+.keywordRow .modeSelector[aria-expanded='true'] {
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+}
+
+.keywordRow .modeSelector .chevron {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.keywordRow .btnPrimary {
+  flex: none;
 }
 
 .select,
@@ -664,16 +744,28 @@
   cursor: pointer;
 }
 
+/* 【变更】2026-10-20 (批次二 2.8): the result card carries the matched grade's
+   tier accent — a 3px tinted left border plus the colored dot/role text
+   below (TIER_CLASS sets --tier-color on the card). */
 .preview {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
+  border-left: 3px solid var(--tier-color, var(--dsw-alias-border-l2));
   border-radius: 10px;
   font-size: 13px;
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-primary));
+}
+
+.previewTier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--tier-color, inherit);
 }
 
 .previewLine {

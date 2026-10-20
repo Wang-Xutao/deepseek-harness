@@ -8,22 +8,44 @@ import {
   IconCloseOutlineMedium as IconCloseOutline16,
   IconLinkOutlineMedium as IconLinkOutline16,
   IconQuestionOutlineMedium as IconQuestionOutline14,
+  ShortcutKeys,
+  Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { openHelpExternal, resolveHelpDocsUrl } from './bridge.ts'
 import { HelpLoadingMark } from './HelpLoadingMark.tsx'
 import css from './HelpFooterAction.module.css'
 
+/**
+ * Plugin-level help state consumed by the trigger and the Ctrl+Alt+H command.
+ * 【变更】2026-10-19 (主页面三改 2): the open flag moved from component state to
+ * the apply()-level snapshot store so the 'help.open' shortcut resolver and
+ * this trigger toggle the same panel.
+ */
+export interface HelpFooterInjected {
+  readonly hooks: {
+    readonly helpOpen: SnapshotStore<boolean>
+    readonly shortcuts: ObservableSnapshot<readonly ShortcutCatalogEntry[]>
+  }
+  readonly toggleHelp: () => void
+  readonly closeHelp: () => void
+}
+
 export type HelpFooterActionProps =
-  PropsRuntime<'sidebar.footer.action'> & PropsLocale<'baf.desktop'>
+  PropsRuntime<'sidebar.footer.action'> & PropsLocale<'baf.desktop'> & InjectFace<HelpFooterInjected>
 
 /**
  * Render the Help trigger and optional centered documentation panel.
  * @param props - sidebar footer action props.
  */
-export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
-  const [open, setOpen] = useState(false)
+export function HelpFooterAction({ wide, t, useHelpOpen, useShortcuts, toggleHelp, closeHelp }: HelpFooterActionProps) {
+  const open = useHelpOpen(value => value)
+  // 【变更】2026-10-19 (主页面三改 2): the Ctrl+Alt+H row feeds the hover
+  // tooltip (rail mode), the wide-mode keycap, and aria-keyshortcuts.
+  const shortcut = useShortcuts(rows => rows.find(row => row.id === 'help.open'))
   const [iframeLoaded, setIframeLoaded] = useState(false)
   const titleId = useId()
   const closeRef = useRef<HTMLButtonElement | null>(null)
@@ -35,14 +57,14 @@ export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') closeHelp()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.body.style.overflow = prevOverflow
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [open])
+  }, [open, closeHelp])
 
   // Reset the loaded flag every time the panel mounts: a fresh iframe is a
   // new fetch, and an unmounted iframe (closing the panel) leaves the next
@@ -79,12 +101,13 @@ export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
 
   const panel = open ? (
     <div className={css.overlay} role="presentation">
-      <div className={css.mask} aria-hidden="true" onClick={() => { setOpen(false) }} />
+      <div className={css.mask} aria-hidden="true" onClick={() => { closeHelp() }} />
       <aside
         className={css.panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        data-shortcut-modal="help"
       >
         <header className={css.header}>
           <div className={css.headerLead}>
@@ -107,7 +130,7 @@ export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
               type="button"
               className={css.close}
               aria-label={t('help.close')}
-              onClick={() => { setOpen(false) }}
+              onClick={() => { closeHelp() }}
             >
               <IconCloseOutline16 size={14} />
             </button>
@@ -138,16 +161,27 @@ export function HelpFooterAction({ wide, t }: HelpFooterActionProps) {
 
   return (
     <div className={clsx(css.layer, !wide && css.rail)} data-testid="help-footer-action">
-      <button
-        type="button"
-        className={css.trigger}
-        data-active={open || undefined}
-        aria-expanded={open}
-        onClick={() => { setOpen(v => !v) }}
-      >
-        <IconQuestionOutline14 size={wide ? 16 : 18} />
-        {wide ? <span className={css.triggerLabel}>{t('help.trigger')}</span> : null}
-      </button>
+      {/* Rail mode explains the trigger through a hover tooltip that carries
+          the chord; wide mode keeps the label and shows the keycap on hover. */}
+      <Tooltip label={t('help.trigger')} shortcutKeys={shortcut?.keys} delayMs={500} disabled={wide}>
+        <button
+          type="button"
+          className={css.trigger}
+          data-active={open || undefined}
+          aria-label={t('help.trigger')}
+          aria-keyshortcuts={shortcut?.aria}
+          aria-expanded={open}
+          onClick={() => { toggleHelp() }}
+        >
+          <IconQuestionOutline14 size={wide ? 16 : 18} />
+          {wide ? <span className={css.triggerLabel}>{t('help.trigger')}</span> : null}
+          {wide && shortcut !== undefined && shortcut.keys.length > 0 && (
+            <span className={css.triggerShortcut} aria-hidden="true">
+              <ShortcutKeys keys={shortcut.keys} />
+            </span>
+          )}
+        </button>
+      </Tooltip>
       {panel !== null && typeof document !== 'undefined'
         ? createPortal(panel, document.body)
         : null}

@@ -6,19 +6,34 @@
  * node's scripts (进 n · 出 m, or 未配置); RIGHT the editor for the SELECTED
  * node (click a canvas card to switch — 进入状态 / 退出状态 lists, add /
  * edit / delete, keyed so a switch resets the in-flight input). Draft
- * locally like the AI 禁改路径 card; one save persists the whole map
+ * locally like the 受保护路径 card; one save persists the whole map
  * through the Remote's surgical baseline write.
+ *
+ * 【变更】2026-10-20 (批次三 4.4): the .baf/baseline.yml 说明 is deleted; a
+ * hover Tooltip on every canvas card lists its script paths; entries are
+ * clickable (default-app open, hover title = absolute path); the add row
+ * gains a folder picker that pre-fills the relative folder, and every add is
+ * existence-checked through the Remote (不存在不允许添加); the footer gains a
+ * 取消 that drops the draft back to the persisted map.
  *
  * drift is deliberately absent: the engine never fires hooks on the drift
  * parking lot (planNodeHooks is main-chain only), so listing it here would be
  * config the product silently ignores.
+ *
+ * 【变更】2026-10-20 (批次四 3.4/3.6): save/cancel move to the card-title row's
+ * end; every canvas card carries zh + English names; edges between two
+ * configured nodes light up green (确认门 tier-color parity — configured
+ * green / idle gray); and the add row's 选择脚本文件 opens the OS FILE picker
+ * (desktop: the preload bridge resolves the File to an absolute path →
+ * workspace-relative prefill; web: the bare file NAME prefills).
  */
-import { useState } from 'react'
-import { InlineEditor } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { BafStandardNodeHooks, BafStandardNodeHookLists } from '../types.ts'
+import { useRef, useState, type ChangeEvent } from 'react'
+import { InlineEditor, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { BafStandardNodeHooks, BafStandardNodeHookLists, BafStandardSummaryResult } from '../types.ts'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import type { BafStandardKey } from './locales.ts'
 import type { StandardsPanelProps } from './StandardsOverview.tsx'
+import { joinEntry, toRelativeEntry } from './StandardsOverview.tsx'
 import css from './StandardsOverview.module.css'
 
 /** Main-chain order the engine enforces (WORKFLOW_NODES minus drift). */
@@ -33,9 +48,10 @@ const NODES: readonly ('intake' | 'open' | 'clarify' | 'design' | 'plan' | 'impl
   'archive',
 ]
 
-/** Canvas geometry — the 多模型路由 node card box and row pitch. */
+/** Canvas geometry — the 确认门 node card box and row pitch (64px: the card
+ * now stacks three lines — zh label / en label / accent, 批次四 3.6). */
 const NODE_W = 192
-const NODE_H = 56
+const NODE_H = 64
 const NODE_GAP = 16
 const NODE_X = 16
 const CANVAS_TOP = 16
@@ -59,6 +75,28 @@ const KIND_LABEL_KEYS: Record<'enter' | 'exit', BafStandardKey> = {
   exit: 'hooksExitLabel',
 }
 
+/** 【变更】2026-10-20 (批次四 3.6): every canvas card carries both languages —
+ * the English name rides under the zh label (确认门 flow-card parity). */
+const NODE_EN: Record<(typeof NODES)[number], string> = {
+  intake: 'Intake',
+  open: 'Open change',
+  clarify: 'Clarify',
+  design: 'Design',
+  plan: 'Plan',
+  implement: 'Implement',
+  verify: 'Verify',
+  archive: 'Archive',
+}
+
+/**
+ * 【变更】2026-10-20 (批次四 3.6): the desktop preload bridge that turns a
+ * picked File into its ABSOLUTE path (Electron webUtils) — plain web has no
+ * equivalent, so the picker falls back to pre-filling the file NAME.
+ */
+type FilePickerBridge = { pathFor: (file: File) => string }
+const filePickerBridge = (): FilePickerBridge | undefined =>
+  (globalThis as { __BAF_FILE_PICKER__?: FilePickerBridge }).__BAF_FILE_PICKER__
+
 /** Join CSS-module names without a clsx dependency (filters dropped keys). */
 const join = (...names: ReadonlyArray<string | undefined>): string =>
   names.filter((name): name is string => name !== undefined && name !== '').join(' ')
@@ -69,6 +107,20 @@ function normalizeEntry(entry: string): string {
   return entry.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '').trim()
 }
 
+/**
+ * 【变更】2026-10-20 (批次三 4.4): a canvas card's hover Tooltip text — the
+ * node's configured script paths per kind (未配置脚本 when bare), the same
+ * string the editor would print for the selected node.
+ */
+function nodePathsText(label: string, lists: BafStandardNodeHookLists | undefined, t: StandardsPanelProps['t']): string {
+  const lines = [label]
+  for (const kind of ['enter', 'exit'] as const) {
+    const entries = kind === 'enter' ? lists?.enter ?? [] : lists?.exit ?? []
+    lines.push(`${t(KIND_LABEL_KEYS[kind])}: ${entries.length > 0 ? entries.join(', ') : t('hooksEmpty')}`)
+  }
+  return lines.join('\n')
+}
+
 /** Which list a (node, kind) edit targets. */
 interface EditTarget {
   readonly node: (typeof NODES)[number]
@@ -77,15 +129,18 @@ interface EditTarget {
   readonly value: string
 }
 
-/** One script entry row: mono path + edit/delete (an InlineEditor while editing). */
-function HookEntryRow({ entry, editingValue, onEditChange, onCommitEdit, onCancelEdit, onBeginEdit, onRemove, t }: {
+/** One script entry row: clickable mono path (default-app open) + edit/delete
+ * (an InlineEditor while editing). */
+function HookEntryRow({ entry, cwd, editingValue, onEditChange, onCommitEdit, onCancelEdit, onBeginEdit, onRemove, onOpen, t }: {
   entry: string
+  cwd: string
   editingValue: string | undefined
   onEditChange: (value: string) => void
   onCommitEdit: () => void
   onCancelEdit: () => void
   onBeginEdit: () => void
   onRemove: () => void
+  onOpen: () => void
   t: StandardsPanelProps['t']
 }) {
   if (editingValue !== undefined) {
@@ -102,7 +157,14 @@ function HookEntryRow({ entry, editingValue, onEditChange, onCommitEdit, onCance
   }
   return (
     <div className={css.hooksEntryRow}>
-      <span className={css.hooksEntryPath}>{entry}</span>
+      <button
+        type="button"
+        className={css.hooksEntryButton}
+        title={joinEntry(cwd, entry)}
+        onClick={onOpen}
+      >
+        {entry}
+      </button>
       <span className={css.pathActions}>
         <button type="button" className={css.miniButton} onClick={onBeginEdit}>{t('editLabel')}</button>
         <button type="button" className={css.miniButton} onClick={onRemove}>{t('deleteLabel')}</button>
@@ -116,17 +178,24 @@ function HookEntryRow({ entry, editingValue, onEditChange, onCommitEdit, onCance
  * add / edit / delete. Keyed by node in the parent, so switching the canvas
  * selection resets the in-flight input and message.
  */
-function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, t }: {
+function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, cwd, statWorkspacePath, openPath, t }: {
   node: (typeof NODES)[number]
   lists: BafStandardNodeHookLists
   editing: EditTarget | null
   setEditing: (target: EditTarget | null) => void
   draft: BafStandardNodeHooks
   updateDraft: (hooks: BafStandardNodeHooks) => void
+  cwd: string
+  statWorkspacePath: StandardsOverviewFace['statWorkspacePath']
+  openPath: StandardsOverviewFace['openPath']
   t: StandardsPanelProps['t']
 }) {
   const [input, setInput] = useState('')
   const [localMessage, setLocalMessage] = useState<string | undefined>(undefined)
+  // 【变更】2026-10-20 (批次四 3.6): the picker is a script FILE picker — one
+  // hidden file input shared by both kind rows (it only pre-fills the add
+  // input; 添加 still runs the existence check before anything lands).
+  const fileRef = useRef<HTMLInputElement | null>(null)
 
   const addEntry = (kind: 'enter' | 'exit', raw: string): void => {
     const entry = normalizeEntry(raw)
@@ -136,12 +205,45 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
       setLocalMessage(t('protectedDuplicate'))
       return
     }
-    const next: BafStandardNodeHookLists = kind === 'enter'
-      ? { ...lists, enter: [...existing, entry] }
-      : { ...lists, exit: [...existing, entry] }
-    updateDraft({ ...draft, [node]: next })
-    setInput('')
+    // 【变更】2026-10-20 (批次三 4.4): add-time existence check — the Remote
+    // stats the workspace-relative entry; a miss never lands in the draft.
+    void statWorkspacePath(entry).then((exists) => {
+      if (!exists) {
+        setLocalMessage(t('hooksPathMissing'))
+        return
+      }
+      const next: BafStandardNodeHookLists = kind === 'enter'
+        ? { ...lists, enter: [...existing, entry] }
+        : { ...lists, exit: [...existing, entry] }
+      updateDraft({ ...draft, [node]: next })
+      setInput('')
+      setLocalMessage(undefined)
+    })
+  }
+
+  /** Open the OS file chooser; the chosen script pre-fills the add input as a
+   * workspace-relative path (file NAME on plain web — no path bridge there). */
+  const onPickFile = (): void => {
     setLocalMessage(undefined)
+    fileRef.current?.click()
+  }
+
+  const onFileChosen = (event: ChangeEvent<HTMLInputElement>): void => {
+    const file = event.currentTarget.files?.[0]
+    // Reset so picking the SAME file twice still fires onChange.
+    event.currentTarget.value = ''
+    if (file === undefined) return
+    const bridge = filePickerBridge()
+    if (bridge === undefined) {
+      setInput(file.name)
+      return
+    }
+    const entry = toRelativeEntry(cwd, bridge.pathFor(file))
+    if (entry === undefined) {
+      setLocalMessage(t('protectedPickOutside'))
+      return
+    }
+    setInput(entry)
   }
 
   const commitEdit = (): void => {
@@ -160,7 +262,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
     const next: BafStandardNodeHookLists = editing.kind === 'enter'
       ? { ...lists, enter: nextList }
       : { ...lists, exit: nextList }
-    updateDraft({ ...draft, [node]: next })
+    updateDraft({ ...draft, [editing.node]: next })
     setEditing(null)
     setLocalMessage(undefined)
   }
@@ -184,6 +286,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                   <HookEntryRow
                     key={`${node}-${kind}-${String(index)}-${entry}`}
                     entry={entry}
+                    cwd={cwd}
                     editingValue={editing !== null
                       && editing.node === node
                       && editing.kind === kind
@@ -194,6 +297,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                     onCommitEdit={commitEdit}
                     onCancelEdit={() => { setEditing(null) }}
                     onBeginEdit={() => { setEditing({ node, kind, index, value: entry }) }}
+                    onOpen={() => { void openPath(joinEntry(cwd, entry)) }}
                     onRemove={() => {
                       setEditing(null)
                       const nextList = entries.filter((_, index2) => index2 !== index)
@@ -247,20 +351,42 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                 >
                   {t('hooksAdd')}
                 </button>
+                <button
+                  type="button"
+                  className={css.miniButton}
+                  data-testid={`baf-standard-hooks-pick-${node}-${kind}`}
+                  onClick={onPickFile}
+                >
+                  {t('hooksPick')}
+                </button>
               </div>
             </div>
           )
         })}
       </div>
       {localMessage !== undefined ? <div className={css.statusError}>{localMessage}</div> : null}
+      {/* The shared OS file chooser (display:none, rendered LAST so the two
+          add inputs stay the editor's first two inputs) both 选择脚本文件
+          buttons programmatic-click; choosing pre-fills the add input above. */}
+      <input
+        ref={fileRef}
+        type="file"
+        className={css.hiddenFileInput}
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={onFileChosen}
+      />
     </div>
   )
 }
 
 /** The 状态脚本 card itself — rendered inside the 项目工程 ready branch. */
-export function NodeHooksCard({ state, t, updateHooksDraft, saveNodeHooks }: {
+export function NodeHooksCard({ state, summary, t, openPath, statWorkspacePath, updateHooksDraft, saveNodeHooks }: {
   state: StandardsOverviewState
+  summary: BafStandardSummaryResult
   t: StandardsPanelProps['t']
+  openPath: StandardsOverviewFace['openPath']
+  statWorkspacePath: StandardsOverviewFace['statWorkspacePath']
   updateHooksDraft: StandardsOverviewFace['updateHooksDraft']
   saveNodeHooks: StandardsOverviewFace['saveNodeHooks']
 }) {
@@ -270,6 +396,7 @@ export function NodeHooksCard({ state, t, updateHooksDraft, saveNodeHooks }: {
   const [picked, setPicked] = useState<(typeof NODES)[number] | null>(null)
   const draft = state.hooksDraft ?? {}
   const persisted = state.summary?.nodeHooks ?? {}
+  const cwd = summary.cwd ?? ''
   const draftCount = Object.values(draft)
     .reduce((sum, lists) => sum + (lists.enter?.length ?? 0) + (lists.exit?.length ?? 0), 0)
   const persistedCount = Object.values(persisted)
@@ -293,8 +420,34 @@ export function NodeHooksCard({ state, t, updateHooksDraft, saveNodeHooks }: {
 
   return (
     <div className={css.card} data-testid="baf-standard-hooks-card">
-      <div className={css.cardTitle}>{t('hooksTitle')}</div>
-      <div className={css.cardDesc}>{t('hooksDesc')}</div>
+      {/* 【变更】2026-10-20 (批次四 3.4): save/cancel at the title row's end
+          (取消 quiet / 保存 brand-filled), same anatomy as 受保护路径. */}
+      <div className={css.cardTitleRow}>
+        <span className={css.cardTitle}>{t('hooksTitle')}</span>
+        <span className={css.titleActions}>
+          <button
+            type="button"
+            className={css.titleCancel}
+            data-testid="baf-standard-hooks-cancel"
+            disabled={state.hooksSaving || !dirty}
+            onClick={() => {
+              setEditing(null)
+              updateHooksDraft(persisted)
+            }}
+          >
+            {t('hooksCancel')}
+          </button>
+          <button
+            type="button"
+            className={css.titleSave}
+            data-testid="baf-standard-hooks-save"
+            disabled={state.hooksSaving || !dirty}
+            onClick={() => { void saveNodeHooks() }}
+          >
+            {state.hooksSaving ? t('hooksSaving') : t('hooksSave')}
+          </button>
+        </span>
+      </div>
       <div className={css.hooksFlowWrap}>
         <div className={css.hooksLegend}>
           <span className={css.hooksLegendItem}>
@@ -326,18 +479,25 @@ export function NodeHooksCard({ state, t, updateHooksDraft, saveNodeHooks }: {
                 </marker>
               </defs>
               {NODES.slice(0, -1).map((node, index) => {
-                // The route's same-column vertical bezier, bottom-center →
+                // The 确认门 same-column vertical bezier, bottom-center →
                 // top-center, with the arrowhead landing on the next card.
+                // 【变更】2026-10-20 (批次四 3.6): an edge bridging two CONFIGURED
+                // nodes lights up in the configured green — the configured
+                // chain reads as one colored path through the graph.
                 const x = NODE_X + NODE_W / 2
                 const y1 = CANVAS_TOP + index * (NODE_H + NODE_GAP) + NODE_H
                 const y2 = CANVAS_TOP + (index + 1) * (NODE_H + NODE_GAP)
                 const mid = (y1 + y2) / 2
+                const downstream = NODES[index + 1]
+                const lit = downstream !== undefined
+                  && accentOf(node).set
+                  && accentOf(downstream).set
                 return (
                   <path
                     key={node}
                     d={`M ${x} ${y1} C ${x} ${mid}, ${x} ${mid}, ${x} ${y2}`}
                     markerEnd="url(#baf-standard-hooks-arrow)"
-                    className={css.hooksEdge}
+                    className={join(css.hooksEdge, lit ? css.hooksEdgeSet : undefined)}
                   />
                 )
               })}
@@ -346,33 +506,42 @@ export function NodeHooksCard({ state, t, updateHooksDraft, saveNodeHooks }: {
               const accent = accentOf(node)
               const label = t(NODE_LABEL_KEYS[node])
               return (
-                <button
-                  type="button"
+                <Tooltip
                   key={node}
-                  className={join(
-                    css.hooksNode,
-                    accent.set ? css.hooksNodeSet : css.hooksNodeIdle,
-                    node === selected ? css.hooksNodeSelected : undefined,
-                  )}
-                  data-testid={`baf-standard-hooks-node-${node}`}
-                  aria-pressed={node === selected}
-                  aria-label={`${label} · ${accent.text}`}
-                  style={{
-                    left: NODE_X,
-                    top: CANVAS_TOP + index * (NODE_H + NODE_GAP),
-                    width: NODE_W,
-                    height: NODE_H,
-                  }}
-                  onClick={() => {
-                    setPicked(node)
-                    setEditing(null)
-                  }}
+                  label={nodePathsText(label, draft[node], t)}
+                  side="right"
+                  portal
+                  maxWidth={360}
+                  delayMs={120}
                 >
-                  <span className={css.hooksNodeName}>{label}</span>
-                  <span className={join(css.hooksNodeAccent, accent.set ? undefined : css.hooksNodeAccentIdle)}>
-                    {accent.text}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    className={join(
+                      css.hooksNode,
+                      accent.set ? css.hooksNodeSet : css.hooksNodeIdle,
+                      node === selected ? css.hooksNodeSelected : undefined,
+                    )}
+                    data-testid={`baf-standard-hooks-node-${node}`}
+                    aria-pressed={node === selected}
+                    aria-label={`${label} · ${accent.text}`}
+                    style={{
+                      left: NODE_X,
+                      top: CANVAS_TOP + index * (NODE_H + NODE_GAP),
+                      width: NODE_W,
+                      height: NODE_H,
+                    }}
+                    onClick={() => {
+                      setPicked(node)
+                      setEditing(null)
+                    }}
+                  >
+                    <span className={css.hooksNodeName}>{label}</span>
+                    <span className={css.hooksNodeEn}>{NODE_EN[node]}</span>
+                    <span className={join(css.hooksNodeAccent, accent.set ? undefined : css.hooksNodeAccentIdle)}>
+                      {accent.text}
+                    </span>
+                  </button>
+                </Tooltip>
               )
             })}
           </div>
@@ -385,21 +554,13 @@ export function NodeHooksCard({ state, t, updateHooksDraft, saveNodeHooks }: {
               setEditing={setEditing}
               draft={draft}
               updateDraft={updateHooksDraft}
+              cwd={cwd}
+              statWorkspacePath={statWorkspacePath}
+              openPath={openPath}
               t={t}
             />
           </div>
         </div>
-      </div>
-      <div className={css.protectedFoot}>
-        <button
-          type="button"
-          className={css.saveButton}
-          data-testid="baf-standard-hooks-save"
-          disabled={state.hooksSaving || !dirty}
-          onClick={() => { void saveNodeHooks() }}
-        >
-          {state.hooksSaving ? t('hooksSaving') : t('hooksSave')}
-        </button>
       </div>
       {state.hooksNotice !== undefined ? (
         <div className={css.statusError} data-testid="baf-standard-hooks-notice">

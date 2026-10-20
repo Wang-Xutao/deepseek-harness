@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-/** Workflow settings section tab host — renders slot ids per tab. */
+/** Workflow tab host — renders slot ids per tab.
+ * 【变更】2026-10-19 (主页面三改 3): rendered by WorkflowPage on the main
+ * stage now; the standalone render keeps exercising the tab logic directly. */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -16,7 +18,7 @@ describe('WorkflowSection tabs', () => {
     const renderSlot = vi.fn((_name: string, _owner: object, opts?: { only?: string }) => (
       <span data-testid={`slot-${opts?.only ?? 'all'}`} />
     ))
-    render(<WorkflowSection t={t as never} renderSlot={renderSlot as never} close={vi.fn()} />)
+    render(<WorkflowSection t={t as never} renderSlot={renderSlot as never} />)
 
     expect(screen.getByTestId('workflow-tab-general')).toBeDefined()
     expect(screen.getByTestId('workflow-tab-project')).toBeDefined()

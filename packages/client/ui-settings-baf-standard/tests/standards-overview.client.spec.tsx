@@ -75,6 +75,9 @@ function t(key: string): string {
   return key
 }
 
+/** One macrotask — the 状态脚本 add flow awaits an existence RPC (批次三 4.4). */
+const tick = () => new Promise(resolve => setTimeout(resolve, 0))
+
 /** A ready summary carrying all 8 areas with anchored sourceRefs. */
 function readySummary(overrides: Partial<BafStandardSummaryResult> = {}): BafStandardSummaryResult {
   return {
@@ -119,6 +122,9 @@ function harness(initial: StandardsOverviewState, faceOverrides: Partial<Standar
     revealPath: vi.fn(),
     openPath: vi.fn(),
     pickDirectory: vi.fn().mockResolvedValue(null),
+    // 【变更】2026-10-20 (批次三 4.4): the add-time existence check; the default
+    // answers true (fail-open) so existing add flows keep working unchanged.
+    statWorkspacePath: vi.fn().mockResolvedValue(true),
     updateHooksDraft: (hooks) => {
       store.update((state) => {
         state.hooksDraft = Object.fromEntries(Object.entries(hooks).map(([node, lists]) => [
@@ -213,20 +219,22 @@ describe('sliceAreaContent (anchor slicing)', () => {
   })
 })
 
-describe('StandardsProjectOverview · baseline archive header card', () => {
-  it('leads the grid with the git-managed baseline id / compatibility (4.3)', () => {
+describe('StandardsProjectOverview · ready branch layout (批次三 4.2)', () => {
+  it('renders ONLY the 受保护路径 + 状态脚本 cards — the archive / scaffold cards are gone', () => {
     const { props } = harness(readyState())
     render(<StandardsProjectOverview {...props} />)
-    const card = screen.getByTestId('baf-standard-card-baseline')
-    expect(card.textContent).toContain('b1')
-    expect(card.textContent).toContain('0.0.0 ~ 9.9.9')
-    // 【变更】2026-10-19 (六问题批 4.1): the path left the card for the tab-top
-    // readonly config rows — the card carries only id + compatibility now.
-    expect(card.textContent).not.toContain('baseline.yml')
-    expect(card.textContent).toContain('cardTitleBaseline')
-    // The archive card precedes the always-present scaffold card in document order.
-    const scaffoldCard = screen.getByTestId('baf-standard-card-scaffold')
-    expect(card.compareDocumentPosition(scaffoldCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // 【变更】2026-10-20 (批次三 4.2): the multi-column grid left with the
+    // baseline archive, scaffold, and per-package projection cards; the
+    // ready branch is one full-width card per item (path rows on top).
+    expect(screen.queryByTestId('baf-standard-card-baseline')).toBeNull()
+    expect(screen.queryByTestId('baf-standard-card-scaffold')).toBeNull()
+    expect(screen.getByTestId('baf-standard-protected-card')).toBeDefined()
+    expect(screen.getByTestId('baf-standard-hooks-card')).toBeDefined()
+    // 4.3: the card is 受保护路径 now, without its long description line;
+    // 4.4: the 状态脚本 card drops its .baf/baseline.yml 说明 too.
+    expect(screen.getByTestId('baf-standard-protected-card').textContent).toContain('protectedTitle')
+    expect(screen.getByTestId('baf-standard-protected-card').textContent).not.toContain('protectedDesc')
+    expect(screen.getByTestId('baf-standard-hooks-card').textContent).not.toContain('hooksDesc')
   })
 
   it('renders no archive card before the summary is ready', () => {
@@ -435,7 +443,10 @@ describe('StandardsProjectOverview · ProtectedPathsCard (项目工程 1.3)', ()
     })
   }
 
-  it('lists the draft with copy / open / edit / delete per row and the 防线 status', () => {
+  // 【变更】2026-10-20 (批次四 3.5): the row keeps ONLY the reveal-value button
+  // + 编辑/删除 — the copy/open mini buttons are gone; the 防线 hook status
+  // line is gone with the footer (批次四 3.3).
+  it('lists the draft with the reveal value + edit / delete per row', () => {
     const revealPath = vi.fn()
     const { props } = harness(protectedState(undefined, { commitGuardHookInstalled: true }), { revealPath })
     render(<StandardsProjectOverview {...props} />)
@@ -444,7 +455,10 @@ describe('StandardsProjectOverview · ProtectedPathsCard (项目工程 1.3)', ()
     // The path button reveals the joined absolute folder.
     fireEvent.click(row.querySelector('button') as HTMLElement)
     expect(revealPath).toHaveBeenCalledWith('/ws/docs')
-    expect(screen.getByTestId('baf-standard-protected-hook').textContent).toContain('protectedHookOn')
+    // Exactly the value button + 编辑/删除 — no copy/open, no hook line.
+    expect(row.querySelectorAll('button')).toHaveLength(3)
+    expect(row.textContent).not.toContain('copyLabel')
+    expect(screen.queryByTestId('baf-standard-protected-hook')).toBeNull()
     // Clean draft → the save button stays disabled.
     expect((screen.getByTestId('baf-standard-protected-save') as HTMLButtonElement).disabled).toBe(true)
   })
@@ -490,29 +504,36 @@ describe('StandardsProjectOverview · ProtectedPathsCard (项目工程 1.3)', ()
     expect(store.getSnapshot().protectedDraft).toEqual(['docs', 'picked'])
   })
 
-  it('edits a row in place (save / cancel) and deletes rows', () => {
+  // 【变更】2026-10-20 (批次四 3.5): editing is a bare autoFocus input that
+  // commits on Enter/blur and ALWAYS leaves edit state — invalid or duplicate
+  // text reverts with its notice; Escape reverts silently.
+  it('edits a row in place (Enter commits; invalid/duplicate revert; Escape reverts) and deletes rows', () => {
     const { props, store } = harness(protectedState({ protectedDraft: ['docs', 'legacy'] }, { guardProtectedPaths: ['docs', 'legacy'] }))
     render(<StandardsProjectOverview {...props} />)
     // Edit the second row.
     fireEvent.click(withinRow('baf-standard-protected-row-1', 'editLabel'))
-    const editor = screen.getByLabelText('protectedEditLabel')
+    const editor = screen.getByLabelText('protectedEditLabel') as HTMLInputElement
     fireEvent.change(editor, { target: { value: 'legacy2' } })
     fireEvent.keyDown(editor, { key: 'Enter' })
     expect(store.getSnapshot().protectedDraft).toEqual(['docs', 'legacy2'])
-    // An empty commit is refused with its own notice.
+    // An empty finish reverts the row and says why.
     fireEvent.click(withinRow('baf-standard-protected-row-0', 'editLabel'))
     fireEvent.change(screen.getByLabelText('protectedEditLabel'), { target: { value: '  ' } })
     fireEvent.keyDown(screen.getByLabelText('protectedEditLabel'), { key: 'Enter' })
     expect(screen.getByTestId('baf-standard-protected-notice').textContent).toContain('protectedInvalidEntry')
+    expect(store.getSnapshot().protectedDraft).toEqual(['docs', 'legacy2'])
+    expect(screen.queryByLabelText('protectedEditLabel')).toBeNull()
     // Escape cancels without touching the draft.
+    fireEvent.click(withinRow('baf-standard-protected-row-0', 'editLabel'))
     fireEvent.keyDown(screen.getByLabelText('protectedEditLabel'), { key: 'Escape' })
     expect(store.getSnapshot().protectedDraft).toEqual(['docs', 'legacy2'])
-    // A duplicate commit is refused (and the editor stays open for a retry).
+    expect(screen.queryByLabelText('protectedEditLabel')).toBeNull()
+    // A duplicate finish reverts the row to its original text and says why.
     fireEvent.click(withinRow('baf-standard-protected-row-0', 'editLabel'))
     fireEvent.change(screen.getByLabelText('protectedEditLabel'), { target: { value: 'legacy2' } })
-    fireEvent.keyDown(screen.getByLabelText('protectedEditLabel'), { key: 'Enter' })
+    fireEvent.blur(screen.getByLabelText('protectedEditLabel'))
     expect(screen.getByTestId('baf-standard-protected-notice').textContent).toContain('protectedDuplicate')
-    fireEvent.keyDown(screen.getByLabelText('protectedEditLabel'), { key: 'Escape' })
+    expect(store.getSnapshot().protectedDraft).toEqual(['docs', 'legacy2'])
     // Delete removes the row.
     fireEvent.click(withinRow('baf-standard-protected-row-0', 'deleteLabel'))
     expect(store.getSnapshot().protectedDraft).toEqual(['legacy2'])
@@ -529,7 +550,20 @@ describe('StandardsProjectOverview · ProtectedPathsCard (项目工程 1.3)', ()
     const empty = harness(protectedState({ protectedDraft: [] }, { guardProtectedPaths: [] }))
     render(<StandardsProjectOverview {...empty.props} />)
     expect(screen.getByTestId('baf-standard-protected-empty').textContent).toContain('protectedEmpty')
-    expect(screen.getByTestId('baf-standard-protected-hook').textContent).toContain('protectedHookOff')
+    expect((screen.getByTestId('baf-standard-protected-save') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  // 【变更】2026-10-20 (批次三 4.3): the footer is 保存 + 取消 — the cancel
+  // drops a dirty draft back to the persisted list.
+  it('drops a dirty draft back to the persisted list on 取消 (批次三 4.3)', () => {
+    const { props, store } = harness(protectedState({ protectedDraft: ['docs', 'temp'] }))
+    render(<StandardsProjectOverview {...props} />)
+    const cancel = screen.getByTestId('baf-standard-protected-cancel') as HTMLButtonElement
+    expect(cancel.disabled).toBe(false)
+    fireEvent.click(cancel)
+    expect(store.getSnapshot().protectedDraft).toEqual(['docs'])
+    // Clean again → both footer buttons disable.
+    expect((screen.getByTestId('baf-standard-protected-cancel') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByTestId('baf-standard-protected-save') as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -695,6 +729,28 @@ describe('StandardsController · 禁改路径 save + 桌面手势 + 文件夹选
     await tick()
     expect(await c5.pickDirectory()).toBeNull()
   })
+
+  // 【变更】2026-10-20 (批次三 4.4): the add-time existence check — every
+  // failure mode fails OPEN so a broken RPC never bricks the add flow.
+  it('stats workspace entries and fails open on every transport problem', async () => {
+    const { ctx } = controllerCtx({})
+    ;(ctx.remote.bafStandardConfig as Record<string, unknown>).statWorkspacePath = vi.fn()
+      .mockResolvedValueOnce({ ok: true, value: { exists: true } })
+      .mockResolvedValueOnce({ ok: true, value: { exists: false } })
+      .mockResolvedValueOnce({ ok: false, error: { message: 'boom' } })
+      .mockRejectedValueOnce(new Error('rpc down'))
+    const c = new StandardsController(ctx as never)
+    await tick()
+    expect(await c.statWorkspacePath('scripts/build.sh')).toBe(true)
+    expect(await c.statWorkspacePath('scripts/ghost.sh')).toBe(false)
+    expect(await c.statWorkspacePath('scripts/any')).toBe(true)
+    expect(await c.statWorkspacePath('scripts/any')).toBe(true)
+    // A namespace without the method at all (older host) also fails open.
+    const legacy = controllerCtx({})
+    const c2 = new StandardsController(legacy.ctx as never)
+    await tick()
+    expect(await c2.statWorkspacePath('scripts/old.sh')).toBe(true)
+  })
 })
 
 describe('StandardsProjectOverview · no-baseline 生成配置文件 (六问题批 4.1)', () => {
@@ -760,7 +816,7 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     expect((screen.getByTestId('baf-standard-hooks-save') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('drafts add / edit / delete entries per kind and saves through the face', () => {
+  it('drafts add / edit / delete entries per kind and saves through the face', async () => {
     const saveNodeHooks = vi.fn()
     const { props, store } = harness(readyState(), { saveNodeHooks })
     render(<StandardsProjectOverview {...props} />)
@@ -768,12 +824,16 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     fireEvent.click(screen.getByTestId('baf-standard-hooks-node-implement'))
     const editor = screen.getByTestId('baf-standard-hooks-editor')
     expect(editor.getAttribute('data-node')).toBe('implement')
-    // Two kind rows per node (enter then exit), each with one add input.
+    // Two kind rows per node (enter then exit), each with one add input —
+    // plus the hidden shared file chooser rendered LAST (批次四 3.6).
     const inputs = editor.querySelectorAll('input')
-    expect(inputs).toHaveLength(2)
-    // Add into the EXIT list (退出实现状态 must pass).
+    expect(inputs).toHaveLength(3)
+    expect((inputs[2] as HTMLInputElement).type).toBe('file')
+    // Add into the EXIT list (退出实现状态 must pass). 【变更】2026-10-20
+    // (批次三 4.4): every add awaits the existence RPC before it lands.
     fireEvent.change(inputs[1] as HTMLElement, { target: { value: './scripts/build.sh' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-implement-exit'))
+    await tick()
     expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/build.sh'] } })
     // The canvas accent reflects the counts; the add input cleared and the
     // draft is dirty → save enabled.
@@ -783,9 +843,11 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     expect(save.disabled).toBe(false)
     fireEvent.click(save)
     expect(saveNodeHooks).toHaveBeenCalledTimes(1)
-    // A duplicate add is refused with the shared duplicate notice, inline.
+    // A duplicate add is refused (synchronously, before the RPC) with the
+    // shared duplicate notice, inline.
     fireEvent.change(inputs[1] as HTMLElement, { target: { value: 'scripts/build.sh' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-implement-exit'))
+    await tick()
     expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/build.sh'] } })
     expect(editor.textContent).toContain('protectedDuplicate')
     // Edit in place: the only entry row's 编辑 swaps in an InlineEditor.
@@ -799,7 +861,7 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     expect(store.getSnapshot().hooksDraft).toEqual({})
   })
 
-  it('keeps the node when the other kind still has entries', () => {
+  it('keeps the node when the other kind still has entries', async () => {
     const { props, store } = harness(readyState())
     render(<StandardsProjectOverview {...props} />)
     fireEvent.click(screen.getByTestId('baf-standard-hooks-node-verify'))
@@ -807,19 +869,23 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     const inputs = editor.querySelectorAll('input')
     fireEvent.change(inputs[0] as HTMLElement, { target: { value: 'scripts/enter-verify.mjs' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-verify-enter'))
+    await tick()
     // Deleting it again: enter goes empty → the node leaves the draft.
     fireEvent.click(withinRow('baf-standard-hooks-editor', 'deleteLabel'))
     expect(store.getSnapshot().hooksDraft).toEqual({})
     // Re-add on BOTH kinds, delete one: the other kind's entry survives.
     fireEvent.change(inputs[0] as HTMLElement, { target: { value: 'e.mjs' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-verify-enter'))
+    await tick()
     fireEvent.change(editor.querySelectorAll('input')[1] as HTMLElement, { target: { value: 'x.sh' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-verify-exit'))
-    // Delete the EXIT entry (x.sh) specifically: its entry row is the div
-    // parenting the x.sh span — the enter entry (e.mjs) must survive.
-    const entrySpan = [...editor.querySelectorAll('span')]
-      .find(span => span.textContent === 'x.sh')
-    const exitRow = entrySpan?.parentElement
+    await tick()
+    // Delete the EXIT entry (x.sh) specifically: 【变更】2026-10-20 (批次三
+    // 4.4) the entry itself is a clickable BUTTON now — its row is the div
+    // parenting it; the enter entry (e.mjs) must survive.
+    const entryButton = [...editor.querySelectorAll('button')]
+      .find(button => button.textContent === 'x.sh') as HTMLElement
+    const exitRow = entryButton.parentElement
     const exitDelete = [...(exitRow?.querySelectorAll('button') ?? [])]
       .find(button => button.textContent === 'deleteLabel') as HTMLElement
     fireEvent.click(exitDelete)
@@ -837,6 +903,95 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     render(<StandardsProjectOverview {...noticed.props} />)
     expect(screen.getByTestId('baf-standard-hooks-notice').textContent)
       .toContain('未知的工作流节点：midway')
+  })
+
+  // 【变更】2026-10-20 (批次三 4.4): the add-time existence check — a miss
+  // never lands in the draft and says so inline.
+  it('rejects an add whose path does not exist and keeps the draft clean', async () => {
+    const statWorkspacePath = vi.fn().mockResolvedValueOnce(false)
+    const { props, store } = harness(readyState(), { statWorkspacePath })
+    render(<StandardsProjectOverview {...props} />)
+    fireEvent.click(screen.getByTestId('baf-standard-hooks-node-implement'))
+    const editor = screen.getByTestId('baf-standard-hooks-editor')
+    fireEvent.change(editor.querySelectorAll('input')[1] as HTMLElement, { target: { value: 'scripts/ghost.sh' } })
+    fireEvent.click(screen.getByTestId('baf-standard-hooks-add-implement-exit'))
+    await tick()
+    expect(statWorkspacePath).toHaveBeenCalledWith('scripts/ghost.sh')
+    expect(store.getSnapshot().hooksDraft).toEqual({})
+    expect(editor.textContent).toContain('hooksPathMissing')
+    // The input keeps the typo for a quick fix; a clean draft keeps save off.
+    expect((editor.querySelectorAll('input')[1] as HTMLInputElement).value).toBe('scripts/ghost.sh')
+    expect((screen.getByTestId('baf-standard-hooks-save') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  // 【变更】2026-10-20 (批次四 3.6): the picker selects a script FILE through a
+  // hidden <input type="file">. jsdom cannot open the OS dialog — the probe
+  // drives the input's change event directly, covering all three answers:
+  // desktop bridge under the root, bridge outside the root, and web fallback
+  // (no bridge → bare file name).
+  it('pre-fills the add input from a chosen script file (批次四 3.6)', async () => {
+    const bridge = { pathFor: vi.fn() }
+    ;(globalThis as { __BAF_FILE_PICKER__?: typeof bridge }).__BAF_FILE_PICKER__ = bridge
+    try {
+      const { props } = harness(readyState())
+      render(<StandardsProjectOverview {...props} />)
+      fireEvent.click(screen.getByTestId('baf-standard-hooks-node-implement'))
+      const editor = screen.getByTestId('baf-standard-hooks-editor')
+      // The editor's LAST input is the shared hidden file chooser.
+      const inputs = editor.querySelectorAll('input')
+      const fileInput = inputs[inputs.length - 1] as HTMLInputElement
+      expect(fileInput.type).toBe('file')
+      const exitInput = inputs[1] as HTMLInputElement
+      const choose = (name: string): void => {
+        const file = new File(['x'], name, { type: 'text/plain' })
+        Object.defineProperty(fileInput, 'files', { value: [file], configurable: true })
+        fireEvent.change(fileInput)
+      }
+      // The fixture workspace root is /ws — the bridge answers inside it.
+      bridge.pathFor.mockReturnValueOnce('/ws/scripts/build.sh')
+      choose('build.sh')
+      // Desktop: the bridge resolved the absolute path → relative FILE path.
+      expect(bridge.pathFor).toHaveBeenCalled()
+      expect(exitInput.value).toBe('scripts/build.sh')
+      // Outside the workspace root: the prefill stays and the notice says why.
+      bridge.pathFor.mockReturnValueOnce('/elsewhere/build.sh')
+      choose('build.sh')
+      expect(editor.textContent).toContain('protectedPickOutside')
+      expect(exitInput.value).toBe('scripts/build.sh')
+      // Web (no bridge): the bare file NAME prefills.
+      delete (globalThis as { __BAF_FILE_PICKER__?: typeof bridge }).__BAF_FILE_PICKER__
+      choose('lint.ps1')
+      expect(exitInput.value).toBe('lint.ps1')
+    } finally {
+      delete (globalThis as { __BAF_FILE_PICKER__?: typeof bridge }).__BAF_FILE_PICKER__
+    }
+  })
+
+  it('opens an existing entry with the default app and cancels a dirty draft (批次三 4.4)', async () => {
+    const openPath = vi.fn()
+    const summary = readySummary({ nodeHooks: { implement: { exit: ['scripts/build.sh'] } } })
+    const { props, store } = harness(
+      readyState({ summary, hooksDraft: { implement: { exit: ['scripts/build.sh'] } } }),
+      { openPath },
+    )
+    render(<StandardsProjectOverview {...props} />)
+    // The populated draft selects 实现 into the editor; the entry itself is
+    // the click target with the absolute path as its hover title.
+    const entry = [...screen.getByTestId('baf-standard-hooks-editor').querySelectorAll('button')]
+      .find(button => button.textContent === 'scripts/build.sh') as HTMLElement
+    expect(entry.getAttribute('title')).toBe('/ws/scripts/build.sh')
+    fireEvent.click(entry)
+    expect(openPath).toHaveBeenCalledWith('/ws/scripts/build.sh')
+    // Dirty the draft, then 取消 drops it back to the persisted map.
+    fireEvent.click(withinRow('baf-standard-hooks-editor', 'deleteLabel'))
+    expect(store.getSnapshot().hooksDraft).toEqual({})
+    const cancel = screen.getByTestId('baf-standard-hooks-cancel') as HTMLButtonElement
+    expect(cancel.disabled).toBe(false)
+    fireEvent.click(cancel)
+    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/build.sh'] } })
+    // Clean again → both footer buttons disable.
+    expect((screen.getByTestId('baf-standard-hooks-save') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTestId('baf-standard-hooks-cancel') as HTMLButtonElement).disabled).toBe(true)
   })
 })
 

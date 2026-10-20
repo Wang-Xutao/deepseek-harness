@@ -1,5 +1,5 @@
 /**
- * Browser 轨迹图 plugin: conversation view tab + settings contributions.
+ * Browser 轨迹图 plugin: conversation view tab + 工作流 main panel page.
  *
  * - The conversation view tab is gated on the device-local
  *   trace-graph preference switch — when it is `false` the plugin never
@@ -8,19 +8,27 @@
  *   (【变更】2026-09-25: the host settings namespace round-trip was a silent
  *   no-op after the master merge; see ../workflow-settings.ts).
  * - 【变更】2026-10-06 (问题 1): the toggle lives under the dedicated 工作流
- *   settings section (`settings.workflow.item`, order 5 — ahead of the
- *   工作流图 row), no longer under General settings.
+ *   surface (`settings.workflow.item`, order 5 — ahead of the 工作流图 row),
+ *   no longer under General settings.
+ * - 【变更】2026-10-19 (主页面三改 3): the 工作流 surface left the Settings
+ *   modal and became a first-level main panel (sidebar entry below 插件 /
+ *   自动化任务, tagged baf); this plugin owns the page + panel entry and
+ *   still declares the `settings.workflow.item` child slot — now under the
+ *   main entry instead of a settings.section one.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-trajectory/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workflow-run/client'
@@ -36,7 +44,8 @@ import {
   EMPTY_TRAJECTORY, TraceGraphView, type TraceGraphViewInjected,
 } from './TraceGraphView.tsx'
 import { TraceGraphRow, type TraceGraphRowInjected } from './TraceGraphRow.tsx'
-import { WorkflowSection } from './WorkflowSection.tsx'
+import { WorkflowPage } from './WorkflowPage.tsx'
+import { WorkflowPanelIcon } from './WorkflowPanelIcon.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -46,6 +55,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 export type { TraceGraphKey, WorkflowKey } from './locales.ts'
+
+/** Main panel key + matching sidebar entry id for the 工作流 page. */
+const PANEL_ID = 'workflow' as MainPanelId
 
 /** Required services. */
 export const inject = [
@@ -99,19 +111,30 @@ export function apply(ctx: ClientContext): void {
     inject: settingsInject,
   }, TraceGraphRow))
 
-  // Nav glyph for id `workflow` is owned by ui-settings-general SettingsRoot.
-  // 【变更】2026-09-29 (demo23 问题 5): the section declares its child row slot
-  // (same composition General settings uses) — feature packages register
-  // workflow preference rows into 'settings.workflow.item' instead of the
-  // section carrying placeholders.
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'workflow',
-    order: 20,
-    label: () => tSection('section.title'),
+  // 【变更】2026-10-19 (主页面三改 3): the 工作流 settings.section registration
+  // became a first-level main panel + its sidebar entry. The child row slot
+  // 'settings.workflow.item' keeps its name, list kind, and root scope, so
+  // every row registrant (trace-graph here, baf-workflow's gates/工作流 tabs,
+  // baf-standard's project/enterprise/quality rows) is unchanged — only the
+  // declaring parent moved. order 20 sits below 插件 (0) and 自动化任务 (10).
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main',
+    key: PANEL_ID,
     locale: WORKFLOW_NS,
     children: { 'settings.workflow.item': { kind: 'list', scope: 'root' } },
-  }, WorkflowSection))
+  }, WorkflowPage))
+
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist',
+    id: PANEL_ID,
+    order: 20,
+    locale: WORKFLOW_NS,
+    label: () => tSection('section.title'),
+    // 【变更】2026-10-20 (批次四 3.1): the baf mark moved off the glyph onto the
+    // LABEL's top-right corner — it rides as list-option metadata the sidebar
+    // renders (narrow rail shows no tag), no longer baked into the icon.
+    badge: 'baf',
+  }, WorkflowPanelIcon))
 
   const viewInject = (): TraceGraphViewInjected => ({
     ensureOpen: async (id) => {

@@ -82,6 +82,9 @@ export interface SidebarPanelMetadata {
   order: number
   /** Row title and accessible name: resolved label, or the id when omitted. */
   label: string
+  /** 【变更】2026-10-20 (批次四 3.1): optional corner superscript tag pinned by
+   * the registrant (the 工作流 entry carries its `baf` mark this way). */
+  badge?: string
 }
 
 /**

@@ -21,7 +21,6 @@ export type BafRouteKey =
   | 'tierModeTwo'
   | 'tierModeThree'
   | 'advancedTitle'
-  | 'advancedHint'
   | 'tabsAria'
   | 'roleLabel'
   | 'phaseTitle'
@@ -38,7 +37,6 @@ export type BafRouteKey =
   | 'phaseDrift'
   | 'keywordsTitle'
   | 'keywordsHint'
-  | 'presetsFileHint'
   | 'presetBadge'
   | 'presetAlwaysHint'
   | 'presetComplexEngineering'
@@ -48,27 +46,19 @@ export type BafRouteKey =
   | 'keywordCategory'
   | 'keywordTier'
   | 'tagToggle'
-  | 'tagsZh'
-  | 'tagsEn'
   | 'keywordAdd'
   | 'keywordRemove'
   | 'keywordEdit'
   | 'keywordSave'
   | 'keywordCancel'
-  | 'escalateOnly'
-  | 'escalateOnlyHint'
   | 'previewTitle'
   | 'previewPlaceholder'
   | 'previewRun'
   | 'previewNone'
-  | 'previewVerify'
-  | 'previewVerifyHint'
-  | 'previewVerifyHintTwo'
   | 'previewEscalated'
   | 'previewMatched'
   | 'previewRole'
   | 'previewModel'
-  | 'previewAutoHint'
   | 'save'
   | 'cancel'
   | 'reset'
@@ -78,7 +68,9 @@ export type BafRouteKey =
 export const en: Record<BafRouteKey, string> = {
   nav: 'Multi-model routing',
   title: 'Multi-model routing',
-  description: 'Route work orders by phase and keyword to the chosen model grades. Sessions on Auto route automatically; a pinned model always wins (~/.dsh/baf-route-config.json).',
+  // 【变更】2026-10-20 (批次二 2.3): one sentence — the config-file aside and
+  // the pinned-model clause are gone; Auto triggers routing, full stop.
+  description: 'Route work orders by phase and keyword to the chosen model grades. Sessions on the Auto model route automatically.',
   master: 'Enable multi-model routing',
   dirty: 'Unsaved changes',
   // 【变更】2026-10-05 (角色三档): tiers are named as ROLES — Commander leads,
@@ -112,7 +104,6 @@ export const en: Record<BafRouteKey, string> = {
   tierModeTwo: 'Two grades',
   tierModeThree: 'Three grades',
   advancedTitle: 'Advanced',
-  advancedHint: 'Reset the whole multi-model routing config (~/.dsh/baf-route-config.json) back to factory defaults — three grades with the default models, no keyword rules of your own. Saved bindings and rules are discarded.',
   tabsAria: 'Multi-model routing categories',
   roleLabel: 'Role',
   phaseTitle: 'Workflow model binding',
@@ -128,10 +119,10 @@ export const en: Record<BafRouteKey, string> = {
   phaseArchive: 'Archive',
   phaseDrift: 'Drift',
   keywordsTitle: 'Keyword rules',
-  // 【变更】2026-10-07 (九点批 问题 7): rewritten plain — one sentence per rule,
-  // no nested terminology; matches the zh copy structure.
-  keywordsHint: 'A task goes to whichever tier\'s keyword it hits; with no hit (or keywords off) the fallback grade Worker takes it, so Worker needs no keywords of its own. Tags with a "Preset" badge come built in; plain tags are yours. Click a tag = park/revive that word; the switch by a pack or category name parks the whole group. Chinese and English tags sit in separate segments.',
-  presetsFileHint: 'Built-in packs live in ~/.dsh/baf-route-presets.json — edit the file to add or remove packs; the next dispatch already uses them.',
+  // 【变更】2026-10-20 (批次二 2.2): one sentence — the preset-file pointer and
+  // the segment/tag-switch explanations are gone (the tag switches still work;
+  // their affordance no longer needs a manual).
+  keywordsHint: 'A task goes to whichever tier its keyword hits; with no hit the Worker model takes it as the fallback.',
   presetBadge: 'Preset',
   presetAlwaysHint: 'preset pack word · click the tag to park it',
   presetComplexEngineering: 'Complex engineering',
@@ -141,30 +132,24 @@ export const en: Record<BafRouteKey, string> = {
   keywordCategory: 'Category (optional)',
   keywordTier: 'Role',
   tagToggle: 'enable or disable this rule',
-  tagsZh: 'Chinese',
-  tagsEn: 'English',
   keywordAdd: 'Add',
   keywordRemove: 'Remove',
   keywordEdit: 'Edit',
   keywordSave: 'Save',
   keywordCancel: 'Cancel',
-  escalateOnly: 'Keywords only escalate',
-  escalateOnlyHint: 'A keyword hit raises the role at most; it never lowers it.',
   previewTitle: 'Dry-run',
   previewPlaceholder: 'Type a task summary — match updates as you type…',
   previewRun: 'Dry-run',
   previewNone: 'No keyword matched — no role would freeze from keywords',
-  previewVerify: 'Simulate a verify-failed retry',
-  previewVerifyHint: 'A real rule: a failed verify retries at Reviewer or above so Worker never retries its own failure. Check the box to include it in the dry-run.',
-  previewVerifyHintTwo: 'A real rule: a failed verify retries at Commander so Worker never retries its own failure. Check the box to include it in the dry-run.',
   previewEscalated: 'raised by verify-retry floor',
   previewMatched: 'Matched keyword',
   previewRole: 'Assigned grade',
   previewModel: 'Dispatched model',
-  previewAutoHint: 'Results update automatically while you type (no button needed).',
   save: 'Save',
   cancel: 'Cancel',
-  reset: 'Reset',
+  // 【变更】2026-10-20 (批次二 2.9): the 高级 tab lost its blast-radius
+  // paragraph; the button text spells out what it restores.
+  reset: 'Restore defaults',
   loading: 'Loading…',
   loadFailed: 'Could not read the routing config.',
 }
@@ -172,7 +157,8 @@ export const en: Record<BafRouteKey, string> = {
 export const zh: Record<BafRouteKey, string> = {
   nav: '多模型路由',
   title: '多模型路由',
-  description: '按阶段与关键词把工单派给所选档位模型。会话选择 Auto 时自动路由；选择具体模型则始终使用该模型（~/.dsh/baf-route-config.json）。',
+  // 【变更】2026-10-20 (批次二 2.3): 客户口径一句文案，删掉配置文件与固定模型说明。
+  description: '按阶段与关键词把工单派给所选档位模型。会话选择 Auto 模型时自动触发路由。',
   master: '启用多模型路由',
   dirty: '有未保存修改',
   // 【变更】2026-10-05 (角色三档): 档位以角色命名 — Commander 统帅、Reviewer
@@ -202,7 +188,6 @@ export const zh: Record<BafRouteKey, string> = {
   tierModeTwo: '两档',
   tierModeThree: '三档',
   advancedTitle: '高级',
-  advancedHint: '把多模型路由配置（~/.dsh/baf-route-config.json）整体恢复为出厂默认：三档默认模型、无自定义关键词规则；已保存的档位绑定与规则都会被清掉。',
   tabsAria: '多模型路由分类',
   roleLabel: '角色',
   phaseTitle: '工作流模型绑定',
@@ -218,9 +203,8 @@ export const zh: Record<BafRouteKey, string> = {
   phaseArchive: '归档',
   phaseDrift: '漂移',
   keywordsTitle: '关键词规则',
-  // 【变更】2026-10-07 (九点批 问题 7): 通俗化改写 — 一句一条规则，去掉嵌套术语。
-  keywordsHint: '命中哪个档的词，任务就派给哪个档的模型；没命中（或关掉关键词）就兜底给 Worker，所以 Worker 不需要自己的关键词。带「预设」角标的是产品自带词库，普通标签是你自己加的。点一下标签＝停用/启用这个词；词库或分类名旁的开关＝整组停用。中文、英文标签分段排列。',
-  presetsFileHint: '自带词库存在 ~/.dsh/baf-route-presets.json：改这个文件就能增删词库，下次派单即生效。',
+  // 【变更】2026-10-20 (批次二 2.2): 两段合并为客户指定的一句话。
+  keywordsHint: '命中哪个档的关键词，任务就分配给对应挡位的模型。没有命中则使用Worker模型兜底',
   presetBadge: '预设',
   presetAlwaysHint: '预设词 · 点击标签可停用',
   presetComplexEngineering: '复杂工程',
@@ -230,32 +214,23 @@ export const zh: Record<BafRouteKey, string> = {
   keywordCategory: '功能分类（可选）',
   keywordTier: '角色',
   tagToggle: '启用或停用此规则',
-  tagsZh: '中文',
-  tagsEn: '英文',
   keywordAdd: '添加',
   keywordRemove: '移除',
   keywordEdit: '编辑',
   keywordSave: '保存',
   keywordCancel: '取消',
-  escalateOnly: '关键词仅升档',
-  escalateOnlyHint: '关键词命中只会抬高档位，不会降低。',
   previewTitle: '预演',
   previewPlaceholder: '输入任务摘要，输入即自动预演…',
   previewRun: '预演',
   previewNone: '未命中任何关键词 — 不会因关键词冻结角色',
-  previewVerify: '模拟 verify 失败重试',
-  // 【变更】2026-10-06 (问题 3 批): 保底规则逻辑不动，文案改通俗 — 说清这是
-  // 真实规则、为什么要保底（防低档模型反复栽在同一处），勾选只是让预演演示它。
-  previewVerifyHint: '这是真实规则：模型自查（verify）没通过的活，重做时至少换 Reviewer 档接手，免得低档模型在同一个坑里反复失败。勾选后，预演就按这条规则演示。',
-  previewVerifyHintTwo: '这是真实规则：模型自查（verify）没通过的活，重做时至少换 Commander 档接手，免得 Worker 在同一个坑里反复失败。勾选后，预演就按这条规则演示。',
   previewEscalated: '经 verify 重试保底升档',
   previewMatched: '命中关键词',
   previewRole: '派给档位',
   previewModel: '派给模型',
-  previewAutoHint: '输入时自动预演，无需点击按钮。',
   save: '保存',
   cancel: '取消',
-  reset: '恢复默认',
+  // 【变更】2026-10-20 (批次二 2.9): 按钮文字改为「恢复默认配置」，长说明删除。
+  reset: '恢复默认配置',
   loading: '加载中…',
   loadFailed: '读取路由配置失败。',
 }

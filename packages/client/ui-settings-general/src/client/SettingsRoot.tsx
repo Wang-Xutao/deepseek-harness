@@ -14,8 +14,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
-  ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconBranchOutlineMedium, IconCloseOutlineRegular,
+  ConnectionIndicator, ShortcutKeys, Tooltip, useModalLayer,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular,
   IconDataOutlineMedium, IconDownloadOutlineMedium, IconGaugeOutlineMedium, IconPersonalizationOutlineMedium,
   IconPluginPinwheelOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -38,7 +38,7 @@ const CONNECTING_MIN_VISIBLE_MS = 800
  * 【变更】2026-10-12 (问题 3): 用户反馈 joins the baf-signed set — its entry
  * point, notice copy, and telemetry targets are all BAF-owned in this build.
  */
-const BAF_EXCLUSIVE = new Set(['workflow', 'model-routing', 'version-updates', 'featured-plugins', 'user-feedback'])
+const BAF_EXCLUSIVE = new Set(['model-routing', 'version-updates', 'featured-plugins', 'user-feedback'])
 
 /** Nav glyph by section id; unknown ids fall back to the settings gear. */
 function navIcon(id: string) {
@@ -47,9 +47,11 @@ function navIcon(id: string) {
   if (id === 'agent-presets') return <IconAgentPresetOutlineMedium className={css.navIcon} size={16} />
   if (id === 'plugins') return <IconPersonalizationOutlineMedium className={css.navIcon} size={16} />
   if (id === 'archived-sessions') return <IconArchiveOutlineMedium className={css.navIcon} size={16} />
-  // 【变更】2026-09-25: 工作流/版本与更新 get their own glyphs — a shared gear
-  // made three sections read as one generic "settings" bucket.
-  if (id === 'workflow') return <IconBranchOutlineMedium className={css.navIcon} size={16} />
+  // 【变更】2026-09-25: 版本与更新 gets its own glyph — a shared gear made the
+  // sections read as one generic "settings" bucket.
+  // 【变更】2026-10-19 (主页面三改 3): the 工作流 nav row left Settings for a
+  // first-level main panel (owned by ui-baf-tracegraph); its branch glyph and
+  // baf sup badge moved with it onto the sidebar panel button.
   if (id === 'version-updates') return <IconDownloadOutlineMedium className={css.navIcon} size={16} />
   // 【变更】2026-10-04 (用户问题 2): 精选插件 gets the plugin pinwheel — the
   // same plugin glyph the Plugins panel carries — instead of the generic
@@ -255,7 +257,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           wide, settingsOpen: open, openSettings: actions.open,
           ...(shortcut?.keys.length ? { settingsShortcut: { keys: shortcut.keys, aria: shortcut.aria } } : {}),
           openOnboarding: (id) => { close(); setRequestedOnboarding(id) },
-        }, { fallback: <Tooltip disabled={open} label={t('trigger')} shortcutKeys={shortcut?.keys}>
+        }, { fallback: <Tooltip disabled={wide || open} label={t('trigger')} shortcutKeys={shortcut?.keys}>
           <button
             type="button"
             className={clsx(css.trigger, !wide && css.rail)}
@@ -266,6 +268,13 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
             onClick={() => { actions.open() }}
           >
             {renderSlot('settings.trigger', { wide })}
+            {/* 【变更】2026-10-20 (批次二 1.2): wide-mode hover keycap, the same
+                reveal the Help trigger uses — tooltip stays rail-only. */}
+            {wide && shortcut !== undefined && shortcut.keys.length > 0 && (
+              <span className={css.triggerShortcut} aria-hidden="true">
+                <ShortcutKeys keys={shortcut.keys} />
+              </span>
+            )}
           </button>
         </Tooltip> })}
         <ConnectionIndicator

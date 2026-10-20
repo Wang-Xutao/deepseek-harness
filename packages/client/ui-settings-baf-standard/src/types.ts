@@ -134,6 +134,16 @@ export interface BafStandardSaveProtectedResult {
   readonly message?: string
 }
 
+/**
+ * 【变更】2026-10-20 (批次三 4.4): `statWorkspacePath()` outcome — the 状态脚本
+ * editor's add-time existence check. `exists` is false for anything not
+ * expressible as a workspace-relative entry (absolute, `..` escape, empty).
+ */
+export interface BafStandardStatPathResult {
+  /** Whether the entry resolves to something inside the workspace. */
+  readonly exists: boolean
+}
+
 /** `rulesDoc()` outcome — the rules document viewer's payload. */
 export interface BafStandardRulesDocResult {
   readonly status: 'ready' | 'unavailable' | 'unreadable'

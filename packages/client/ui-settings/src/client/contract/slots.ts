@@ -97,8 +97,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * (ui-baf-workflow → the show-workflow-tab toggle). Options: `id` (row
      * key), `order` (row position); the section column only stacks rows, so a
      * row draws its own internals. Declared at runtime by ui-baf-tracegraph's
-     * 工作流 section entry as its child slot; the type lives here with every
-     * other settings slot type (the settings domain's base layer).
+     * 工作流 entry as its child slot (【变更】2026-10-19 主页面三改 3: the
+     * declaring parent is now the 工作流 main panel page entry, not a
+     * settings.section one — the surface left the Settings modal for the main
+     * stage); the type lives here with every other settings slot type (the
+     * settings domain's base layer).
      */
     'settings.workflow.item': { kind: 'list'; scope: 'root'; owner: SettingsWorkflowItemOwnerProps }
   }

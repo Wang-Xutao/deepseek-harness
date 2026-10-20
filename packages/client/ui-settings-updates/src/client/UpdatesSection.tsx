@@ -8,6 +8,7 @@ import {
   type BafDesktopBridge,
   type CheckUpdateResult,
   type DesktopVersions,
+  type DshReleaseNotes,
 } from './bridge.ts'
 import type { UpdatesSettingsKey } from './locales.ts'
 import css from './UpdatesSection.module.css'
@@ -52,19 +53,27 @@ function VersionRow(props: {
   notes: string | undefined
   /** 【变更】2026-10-05 (插件包说明): static plain-language description of what the row's package DOES. */
   desc?: string
+  /** 【变更】2026-10-20 (批次四 2): small heading line above the notes — the
+   * DeepSeek Harness row uses it to name the upstream release its notes came
+   * from now that they render INSIDE the row instead of a standalone panel. */
+  caption?: string
+  /** Optional testid for the row's li (the upstream-backed dsh row keeps the
+   * `dsh-release-notes` anchor the smoke probes query). */
+  testid?: string
 }): ReactElement {
-  const { label, version, notes, desc } = props
+  const { label, version, notes, desc, caption, testid } = props
   // 【变更】2026-10-04 (用户问题 1): notes render one paragraph per line —
   // version-notes.json now carries concise multi-line copy instead of one
   // wall of text.
   const paragraphs = noteParagraphs(notes)
   return (
-    <li className={css.row}>
+    <li className={css.row} data-testid={testid}>
       <div className={css.rowMain}>
         <span className={css.label}>{label}</span>
         <span className={css.value}>{version ?? '—'}</span>
       </div>
       {desc === undefined ? undefined : <p className={css.desc}>{desc}</p>}
+      {caption === undefined ? undefined : <p className={css.rowCaption}>{caption}</p>}
       {paragraphs.map(line => <p key={line} className={css.notes}>{line}</p>)}
     </li>
   )
@@ -81,6 +90,9 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
   const [busy, setBusy] = useState<'check' | 'update' | null>(null)
   const [progress, setProgress] = useState('')
   const [message, setMessage] = useState('')
+  // 【变更】2026-10-20 (批次二 3.2): upstream release notes — best effort,
+  // silent on failure (the static dshNotes row remains the floor).
+  const [dshRelease, setDshRelease] = useState<DshReleaseNotes>(null)
 
   useEffect(() => {
     const live = readBridge()
@@ -90,6 +102,11 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
     void live.getVersions().then((v) => {
       if (!cancelled) setVersions(v)
     })
+    if (live.getDshReleaseNotes !== undefined) {
+      void live.getDshReleaseNotes().then((notes) => {
+        if (!cancelled && notes !== null) setDshRelease(notes)
+      }).catch(() => { /* silent */ })
+    }
     void live.getLastCheckResult().then((r) => {
       if (cancelled) return
       setCheck(r)
@@ -267,10 +284,21 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
           version={versions?.bafDsh}
           notes={versions?.bafDshNotes}
         />
+        {/* 【变更】2026-10-20 (批次四 2): the upstream repo's latest release
+            notes render INSIDE the DeepSeek Harness row — they REPLACE the
+            static dshNotes description (上游运行时…), not a standalone panel.
+            Offline / fetch-failure keeps the static floor; the caption names
+            the release the lines came from. */}
         <VersionRow
           label={t('labelDsh')}
           version={versions?.dsh}
-          notes={versions?.dshNotes}
+          notes={dshRelease !== null && dshRelease.lines.length > 0
+            ? dshRelease.lines.join('\n')
+            : versions?.dshNotes}
+          caption={dshRelease !== null && dshRelease.lines.length > 0
+            ? `${t('upstreamTitle')}（${dshRelease.name}）`
+            : undefined}
+          testid={dshRelease !== null && dshRelease.lines.length > 0 ? 'dsh-release-notes' : undefined}
         />
       </ul>
       <h3 className={css.subtitle}>{t('packagesHeading')}</h3>

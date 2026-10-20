@@ -18,7 +18,8 @@ import { authorizeUrlWithTheme } from './authorize-url.ts'
 import { BrowserLogin } from './browser-login.ts'
 import { AccountOnboarding } from './AccountOnboarding.tsx'
 import { AccountPlatformHost, type AccountPlatformHostInjected } from './AccountPlatformHost.tsx'
-import { AccountMenu } from './AccountMenu.tsx'
+// 【变更】2026-10-19 (主页面三改 1): AccountMenu left the composition — see the
+// settings.launcher note in apply(). The component stays for its spec.
 import { createPlatformPages, type PlatformPages } from './platform-pages.ts'
 import { AccountSection, type AccountSnapshot, type AccountSectionInjected } from './AccountSection.tsx'
 import { createBonusNoticeController } from './bonus-notices.ts'
@@ -307,9 +308,16 @@ export function apply(ctx: Context): void {
       }),
     }, AccountPlatformHost))
   }
-  ctx.slots.inject('settings.launcher', () => ctx.slots.register({
-    name: 'settings.launcher', locale: 'settings.account', inject: () => operations,
-  }, AccountMenu))
+  // 【变更】2026-10-19 (主页面三改 1): the `settings.launcher` registration is
+  // GONE — the sidebar foot no longer carries the 「更多」 account menu (设置 /
+  // 意见反馈 / 登录). With no occupant in the seat, the settings shell's own
+  // fallback renders: a direct 设置 trigger (gear + label + Ctrl+, keycap)
+  // that opens Settings on click. 意见反馈 and 登录 lose their only main-page
+  // entry points by design; the account SECTION stays reachable in Settings
+  // for already-signed-in users. AccountMenu.tsx survives as a tested,
+  // unmounted component so restoring the menu is a one-registration change.
+  // (Side effect: the refresh-on-Settings-open nicety lived in AccountMenu;
+  // the account watch stream still keeps the section current.)
   ctx.slots.inject('settings.section', () => {
     let unregister: (() => void) | undefined
     const update = () => {

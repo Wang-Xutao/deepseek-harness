@@ -51,6 +51,13 @@ export type ApplyUpdateResult = {
   launchedInstaller?: boolean
 }
 
+/**
+ * 【变更】2026-10-20 (批次二 3.2): upstream DeepSeek Harness release notes —
+ * the latest GitHub release's Chinese section, first five lines. Null when
+ * offline or the channel answers nothing usable.
+ */
+export type DshReleaseNotes = { tag: string; name: string; publishedAt: string; lines: string[] } | null
+
 export type BafDesktopBridge = {
   isDesktop: true
   getPrefs: () => Promise<DesktopPrefs>
@@ -66,6 +73,8 @@ export type BafDesktopBridge = {
    * auto-check). Optional so older injected bridges keep working.
    */
   onCheckResult?: (cb: (result: CheckUpdateResult) => void) => () => void
+  /** 【变更】2026-10-20 (批次二 3.2): upstream release notes; optional the same way. */
+  getDshReleaseNotes?: () => Promise<DshReleaseNotes>
 }
 
 declare global {

@@ -20,6 +20,7 @@ import {
   dialog,
   ipcMain,
   Menu,
+  net,
   Tray,
   nativeImage,
   shell,
@@ -806,6 +807,76 @@ ipcMain.handle('update:start', async () => {
 })
 ipcMain.handle('update:lastCheck', () => updateService?.getLastCheck() ?? null)
 ipcMain.handle('update:lastScoped', () => updateService?.getLastScoped() ?? null)
+
+/**
+ * 【变更】2026-10-20 (批次二 3.2): upstream DeepSeek Harness release notes for
+ * the 版本与更新 page. The public releases list (prereleases included — /latest
+ * 404s on rc-only history) is fetched through Electron's net so the system
+ * proxy applies; the body's CHINESE section (between the `cn-` and `en-` anchor
+ * headings upstream's bilingual template emits) is distilled to its first five
+ * non-empty lines. Failures return null — the page keeps its static dshNotes.
+ */
+const DSH_RELEASES_URL = 'https://api.github.com/repos/deepseek-ai/deepseek-harness/releases?per_page=1'
+const DSH_RELEASE_NOTES_TTL_MS = 30 * 60_000
+/** 【变更】2026-10-20 (批次三 exe 冒烟): failure entries expire after a minute —
+ * a null value used to be pinned for the full 30-minute TTL, hiding the block
+ * long after the proxy recovered. The fetch itself aborts after 15s so a
+ * stalled system proxy cannot leave concurrent invokes pending forever. */
+const DSH_RELEASE_FAIL_TTL_MS = 60_000
+const DSH_RELEASE_FETCH_TIMEOUT_MS = 15_000
+type DshReleaseNotes = { tag: string; name: string; publishedAt: string; lines: string[] } | null
+let dshReleaseNotesCache: { at: number; ttl: number; value: DshReleaseNotes } | undefined
+
+/** Pull the Chinese section out of a bilingual release body, first five lines. */
+function extractChineseReleaseLines(body: string): string[] {
+  let cn = body
+  const cnHeading = cn.indexOf('<h3 id="cn-')
+  if (cnHeading >= 0) cn = cn.slice(cnHeading)
+  const enHeading = cn.search(/<h3 id="en-/)
+  if (enHeading >= 0) cn = cn.slice(0, enHeading)
+  return cn
+    .split(/\r?\n/)
+    .map(line => line.replace(/<[^>]+>/g, '').trim())
+    .map(line => (line.startsWith('- ') ? line.slice(2) : line))
+    .filter(line => line.length > 0 && !line.startsWith('['))
+    .slice(0, 5)
+}
+
+ipcMain.handle('update:dshReleaseNotes', async (): Promise<DshReleaseNotes> => {
+  if (dshReleaseNotesCache !== undefined && Date.now() - dshReleaseNotesCache.at < dshReleaseNotesCache.ttl) {
+    return dshReleaseNotesCache.value
+  }
+  let value: DshReleaseNotes = null
+  try {
+    const res = await net.fetch(DSH_RELEASES_URL, {
+      headers: { 'User-Agent': 'baf-dsh-desktop' },
+      signal: AbortSignal.timeout(DSH_RELEASE_FETCH_TIMEOUT_MS),
+    })
+    if (res.ok) {
+      const releases = JSON.parse(await res.text()) as Array<{ tag_name?: unknown; name?: unknown; published_at?: unknown; body?: unknown }>
+      const latest = Array.isArray(releases) ? releases[0] : undefined
+      if (latest !== undefined && typeof latest.tag_name === 'string') {
+        const lines = extractChineseReleaseLines(typeof latest.body === 'string' ? latest.body : '')
+        if (lines.length > 0) {
+          value = {
+            tag: latest.tag_name,
+            name: typeof latest.name === 'string' ? latest.name : latest.tag_name,
+            publishedAt: typeof latest.published_at === 'string' ? latest.published_at : '',
+            lines,
+          }
+        }
+      }
+    }
+  } catch {
+    value = null
+  }
+  dshReleaseNotesCache = {
+    at: Date.now(),
+    ttl: value === null ? DSH_RELEASE_FAIL_TTL_MS : DSH_RELEASE_NOTES_TTL_MS,
+    value,
+  }
+  return value
+})
 
 ipcMain.handle('shell:openExternal', async (_event, raw: unknown) => {
   if (typeof raw !== 'string' || raw.trim() === '') return { ok: false, error: '无效 URL' }

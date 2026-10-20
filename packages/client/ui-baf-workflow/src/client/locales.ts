@@ -241,9 +241,8 @@ export type WorkflowTabKey =
   // 【变更】2026-10-19 (六问题批 4.2): the「开关与阈值在配置文件」block is
   // deleted (configTitle/configIntro/configBaseline/configRoute/configPresets/
   // honesty keys removed); the density control is renamed 详略.
-  | 'gates.modeAria'
-  | 'gates.modeDetail'
-  | 'gates.modeConcise'
+  // 【变更】2026-10-20 (批次三 4.5): the 详/略 switch itself is deleted too —
+  // the flow is always 详 with a selected-node detail column.
   | 'gates.onceTitle'
   | 'gates.onceHint'
   | 'gates.onceBadge'
@@ -533,9 +532,6 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.sentinelNoop': 'dismiss (runs nothing)',
   'gates.sentinelContinued': 'continued by the caller',
   'gates.dynamicOptions': 'options are filled at runtime (from the live workspace state)',
-  'gates.modeAria': 'Gate display density',
-  'gates.modeDetail': 'Detail',
-  'gates.modeConcise': 'Concise',
   'gates.onceTitle': 'One-shot confirm gates',
   'gates.onceHint': 'not yet placed on the flow chart (a future release will anchor them)',
   'gates.onceBadge': 'One-shot',
@@ -827,9 +823,6 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.sentinelNoop': '关闭（不执行命令）',
   'gates.sentinelContinued': '由调用方续接',
   'gates.dynamicOptions': '选项在运行时按现场状态动态生成',
-  'gates.modeAria': '详略',
-  'gates.modeDetail': '详',
-  'gates.modeConcise': '略',
   'gates.onceTitle': '一次性确认门',
   'gates.onceHint': '暂未在流程图上定位的确认门（后续版本会补上位置）',
   'gates.onceBadge': '一次性',

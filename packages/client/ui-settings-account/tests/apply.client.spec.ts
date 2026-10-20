@@ -40,7 +40,10 @@ function bonus(orderId: string, message = 'Awarded 5.00'): AccountBonusBatch {
   }
 }
 function operations(c: TestClient): AccountSectionInjected {
-  const injected: object = c.ctx.slots.entries('settings.launcher')[0]!.inject!()
+  // 【变更】2026-10-19 (主页面三改 1): the launcher seat is empty by design, so
+  // the shared operations face is read through the models sign-in registrant
+  // (same `operations` object the account section injects).
+  const injected: object = c.ctx.slots.entries('settings.models.sign-in')[0]!.inject!()
   return injected as AccountSectionInjected
 }
 /** The account take-over registered into the Chat-owned frame-wide quota notice chain. */
@@ -68,7 +71,9 @@ it('registers account sign-in in a plain browser without the Desktop-only surfac
   for (const reload of [false, true]) {
     if (reload) await c.reload(SELF)
     await c.mock.streams.opened('account/watch', reload ? 2 : 1)
-    expect(c.ctx.slots.entries('settings.launcher')).toHaveLength(1)
+    // 【变更】2026-10-19 (主页面三改 1): no launcher occupant — the settings
+    // shell's own fallback trigger owns the sidebar foot now.
+    expect(c.ctx.slots.entries('settings.launcher')).toHaveLength(0)
     expect(c.ctx.slots.entries('settings.models.sign-in')).toHaveLength(1)
     expect(quotaNoticeEntry(c)).toBeDefined()
     expect(platformHostEntry(c)).toBeUndefined()

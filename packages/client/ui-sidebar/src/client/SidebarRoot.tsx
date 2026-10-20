@@ -49,14 +49,14 @@ function localBuildVersion(): string | undefined {
 }
 
 type PanelRowProps =
-  Pick<SidebarPanelMetadata, 'id' | 'label'>
+  Pick<SidebarPanelMetadata, 'id' | 'label' | 'badge'>
   & Pick<SidebarSectionOwnerProps, 'wide'>
   & Pick<PropsRuntime<'sidebar'>, 'usePanelInfo'>
   & Pick<InjectFace<SidebarRootInjected>, 'selectPanel'>
   & PropsRenderSlots<'sidebar.panellist'>
 
 /** Each panel row subscribes only to its own selection state. */
-function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: PanelRowProps) {
+function PanelRow({ id, label, badge, wide, usePanelInfo, selectPanel, renderSlot }: PanelRowProps) {
   const active = usePanelInfo(info => info.activePanelId === id)
   return (
     <Tooltip label={label} delayMs={500} disabled={wide}>
@@ -73,6 +73,9 @@ function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: Pa
         {wide && (
           <span className={clsx(css.panelTitle, css.wide)}>
             {label}
+            {/* 【变更】2026-10-20 (批次四 3.1): the registrant's corner tag pins to
+                the LABEL's top-right (not the icon's) — the 工作流 row's baf mark. */}
+            {badge !== undefined && <sup className={css.panelBadge}>{badge}</sup>}
           </span>
         )}
       </button>
@@ -278,11 +281,12 @@ export function SidebarRoot({
 
       {panels.length > 0 && (
         <nav className={css.panelList} aria-label={t('panels.label')}>
-          {panels.map(({ id, label }) => (
+          {panels.map(({ id, label, badge }) => (
             <PanelRow
               key={id}
               id={id}
               label={label}
+              {...(badge === undefined ? {} : { badge })}
               wide={wide}
               usePanelInfo={usePanelInfo}
               selectPanel={selectPanel}

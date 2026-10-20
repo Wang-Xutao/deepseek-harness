@@ -32,6 +32,7 @@ export type UpdatesSettingsKey =
   | 'progress'
   | 'updateTarget'
   | 'updateNotes'
+  | 'upstreamTitle'
   | 'currentVersion'
   | 'latestVersion'
   | 'feedbackNav'
@@ -71,6 +72,7 @@ export const en: Record<UpdatesSettingsKey, string> = {
   progress: 'Progress',
   updateTarget: 'Target version',
   updateNotes: 'What is new',
+  upstreamTitle: 'Upstream release notes',
   currentVersion: 'Current version',
   latestVersion: 'Latest available version',
   feedbackNav: 'User feedback',
@@ -111,6 +113,7 @@ export const zh: Record<UpdatesSettingsKey, string> = {
   progress: '进度',
   updateTarget: '目标版本',
   updateNotes: '更新内容',
+  upstreamTitle: '上游更新说明',
   currentVersion: '当前版本',
   latestVersion: '最新可升级版本',
   feedbackNav: '用户反馈',

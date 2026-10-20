@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 /**
- * Settings composition of the trace-graph plugin.
+ * Composition of the trace-graph plugin: 工作流 main panel + preference rows.
  *
  * 【变更】2026-10-06 (问题 1): the 轨迹图 toggle row moved from General
- * settings ('settings.general.item') INTO the 工作流 section
+ * settings ('settings.general.item') INTO the 工作流 surface
  * ('settings.workflow.item', order 5 — ahead of the 工作流图 row at
- * order 10). The 工作流 settings section (owned here) still declares the
- * child slot and now hosts both rows.
+ * order 10).
+ * 【变更】2026-10-19 (主页面三改 3): the 工作流 surface left the Settings
+ * modal — the settings.section registration became a 'main' panel entry plus
+ * its 'sidebar.panellist' row (order 20, below 插件 0 / 自动化任务 10). The
+ * child slot declaration moved with it; row registrants are unchanged.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
@@ -47,16 +50,19 @@ describe('trace-graph settings composition', () => {
     expect(row).toMatchObject({ id: 'trace-graph', order: 5, locale: 'baf.workflow' })
   })
 
-  it('keeps the 工作流 settings section declaring the workflow.item child slot', () => {
-    const { ctx, registered } = fakeCtx()
+  it('registers the 工作流 main panel + sidebar entry declaring the workflow.item child slot (主页面三改 3)', () => {
+    const { ctx, injected, registered } = fakeCtx()
     apply(ctx)
-    const section = registered.find(options => options.name === 'settings.section')
-    expect(section).toMatchObject({
-      id: 'workflow',
-      order: 20,
+    // The settings.section registration is gone with the Settings-modal surface.
+    expect(injected).not.toContain('settings.section')
+    const page = registered.find(options => options.name === 'main')
+    expect(page).toMatchObject({
+      key: 'workflow',
       children: { 'settings.workflow.item': { kind: 'list', scope: 'root' } },
     })
-    // The section label still binds the workflow namespace dictionary.
-    expect((section?.label as () => string)()).toBe('section.title')
+    const panel = registered.find(options => options.name === 'sidebar.panellist')
+    expect(panel).toMatchObject({ id: 'workflow', order: 20, locale: 'baf.workflow' })
+    // The panel label still binds the workflow namespace dictionary.
+    expect((panel?.label as () => string)()).toBe('section.title')
   })
 })

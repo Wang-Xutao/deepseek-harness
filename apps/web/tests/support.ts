@@ -329,11 +329,13 @@ export function conversationContextKey(kind: string, id: string): string {
   return `${kind.length}:${kind}${id}`
 }
 
-/** Open Settings through the sidebar account menu.
+/** Open Settings through the sidebar foot trigger.
+ * 【变更】2026-10-19 (主页面三改 1): the 「更多」 account menu is gone — the
+ * settings shell's fallback trigger (gear + 设置 label) opens the panel
+ * directly, so one click replaces the old menu → menuitem pair.
  * @param page - browser page with the mounted sidebar.
  * @param locale - current UI language.
  */
 export async function openSettings(page: Page, locale: 'en' | 'zh'): Promise<void> {
-  await page.getByRole('button', { name: locale === 'zh' ? '账号菜单' : 'Account menu', exact: true }).click()
-  await page.getByRole('menuitem', { name: locale === 'zh' ? '设置' : 'Settings', exact: true }).click()
+  await page.getByRole('button', { name: locale === 'zh' ? '设置' : 'Settings', exact: true }).click()
 }

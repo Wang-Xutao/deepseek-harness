@@ -1,4 +1,10 @@
 /**
+ * 【变更】2026-10-20 (批次三 4.5): the 详/略 switch is DELETED — the flow is
+ * always 详, re-laid-out as a left-right split inside the frame: the canvas
+ * on the left, the SELECTED node's 门禁明细 on the right (click a canvas
+ * card to select — every card is a real button with aria-pressed and a
+ * selection ring; the default selection is the first node with anything to
+ * print). The node's full detail also stays in its aria-label.
  * 【变更】2026-10-19 (流程图样式对齐批): the flow adopts the 多模型路由
  * 工作流模型绑定 canvas style EXACTLY — same 460px framed canvas, same
  * absolute node cards (192×56, tier-tinted gradient + hover lift), same SVG
@@ -9,10 +15,6 @@
  * edge it guards (entry gates + 分类 on 接单→建立变更, advance gates on their
  * node's leaving edge, resume/abandon stacked under their branch node) — the
  * gap below a node grows with its pill count, so pills never overlap.
- * 详略 keeps its meaning: 略 = the canvas alone (pills carry titles +
- *「一次性」badges, nodes carry counts with hover/focus Tooltips); 详 adds the
- * 门禁明细 section under the canvas inside the same frame (stage gates with
- * full conditions, every option with its command, template edge conditions).
  * Earlier history: the 2026-10-19 六问题批 4.2 made this ONE complete flow
  * (one-shot gates between states, unanchored gates given fixed client-side
  * anchors: design-confirm rides 设计, verify-archive rides 验证, resume rides
@@ -27,7 +29,6 @@ import type { ReactNode } from 'react'
 import type {
   InjectFace, PropsLocale, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   BafWorkflowGateConfirmRow, BafWorkflowGateOverview, BafWorkflowGateStageRow,
 } from '../types.ts'
@@ -107,13 +108,13 @@ function OptionLine({ option, t }: {
 }
 
 /**
- * One confirm gate inside a card — 略 keeps the title + question on one
- * line; 详 adds every option with the command a click runs (and the
- * runtime-dynamic marker for gates whose options are filled live).
+ * One confirm gate inside a card — the title + question line, then every
+ * option with the command a click runs (and the runtime-dynamic marker for
+ * gates whose options are filled live). Always full (the 略 half-mode left
+ * with the 详略 switch).
  */
-function GateCard({ gate, detail, t }: {
+function GateCard({ gate, t }: {
   gate: BafWorkflowGateConfirmRow
-  detail: boolean
   t: GatesOverviewRowProps['t']
 }) {
   return (
@@ -123,18 +124,16 @@ function GateCard({ gate, detail, t }: {
         {gate.bugFix === true ? <span className={css.chip}>bug-fix</span> : null}
         <span className={css.gateQuestion}>{gate.question}</span>
       </div>
-      {detail ? (
-        <div className={css.gateOptions}>
-          {gate.options.map(option => (
-            <OptionLine key={option.id} option={option} t={t} />
-          ))}
-          {gate.dynamicOptions !== undefined && gate.options.length === 0 && (
-            <div className={css.option} data-testid={`baf-gate-dynamic-${gate.id}`}>
-              · {t('gates.dynamicOptions')}
-            </div>
-          )}
-        </div>
-      ) : null}
+      <div className={css.gateOptions}>
+        {gate.options.map(option => (
+          <OptionLine key={option.id} option={option} t={t} />
+        ))}
+        {gate.dynamicOptions !== undefined && gate.options.length === 0 && (
+          <div className={css.option} data-testid={`baf-gate-dynamic-${gate.id}`}>
+            · {t('gates.dynamicOptions')}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -148,9 +147,9 @@ function optionCommandText(option: BafWorkflowGateConfirmRow['options'][number],
       : option.command
 }
 
-/** The node's full detail as ONE pre-line string — the 略 hover Tooltip's
- * label AND the node's aria-label, so hover, focus, and screen readers all
- * read the same text the 详 flow would print inline. */
+/** The node's full detail as ONE pre-line string — the node's aria-label, so
+ * focus and screen readers read the same text the selected node's 门禁明细
+ * group prints inline. */
 function nodeDetailText(label: string, stage: BafWorkflowGateStageRow | undefined, gates: readonly BafWorkflowGateConfirmRow[], t: GatesOverviewRowProps['t']): string {
   const lines: string[] = [label]
   if (stage !== undefined) {
@@ -177,6 +176,11 @@ function nodeDetailText(label: string, stage: BafWorkflowGateStageRow | undefine
 const join = (...names: ReadonlyArray<string | undefined>): string =>
   names.filter((name): name is string => name !== undefined && name !== '').join(' ')
 
+/** The localized label for one node id; unknown ids keep their raw text. */
+function nodeLabelOf(node: string, t: GatesOverviewRowProps['t']): string {
+  return NODE_LABEL[node] !== undefined ? t(NODE_LABEL[node]) : node
+}
+
 /** Template edge conditions for one state→state step — 详 prints them beside
  * the connector (skip/loop edges to non-adjacent nodes are simply not
  * between-state steps and stay unlisted). */
@@ -188,8 +192,10 @@ function stepConditions(from: string, to: string): readonly string[] {
 
 /* ── Canvas geometry (route parity: the 多模型路由 flow constants) ───────── */
 
-/** Node card size — the route canvas's exact box. */
-const NODE_W = 192
+/** Node card size — the route canvas's box, narrowed 192→176 so the canvas
+ * and the 280px 门禁明细 column sit side-by-side even at a 760px panel
+ * (批次三 4.5 左右分布; below that the flex-wrap stacks them gracefully). */
+const NODE_W = 176
 const NODE_H = 56
 /** Gate pill size: pills sit centered ON the edge they guard. */
 const PILL_W = 176
@@ -197,10 +203,11 @@ const PILL_H = 24
 /** Vertical pitch between stacked pills inside one gap. */
 const PILL_STEP = 30
 /** Column origins (col 0 = main chain, col 1 = branches) + the recovery
- * channel's x, canvas width, and the top margin — all route values. */
-const COL_X: readonly [number, number] = [16, 236]
-const CHANNEL_X = 446
-const CANVAS_W = 460
+ * channel's x, canvas width, and the top margin — route values, rescaled
+ * to the narrowed node box. */
+const COL_X: readonly [number, number] = [12, 208]
+const CHANNEL_X = 402
+const CANVAS_W = 416
 const CANVAS_TOP = 16
 
 /** The gap below a node whose leaving edge carries `count` pills (0 → the
@@ -258,27 +265,31 @@ function GatePill({ pill, pos, t }: {
  * One state node card on the canvas — the route anatomy (name / accent /
  * meta) with the gates projection: the accent line counts the pills this
  * node's edge carries (or shows 无门禁), the meta line carries the stage
- * gate's artifact + condition count. 略 wraps the card in the hover/focus
- * Tooltip; 详 prints everything in the 门禁明细 section instead.
+ * gate's artifact + condition count. 【变更】2026-10-20 (批次三 4.5): the card
+ * is a real BUTTON — clicking it selects the node whose 门禁明细 the right
+ * column prints (aria-pressed + the selection ring); the full detail stays
+ * in the aria-label.
  */
-function CanvasNode({ node, pos, stage, gates, detail, t }: {
+function CanvasNode({ node, pos, stage, gates, selected, onSelect, t }: {
   node: string
   pos: Pos
   stage: BafWorkflowGateStageRow | undefined
   gates: readonly BafWorkflowGateConfirmRow[]
-  detail: boolean
+  selected: boolean
+  onSelect: () => void
   t: GatesOverviewRowProps['t']
 }) {
-  const label = NODE_LABEL[node] !== undefined ? t(NODE_LABEL[node]) : node
+  const label = nodeLabelOf(node, t)
   const detailText = nodeDetailText(label, stage, gates, t)
-  const card = (
-    <div
-      className={join(css.flowNode, TIER_CLASS[node] ?? css.nodeMain)}
+  return (
+    <button
+      type="button"
+      className={join(css.flowNode, TIER_CLASS[node] ?? css.nodeMain, selected ? css.nodeSelected : undefined)}
       data-testid={`baf-gate-node-${node}`}
       style={{ left: pos.x, top: pos.y, width: NODE_W, height: NODE_H }}
-      tabIndex={0}
-      role="group"
+      aria-pressed={selected}
       aria-label={detailText}
+      onClick={onSelect}
     >
       <span className={css.canvasName}>
         <span className={css.nodeIconInline}><NodeIcon id={node as WorkflowNodeId | TerminalStateId} /></span>
@@ -292,30 +303,21 @@ function CanvasNode({ node, pos, stage, gates, detail, t }: {
           {stage.artifact} · {t('gates.conditionsCount')}{String(stage.conditions.length)}
         </span>
       ) : null}
-    </div>
-  )
-  if (detail) return card
-  // 略: the whole detail rides a hover/focus Tooltip on the node.
-  return (
-    <Tooltip label={detailText} side="right" portal maxWidth={360} delayMs={120}>
-      {card}
-    </Tooltip>
+    </button>
   )
 }
 
 /**
  * The whole projection as the route-parity canvas: the framed 460px canvas
  * (main chain down col 0, branches in col 1, SVG edges with arrowheads, gate
- * pills on the guarded edges), the 详-mode 门禁明细 section inside the same
- * frame, and a trailing fallback for unanchored gates this client cannot yet
- * place.
+ * pills on the guarded edges) with the SELECTED node's 门禁明细 as the right
+ * column of a left-right split inside the same frame, and a trailing
+ * fallback for unanchored gates this client cannot yet place.
  */
-function GatesFlow({ data, mode, t }: {
+function GatesFlow({ data, t }: {
   data: BafWorkflowGateOverview
-  mode: 'detail' | 'concise'
   t: GatesOverviewRowProps['t']
 }) {
-  const detail = mode === 'detail'
   const stageByNode = new Map(data.stageGates.map(row => [row.node, row]))
   const gatesByNode = new Map<string, BafWorkflowGateConfirmRow[]>()
   const addGate = (node: string, gate: BafWorkflowGateConfirmRow): void => {
@@ -415,6 +417,28 @@ function GatesFlow({ data, mode, t }: {
   const nodeGates = (node: string): BafWorkflowGateConfirmRow[] =>
     (chainPillList.get(node) ?? []).map(pill => pill.gate)
 
+  // 【变更】2026-10-20 (批次三 4.5): the 门禁明细 column prints exactly ONE
+  // node — the selected canvas card's. picked stays null until the first
+  // click; the default selection follows the first node with anything to
+  // print (stage gate, pills, or leaving-edge conditions), 接单 otherwise.
+  const detailNodes = [...chainOrder, 'drift', 'abandoned']
+  const detailSpecs = detailNodes.map((node, index) => {
+    const stage = stageByNode.get(node)
+    const gates = nodeGates(node)
+    // The leaving-edge template conditions: the chain node's outgoing step;
+    // 漂移回归's recovery edge back into 接单.
+    const next = index < chainOrder.length - 1 ? chainOrder[index + 1] : undefined
+    const conditions = next !== undefined
+      ? stepConditions(node, next)
+      : node === 'drift' ? stepConditions('drift', 'intake') : []
+    return { node, stage, gates, conditions }
+  })
+  const [picked, setPicked] = useState<string | null>(null)
+  const firstContent = detailSpecs.find(spec =>
+    spec.stage !== undefined || spec.gates.length > 0 || spec.conditions.length > 0)
+  const selected = picked ?? firstContent?.node ?? 'intake'
+  const selectedSpec = detailSpecs.find(spec => spec.node === selected)
+
   /** One canvas node + the pills that ride its leaving edge / its stack. */
   const renderNode = (node: string): ReactNode => {
     const nodePos = pos.get(node) ?? { x: COL_X[0], y: CANVAS_TOP }
@@ -426,7 +450,8 @@ function GatesFlow({ data, mode, t }: {
           pos={nodePos}
           stage={stageByNode.get(node)}
           gates={pills.map(pill => pill.gate)}
-          detail={detail}
+          selected={node === selected}
+          onSelect={() => { setPicked(node) }}
           t={t}
         />
         {pills.map((pill, index) => (
@@ -441,62 +466,49 @@ function GatesFlow({ data, mode, t }: {
     )
   }
 
-  // 详's 门禁明细 groups — every node that has anything to print, in canvas
-  // order; each group carries the stage gate's full conditions, the template
-  // edge conditions of the node's leaving edge, and every option's command.
-  const detailNodes = [...chainOrder, 'drift', 'abandoned']
-  const detailSection = detail ? (
-    <section className={css.detail}>
+  // The right-hand 门禁明细 column — the SELECTED node's group: the stage
+  // gate's full conditions, the leaving-edge template conditions, and every
+  // option's command.
+  const detailSection = (
+    <section className={css.detail} data-testid="baf-gates-detail">
       <div className={css.detailHead}>{t('gates.detailTitle')}</div>
-      <div className={css.detailGrid}>
-        {detailNodes.map((node, index) => {
-          const stage = stageByNode.get(node)
-          const gates = nodeGates(node)
-          // The leaving-edge template conditions: the chain node's outgoing
-          // step; 漂移回归's recovery edge back into 接单.
-          const next = index < chainOrder.length - 1 ? chainOrder[index + 1] : undefined
-          const conditions = next !== undefined
-            ? stepConditions(node, next)
-            : node === 'drift' ? stepConditions('drift', 'intake') : []
-          if (stage === undefined && gates.length === 0 && conditions.length === 0) return null
-          const label = NODE_LABEL[node] !== undefined ? t(NODE_LABEL[node]) : node
-          return (
-            <div key={node} className={css.detailGroup} data-testid={`baf-gates-detail-node-${node}`}>
-              <div className={css.nodeHead}>
-                <span className={css.nodeIcon}><NodeIcon id={node as WorkflowNodeId | TerminalStateId} /></span>
-                <span className={css.nodeName}>{label}</span>
-                <span className={join(css.badge, gates.length > 0 ? css.badgeGate : css.badgeIdle)}>
-                  {gates.length > 0 ? `${t('gates.confirmCount')} ×${String(gates.length)}` : t('gates.noGate')}
-                </span>
-              </div>
-              {stage !== undefined ? (
-                <div className={css.stageLine}>
-                  <div className={join(css.nodeChip, css.mono)}>{stage.artifact}</div>
-                  <div className={css.stageMeta}><span className={css.mono}>{stage.gateFn}</span></div>
-                  {stage.conditions.length > 0 ? (
-                    <ul className={css.conditions}>
-                      {stage.conditions.map((line, conditionIndex) => <li key={conditionIndex}>{line}</li>)}
-                    </ul>
-                  ) : null}
-                  {stage.note !== undefined ? <div className={css.note}>{stage.note}</div> : null}
-                </div>
+      {selectedSpec === undefined ? null : (
+        <div className={css.detailGroup} data-testid={`baf-gates-detail-node-${selectedSpec.node}`}>
+          <div className={css.nodeHead}>
+            <span className={css.nodeIcon}><NodeIcon id={selectedSpec.node as WorkflowNodeId | TerminalStateId} /></span>
+            <span className={css.nodeName}>{nodeLabelOf(selectedSpec.node, t)}</span>
+            <span className={join(css.badge, selectedSpec.gates.length > 0 ? css.badgeGate : css.badgeIdle)}>
+              {selectedSpec.gates.length > 0
+                ? `${t('gates.confirmCount')} ×${String(selectedSpec.gates.length)}`
+                : t('gates.noGate')}
+            </span>
+          </div>
+          {selectedSpec.stage !== undefined ? (
+            <div className={css.stageLine}>
+              <div className={join(css.nodeChip, css.mono)}>{selectedSpec.stage.artifact}</div>
+              <div className={css.stageMeta}><span className={css.mono}>{selectedSpec.stage.gateFn}</span></div>
+              {selectedSpec.stage.conditions.length > 0 ? (
+                <ul className={css.conditions}>
+                  {selectedSpec.stage.conditions.map((line, conditionIndex) => <li key={conditionIndex}>{line}</li>)}
+                </ul>
               ) : null}
-              {conditions.length > 0 ? (
-                <div className={css.edgeConditions}>
-                  {conditions.map(line => <span key={line} className={css.connectorCondition}>{line}</span>)}
-                </div>
-              ) : null}
-              {gates.length > 0 ? (
-                <div className={css.gates}>
-                  {gates.map(gate => <GateCard key={gate.id} gate={gate} detail t={t} />)}
-                </div>
-              ) : null}
+              {selectedSpec.stage.note !== undefined ? <div className={css.note}>{selectedSpec.stage.note}</div> : null}
             </div>
-          )
-        })}
-      </div>
+          ) : null}
+          {selectedSpec.conditions.length > 0 ? (
+            <div className={css.edgeConditions}>
+              {selectedSpec.conditions.map(line => <span key={line} className={css.connectorCondition}>{line}</span>)}
+            </div>
+          ) : null}
+          {selectedSpec.gates.length > 0 ? (
+            <div className={css.gates}>
+              {selectedSpec.gates.map(gate => <GateCard key={gate.id} gate={gate} t={t} />)}
+            </div>
+          ) : null}
+        </div>
+      )}
     </section>
-  ) : null
+  )
 
   return (
     <div className={css.flow} data-testid="baf-gates-flow" aria-label={t('gates.canvasAria')}>
@@ -506,38 +518,43 @@ function GatesFlow({ data, mode, t }: {
           <span className={css.legendItem}><span className={css.legendPillDot} aria-hidden />{t('gates.confirmCount')}</span>
           <span className={css.legendItem}><span className={css.legendOnceChip} aria-hidden />{t('gates.onceBadge')}</span>
         </div>
-        <div className={css.flowCanvas} style={{ width: CANVAS_W, height: canvasH }}>
-          <svg className={css.flowEdges} viewBox={`0 0 ${CANVAS_W} ${canvasH}`} aria-hidden="true">
-            <defs>
-              <marker
-                id="baf-gates-flow-arrow"
-                viewBox="0 0 10 10"
-                refX="8"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" className={css.arrowHead} />
-              </marker>
-            </defs>
-            {edgeList.map((edge, index) => (
-              <path
-                key={index}
-                d={edge.d}
-                markerEnd="url(#baf-gates-flow-arrow)"
-                className={join(css.edge, edge.dashed === true ? css.edgeDashed : undefined)}
-              />
-            ))}
-          </svg>
-          {chainOrder.map(node => renderNode(node))}
-          <div className={css.branchLabel} data-testid="baf-gates-branch" style={{ left: COL_X[1], top: driftPos.y - 20 }}>
-            {t('gates.branchTitle')}
+        {/* 【变更】2026-10-20 (批次三 4.5): the canvas and the 门禁明细 split
+            the frame left-right (the 状态脚本 split layout); clicking a canvas
+            card swaps the right column to that node. */}
+        <div className={css.flowSplit}>
+          <div className={css.flowCanvas} style={{ width: CANVAS_W, height: canvasH }}>
+            <svg className={css.flowEdges} viewBox={`0 0 ${CANVAS_W} ${canvasH}`} aria-hidden="true">
+              <defs>
+                <marker
+                  id="baf-gates-flow-arrow"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 0 L 10 5 L 0 10 z" className={css.arrowHead} />
+                </marker>
+              </defs>
+              {edgeList.map((edge, index) => (
+                <path
+                  key={index}
+                  d={edge.d}
+                  markerEnd="url(#baf-gates-flow-arrow)"
+                  className={join(css.edge, edge.dashed === true ? css.edgeDashed : undefined)}
+                />
+              ))}
+            </svg>
+            {chainOrder.map(node => renderNode(node))}
+            <div className={css.branchLabel} data-testid="baf-gates-branch" style={{ left: COL_X[1], top: driftPos.y - 20 }}>
+              {t('gates.branchTitle')}
+            </div>
+            {renderNode('drift')}
+            {renderNode('abandoned')}
           </div>
-          {renderNode('drift')}
-          {renderNode('abandoned')}
+          {detailSection}
         </div>
-        {detailSection}
       </div>
       {fallbackGates.length > 0 ? (
         <section className={css.fallback} data-testid="baf-gates-once">
@@ -546,7 +563,7 @@ function GatesFlow({ data, mode, t }: {
             <span className={css.nodeHint}>{t('gates.onceHint')}</span>
           </div>
           <div className={css.gates}>
-            {fallbackGates.map(gate => <GateCard key={gate.id} gate={gate} detail={detail} t={t} />)}
+            {fallbackGates.map(gate => <GateCard key={gate.id} gate={gate} t={t} />)}
           </div>
         </section>
       ) : null}
@@ -565,7 +582,6 @@ export function GatesOverviewRow({ loadGateOverview, embeddedInTab, t }: GatesOv
   const [data, setData] = useState<BafWorkflowGateOverview | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'detail' | 'concise'>('detail')
 
   const fetchOverview = (): void => {
     if (data !== undefined || error !== undefined || loading) return
@@ -599,23 +615,11 @@ export function GatesOverviewRow({ loadGateOverview, embeddedInTab, t }: GatesOv
   return (
     <div className={css.block} data-testid="baf-gates-row" data-embedded={embedded ? 'true' : undefined}>
       <div className={css.head}>
-        {/* 【变更】2026-10-18 (工作流确认门 2.1/2.2): the intro paragraph is
-            deleted (the tab title carries the meaning); the density control is
-            the shared `Switch` primitive — the exact control the 轨迹图 row
-            uses, so the two switches on one settings page cannot drift.
-            【变更】2026-10-19 (六问题批 4.2): the labels are 详 / 略. */}
+        {/* 【变更】2026-10-20 (批次三 4.5): the 详/略 switch is deleted (the
+            flow is always 详, split canvas + selected detail) — the head keeps
+            only the collapsed-row expand/collapse toggle. Earlier: the intro
+            paragraph left with 2026-10-18 (工作流确认门 2.1/2.2). */}
         <div className={css.headActions}>
-          {showBody ? (
-            <div className={css.modeSwitch}>
-              <span className={css.modeLabel}>{t('gates.modeConcise')}</span>
-              <Switch
-                checked={mode === 'detail'}
-                label={t('gates.modeAria')}
-                onChange={(next) => { setMode(next ? 'detail' : 'concise') }}
-              />
-              <span className={css.modeLabel}>{t('gates.modeDetail')}</span>
-            </div>
-          ) : null}
           {embedded ? null : (
             <button type="button" className={css.toggle} data-testid="baf-gates-toggle" onClick={expand}>
               {expanded ? t('gates.collapse') : t('gates.expand')}
@@ -630,7 +634,7 @@ export function GatesOverviewRow({ loadGateOverview, embeddedInTab, t }: GatesOv
         ) : error !== undefined ? (
           <div className={css.statusError} data-testid="baf-gates-error">{t('gates.loadFailed')}{error}</div>
         ) : data !== undefined ? (
-          <GatesFlow data={data} mode={mode} t={t} />
+          <GatesFlow data={data} t={t} />
         ) : null
       ) : null}
     </div>

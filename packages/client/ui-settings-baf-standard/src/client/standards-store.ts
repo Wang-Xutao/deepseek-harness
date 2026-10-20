@@ -85,6 +85,12 @@ export interface StandardsOverviewFace {
   openPath(path: string): Promise<void>
   /** Open the OS folder chooser; the picked absolute path, or null on cancel. */
   pickDirectory(): Promise<string | null>
+  /**
+   * 【变更】2026-10-20 (批次三 4.4): does one workspace-relative entry exist?
+   * The 状态脚本 editor's add-time existence check; transport trouble answers
+   * `true` so a broken RPC never bricks the add flow.
+   */
+  statWorkspacePath(entry: string): Promise<boolean>
   /** 【变更】2026-10-19 (六问题批 4.1b): replace the whole 状态脚本 draft. */
   updateHooksDraft(hooks: BafStandardNodeHooks): void
   /** Persist the 状态脚本 draft through the Remote's surgical baseline write. */
@@ -160,6 +166,7 @@ export class StandardsController {
       revealPath: (path: string) => this.revealPath(path),
       openPath: (path: string) => this.openPath(path),
       pickDirectory: () => this.pickDirectory(),
+      statWorkspacePath: (entry: string) => this.statWorkspacePath(entry),
       updateHooksDraft: (hooks: BafStandardNodeHooks) => this.updateHooksDraft(hooks),
       saveNodeHooks: () => this.saveNodeHooks(),
       clearHooksNotice: () => this.clearHooksNotice(),
@@ -470,6 +477,19 @@ export class StandardsController {
       return await workspace.pickDirectory()
     } catch {
       return null
+    }
+  }
+
+  /** @inheritdoc */
+  async statWorkspacePath(entry: string): Promise<boolean> {
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.statWorkspacePath(entry)
+      if (response.ok) return response.value.exists
+      return true
+    } catch {
+      // Fail-open: a broken RPC must not brick the add flow (the save-time
+      // validation remains the authoritative gate).
+      return true
     }
   }
 }

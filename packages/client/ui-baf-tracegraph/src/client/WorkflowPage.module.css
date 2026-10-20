@@ -1,0 +1,75 @@
+/* 【变更】2026-10-19 (主页面三改 3): 工作流 promoted to a first-level page —
+ * the same .page/.pageScroll/.pageContent frame and 20px title step the
+ * Plugins and Schedules pages use, so all three siblings share one rhythm
+ * (sheet copied from ui-schedule's TaskManagerPage.module.css). */
+
+.page {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.pageScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  /* A 9px rail carries the 5px thumb inset 2px from the pane edge (rendered by
+     ui-theme styles/scrollbar.css). */
+  --dsh-scrollbar-width: 9px;
+  --dsh-scrollbar-thumb-border: 2px;
+}
+
+/* The centered column: the same 960px cap and clamp(24-48px) inline / 48px
+   bottom inset as the sibling first-level pages. */
+.pageContent {
+  max-width: 960px;
+  margin: 0 auto;
+  /* Inline and bottom insets only: the 28px top inset belongs to the heading
+     row, which starts at the window's top edge. */
+  padding: 0 clamp(24px, 4vw, 48px) 48px;
+}
+
+/* Page title row (no creation actions on this page). */
+.pageHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  /* The column's former top inset: the row starts at the window's top edge, so
+     the whole strip above the heading belongs to the row's own box. */
+  padding-top: 28px;
+  margin-bottom: 12px;
+}
+
+/* macOS hiddenInset titlebar: the sibling pages' heads carry the frame's top
+   clearance above their own 28px inset, so all three keep the same total. */
+:global([data-platform='darwin']) .pageHeading {
+  padding-top: calc(28px + var(--dsh-frame-top-clearance, 0px));
+}
+
+/* The first-level page title, on the sibling pages' own 20px/28px/500 step. */
+.pageHeading h1 {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 500;
+}
+
+/* Intro line the section carried in Settings, kept one step under the title. */
+.intro {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-tertiary);
+}

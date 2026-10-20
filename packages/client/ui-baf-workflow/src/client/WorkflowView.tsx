@@ -1083,6 +1083,15 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     <div className={css.root} data-conversation-composer-overlay="">
       <div className={css.strip} role="status">
         <span className={css.stripBrand}>BAF</span>
+        {/* 【变更】2026-10-20 (批次四 4): the active change id rides the strip
+            as an accent-tinted mono chip right after the brand — change-xx is
+            readable at a glance from every corner of the tab, and the rail
+            banner below repeats it for the sidebar reader. */}
+        {view.changeId !== null && (
+          <span className={css.stripChange} data-testid="strip-change-id" title={view.changeId}>
+            变更 {view.changeId}
+          </span>
+        )}
         <span className={css.stripItem}>
           <span className={css.stripLabel}>{t('strip.current')}</span>
           <span className={css.stripValue}>
@@ -1653,6 +1662,26 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
 
         <aside className={css.rail} style={{ width: railWidth }}>
           <div className={css.railScroll}>
+            {/* 【变更】2026-10-20 (批次四 4): the rail opens with the active
+                change banner — id in bold mono + the current node, so the
+                sidebar reader sees change-xx without hunting for it. */}
+            {view.changeId !== null && (
+              <section
+                className={clsx(css.card, css.changeBannerCard)}
+                data-testid="rail-change-banner"
+                aria-label={`变更 ${view.changeId}`}
+              >
+                <div className={css.changeBannerRow}>
+                  <span className={css.changeBannerLabel}>当前变更</span>
+                  <span className={css.changeBannerId}>{view.changeId}</span>
+                </div>
+                <div className={css.changeBannerMeta}>
+                  {view.current === null
+                    ? t('strip.idle')
+                    : t(`node.${view.current}` as WorkflowTabKey)}
+                </div>
+              </section>
+            )}
             {view.intake !== undefined && (
               <section className={clsx(css.card, css.cardAccent)} aria-label={t('intake.title')}>
                 <h3 className={css.cardTitle}>{t('intake.title')}</h3>

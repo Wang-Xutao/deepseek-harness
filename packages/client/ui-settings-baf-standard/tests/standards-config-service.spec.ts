@@ -226,6 +226,18 @@ describe('BafStandardConfigRemote (mounted)', () => {
     expect(doc.content).toContain('testing-discipline')
   })
 
+  // 【变更】2026-10-20 (批次三 4.4): the 状态脚本 editor's add-time existence
+  // check — exists only for entries inside the workspace.
+  it('stats workspace-relative entries (exists only inside the workspace)', async () => {
+    const { remote } = await workspace(true, true)
+    expect(await remote.statWorkspacePath('.baf/standards/default-rules.md')).toEqual({ exists: true })
+    expect(await remote.statWorkspacePath('scripts/ghost.sh')).toEqual({ exists: false })
+    // Anything not expressible as a workspace-relative entry is a miss.
+    expect(await remote.statWorkspacePath(join(tmpdir(), 'elsewhere'))).toEqual({ exists: false })
+    expect(await remote.statWorkspacePath('../escape.sh')).toEqual({ exists: false })
+    expect(await remote.statWorkspacePath('   ')).toEqual({ exists: false })
+  })
+
   // 【变更】2026-10-07 (九点批 问题 8): the 8 rule areas ride the summary —
   // id + locale titleKey + ANCHORED sourceRef (raw ref while placeholder).
   it('exposes the 8 rule areas with anchored sourceRefs', async () => {

@@ -132,6 +132,67 @@ describe('UpdatesSection', () => {
     expect(screen.getByText('② checklist 中文检查项')).toBeTruthy()
   })
 
+  // 【变更】2026-10-20 (批次二 3.2 → 批次四 2): the upstream release notes — the
+  // Chinese section of the repo's latest GitHub release — render INSIDE the
+  // DeepSeek Harness row (replacing its static dshNotes), with the caption
+  // naming the release; the `dsh-release-notes` testid rides the row. Null
+  // keeps the static floor and no testid anywhere.
+  it('lists the upstream release notes when the bridge fetches them', async () => {
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS }),
+      checkForUpdate: async () => AVAILABLE,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+      onUpdateProgress: () => () => {},
+      getDshReleaseNotes: async () => ({
+        tag: 'dsh-v0.2.1-rc.2',
+        name: 'v0.2.1-rc.2',
+        publishedAt: '2026-10-17T08:16:33Z',
+        lines: ['新增功能', '适配 DeepSeek-V4.1-Flash-1017 上线', '适配 DeepSeek Search 与 Fetch API'],
+      }),
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      expect(screen.getByTestId('dsh-release-notes')).toBeTruthy()
+    })
+    const block = screen.getByTestId('dsh-release-notes')
+    expect(block.textContent).toContain('upstreamTitle')
+    expect(block.textContent).toContain('v0.2.1-rc.2')
+    expect(block.textContent).toContain('适配 DeepSeek-V4.1-Flash-1017 上线')
+  })
+
+  it('renders no upstream block when the bridge answers null', async () => {
+    const bridge: BafDesktopBridge = {
+      isDesktop: true,
+      getPrefs: async () => ({ closeAction: 'ask' }),
+      setPrefs: async p => ({ closeAction: p.closeAction ?? 'ask' }),
+      getVersions: async () => ({ ...VERSIONS }),
+      checkForUpdate: async () => AVAILABLE,
+      startUpdate: async () => ({ ok: true, versions: { ...VERSIONS } }),
+      getLastCheckResult: async () => ({
+        status: 'up-to-date',
+        versions: { ...VERSIONS },
+        checkedAt: new Date().toISOString(),
+      }),
+      onUpdateProgress: () => () => {},
+      getDshReleaseNotes: async () => null,
+    }
+    window.bafDesktop = bridge
+    render(<UpdatesSection {...kit} t={t as never} />)
+    await waitFor(() => {
+      expect(screen.getByText('labelDsh')).toBeTruthy()
+    })
+    expect(screen.queryByTestId('dsh-release-notes')).toBeNull()
+  })
+
   it('auto-checks silently when no retained result exists', async () => {
     const checkForUpdate = vi.fn(async () => AVAILABLE)
     const bridge: BafDesktopBridge = {

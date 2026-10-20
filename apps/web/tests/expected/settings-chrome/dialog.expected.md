@@ -5,6 +5,18 @@
     - button "模型"
     - button "内置插件"
     - button "Agent 预设"
+    - button "多模型路由baf":
+      - text: 多模型路由
+      - superscript: baf
+    - button "版本与更新baf":
+      - text: 版本与更新
+      - superscript: baf
+    - button "推荐插件baf":
+      - text: 推荐插件
+      - superscript: baf
+    - button "用户反馈baf":
+      - text: 用户反馈
+      - superscript: baf
   - button "打开配置文件"
   - button "关闭"
   - text: 权限 选择新会话的默认权限模式

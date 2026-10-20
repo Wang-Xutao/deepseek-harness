@@ -1,4 +1,6 @@
-/* Workflow settings section — tabbed layout (Plugins settings precedent). */
+/* Workflow tab host — tabbed layout (Plugins settings precedent).
+ * 【变更】2026-10-19 (主页面三改 3): title/intro moved to the WorkflowPage
+ * shell; this sheet keeps only the tab strip + panels. */
 
 .section {
   display: flex;
@@ -6,18 +8,6 @@
   gap: 12px;
   max-width: 760px;
   color: var(--dsw-alias-label-primary);
-}
-
-.title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.intro {
-  margin: 0;
-  font-size: 13px;
-  color: var(--dsw-alias-label-tertiary);
 }
 
 .tabs {

@@ -56,6 +56,20 @@
   white-space: nowrap;
 }
 
+/* 【变更】2026-10-20 (批次二 1.2): hover chord keycap, matching the Help
+   trigger — hidden until hover/focus, decorative, never a pointer target. */
+.triggerShortcut {
+  display: inline-flex;
+  flex: none;
+  opacity: 0;
+  pointer-events: none;
+  font-weight: 400;
+}
+
+.trigger:is(:hover, :focus-visible) .triggerShortcut {
+  opacity: 1;
+}
+
 /* Full-viewport layer (figma Mask 501:29946 #000@24%): mask tokens match the
    Modal primitive (--dsw-alias-bg-mask-1 + --dsw-mask-blur). */
 .overlay {

@@ -1,11 +1,14 @@
 /**
- * 工作流 settings section: tabbed host for feature-owned workflow rows.
+ * 工作流 tabbed host for feature-owned workflow rows.
  * 【变更】2026-10-12 (工作流设置 7): General / 项目工程 / 工作流确认门 /
  * 企业规范 / 质量监控 tabs; each tab renders selected `settings.workflow.item`
  * contributions via `{ only: id }`.
+ * 【变更】2026-10-19 (主页面三改 3): the title/intro moved up to the
+ * WorkflowPage shell when the section left Settings for the main stage; this
+ * component is now purely the tab strip + tab panels.
  */
 import { useEffect, useId, useRef, useState } from 'react'
-import type { PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './WorkflowSection.module.css'
 
 /** One settings tab and the workflow item slot ids it renders. */
@@ -28,14 +31,13 @@ const WORKFLOW_TABS: readonly WorkflowSettingsTab[] = [
   { id: 'quality', labelKey: 'tabs.quality', slotIds: ['baf-standard-quality'] },
 ]
 
-/** Full component props for the section renderer. */
+/** Full component props for the tab-host renderer. */
 export type WorkflowSectionProps =
-  PropsRuntime<'settings.section'>
-  & PropsRenderSlots<'settings.workflow.item'>
+  PropsRenderSlots<'settings.workflow.item'>
   & PropsLocale<'baf.workflow'>
 
 /**
- * Render the 工作流 settings page body — tabbed preference surfaces.
+ * Render the 工作流 body — tabbed preference surfaces.
  * @param props - composed slot props.
  * @returns the section element tree.
  */
@@ -54,9 +56,6 @@ export function WorkflowSection({ renderSlot, t }: WorkflowSectionProps) {
 
   return (
     <div className={css.section} data-testid="workflow-section">
-      <h2 className={css.title}>{t('section.title')}</h2>
-      <p className={css.intro}>{t('section.intro')}</p>
-
       <div className={css.tabs} role="tablist" aria-label={t('tabs.aria')}>
         {WORKFLOW_TABS.map((tab, index) => {
           const selected = tab.id === activeId

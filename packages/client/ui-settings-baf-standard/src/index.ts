@@ -42,7 +42,7 @@ import type {
   BafStandardNodeHooks, BafStandardSaveNodeHooksResult,
   BafStandardSaveProtectedResult,
   BafStandardFieldRow, BafStandardFieldState, BafStandardPackageCard,
-  BafStandardRulesDocResult, BafStandardSummaryResult,
+  BafStandardRulesDocResult, BafStandardStatPathResult, BafStandardSummaryResult,
 } from './types.ts'
 
 /** Project workspace enterprise-pack + blockers readout (方案乙). */
@@ -474,6 +474,30 @@ export class BafStandardConfigRemote extends TypertRemoteService {
           ...(lists.exit === undefined ? {} : { exit: [...lists.exit] }),
         },
       ])),
+    }
+  }
+
+  /**
+   * 【变更】2026-10-20 (批次三 4.4): stat one workspace-relative entry — the
+   * 状态脚本 editor's add-time existence check (不存在不允许添加). Entries not
+   * expressible as workspace-relative (absolute, `..` escape, empty) answer
+   * `exists: false` without touching the filesystem.
+   * @param entry - the UI's proposed relative entry (validated here).
+   * @returns whether the entry resolves inside the workspace.
+   */
+  @Remote
+  async statWorkspacePath(entry: string): Promise<BafStandardStatPathResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { exists: false }
+    const normalized = entry.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '').trim()
+    if (normalized === '' || isAbsolute(normalized) || normalized.split('/').includes('..')) {
+      return { exists: false }
+    }
+    try {
+      await stat(join(cwd, normalized))
+      return { exists: true }
+    } catch {
+      return { exists: false }
     }
   }
 

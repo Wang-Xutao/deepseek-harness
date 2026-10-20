@@ -50,12 +50,18 @@ export function apply(ctx: ClientContext): void {
     const next = ctx.slots.entriesOfSlot('sidebar.panellist').map(({ options }) => {
       // The list registration requires an id; StoredEntry erases the slot kind.
       const id = options.id as MainPanelId
-      return { id, order: options.order ?? 0, label: resolveSlotLabel(options.label) ?? id }
+      return {
+        id,
+        order: options.order ?? 0,
+        label: resolveSlotLabel(options.label) ?? id,
+        ...(options.badge !== undefined ? { badge: options.badge } : {}),
+      }
     }).sort((a, b) => a.order - b.order)
     const previous = panels.getSnapshot()
     if (previous.length === next.length && previous.every((panel, index) => {
       const candidate = next[index] as SidebarPanelMetadata
-      return panel.id === candidate.id && panel.order === candidate.order && panel.label === candidate.label
+      return panel.id === candidate.id && panel.order === candidate.order
+        && panel.label === candidate.label && panel.badge === candidate.badge
     })) return
     panels.set(next)
   }

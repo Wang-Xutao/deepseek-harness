@@ -160,14 +160,6 @@
   line-height: 18px;
 }
 
-.scaffoldFiles {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
 .fields {
   width: 100%;
   margin-top: 8px;
@@ -347,11 +339,16 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* 【变更】2026-10-20 (批次四 3.2): the mono path values drop the dotted
+ * underline — hover is a quiet tinted pill (padding + negative margin keep
+ * the text in place), matching .configValue / .hooksEntryButton. */
 .pathValueButton {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0;
+  padding: 3px 8px;
+  margin: -3px -8px;
   border: none;
+  border-radius: 6px;
   background: none;
   font: inherit;
   font-family: var(--dsw-alias-font-mono, monospace);
@@ -359,13 +356,11 @@
   text-align: left;
   word-break: break-all;
   cursor: pointer;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 3px;
 }
 
 .pathValueButton:hover {
   color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
 }
 
 .pathActions {
@@ -445,11 +440,88 @@
   border-color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
 }
 
-.protectedFoot {
+/* 【变更】2026-10-20 (批次四 3.4): the card-title row carries the save/cancel
+ * pair at its END — 保存 is the brand-filled primary, 取消 the quiet outline
+ * (the old bottom footer and the 提交防线 hook line are deleted). */
+.cardTitleRow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.titleActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.titleSave,
+.titleCancel {
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.titleSave {
+  border: 1px solid var(--dsw-alias-brand-primary, #4a78d2);
+  background: var(--dsw-alias-brand-primary, #4a78d2);
+  color: #fff;
+}
+
+.titleSave:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.titleCancel {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.titleCancel:hover:not(:disabled) {
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  color: var(--dsw-alias-label-primary);
+}
+
+.titleSave:disabled,
+.titleCancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 【变更】2026-10-20 (批次四 3.5): the in-place 受保护路径 edit input — a bare
+ * mono input that fills the row (commit on blur/Enter, revert on Esc). */
+.rowEditInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-interactive-label-hover, var(--dsw-alias-border-l2));
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.rowEditInput:focus-visible {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary, #4a78d2);
+}
+
+/* 【变更】2026-10-20 (批次四 3.7): the 项目信息 card body — the two config rows
+ * keep their hairlines between them; the last one drops its bottom border. */
+.projectInfoRows .configRow:last-child {
+  border-bottom: none;
 }
 
 .saveButton {
@@ -475,49 +547,58 @@
   cursor: default;
 }
 
-.hookLine {
-  flex: 1 1 auto;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-/* 【变更】2026-10-19 (六问题批 4.1): the two standalone readonly config rows
- * (项目路径 / 配置文件) — label-over-mono-value in the 轨迹图 row style; the
- * value itself is the click target (no copy/open buttons). */
+/* 【变更】2026-10-20 (批次三 4.1): the two readonly config rows (项目路径 /
+ * 配置文件) adopt the 通用 tab's 轨迹图/工作流图 row anatomy — full-width
+ * label-left / control-right, 16px 0 padding, bottom hairline. The value
+ * itself is the click target (no copy/open buttons). */
 
 .configRow {
-  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
-.configLabel {
-  display: block;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 16px;
+.configTitle {
+  flex: none;
+  font-size: 14px;
+  line-height: 20px;
 }
 
+/* 【变更】2026-10-20 (批次四 3.2/3.7): no underline — hover is a quiet tinted
+ * pill (padding + negative margin keep the right edge aligned). */
 .configValue {
-  display: block;
-  margin-top: 2px;
-  padding: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 8px;
+  margin: -3px -8px;
   border: none;
+  border-radius: 6px;
   background: none;
   font: inherit;
   font-family: var(--dsw-alias-font-mono, monospace);
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-primary);
-  text-align: left;
+  text-align: right;
   word-break: break-all;
   cursor: pointer;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 3px;
 }
 
 .configValue:hover {
   color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+}
+
+/* 【变更】2026-10-20 (批次三 4.2): the ready branch is a plain vertical stack —
+ * one full-width card per item, no multi-column grid. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 /* 【变更】2026-10-19 (六问题批 4.1): the no-baseline error + 生成配置文件 row. */
@@ -600,6 +681,14 @@
   opacity: 0.55;
 }
 
+/* 【变更】2026-10-20 (批次四 3.6): an edge bridging two CONFIGURED nodes takes
+ * the configured green (opacity keeps it calm) — the configured chain reads
+ * as one lit path through the graph. */
+.hooksEdgeSet {
+  stroke: #7ba984;
+  opacity: 0.8;
+}
+
 .hooksArrow {
   fill: var(--dsw-alias-label-tertiary, #8b949e);
 }
@@ -663,6 +752,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dsw-alias-label-primary);
+}
+
+/* 【变更】2026-10-20 (批次四 3.6): the English name rides under the zh label —
+ * quiet secondary text, so the card reads zh-first but bilingual. */
+.hooksNodeEn {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 9.5px;
+  line-height: 12px;
+  letter-spacing: 0.2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .hooksNodeAccent {
@@ -747,8 +849,40 @@
   word-break: break-all;
 }
 
+/* 【变更】2026-10-20 (批次三 4.4 → 批次四 3.2): the entry itself is the click
+ * target; the dotted underline is gone — hover is the same quiet tinted pill
+ * as .pathValueButton; hover title carries the absolute path. */
+.hooksEntryButton {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 8px;
+  margin: -3px -8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.hooksEntryButton:hover {
+  color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+}
+
 .hooksEmpty {
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   line-height: 16px;
+}
+
+/* 【变更】2026-10-20 (批次四 3.6): the hidden OS file chooser both
+ * 选择脚本文件 buttons programmatic-click (display:none still opens). */
+.hiddenFileInput {
+  display: none;
 }

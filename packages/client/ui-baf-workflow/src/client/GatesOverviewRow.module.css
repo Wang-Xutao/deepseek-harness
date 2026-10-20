@@ -20,21 +20,6 @@
   gap: 10px;
 }
 
-/* 【变更】2026-10-18 (工作流确认门 2.2): the 详细/简洁 density control is the
-   shared `Switch` primitive (the exact control the 轨迹图 row uses) with a
-   label on each side — the dropdown pill is gone. */
-.modeSwitch {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.modeLabel {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
 .title {
   font-size: 14px;
   line-height: 20px;
@@ -322,6 +307,7 @@
 
 .flowCanvas {
   position: relative;
+  flex: none;
   margin: 0 auto;
 }
 
@@ -366,7 +352,8 @@
   --tier-color: var(--dsw-alias-label-tertiary, #8b949e);
 }
 
-/* The route flowNode card verbatim — minus the pointer cursor (read-only). */
+/* The route flowNode card verbatim — 【变更】2026-10-20 (批次三 4.5): the card
+   is now a selection button, so the cursor returns (pointer). */
 .flowNode {
   position: absolute;
   z-index: 1;
@@ -385,7 +372,7 @@
   );
   border: 1px solid color-mix(in srgb, var(--tier-color) 45%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
   border-radius: 10px;
-  cursor: default;
+  cursor: pointer;
   outline: none;
   transition: transform 160ms ease, border-color 160ms ease;
 }
@@ -394,6 +381,12 @@
 .flowNode:focus-visible {
   border-color: var(--tier-color);
   transform: translateY(-2px);
+}
+
+/* The selected canvas node anchors the 门禁明细 column (the 状态脚本 ring). */
+.nodeSelected {
+  border-color: var(--tier-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tier-color) 25%, transparent);
 }
 
 .flowNode:focus-visible {
@@ -495,11 +488,23 @@
   white-space: nowrap;
 }
 
-/* 详's 门禁明细 section — inside the canvas frame, under the graph. */
-.detail {
-  margin-top: 12px;
+/* 【变更】2026-10-20 (批次三 4.5): the canvas and the selected node's 门禁明细
+   split the frame left-right — the 状态脚本 hooksSplit layout (canvas keeps
+   its fixed width, the detail column takes the rest and never wraps under). */
+.flowSplit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 14px;
   padding: 10px 12px 12px;
-  border-top: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.2));
+}
+
+/* The right-hand 门禁明细 column — the 状态脚本 hooksEditor treatment. */
+.detail {
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 10px 2px 2px 14px;
+  border-left: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.2));
 }
 
 .detailHead {
@@ -508,12 +513,6 @@
   line-height: 18px;
   font-weight: 600;
   color: var(--dsw-alias-label-secondary);
-}
-
-.detailGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 10px;
 }
 
 .detailGroup {
