@@ -286,8 +286,10 @@ export function ModelRoutingRow({
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null)
   const [keywordEdit, setKeywordEdit] = useState<KeywordEdit | null>(null)
   const [previewText, setPreviewText] = useState('')
-  /** 【变更】2026-10-12: restore tabbed layout; 高级 carries 恢复默认 (1.3). */
-  const [routeTab, setRouteTab] = useState<'tiers' | 'phase' | 'keywords' | 'advanced'>('tiers')
+  /** 【变更】2026-10-12: restore tabbed layout; 高级 carries 恢复默认 (1.3).
+   * 【变更】2026-10-20 (批次七 1): the dry-run moves OUT of 关键词规则 into
+   * its own 预演 tab (multi-line summary + hero verdict card). */
+  const [routeTab, setRouteTab] = useState<'tiers' | 'phase' | 'keywords' | 'preview' | 'advanced'>('tiers')
   const tabsId = useId()
   const draft = state.draft
   // 1.6 热加载: while the box holds text, any draft edit (keyword add/remove,
@@ -535,6 +537,7 @@ export function ModelRoutingRow({
           ['tiers', 'tiersTitle'],
           ['phase', 'phaseTitle'],
           ['keywords', 'keywordsTitle'],
+          ['preview', 'previewTitle'],
           ['advanced', 'advancedTitle'],
         ] as const).map(([id, labelKey]) => {
           const selected = routeTab === id
@@ -902,21 +905,37 @@ export function ModelRoutingRow({
           t={t}
           onAdd={addKeywordFrom}
         />
+        {/* 【变更】2026-10-20 (批次七 1): the dry-run block moved out of the
+            keywords panel into its own 预演 tab (see route-panel-preview). */}
+      </div>
 
+      {/* 【变更】2026-10-20 (批次七 1): the dry-run as its OWN tab — the
+          keywords panel is rules-only now; 预演 carries a multi-line task
+          summary box plus a HERO verdict card (tier-tinted headline with the
+          role name and dispatched model, detail lines beneath) so the routing
+          result reads at a glance. */}
+      <div
+        className={css.block}
+        id={`${tabsId}-panel-preview`}
+        role="tabpanel"
+        aria-labelledby={`${tabsId}-tab-preview`}
+        hidden={routeTab !== 'preview'}
+        data-testid="route-panel-preview"
+      >
         <div className={css.previewBlock}>
-          <div className={css.blockTitle}>{t('previewTitle')}</div>
-          <div className={css.previewBar}>
-            <input
-              className={css.input}
-              data-testid="route-preview-input"
-              placeholder={t('previewPlaceholder')}
-              value={previewText}
-              onChange={(event) => { setPreviewText(event.currentTarget.value) }}
-            />
-          </div>
-          {/* 【变更】2026-10-20 (批次二 2.7/2.8): the auto-run hint and the
-              verify-retry simulation switch + hints are gone; the result card
-              carries the matched grade's tier accent (border, dot, role text). */}
+          <textarea
+            className={css.previewInput}
+            data-testid="route-preview-input"
+            placeholder={t('previewPlaceholder')}
+            aria-label={t('previewTitle')}
+            rows={4}
+            value={previewText}
+            onChange={(event) => { setPreviewText(event.currentTarget.value) }}
+          />
+          {/* 【变更】2026-10-20 (批次二 2.8 → 批次七 1): the simulation switch
+              stays gone; the verdict is a hero card carrying the matched
+              grade's tier accent (tinted headline + border, colored dot and
+              role text) with the matched keyword / model details beneath. */}
           {state.preview === undefined ? undefined : (
             <div
               className={join(css.preview, state.preview.tier === null ? '' : TIER_CLASS[state.preview.tier])}
@@ -926,28 +945,35 @@ export function ModelRoutingRow({
                 <div className={css.previewLine}>{t('previewNone')}</div>
               ) : (
                 <>
-                  <div className={css.previewLine}>
-                    <span className={css.previewLabel}>{t('previewMatched')}</span>
-                    <span>{state.preview.matched ?? '—'}</span>
-                  </div>
-                  <div className={css.previewLine}>
-                    <span className={css.previewLabel}>{t('previewRole')}</span>
-                    <span className={join(css.previewTier, TIER_CLASS[state.preview.tier])}>
-                      <span className={join(css.dot, TIER_CLASS[state.preview.tier])} aria-hidden="true" />
+                  <div className={join(css.previewHero, TIER_CLASS[state.preview.tier])}>
+                    <span className={css.previewHeroLabel}>{t('previewRole')}</span>
+                    <span className={css.previewHeroTier}>
+                      <span className={join(css.previewHeroDot, TIER_CLASS[state.preview.tier])} aria-hidden="true" />
                       {t(tierKey(state.preview.tier))}
+                      <span className={css.previewHeroModel}>
+                        {state.preview.provider !== undefined && state.preview.model !== undefined
+                          ? `${state.preview.provider} / ${state.preview.model}`
+                          : '—'}
+                      </span>
                     </span>
                   </div>
-                  <div className={css.previewLine}>
-                    <span className={css.previewLabel}>{t('previewModel')}</span>
-                    <span>
-                      {state.preview.provider !== undefined && state.preview.model !== undefined
-                        ? `${state.preview.provider} / ${state.preview.model}`
-                        : '—'}
-                    </span>
+                  <div className={css.previewDetails}>
+                    <div className={css.previewLine}>
+                      <span className={css.previewLabel}>{t('previewMatched')}</span>
+                      <span>{state.preview.matched ?? '—'}</span>
+                    </div>
+                    <div className={css.previewLine}>
+                      <span className={css.previewLabel}>{t('previewModel')}</span>
+                      <span>
+                        {state.preview.provider !== undefined && state.preview.model !== undefined
+                          ? `${state.preview.provider} / ${state.preview.model}`
+                          : '—'}
+                      </span>
+                    </div>
+                    {state.preview.escalated === true
+                      ? <div className={css.previewNote}>{t('previewEscalated')}</div>
+                      : null}
                   </div>
-                  {state.preview.escalated === true
-                    ? <div className={css.previewNote}>{t('previewEscalated')}</div>
-                    : null}
                 </>
               )}
             </div>

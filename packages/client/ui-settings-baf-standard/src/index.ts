@@ -29,36 +29,20 @@ import {
   validateNodeHooks, validateProtectedPaths, type BaselineManifest,
 } from '@deepseek-ai/dsh-baf-core'
 import { commitGuardHookInstalled, installCommitGuardHook } from '@deepseek-ai/dsh-baf-guard/commit-hook'
-import { collectStatusBlockers } from '@deepseek-ai/dsh-baf-quality'
 import { scaffoldWorkspace } from '@deepseek-ai/dsh-baf-scaffold'
 import {
-  detectAppliedEnterprisePacks,
   readEnterpriseDoc,
   STANDARD_AREAS, STANDARD_PLACEHOLDER, summarizeStandard,
 } from '@deepseek-ai/dsh-baf-standard'
 // Type-only: pulls the session store's Context merge (ctx.sessions).
 import type {} from '@deepseek-ai/dsh-session'
 import type {
-  BafEnterpriseDocResult, BafEnterpriseStandardsStatus, BafStandardGenerateResult,
+  BafEnterpriseDocResult, BafStandardGenerateResult,
   BafStandardNodeHooks, BafStandardSaveNodeHooksResult,
   BafStandardSaveProtectedResult,
   BafStandardFieldRow, BafStandardFieldState, BafStandardPackageCard,
   BafStandardRulesDocResult, BafStandardStatPathResult, BafStandardSummaryResult,
 } from './types.ts'
-
-/** Project workspace enterprise-pack + blockers readout (方案乙). */
-function projectEnterpriseStandards(cwd: string): BafEnterpriseStandardsStatus {
-  const appliedPacks = detectAppliedEnterprisePacks(cwd)
-  const blockers = collectStatusBlockers({ workspaceRoot: cwd })
-  const errors = blockers.blockers.filter(row => row.severity === 'error')
-  const warnings = blockers.blockers.filter(row => row.severity !== 'error')
-  return {
-    appliedPacks: [...appliedPacks],
-    blockerErrors: errors.length,
-    blockerWarnings: warnings.length,
-    blockerLines: blockers.blockers.slice(0, 8).map(row => `${row.id}: ${row.message}`),
-  }
-}
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -250,7 +234,6 @@ export class BafStandardConfigRemote extends TypertRemoteService {
         status: 'no-baseline',
         cwd,
         baselinePath,
-        enterpriseStandards: projectEnterpriseStandards(cwd),
       }
     }
     let manifest: BaselineManifest
@@ -281,7 +264,6 @@ export class BafStandardConfigRemote extends TypertRemoteService {
         sourceRef: area.sourceRef,
       })),
       cards: projectStandardCards(manifest),
-      enterpriseStandards: projectEnterpriseStandards(cwd),
       // 【变更】2026-10-18 (项目工程 1.3): raw protected-paths list + commit
       // 防线 presence for the editable AI 禁改路径 card.
       guardProtectedPaths: [...manifest.guard.protectedPaths],

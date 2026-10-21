@@ -13,7 +13,9 @@ const zh = {
   // 【变更】2026-10-19 (六问题批 4.1/4.3): panelProject*/panelStandard* heads are
   // deleted — the tab labels already carry the meaning.
   panelQualityTitle: '质量监控',
-  panelQualityDescription: '编译、构建、测试与覆盖率门禁的 stack 配置只读投影。',
+  // 【变更】2026-10-20 (批次七 2.5): the description now covers the real
+  // baf-quality toolchain assets below the baseline stack projection.
+  panelQualityDescription: 'stack 配置只读投影 + baf-quality 真实工具链资产（环境搭建、配置、规范文档）。',
   statusLoading: '正在读取工作区基线…',
   statusNoWorkspace: '还没有打开的工作区。先在会话里打开一个项目目录（或在项目里运行 /baf-scaffold 搭好 BAF 工作区），这里就能显示它的规范配置。',
   statusNoBaseline: '当前工作区还没有 BAF 基线（.baf/baseline.yml）。在会话里运行 /baf-scaffold 即可生成：基线配置 + 默认规则文档 + openspec 目录，一步到位。',
@@ -96,8 +98,8 @@ const zh = {
   // + rules-doc viewer keys RETIRE — the 企业规范 tab renders the REAL
   // bafplugin standards as a workflow flow chart (which standard applies at
   // which state; click to read the document itself).
-  enterpriseFlowTitle: '企业规范流程图',
-  enterpriseFlowDesc: '真实企业规范（自 bafplugin 迁入）按工作流状态标注适用位置；点击状态查看该状态的规范清单，点击规范阅读原文。',
+  // 【变更】2026-10-20 (批次七 2.1): enterpriseFlowTitle/Desc retire — the
+  // card's title + description rows are gone (the tab label already says it).
   enterpriseFlowAria: '企业规范状态流程图',
   enterpriseLegendDocs: '适用规范',
   enterpriseNodeNone: '无适用规范',
@@ -108,8 +110,13 @@ const zh = {
   enterpriseDocLoading: '正在读取规范文档…',
   enterpriseDocUnknown: '未找到该规范文档。',
   enterpriseDocUnreadable: '规范文档读取失败：',
-  qualityMechanismTitle: '门禁机制（产品内置）',
-  qualityMechanismBody: '质量监控在验证（verify）阶段执行门禁：按基线 stack 配置构建（build）、跑测试（test）、校验覆盖率（coverage）与静态检查（analyzers）。机制是产品固定的；具体命令与阈值是项目参数，由下方基线 stack 卡片只读展示。',
+  // 【变更】2026-10-20 (批次七 2.5): the static gate-mechanism keys retire —
+  // the 质量监控 tab now lists the REAL baf-quality toolchain assets.
+  qualityToolchainTitle: '质量工具链（baf-quality · 真实资产）',
+  qualityGroupEnv: '环境搭建',
+  qualityGroupConfig: '配置',
+  qualityGroupStandard: '规范文档',
+  qualityDocsPick: '点击条目在右侧打开原文。',
   cardTitleWorkflow: 'baf-workflow · 流程引擎',
   cardDescWorkflow: '驱动 intake → open → clarify → design → plan → implement → verify → archive 八节点流程：阶段门禁、工单派发、verify 复核与归档都在这一个包里。',
   cardCommandWorkflow: '会话内 /baf-go 接单开工',
@@ -130,13 +137,9 @@ const zh = {
   cardCommandGuard: 'scaffold / archive / abandon 前自动拦截',
   // 【变更】2026-10-20 (批次三 4.2): cardTitleBaseline…scaffoldFileOpenspec 退役 —
   // 基线档案头卡与脚手架卡随项目工程页瘦身一起删除。
-  enterprisePacksTitle: '企业规范资产（方案乙）',
-  enterprisePacksDesc: '从 bafplugin 迁入的 C/提交/UT/宪法模板与机读门。未写入时在会话运行 /baf-standard-init。',
-  enterprisePacksApplied: '已应用资产包',
-  enterprisePacksNone: '尚未检测到企业资产包（可运行 /baf-standard-init）',
-  enterpriseBlockersLabel: '机读门',
-  enterpriseBlockersClear: '无 error 级阻断',
-  enterpriseCommandHint: '会话内 /baf-standard-init（可选 packs：c,commitlint,constitution,quality,scripts,skills）',
+  // 【变更】2026-10-20 (批次七 2.2): enterprisePacks* / enterpriseBlockers* /
+  // enterpriseCommandHint retire — the 企业规范资产（方案乙）card is deleted;
+  // the tab is the flow chart + document viewer, nothing else.
 }
 
 const en = {
@@ -144,7 +147,7 @@ const en = {
   rowDescription: 'Current rule values, purpose, and config location for each of the seven BAF plugin packages. To change a rule: edit .baf/baseline.yml in the workspace (refresh here to see it); rule CONTENT lives in the rules document.',
   // 2026-10-19 (六问题批 4.1/4.3): panelProject*/panelStandard* heads deleted.
   panelQualityTitle: 'Quality monitoring',
-  panelQualityDescription: 'Read-only projection of compile, build, test, and coverage gates from the stack config.',
+  panelQualityDescription: 'Read-only stack gate projection plus the real baf-quality toolchain assets (env setup, config, standards docs).',
   statusLoading: 'Reading the workspace baseline…',
   statusNoWorkspace: 'No open workspace yet. Open a project directory in a session (or run /baf-scaffold inside one) and its standards config shows up here.',
   statusNoBaseline: 'This workspace has no BAF baseline (.baf/baseline.yml) yet. Run /baf-scaffold in a session: baseline + default rules document + the openspec directory, in one step.',
@@ -208,8 +211,7 @@ const en = {
   stateTbd: 'enterprise TBD',
   stateAvailabilityReady: 'ready (rules doc wired)',
   stateAvailabilityMissing: 'policy_missing (rules doc not configured)',
-  enterpriseFlowTitle: 'Standards flow chart',
-  enterpriseFlowDesc: 'The real enterprise standards (migrated from bafplugin) marked on the workflow states where they apply; click a state to list its standards, click a standard to read the document.',
+  // (批次七 2.1) enterpriseFlowTitle/Desc retire with the card's title rows.
   enterpriseFlowAria: 'Enterprise standards flow chart',
   enterpriseLegendDocs: 'standards apply',
   enterpriseNodeNone: 'No standards apply',
@@ -220,8 +222,13 @@ const en = {
   enterpriseDocLoading: 'Reading the standard…',
   enterpriseDocUnknown: 'This standard document was not found.',
   enterpriseDocUnreadable: 'Standard read failed: ',
-  qualityMechanismTitle: 'Gate mechanism (built in)',
-  qualityMechanismBody: 'Quality gates run at the verify stage: build, test, coverage, and static analyzers, per the baseline\'s stack config. The mechanism is product-fixed; the concrete commands and thresholds are project parameters, shown read-only in the stack card below.',
+  // (批次七 2.5) the static gate-mechanism keys retire — the Quality tab lists
+  // the REAL baf-quality toolchain assets instead.
+  qualityToolchainTitle: 'Quality toolchain (baf-quality · real assets)',
+  qualityGroupEnv: 'Environment setup',
+  qualityGroupConfig: 'Configuration',
+  qualityGroupStandard: 'Standards docs',
+  qualityDocsPick: 'Click an entry to open it on the right.',
   cardTitleWorkflow: 'baf-workflow · process engine',
   cardDescWorkflow: 'Drives the intake → open → clarify → design → plan → implement → verify → archive eight-node flow: stage gates, work-order dispatch, verify review, and archiving.',
   cardCommandWorkflow: '/baf-go in a session',
@@ -240,13 +247,8 @@ const en = {
   cardTitleGuard: 'baf-guard · safety rails',
   cardDescGuard: 'Secret scanning, protected-path interception, and the actions that require human confirmation.',
   cardCommandGuard: 'Intercepts before scaffold / archive / abandon',
-  enterprisePacksTitle: 'Enterprise standards assets (Plan B)',
-  enterprisePacksDesc: 'C/commit/UT/constitution templates and machine-readable gates migrated from bafplugin. If missing, run /baf-standard-init in a session.',
-  enterprisePacksApplied: 'Applied packs',
-  enterprisePacksNone: 'No enterprise packs detected yet (run /baf-standard-init)',
-  enterpriseBlockersLabel: 'Status blockers',
-  enterpriseBlockersClear: 'No error-severity blockers',
-  enterpriseCommandHint: '/baf-standard-init in a session (optional packs: c,commitlint,constitution,quality,scripts,skills)',
+  // (批次七 2.2) enterprisePacks* / enterpriseBlockers* / enterpriseCommandHint
+  // retire — the Plan-B assets card is deleted from the 企业规范 tab.
 }
 
 /** Dictionary key union for the baf.standard namespace. */

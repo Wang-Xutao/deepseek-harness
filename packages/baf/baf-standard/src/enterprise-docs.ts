@@ -107,18 +107,97 @@ export const ENTERPRISE_DOCS: readonly EnterpriseDocEntry[] = [
 
 /** {@link readEnterpriseDoc} outcome. */
 export type EnterpriseDocRead =
-  | { readonly status: 'ready'; readonly entry: EnterpriseDocEntry; readonly path: string; readonly content: string }
+  | {
+    readonly status: 'ready'
+    /** The matched catalog row (standards or quality — ids are disjoint). */
+    readonly entry: EnterpriseDocEntry | QualityDocEntry
+    readonly path: string
+    readonly content: string
+  }
   | { readonly status: 'unknown' }
   | { readonly status: 'unreadable'; readonly reason: string }
 
 /**
- * Read one cataloged document's full text from the package assets.
+ * 【变更】2026-10-20 (批次七 2.5): the 质量监控 tab's REAL baf-quality assets —
+ * environment setup (templates README), configuration (project.yml /
+ * config.json / CPPLINT.cfg / suppressions), and the toolchain's own skill
+ * docs. Rendered as grouped rows by the client mirror; the three STANDARDS
+ * skills themselves stay cataloged in {@link ENTERPRISE_DOCS} (ids `static` /
+ * `ut` / `utlist`) and the quality UI re-uses those ids instead of duplicating
+ * entries here, so an id resolves in exactly one catalog.
+ */
+export type QualityDocGroup = 'env' | 'config'
+
+/** One cataloged quality-toolchain document. */
+export interface QualityDocEntry {
+  /** Stable doc id (`env-ut` / `cfg-project` / …). */
+  readonly id: string
+  /** Chinese title. */
+  readonly titleZh: string
+  /** English title. */
+  readonly titleEn: string
+  /** Posix path under `assets/enterprise`. */
+  readonly rel: string
+  /** Presentation group (环境搭建 / 配置). */
+  readonly group: QualityDocGroup
+}
+
+/** The quality catalog — presentation order is the group order. */
+export const QUALITY_DOCS: readonly QualityDocEntry[] = [
+  {
+    id: 'env-ut',
+    titleZh: 'C 单元测试工程说明（Ceedling）',
+    titleEn: 'UT project guide (Ceedling)',
+    rel: 'quality/ceedling/README.md',
+    group: 'env',
+  },
+  {
+    id: 'env-static',
+    titleZh: '静态分析入仓资产说明（cpplint + cppcheck）',
+    titleEn: 'Static-analysis assets guide',
+    rel: 'quality/static-analysis/README.md',
+    group: 'env',
+  },
+  {
+    id: 'cfg-project',
+    titleZh: 'Ceedling 工程配置 project.yml',
+    titleEn: 'Ceedling project.yml',
+    rel: 'quality/ceedling/project.yml',
+    group: 'config',
+  },
+  {
+    id: 'cfg-config',
+    titleZh: '质量门配置 config.json',
+    titleEn: 'Quality gate config.json',
+    rel: 'quality/ceedling/config.json',
+    group: 'config',
+  },
+  {
+    id: 'cfg-cpplint',
+    titleZh: 'CPPLINT.cfg（SORA 风格定制）',
+    titleEn: 'CPPLINT.cfg (SORA style)',
+    rel: 'quality/static-analysis/CPPLINT.cfg',
+    group: 'config',
+  },
+  {
+    id: 'cfg-cppcheck',
+    titleZh: 'cppcheck 抑制文件',
+    titleEn: 'cppcheck suppressions',
+    rel: 'quality/static-analysis/cppcheck-suppressions.xml',
+    group: 'config',
+  },
+]
+
+/**
+ * Read one cataloged document's full text from the package assets (the
+ * standards catalog first, then the quality catalog — ids are disjoint).
  * @param id - catalog id.
  * @returns ready with the absolute path + content, unknown for an uncataloged
  * id, unreadable with the IO reason.
  */
 export function readEnterpriseDoc(id: string): EnterpriseDocRead {
   const entry = ENTERPRISE_DOCS.find(doc => doc.id === id)
+    ?? QUALITY_DOCS.find(doc => doc.id === id)
   if (entry === undefined) return { status: 'unknown' }
   const path = join(enterpriseAssetsRoot(), ...entry.rel.split('/'))
   try {

@@ -713,35 +713,35 @@
   border-radius: 6px;
 }
 
-/* 1.6: the dry-run rides as a nested sub-block at the tail of 关键词规则 —
-   visually set apart without introducing a fourth page block. */
+/* 【变更】2026-10-20 (批次七 1): the dry-run is its OWN panel now (route-panel-
+   preview), so the sub-block separator retires — it is the whole tab body. */
 .previewBlock {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  gap: 10px;
 }
 
-.previewBar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* 批次七 1: the task summary is a MULTI-LINE box — a task sentence needs room,
+   and Enter must make a newline, not submit. Same skin as .input. */
+.previewInput {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  min-height: 84px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsh-alias-label-primary, inherit);
+  background: transparent;
+  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border-radius: 6px;
+  resize: vertical;
 }
 
-.previewBar .input {
-  flex: 1 1 auto;
-}
-
-/* 批次C: the verify-retry simulation switch rides under the run bar. */
-.previewOpt {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
+.previewInput:focus-visible {
+  outline: 2px solid var(--dsw-alias-focus, rgba(127, 127, 127, 0.5));
+  outline-offset: -1px;
 }
 
 /* 【变更】2026-10-20 (批次二 2.8): the result card carries the matched grade's
@@ -750,7 +750,7 @@
 .preview {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-left: 3px solid var(--tier-color, var(--dsw-alias-border-l2));
@@ -760,12 +760,60 @@
   background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-primary));
 }
 
-.previewTier {
-  display: inline-flex;
+/* 【变更】2026-10-20 (批次七 1): the verdict HERO — a tier-tinted headline band
+   (label + big role name + dispatched model chip) so the routing result reads
+   at a glance; the detail lines ride beneath it. */
+.previewHero {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tier-color, #7f7f7f) 14%, transparent);
+}
+
+.previewHeroLabel {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.previewHeroTier {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 600;
+  gap: 8px;
+  min-width: 0;
+  font-size: 19px;
+  line-height: 26px;
+  font-weight: 700;
   color: var(--tier-color, inherit);
+}
+
+.previewHeroDot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--tier-color, currentcolor);
+}
+
+.previewHeroModel {
+  min-width: 0;
+  overflow: hidden;
+  margin-left: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 2px 0 12px;
 }
 
 .previewLine {

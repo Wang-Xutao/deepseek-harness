@@ -47,15 +47,6 @@
   background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
 }
 
-/* 【变更】2026-10-13 (问题 4 批): the always-on gate-mechanism card rides the
- * same visual treatment as the grid cards (it sits OUTSIDE the grid). */
-.mechanismCard {
-  padding: 16px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
-  margin-top: 12px;
-}
-
 .status {
   margin-top: 12px;
   color: var(--dsw-alias-label-secondary);
@@ -94,6 +85,7 @@
 }
 
 .card {
+  position: relative;
   padding: 12px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
@@ -230,6 +222,38 @@
   line-height: 16px;
 }
 
+/* 【变更】2026-10-20 (批次七 2.5): the quality toolchain card — grouped real
+ * asset rows on the left, the shared document pane on the right when open. */
+.qualitySplit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 14px;
+  padding: 10px 12px 12px;
+}
+
+.qualityGroups {
+  flex: 1 1 320px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.qualityGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.qualityGroupLabel {
+  margin: 0 0 6px;
+  padding-left: 7px;
+  border-left: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 55%, transparent);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .docHint {
   margin-top: 8px;
   color: var(--dsw-alias-label-tertiary);
@@ -237,11 +261,28 @@
   line-height: 16px;
 }
 
-/* The in-card document viewer — head (title + open/close) over the full text. */
-.docViewer {
-  margin: 0 12px 12px;
-  padding-top: 8px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
+/* 【变更】2026-10-20 (批次七 2.3 v2): the document pane DOCKS to the card's
+   right edge as an absolute drawer — the workflow content column is ~730px
+   wide, so a third inline column never fits beside canvas+detail; a docked
+   overlay (like an opened file pane in an IDE) is right-side at ANY width. */
+.docSide {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 84%);
+  padding: 12px 12px 12px 14px;
+  border-left: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 0 8px 8px 0;
+  /* 批次七 2.3 v3: this page never defines --dsw-alias-bg-primary (body is
+     plain white, cards transparent), so without a fallback the drawer rendered
+     TRANSPARENT and the rows beneath bled through the document text. */
+  background: var(--dsw-alias-bg-primary, #ffffff);
+  box-shadow: -14px 0 28px rgba(0, 0, 0, 0.14);
 }
 
 .docViewerHead {
@@ -249,6 +290,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-top: 0;
 }
 
 .docViewerTitle {
@@ -263,7 +305,10 @@
 }
 
 .docBody {
-  max-height: 360px;
+  /* 批次七 2.3 v2: the drawer bounds the pane, so the body flexes to the full
+     pane height instead of a fixed max-height cap. */
+  flex: 1 1 auto;
+  min-height: 0;
   margin: 8px 0 0;
   padding: 8px;
   overflow: auto;

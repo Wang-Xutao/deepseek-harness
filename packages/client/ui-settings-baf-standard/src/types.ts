@@ -46,18 +46,6 @@ export interface BafStandardAreaRow {
   readonly sourceRef: string
 }
 
-/** One enterprise-pack presence / blockers readout (方案乙). */
-export interface BafEnterpriseStandardsStatus {
-  /** Packs whose marker files are present (`c` / `commitlint` / …). */
-  readonly appliedPacks: readonly string[]
-  /** Error-severity blocker count from collectStatusBlockers. */
-  readonly blockerErrors: number
-  /** Warning/info blocker count. */
-  readonly blockerWarnings: number
-  /** Short lines for the settings card (`id: message`). */
-  readonly blockerLines: readonly string[]
-}
-
 /** `summary()` outcome — every non-ready status carries its own empty state. */
 export interface BafStandardSummaryResult {
   readonly status: 'ready' | 'no-workspace' | 'no-baseline' | 'failed'
@@ -70,8 +58,6 @@ export interface BafStandardSummaryResult {
   /** 【变更】2026-10-07 (九点批 问题 8): the 8 rule areas, anchored. */
   readonly standardAreas?: readonly BafStandardAreaRow[]
   readonly cards?: readonly BafStandardPackageCard[]
-  /** 方案乙: enterprise asset pack presence + machine-readable blockers. */
-  readonly enterpriseStandards?: BafEnterpriseStandardsStatus
   /**
    * 【变更】2026-10-18 (项目工程 1.3): the raw AI 禁改路径 list (baseline
    * `guard.protectedPaths`, verbatim including the enterprise placeholder) so

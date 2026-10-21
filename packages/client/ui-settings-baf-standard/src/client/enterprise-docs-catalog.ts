@@ -108,3 +108,60 @@ export const ENTERPRISE_DOC_ROWS: readonly EnterpriseDocRow[] = [
     nodes: ['verify'],
   },
 ]
+
+/**
+ * 【变更】2026-10-20 (批次七 2.5): the 质量监控 tab's REAL baf-quality assets —
+ * environment setup + configuration files (host source of truth:
+ * baf-standard's `QUALITY_DOCS`). The three standards SKILLs themselves stay
+ * in ENTERPRISE_DOC_ROWS and the quality UI references those ids, so an id
+ * resolves in exactly one catalog.
+ */
+export type QualityDocGroup = 'env' | 'config'
+
+/** One mirrored quality document (display fields only — no path, no IO). */
+export interface QualityDocRow {
+  readonly id: string
+  readonly titleZh: string
+  readonly titleEn: string
+  readonly group: QualityDocGroup
+}
+
+/** The quality mirror, in the host catalog's presentation order. */
+export const QUALITY_DOC_ROWS: readonly QualityDocRow[] = [
+  {
+    id: 'env-ut',
+    titleZh: 'C 单元测试工程说明（Ceedling）',
+    titleEn: 'UT project guide (Ceedling)',
+    group: 'env',
+  },
+  {
+    id: 'env-static',
+    titleZh: '静态分析入仓资产说明（cpplint + cppcheck）',
+    titleEn: 'Static-analysis assets guide',
+    group: 'env',
+  },
+  {
+    id: 'cfg-project',
+    titleZh: 'Ceedling 工程配置 project.yml',
+    titleEn: 'Ceedling project.yml',
+    group: 'config',
+  },
+  {
+    id: 'cfg-config',
+    titleZh: '质量门配置 config.json',
+    titleEn: 'Quality gate config.json',
+    group: 'config',
+  },
+  {
+    id: 'cfg-cpplint',
+    titleZh: 'CPPLINT.cfg（SORA 风格定制）',
+    titleEn: 'CPPLINT.cfg (SORA style)',
+    group: 'config',
+  },
+  {
+    id: 'cfg-cppcheck',
+    titleZh: 'cppcheck 抑制文件',
+    titleEn: 'cppcheck suppressions',
+    group: 'config',
+  },
+]

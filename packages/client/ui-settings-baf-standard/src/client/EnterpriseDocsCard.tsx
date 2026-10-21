@@ -4,15 +4,19 @@
  * zh+en name line, SVG bezier edges) where each node card's accent line lists
  * the SHORT tags of the standards that apply at that state; clicking a node
  * opens its 标准 list in the right-hand detail column, and clicking a
- * standard fetches the document's full text (bafplugin-migrated package
- * assets, served via the Remote's `enterpriseDoc`) into the in-card viewer —
- * real documents, never the constitution TODO placeholders.
+ * standard opens the document (bafplugin-migrated package assets, served via
+ * the Remote's `enterpriseDoc`) in the RIGHT-HAND side pane — real documents,
+ * never the constitution TODO placeholders.
+ * 【变更】2026-10-20 (批次七 2.1/2.3): the card title + description rows are
+ * gone (the tab label already says it); the document viewer moved from below
+ * the split into a third right column (canvas | detail | document), like an
+ * opened file.
  */
 import { useState } from 'react'
-import type { BafEnterpriseDocResult } from '../types.ts'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import type { BafStandardKey } from './locales.ts'
 import type { StandardsPanelProps } from './StandardsOverview.tsx'
+import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
 import { ENTERPRISE_DOC_ROWS, type EnterpriseDocNode, type EnterpriseDocRow } from './enterprise-docs-catalog.ts'
 import css from './StandardsOverview.module.css'
 
@@ -37,8 +41,9 @@ const CANVAS_TOP = 16
 const CANVAS_W = NODE_X + NODE_W + NODE_X
 const CANVAS_H = NODES.length * NODE_H + (NODES.length - 1) * NODE_GAP + CANVAS_TOP * 2
 
-/** Locale key per node — the SAME vocabulary the 状态脚本 canvas uses. */
-const NODE_LABEL_KEYS: Record<EnterpriseDocNode, BafStandardKey> = {
+/** Locale key per node — the SAME vocabulary the 状态脚本 canvas uses
+ * (exported for the quality card's standards-row meta line). */
+export const NODE_LABEL_KEYS: Record<EnterpriseDocNode, BafStandardKey> = {
   intake: 'hooksNodeIntake',
   open: 'hooksNodeOpen',
   clarify: 'hooksNodeClarify',
@@ -69,13 +74,6 @@ const join = (...names: ReadonlyArray<string | undefined>): string =>
 const docsAt = (node: EnterpriseDocNode): readonly EnterpriseDocRow[] =>
   ENTERPRISE_DOC_ROWS.filter(doc => doc.nodes.includes(node))
 
-/** The doc viewer's payload state the card renders. */
-type DocViewer =
-  | { readonly kind: 'loading'; readonly id: string }
-  | { readonly kind: 'ready'; readonly result: Extract<BafEnterpriseDocResult, { status: 'ready' }> }
-  | { readonly kind: 'unknown' }
-  | { readonly kind: 'unreadable'; readonly reason: string }
-
 /** One standard's row in the selected node's detail column. */
 function DocRow({ doc, selected, t, onOpen }: {
   doc: EnterpriseDocRow
@@ -102,55 +100,6 @@ function DocRow({ doc, selected, t, onOpen }: {
   )
 }
 
-/** The in-card document viewer — full text of the clicked standard. */
-function DocViewerSection({ viewer, t, onOpenFile, onClose }: {
-  viewer: DocViewer
-  t: StandardsPanelProps['t']
-  onOpenFile: (path: string) => void
-  onClose: () => void
-}) {
-  const title = viewer.kind === 'ready'
-    ? `${viewer.result.titleZh} · ${viewer.result.titleEn}`
-    : undefined
-  return (
-    <div className={css.docViewer} data-testid="baf-enterprise-doc-viewer">
-      <div className={css.docViewerHead}>
-        <span className={css.docViewerTitle}>{title}</span>
-        <span className={css.titleActions}>
-          {viewer.kind === 'ready' ? (
-            <button
-              type="button"
-              className={css.miniButton}
-              data-testid="baf-enterprise-doc-open-file"
-              title={viewer.result.path}
-              onClick={() => { onOpenFile(viewer.result.path) }}
-            >
-              {t('enterpriseDocOpenFile')}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={css.miniButton}
-            data-testid="baf-enterprise-doc-close"
-            onClick={onClose}
-          >
-            {t('enterpriseDocClose')}
-          </button>
-        </span>
-      </div>
-      {viewer.kind === 'loading' ? (
-        <div className={css.status}>{t('enterpriseDocLoading')}</div>
-      ) : viewer.kind === 'ready' ? (
-        <pre className={css.docBody} data-testid="baf-enterprise-doc-body">{viewer.result.content}</pre>
-      ) : viewer.kind === 'unknown' ? (
-        <div className={css.statusError}>{t('enterpriseDocUnknown')}</div>
-      ) : (
-        <div className={css.statusError}>{t('enterpriseDocUnreadable')}{viewer.reason}</div>
-      )}
-    </div>
-  )
-}
-
 /** The 企业规范 flow-chart card — canvas + per-node detail + doc viewer. */
 export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpriseDoc, openPath }: {
   state: StandardsOverviewState
@@ -169,16 +118,7 @@ export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpris
   // state; the panel re-renders on the same locale revision).
   const zh = state.localeActive === 'zh'
   const openId = state.enterpriseDocId
-  const doc = state.enterpriseDoc
-  const viewer: DocViewer | undefined = openId === undefined
-    ? undefined
-    : doc === undefined
-      ? { kind: 'loading', id: openId }
-      : doc.status === 'ready'
-        ? { kind: 'ready', result: doc }
-        : doc.status === 'unknown'
-          ? { kind: 'unknown' }
-          : { kind: 'unreadable', reason: doc.reason }
+  const viewer = viewerOf(openId, state.enterpriseDoc)
 
   // The canvas accent: the doc SHORT tags joined ' · ' (zh or en per locale);
   // a node without standards carries the idle line instead.
@@ -190,8 +130,9 @@ export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpris
 
   return (
     <div className={css.card} data-testid="baf-enterprise-docs-card">
-      <div className={css.cardTitle}>{t('enterpriseFlowTitle')}</div>
-      <div className={css.cardDesc}>{t('enterpriseFlowDesc')}</div>
+      {/* 【变更】2026-10-20 (批次七 2.1): the card title + description rows are
+          gone — the tab label already says 企业规范; the legend below carries
+          the reading cues. */}
       <div className={css.hooksFlowWrap}>
         <div className={css.hooksLegend}>
           <span className={css.hooksLegendItem}>
@@ -298,15 +239,18 @@ export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpris
               <div className={css.docHint}>{t('enterpriseDocsPick')}</div>
             </div>
           </div>
+          {/* 【变更】2026-10-20 (批次七 2.3): the opened document rides as a
+              third right column of the split (canvas | detail | document) —
+              the same side-pane anatomy as opening a file. */}
+          {viewer !== undefined ? (
+            <EnterpriseDocViewer
+              viewer={viewer}
+              t={t}
+              onOpenFile={(path) => { void openPath(path) }}
+              onClose={() => { closeEnterpriseDoc() }}
+            />
+          ) : null}
         </div>
-        {viewer !== undefined ? (
-          <DocViewerSection
-            viewer={viewer}
-            t={t}
-            onOpenFile={(path) => { void openPath(path) }}
-            onClose={() => { closeEnterpriseDoc() }}
-          />
-        ) : null}
       </div>
     </div>
   )

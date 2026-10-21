@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
-import { ENTERPRISE_DOCS } from '@deepseek-ai/dsh-baf-standard/src/enterprise-docs.ts'
+import { ENTERPRISE_DOCS, QUALITY_DOCS } from '@deepseek-ai/dsh-baf-standard/src/enterprise-docs.ts'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   BafStandardConfigRemote, projectStandardCards, resolveWorkspaceCwd, type CwdSessionStore,
@@ -246,6 +246,27 @@ describe('BafStandardConfigRemote (mounted)', () => {
       expect(doc.content, entry.id).toMatch(/(^|\n)# /)
     }
     expect(await remote.enterpriseDoc('nope')).toEqual({ status: 'unknown' })
+  })
+
+  // 【变更】2026-10-20 (批次七 2.5): the quality toolchain documents — the
+  // baf-quality templates (ceedling / static-analysis) migrated under
+  // assets/quality; guards that every cataloged env/config asset ships. The
+  // config files are NOT markdown, so the H1 check only applies to the env
+  // READMEs.
+  it('serves every cataloged quality document as a real shipped asset', async () => {
+    const { remote } = await workspace(true, true)
+    for (const entry of QUALITY_DOCS) {
+      const doc = await remote.enterpriseDoc(entry.id)
+      expect(doc.status, entry.id).toBe('ready')
+      if (doc.status !== 'ready') continue
+      expect(doc.id, entry.id).toBe(entry.id)
+      expect(doc.titleZh, entry.id).toBe(entry.titleZh)
+      expect(doc.path, entry.id).toContain('assets')
+      expect((doc.content ?? '').length, entry.id).toBeGreaterThan(30)
+      if (entry.group === 'env') {
+        expect(doc.content, entry.id).toMatch(/(^|\n)# /)
+      }
+    }
   })
 
   // 【变更】2026-10-20 (批次三 4.4): the 状态脚本 editor's add-time existence

@@ -479,17 +479,19 @@ describe('RouteSectionController', () => {
 })
 
 describe('ModelRoutingRow', () => {
-  it('lays the page out as four tabs — 模型分级 / 工作流模型绑定 / 关键词规则 / 高级 — with real pagination', () => {
+  it('lays the page out as five tabs — 模型分级 / 工作流模型绑定 / 关键词规则 / 预演 / 高级 — with real pagination', () => {
     const { props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
     expect(screen.getByTestId('route-tier-mode')).toBeTruthy()
     const tiersTab = screen.getByTestId('route-tab-tiers')
     const phaseTab = screen.getByTestId('route-tab-phase')
     const keywordsTab = screen.getByTestId('route-tab-keywords')
+    const previewTab = screen.getByTestId('route-tab-preview')
     const advancedTab = screen.getByTestId('route-tab-advanced')
     expect(tiersTab.compareDocumentPosition(phaseTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(phaseTab.compareDocumentPosition(keywordsTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(keywordsTab.compareDocumentPosition(advancedTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(keywordsTab.compareDocumentPosition(previewTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(previewTab.compareDocumentPosition(advancedTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByTestId('route-tier-high')).toBeTruthy()
     // 1.2: exactly one panel is un-hidden at a time (the flex display used to
     // override the hidden attribute — every panel showed at once).
@@ -503,6 +505,16 @@ describe('ModelRoutingRow', () => {
     fireEvent.click(keywordsTab)
     expect(screen.getByTestId('route-keyword-tag')).toBeTruthy()
     expect(screen.queryByText('presetsTitle')).toBeNull()
+    // 【变更】2026-10-20 (批次七 1): the dry-run moved to its OWN tab — the
+    // keywords panel no longer hosts the preview box.
+    expect(within(panelOf('keywords')).queryByTestId('route-preview-input')).toBeNull()
+    fireEvent.click(previewTab)
+    expect(panelOf('preview').hasAttribute('hidden')).toBe(false)
+    expect(panelOf('keywords').hasAttribute('hidden')).toBe(true)
+    // The summary box is MULTI-LINE: a textarea with rows, not a one-line input.
+    const previewBox = within(panelOf('preview')).getByTestId('route-preview-input')
+    expect(previewBox.tagName).toBe('TEXTAREA')
+    expect(Number(previewBox.getAttribute('rows'))).toBeGreaterThanOrEqual(2)
   })
 
   it('renders the three roles as CARDS: role header prominent, then labelled pickers (问题 2)', () => {
@@ -902,6 +914,8 @@ describe('ModelRoutingRow', () => {
   it('hot-reloads the preview: draft edits re-run the dry-run on a debounce (1.6)', async () => {
     const { store, props } = harness(READY)
     render(<ModelRoutingRow {...props} />)
+    // 【变更】2026-10-20 (批次七 1): the dry-run box lives behind its own tab.
+    fireEvent.click(screen.getByTestId('route-tab-preview'))
     // Type once — the debounce fires on its own, no run click.
     fireEvent.change(screen.getByTestId('route-preview-input'), { target: { value: 'readme' } })
     await waitFor(() => { expect(props.runPreview).toHaveBeenCalledWith('readme', { verifyRetry: false }) })
@@ -928,10 +942,17 @@ describe('ModelRoutingRow', () => {
       },
     })
     render(<ModelRoutingRow {...props} />)
+    // 【变更】2026-10-20 (批次七 1): the verdict renders in its own 预演 tab.
+    fireEvent.click(screen.getByTestId('route-tab-preview'))
     expect(screen.queryByTestId('route-preview-run')).toBeNull()
     expect(screen.getByTestId('route-preview').textContent).toContain('readme')
     expect(screen.getByTestId('route-preview').textContent).toContain('previewEscalated')
     expect(screen.getByTestId('route-preview').textContent).toContain('p / mid')
+    // 【变更】2026-10-20 (批次七 1): the verdict HERO band — 派给档位 label +
+    // the tier-colored role headline + the provider / model chip ride above
+    // the detail lines, so the result reads at a glance.
+    expect(screen.getByTestId('route-preview').textContent).toContain('previewRole')
+    expect(screen.getByTestId('route-preview').textContent).toContain('tierMid')
     // 【变更】2026-10-20 (批次二 2.8): the verdict card carries the matched
     // grade's tier accent (TIER_CLASS key in the class list).
     expect(screen.getByTestId('route-preview').className).toContain('tierMid')

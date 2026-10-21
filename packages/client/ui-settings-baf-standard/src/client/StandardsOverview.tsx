@@ -23,6 +23,7 @@ import type { BafStandardCardId, BafStandardFieldRow, BafStandardSummaryResult }
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import { NodeHooksCard } from './NodeHooksCard.tsx'
 import { EnterpriseDocsCard } from './EnterpriseDocsCard.tsx'
+import { QualityDocsCard } from './QualityDocsCard.tsx'
 import { type BafStandardKey } from './locales.ts'
 import css from './StandardsOverview.module.css'
 
@@ -70,7 +71,6 @@ export function joinEntry(cwd: string, entry: string): string {
 }
 
 const QUALITY_CARD_IDS: readonly BafStandardCardId[] = ['quality']
-const STANDARD_CARD_IDS: readonly BafStandardCardId[] = ['standard']
 
 const CARD_META: Record<BafStandardCardId, readonly [BafStandardKey, BafStandardKey, BafStandardKey]> = {
   workflow: ['cardTitleWorkflow', 'cardDescWorkflow', 'cardCommandWorkflow'],
@@ -572,25 +572,27 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
   )
 }
 
-/** 质量监控 tab — product-fixed gate mechanism + the baseline's stack card. */
+/** 质量监控 tab — REAL baf-quality toolchain docs + the baseline's stack card. */
 export function StandardsQualityOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
-  const { t } = props
+  const { openEnterpriseDoc, closeEnterpriseDoc, openPath, t } = props
   const cards = (summary?.cards ?? []).filter(card => QUALITY_CARD_IDS.includes(card.id))
 
   return (
     <section className={css.blockQuality} data-testid="baf-standard-quality">
       <PanelHead titleKey="panelQualityTitle" descKey="panelQualityDescription" t={t} />
       <StatusSurface state={state} summary={summary} t={t} />
-      {/* 【变更】2026-10-13 (问题 4 批, 客户决策): the gate MECHANISM is product
-          knowledge and always shows — the per-project card below it (commands,
-          coverage floor, analyzers) is the baseline's stack section, i.e. the
-          same git-managed project config 项目工程 projects; without a baseline
-          there is nothing real to show and the banner above explains why. */}
-      <div className={css.mechanismCard} data-testid="baf-standard-quality-mechanism">
-        <div className={css.cardTitle}>{t('qualityMechanismTitle')}</div>
-        <div className={css.cardDesc}>{t('qualityMechanismBody')}</div>
-      </div>
+      {/* 【变更】2026-10-20 (批次七 2.5): the static gate-mechanism card is
+          REPLACED by the REAL baf-quality toolchain — environment setup,
+          configuration, and the toolchain's own standards docs, read from the
+          bafplugin-migrated package assets through the shared doc viewer. */}
+      <QualityDocsCard
+        state={state}
+        t={t}
+        openEnterpriseDoc={openEnterpriseDoc}
+        closeEnterpriseDoc={closeEnterpriseDoc}
+        openPath={openPath}
+      />
       {summary?.status === 'ready' ? (
         <div className={css.qualityGrid}>
           {cards.map(card => (
@@ -602,13 +604,10 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
   )
 }
 
-/** 企业规范 tab — REAL bafplugin standards on a workflow flow chart + packs. */
+/** 企业规范 tab — REAL bafplugin standards on a workflow flow chart. */
 export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
   const { openEnterpriseDoc, closeEnterpriseDoc, openPath, t } = props
-  const standardCards = (summary?.cards ?? []).filter(card => STANDARD_CARD_IDS.includes(card.id))
-
-  const enterprise = summary?.enterpriseStandards
 
   return (
     <section className={css.block} data-testid="baf-standard-overview">
@@ -622,7 +621,10 @@ export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
           digest + rules-doc viewer are REPLACED by the REAL enterprise
           standards (bafplugin-migrated package assets) rendered as the
           确认门-parity flow chart — which standard applies at which state,
-          click to read the document itself. */}
+          click to read the document itself.
+          【变更】2026-10-20 (批次七 2.2): the 企业规范资产（方案乙）card and the
+          baf-standard · 工程规范 baseline card are REMOVED — the tab is the
+          flow chart + document viewer, nothing else. */}
       <EnterpriseDocsCard
         state={state}
         t={t}
@@ -630,42 +632,6 @@ export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
         closeEnterpriseDoc={closeEnterpriseDoc}
         openPath={openPath}
       />
-      {enterprise !== undefined ? (
-        <div className={css.card} data-testid="baf-enterprise-packs">
-          <div className={css.cardTitle}>{t('enterprisePacksTitle')}</div>
-          <div className={css.cardDesc}>{t('enterprisePacksDesc')}</div>
-          <div className={css.cardCommand}>{t('enterpriseCommandHint')}</div>
-          <FieldTable
-            fields={[
-              {
-                field: t('enterprisePacksApplied'),
-                value: enterprise.appliedPacks.length === 0
-                  ? t('enterprisePacksNone')
-                  : enterprise.appliedPacks.join(', '),
-                state: 'ok',
-              },
-              {
-                field: t('enterpriseBlockersLabel'),
-                value: enterprise.blockerErrors === 0 && enterprise.blockerWarnings === 0
-                  ? t('enterpriseBlockersClear')
-                  : `error ${String(enterprise.blockerErrors)} · warning ${String(enterprise.blockerWarnings)}`
-                    + (enterprise.blockerLines.length > 0
-                      ? ` — ${enterprise.blockerLines.slice(0, 3).join('; ')}`
-                      : ''),
-                state: enterprise.blockerErrors > 0 ? 'tbd' : 'ok',
-              },
-            ]}
-            t={t}
-          />
-        </div>
-      ) : null}
-      {summary?.status === 'ready' && standardCards.length > 0 ? (
-        <div className={css.grid}>
-          {standardCards.map(card => (
-            <PackageCard key={card.id} cardId={card.id} fields={card.fields} t={t} />
-          ))}
-        </div>
-      ) : null}
     </section>
   )
 }

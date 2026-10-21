@@ -23,9 +23,9 @@ import {
   StandardsEnterpriseOverview, StandardsProjectOverview, StandardsQualityOverview,
   toRelativeEntry,
 } from '../src/client/StandardsOverview.tsx'
-import { ENTERPRISE_DOC_ROWS } from '../src/client/enterprise-docs-catalog.ts'
+import { ENTERPRISE_DOC_ROWS, QUALITY_DOC_ROWS } from '../src/client/enterprise-docs-catalog.ts'
 // Host source of truth for the parity guard (vitest runs in node — node:fs OK).
-import { ENTERPRISE_DOCS } from '@deepseek-ai/dsh-baf-standard/src/enterprise-docs.ts'
+import { ENTERPRISE_DOCS, QUALITY_DOCS } from '@deepseek-ai/dsh-baf-standard/src/enterprise-docs.ts'
 import {
   StandardsController, type StandardsOverviewFace, type StandardsOverviewState,
 } from '../src/client/standards-store.ts'
@@ -396,6 +396,23 @@ describe('enterprise-docs catalog parity (批次六 5)', () => {
       }
     }
   })
+
+  it('mirrors the host QUALITY_DOCS catalog — ids in order, titles, groups (批次七 2.5)', () => {
+    expect(QUALITY_DOC_ROWS.map(row => row.id)).toEqual(QUALITY_DOCS.map(entry => entry.id))
+    for (const row of QUALITY_DOC_ROWS) {
+      const entry = QUALITY_DOCS.find(candidate => candidate.id === row.id)
+      if (entry === undefined) throw new Error(`client row without a host entry: ${row.id}`)
+      expect(row.titleZh, row.id).toBe(entry.titleZh)
+      expect(row.titleEn, row.id).toBe(entry.titleEn)
+      expect(row.group, row.id).toBe(entry.group)
+    }
+    // The toolchain's standards SKILLs re-use ENTERPRISE ids — a quality id
+    // must never collide (each id resolves in exactly one catalog).
+    const enterpriseIds = new Set(ENTERPRISE_DOC_ROWS.map(row => row.id))
+    for (const row of QUALITY_DOC_ROWS) {
+      expect(enterpriseIds.has(row.id), row.id).toBe(false)
+    }
+  })
 })
 
 describe('StandardsController · enterpriseDoc viewer (批次六 5)', () => {
@@ -458,20 +475,67 @@ describe('StandardsController · enterpriseDoc viewer (批次六 5)', () => {
   })
 })
 
-describe('StandardsQualityOverview · gate mechanism + baseline stack card', () => {
-  it('always shows the product-fixed mechanism card — even without a baseline (2026-10-13 问题 4 批)', () => {
+describe('StandardsQualityOverview · real baf-quality toolchain (批次七 2.5)', () => {
+  it('lists the grouped real assets even without a baseline — 环境搭建 / 配置 / 规范文档', () => {
     const { props } = harness(notReadyState('no-baseline', { status: 'no-baseline' }))
     render(<StandardsQualityOverview {...props} />)
-    expect(screen.getByTestId('baf-standard-quality-mechanism').textContent).toContain('qualityMechanismTitle')
+    // The toolchain card is NOT baseline-gated: the bafplugin-migrated assets
+    // ship with the product, so the groups render with no workspace at all.
+    const card = screen.getByTestId('baf-quality-docs-card')
+    expect(card.textContent).toContain('qualityToolchainTitle')
+    const groups = [...document.querySelectorAll('[data-testid^="baf-quality-group-"]')]
+    expect(groups.map(group => group.getAttribute('data-testid'))).toEqual([
+      'baf-quality-group-env',
+      'baf-quality-group-config',
+      'baf-quality-group-standard',
+    ])
+    // 环境搭建 carries the ceedling + static-analysis READMEs.
+    expect(screen.getByTestId('baf-quality-doc-env-ut').textContent).toContain('Ceedling')
+    expect(screen.getByTestId('baf-quality-doc-env-static').textContent).toContain('cpplint')
+    // 配置 carries the toolchain's config files (project.yml et al).
+    expect(screen.getByTestId('baf-quality-doc-cfg-project').textContent).toContain('project.yml')
+    // 规范文档 re-uses the enterprise catalog ids with the applies-at meta —
+    // titles can never drift from the flow chart's list.
+    expect(screen.getByTestId('baf-quality-doc-static').textContent).toContain('enterpriseDocApplies')
     // The stack card (project parameters) stays baseline-gated.
     expect(screen.queryByTestId('baf-standard-card-quality')).toBeNull()
     expect(screen.getByTestId('baf-standard-empty').textContent).toContain('statusNoBaseline')
   })
 
+  it('opens a toolchain doc in the SHARED right-hand viewer and closes it', () => {
+    const openEnterpriseDoc = vi.fn()
+    const { props } = harness(readyState(), { openEnterpriseDoc })
+    render(<StandardsQualityOverview {...props} />)
+    // No id open → no viewer pane beside the groups.
+    expect(screen.queryByTestId('baf-enterprise-doc-viewer')).toBeNull()
+    fireEvent.click(screen.getByTestId('baf-quality-doc-cfg-cpplint'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('cfg-cpplint')
+    cleanup()
+
+    // Ready payload → the shared viewer pane carries the file body + gestures,
+    // and the clicked row shows as the selected one.
+    const openPath = vi.fn()
+    const closeEnterpriseDoc = vi.fn()
+    const ready = harness(readyState({
+      enterpriseDocId: 'cfg-cpplint',
+      enterpriseDoc: {
+        status: 'ready', id: 'cfg-cpplint', titleZh: 'CPPLINT.cfg（SORA 风格定制）', titleEn: 'CPPLINT.cfg (SORA style)',
+        path: 'D:/assets/quality/static-analysis/CPPLINT.cfg', content: 'set noparent\nlinelength=120\n',
+      },
+    }), { openPath, closeEnterpriseDoc })
+    render(<StandardsQualityOverview {...ready.props} />)
+    expect(screen.getByTestId('baf-enterprise-doc-body').textContent).toContain('linelength=120')
+    expect(screen.getByTestId('baf-quality-doc-cfg-cpplint').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByTestId('baf-enterprise-doc-open-file'))
+    expect(openPath).toHaveBeenCalledWith('D:/assets/quality/static-analysis/CPPLINT.cfg')
+    fireEvent.click(screen.getByTestId('baf-enterprise-doc-close'))
+    expect(closeEnterpriseDoc).toHaveBeenCalledTimes(1)
+  })
+
   it('projects the stack card once the baseline is ready', () => {
     const { props } = harness(readyState())
     render(<StandardsQualityOverview {...props} />)
-    expect(screen.getByTestId('baf-standard-quality-mechanism')).toBeDefined()
+    expect(screen.getByTestId('baf-quality-docs-card')).toBeDefined()
     // cards: [] in the fixture — the grid renders nothing without the card.
     expect(screen.queryByTestId('baf-standard-card-quality')).toBeNull()
   })
