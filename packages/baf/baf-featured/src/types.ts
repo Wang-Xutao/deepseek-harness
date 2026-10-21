@@ -97,6 +97,38 @@ export interface FeaturedInstallOptions {
   readonly acceptRisk?: boolean
 }
 
+/**
+ * 【变更】2026-10-22 (批次十一 2): what `exportManifest` reports — the
+ * effective manifest (imported overlay, else the shell seed) as canonical
+ * `featured-plugins.json` text, ready to save as a config file.
+ */
+export interface FeaturedExportResult {
+  readonly ok: boolean
+  /** Canonical manifest JSON text, present on success. */
+  readonly text?: string
+  /** Manifest revision the text carries. */
+  readonly revision?: number
+  /** Entry count the text carries. */
+  readonly count?: number
+  /** Why nothing could be exported. */
+  readonly error?: string
+}
+
+/**
+ * 【变更】2026-10-22 (批次十一 2): what `importManifest` reports — the chosen
+ * document validated whole; a rejection names every problem, an acceptance
+ * persists the overlay and states what now applies.
+ */
+export interface FeaturedImportResult {
+  readonly ok: boolean
+  /** Applied overlay's revision, on success. */
+  readonly revision?: number
+  /** Applied overlay's entry count, on success. */
+  readonly count?: number
+  /** Validation problems joined with '; ', when the document was rejected. */
+  readonly problems?: string
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /**

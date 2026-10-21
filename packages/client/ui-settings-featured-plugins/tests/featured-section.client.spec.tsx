@@ -64,6 +64,8 @@ function readyState(
     busy: undefined,
     bulk: undefined,
     checking: false,
+    exporting: false,
+    importing: false,
     confirm: undefined,
     notice: undefined,
     progress: undefined,
@@ -93,6 +95,9 @@ function harness(state: FeaturedSectionState) {
     bulkInstall: vi.fn(),
     bulkSetEnabled: vi.fn(),
     checkUpdates: vi.fn(),
+    // 【变更】2026-10-22 (批次十一 2): the import/export face seats.
+    exportConfig: vi.fn(async () => undefined),
+    importConfig: vi.fn(),
     acceptConfirm: vi.fn(),
     nameOf: c => c.nameEn,
     descriptionOf: c => c.descriptionEn,
@@ -117,6 +122,28 @@ describe('FeaturedSection', () => {
     expect(screen.queryByTestId('featured-remove')).toBeNull()
     expect(within(screen.getByTestId('featured-card-dsh-feishu')).getByText('autoUpdate')).toBeTruthy()
     expect(screen.getByTestId('featured-homepage-link').textContent).toBe('https://github.com/PGZXB/dsh-feishu')
+  })
+
+  // 【变更】2026-10-22 (批次十一 2): the list's import/export row.
+  it('shows the export/import row even with an empty list, and export asks the face', () => {
+    const { props, face } = harness(readyState([]))
+    render(<FeaturedSection {...props} />)
+    expect(screen.getByTestId('featured-config-row')).toBeTruthy()
+    expect(screen.getByTestId('featured-export')).toBeTruthy()
+    expect(screen.getByTestId('featured-import')).toBeTruthy()
+    expect(screen.getByText('configHint')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('featured-export'))
+    expect(face.exportConfig).toHaveBeenCalled()
+  })
+
+  it('feeds a chosen config file to importConfig', async () => {
+    const { props, face } = harness(readyState([card()]))
+    render(<FeaturedSection {...props} />)
+    const text = JSON.stringify({ schemaVersion: 1, revision: 7, plugins: [] })
+    fireEvent.change(screen.getByTestId('featured-import-input'), {
+      target: { files: [new File([text], 'featured-plugins.json', { type: 'application/json' })] },
+    })
+    await waitFor(() => expect(face.importConfig).toHaveBeenCalledWith(text))
   })
 
   it('renders an enabled card with disable, update, and remove when an update is available', () => {

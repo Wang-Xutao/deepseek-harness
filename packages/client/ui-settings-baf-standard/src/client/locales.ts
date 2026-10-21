@@ -65,13 +65,20 @@ const zh = {
   qolDocPick: '点击条目全屏打开原文；点文档外空白处关闭。',
   // 【变更】2026-10-21 (指令集 tab): the per-state baf-command flow chart's
   // copy (command text itself rides the baf-commands-catalog mirror).
+  // 【变更】2026-10-22 (批次十一 3): the legend keys retire (图例删除) and the
+  // tab splits into two cards — 状态指令 + 全局指令 — each with its own
+  // title/intro; every command row carries three captioned lines.
   cmdFlowAria: 'BAF 指令集状态流程图',
-  cmdLegendState: '状态专属指令',
-  cmdLegendGlobal: '全局指令（任何状态可用，见图下方）',
+  cmdStateTitle: '状态指令 · 按阶段查看',
+  cmdStateIntro: '工作流的每个阶段绑定了各自的专属指令。点击左侧状态节点，右侧列出该阶段可用的指令——作用、实现的功能、运行的结果，一目了然。',
   cmdAccentUnit: '条指令',
   cmdNodeNone: '该状态没有专属指令（全局指令仍然可用）',
   cmdPick: '点击状态节点查看该状态支持的指令。',
-  cmdGlobalTitle: '全局指令（任何状态可用）',
+  cmdGlobalTitle: '全局指令 · 任何状态可用',
+  cmdGlobalIntro: '与阶段无关的常备指令：查状态、初始化、体检、升级这类操作任何时候都能用。每条同样给出作用、功能与运行结果。',
+  cmdUseLabel: '作用',
+  cmdEffectLabel: '功能',
+  cmdResultLabel: '结果',
   // 【变更】2026-10-21 (批次十 测试流图): the unit-test execution-flow chart's
   // copy (structure rides the quality-flow-catalog mirror).
   qolFlowTitle: '测试流图 · 单元测试执行流程',
@@ -203,7 +210,8 @@ const zh = {
   // 【变更】2026-10-20 (批次七 2.1): enterpriseFlowTitle/Desc retire — the
   // card's title + description rows are gone (the tab label already says it).
   enterpriseFlowAria: '企业规范状态流程图',
-  enterpriseLegendDocs: '适用规范',
+  // 【变更】2026-10-22 (批次十一 4): enterpriseLegendDocs retires — the legend
+  // row is deleted from the 企业规范 tab (客户指定).
   enterpriseNodeNone: '无适用规范',
   // 【变更】2026-10-21 (批次八 3.2): the doc viewer is a full-screen modal —
   // enterpriseDocClose retires (the scrim click / Escape is the only way out)
@@ -214,6 +222,14 @@ const zh = {
   enterpriseDocLoading: '正在读取规范文档…',
   enterpriseDocUnknown: '未找到该规范文档。',
   enterpriseDocUnreadable: '规范文档读取失败：',
+  // 【变更】2026-10-22 (批次十一 4): the doc viewer renders MARKDOWN now —
+  // these feed the shared MarkdownText chrome (code fence + footnote copy).
+  mdCopy: '复制',
+  mdCopied: '已复制',
+  mdCode: '代码',
+  mdWrap: '换行',
+  mdUnwrap: '不换行',
+  mdFootnotes: '脚注',
   cardTitleWorkflow: 'baf-workflow · 流程引擎',
   cardDescWorkflow: '驱动 intake → open → clarify → design → plan → implement → verify → archive 八节点流程：阶段门禁、工单派发、verify 复核与归档都在这一个包里。',
   cardCommandWorkflow: '会话内 /baf-go 接单开工',
@@ -295,13 +311,19 @@ const en = {
   qolDocGroupConfig: 'Config templates',
   qolDocPick: 'Click an entry to read it full screen; click the blank area outside the document to close.',
   // (指令集 tab) the per-state command flow chart's copy.
+  // (批次十一 3) legend keys retire; two cards with their own title/intro;
+  // every row carries three captioned lines.
   cmdFlowAria: 'BAF commands flow chart',
-  cmdLegendState: 'state-bound commands',
-  cmdLegendGlobal: 'global commands (any state, below the chart)',
+  cmdStateTitle: 'State commands · by stage',
+  cmdStateIntro: 'Each workflow stage binds its own commands. Click a state node on the left; the column on the right lists that stage\'s commands — purpose, mechanism, and the result you will see.',
   cmdAccentUnit: 'commands',
   cmdNodeNone: 'No state-bound commands here (global ones still apply)',
   cmdPick: 'Click a state node to list its commands.',
-  cmdGlobalTitle: 'Global commands (available at every state)',
+  cmdGlobalTitle: 'Global commands · any state',
+  cmdGlobalIntro: 'Stage-independent commands — status, scaffolding, health checks, updates — usable at any time. Each row explains purpose, mechanism, and result the same way.',
+  cmdUseLabel: 'Purpose',
+  cmdEffectLabel: 'Does',
+  cmdResultLabel: 'Result',
   // (批次十 测试流图) the unit-test execution-flow chart's copy.
   qolFlowTitle: 'Test flow · unit-test pipeline',
   qolFlowAria: 'Unit-test execution flow chart',
@@ -411,8 +433,8 @@ const en = {
   stateAvailabilityReady: 'ready (rules doc wired)',
   stateAvailabilityMissing: 'policy_missing (rules doc not configured)',
   // (批次七 2.1) enterpriseFlowTitle/Desc retire with the card's title rows.
+  // (批次十一 4) enterpriseLegendDocs retires with the deleted legend row.
   enterpriseFlowAria: 'Enterprise standards flow chart',
-  enterpriseLegendDocs: 'standards apply',
   enterpriseNodeNone: 'No standards apply',
   // (批次八 3.2) the doc viewer is a full-screen modal — enterpriseDocClose
   // retires; the scrim click / Escape is the only way out.
@@ -422,6 +444,13 @@ const en = {
   enterpriseDocLoading: 'Reading the standard…',
   enterpriseDocUnknown: 'This standard document was not found.',
   enterpriseDocUnreadable: 'Standard read failed: ',
+  // (批次十一 4) markdown chrome copy for the shared MarkdownText renderer.
+  mdCopy: 'Copy',
+  mdCopied: 'Copied',
+  mdCode: 'Code',
+  mdWrap: 'Wrap',
+  mdUnwrap: 'Unwrap',
+  mdFootnotes: 'Footnotes',
   cardTitleWorkflow: 'baf-workflow · process engine',
   cardDescWorkflow: 'Drives the intake → open → clarify → design → plan → implement → verify → archive eight-node flow: stage gates, work-order dispatch, verify review, and archiving.',
   cardCommandWorkflow: '/baf-go in a session',

@@ -28,6 +28,12 @@ export type FeaturedSettingsKey =
   | 'bulkDisableAll'
   | 'checkUpdates'
   | 'checking'
+  // 【变更】2026-10-22 (批次十一 2): the recommended list's import/export row.
+  | 'exportConfig'
+  | 'exporting'
+  | 'importConfig'
+  | 'importing'
+  | 'configHint'
   | 'loading'
   | 'loadFailed'
   | 'retry'
@@ -79,6 +85,11 @@ export const en: Record<FeaturedSettingsKey, string> = {
   bulkDisableAll: 'Disable all',
   checkUpdates: 'Check for updates',
   checking: 'Checking…',
+  exportConfig: 'Export list',
+  exporting: 'Exporting…',
+  importConfig: 'Import list',
+  importing: 'Importing…',
+  configHint: 'Export the current recommended list as a config file; importing a config file replaces the recommended list as a whole.',
   loading: 'Loading…',
   loadFailed: 'Could not load the recommended plugin list',
   retry: 'Retry',
@@ -133,6 +144,11 @@ export const zh: Record<FeaturedSettingsKey, string> = {
   bulkDisableAll: '全部禁用',
   checkUpdates: '检查更新',
   checking: '正在检查…',
+  exportConfig: '导出清单',
+  exporting: '正在导出…',
+  importConfig: '导入清单',
+  importing: '正在导入…',
+  configHint: '导出当前推荐清单为配置文件；导入配置文件将整体替换当前推荐插件列表。',
   loading: '正在加载…',
   loadFailed: '推荐插件列表加载失败',
   retry: '重试',

@@ -13,6 +13,7 @@ import { appendDedupeRows, overlappingRowIds, stripDedupeRows } from '../src/ded
 import { FEATURED_MANIFEST_ENV, parseFeaturedManifest, readFeaturedManifest } from '../src/manifest.ts'
 import { compareVersions, rangeSatisfies } from '../src/registry.ts'
 import { FEATURED_STATE_FILENAME, readFeaturedState } from '../src/state.ts'
+import { FEATURED_OVERLAY_FILENAME, featuredOverlayPath } from '../src/overlay.ts'
 
 const FEISHU_SPEC = '@dsh-feishu/dsh-feishu@^0.3.5'
 
@@ -475,5 +476,76 @@ describe('state and version checks', () => {
     featured.ctx.on('featured-plugins/changed', changed)
     await featured.setAutoUpdate('dsh-feishu', true)
     expect(changed).toHaveBeenCalled()
+  })
+})
+
+// 【变更】2026-10-22 (批次十一 2): the recommended list's import/export — the
+// overlay under the dsh home overrides the shell seed whole.
+describe('manifest import and export', () => {
+  const IMPORTED = {
+    schemaVersion: 1,
+    revision: 7,
+    plugins: [
+      {
+        id: 'imported-only',
+        package: '@example/imported',
+        version: '1.2.3',
+        nameZh: '导入', nameEn: 'Imported',
+        descriptionZh: '导入的清单条目', descriptionEn: 'An imported entry',
+        homepage: 'https://example.com/imported',
+      },
+    ],
+  }
+
+  it('exports the effective (seed) manifest as canonical text', async () => {
+    const { featured } = await fixture()
+    const result = await featured.exportManifest()
+    expect(result.ok).toBe(true)
+    expect(result.revision).toBe(3)
+    expect(result.count).toBe(2)
+    const parsed: unknown = JSON.parse(result.text ?? '')
+    const { manifest } = parseFeaturedManifest(parsed)
+    expect(manifest?.plugins.map(plugin => plugin.id)).toEqual(['dsh-feishu', 'second'])
+  })
+
+  it('imports a valid document, persists the overlay, and lists from it', async () => {
+    const { featured } = await fixture()
+    const changed = vi.fn()
+    featured.ctx.on('featured-plugins/changed', changed)
+    const applied = await featured.importManifest(`${JSON.stringify(IMPORTED, undefined, 2)}\n`)
+    expect(applied).toEqual({ ok: true, revision: 7, count: 1 })
+    expect(changed).toHaveBeenCalled()
+    expect(existsSync(featuredOverlayPath(home))).toBe(true)
+    // list() now serves the overlay, not the env seed.
+    const listing = await featured.list()
+    expect(listing.revision).toBe(7)
+    expect(listing.plugins.map(card => card.id)).toEqual(['imported-only'])
+    // export follows the effective manifest too.
+    const exported = await featured.exportManifest()
+    expect(exported.revision).toBe(7)
+    expect(exported.count).toBe(1)
+  })
+
+  it('rejects an invalid document whole, leaving the seed in charge', async () => {
+    const { featured } = await fixture()
+    const broken = await featured.importManifest('{not json')
+    expect(broken.ok).toBe(false)
+    expect(broken.problems).toContain('not valid JSON')
+    const wrongSchema = await featured.importManifest(JSON.stringify({ ...IMPORTED, schemaVersion: 2 }))
+    expect(wrongSchema.ok).toBe(false)
+    expect(wrongSchema.problems).toContain('schemaVersion must be 1')
+    expect(existsSync(join(home, FEATURED_OVERLAY_FILENAME))).toBe(false)
+    const listing = await featured.list()
+    expect(listing.revision).toBe(3)
+    expect(listing.plugins.map(card => card.id)).toEqual(['dsh-feishu', 'second'])
+  })
+
+  it('reports an unreadable overlay instead of silently falling back to the seed', async () => {
+    const { featured } = await fixture()
+    writeFileSync(join(home, FEATURED_OVERLAY_FILENAME), '{broken')
+    const listing = await featured.list()
+    expect(listing.plugins).toEqual([])
+    expect(listing.manifestError).toBeTruthy()
+    expect(listing.revision).toBeUndefined()
   })
 })

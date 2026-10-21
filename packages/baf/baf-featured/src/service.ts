@@ -6,13 +6,15 @@ import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import type { PluginManager } from '@deepseek-ai/dsh-plugin-manager'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type { BundleInfo, ChangeResult, InstallBundleOptions, PluginInstallRequestId } from '@deepseek-ai/dsh-plugin-manager'
-import { FEATURED_MANIFEST_ENV, readFeaturedManifest } from './manifest.ts'
+import { FEATURED_MANIFEST_ENV, parseFeaturedManifest, readFeaturedManifest } from './manifest.ts'
+import { readFeaturedOverlay, writeFeaturedOverlay } from './overlay.ts'
 import { appendDedupeRows, overlappingRowIds, stripDedupeRows } from './dedupe.ts'
 import { VERSION_REGISTRIES, fetchLatestVersion, rangeSatisfies } from './registry.ts'
 import { readFeaturedState, writeFeaturedState, type FeaturedState } from './state.ts'
 import type {
-  FeaturedBulkOutcome, FeaturedBulkResult, FeaturedInstallOptions, FeaturedListResult,
-  FeaturedManifestPlugin, FeaturedPluginCard, FeaturedPluginState, FeaturedResult,
+  FeaturedBulkOutcome, FeaturedBulkResult, FeaturedExportResult, FeaturedImportResult,
+  FeaturedInstallOptions, FeaturedListResult,
+  FeaturedManifest, FeaturedManifestPlugin, FeaturedPluginCard, FeaturedPluginState, FeaturedResult,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -74,7 +76,7 @@ export class FeaturedPlugins extends TypertRemoteService {
    */
   @Remote
   async list(): Promise<FeaturedListResult> {
-    const { manifest, error } = readFeaturedManifest(process.env[FEATURED_MANIFEST_ENV])
+    const { manifest, error } = this.effectiveManifest()
     const bundles = await this.manager?.listBundles()
     const state = readFeaturedState()
     const plugins = (manifest?.plugins ?? []).map(entry => this.cardFor(entry, bundles, state))
@@ -211,7 +213,7 @@ export class FeaturedPlugins extends TypertRemoteService {
    */
   @Remote
   async checkUpdates(): Promise<FeaturedListResult> {
-    const { manifest } = readFeaturedManifest(process.env[FEATURED_MANIFEST_ENV])
+    const { manifest } = this.effectiveManifest()
     if (manifest !== undefined) {
       const found: Record<string, string> = {}
       for (const entry of manifest.plugins) {
@@ -228,8 +230,67 @@ export class FeaturedPlugins extends TypertRemoteService {
 
   /** The manifest entry an id names, from a fresh manifest read. */
   private entryFor(id: string): FeaturedManifestPlugin | undefined {
-    const { manifest } = readFeaturedManifest(process.env[FEATURED_MANIFEST_ENV])
+    const { manifest } = this.effectiveManifest()
     return manifest?.plugins.find(entry => entry.id === id)
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十一 2): the manifest that governs right now — the
+   * imported overlay under the dsh home when one validates, else the
+   * shell-seeded path the environment names. Read fresh every call, so an
+   * import applies without a service restart.
+   */
+  private effectiveManifest(): { manifest?: FeaturedManifest; error?: string } {
+    const overlay = readFeaturedOverlay()
+    if (overlay.manifest !== undefined) return overlay
+    if (overlay.error !== undefined) {
+      // A broken overlay must not silently fall back to the seed — the person
+      // imported something and deserves to see why it is not applying.
+      return overlay
+    }
+    return readFeaturedManifest(process.env[FEATURED_MANIFEST_ENV])
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十一 2): export the effective manifest as canonical
+   * `featured-plugins.json` text, for the settings page to save as a config
+   * file and share.
+   * @returns The manifest text plus its revision and entry count, or why none was readable.
+   */
+  @Remote
+  async exportManifest(): Promise<FeaturedExportResult> {
+    const { manifest, error } = this.effectiveManifest()
+    if (manifest === undefined) {
+      return { ok: false, ...(error === undefined ? {} : { error }) }
+    }
+    return {
+      ok: true,
+      text: `${JSON.stringify(manifest, undefined, 2)}\n`,
+      revision: manifest.revision,
+      count: manifest.plugins.length,
+    }
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十一 2): import a config file's text as the
+   * featured list: validate the whole document first (schema, revision,
+   * every entry), and only then persist it as the dsh-home overlay and
+   * announce the change. A rejected document changes nothing.
+   * @param text The chosen file's full contents.
+   * @returns What was applied, or every validation problem joined.
+   */
+  @Remote
+  async importManifest(text: string): Promise<FeaturedImportResult> {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch (error) {
+      return { ok: false, problems: `not valid JSON: ${(error as Error).message}` }
+    }
+    const { manifest, problems } = parseFeaturedManifest(parsed)
+    if (manifest === undefined) return { ok: false, problems: problems.join('; ') }
+    await writeFeaturedOverlay(manifest)
+    return this.announced({ ok: true, revision: manifest.revision, count: manifest.plugins.length })
   }
 
   /** Install or update one entry, folding the manager outcome for the caller. */

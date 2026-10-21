@@ -377,6 +377,11 @@ describe('StandardsEnterpriseOverview · real-standards flow chart (批次六 5)
     }), { openPath })
     render(<StandardsEnterpriseOverview {...ready.props} />)
     expect(screen.getByTestId('baf-enterprise-doc-body').textContent).toContain('规则行')
+    // 【变更】2026-10-22 (批次十一 4): the body RENDERS markdown — a heading
+    // becomes an element, so the raw '# ' marker never reaches the text.
+    const body = screen.getByTestId('baf-enterprise-doc-body')
+    expect(body.textContent).not.toContain('# SORA')
+    expect(body.querySelector('h1')?.textContent).toContain('SORA C 语言编码规范')
     // code applies at design — select that node so its row is listed.
     fireEvent.click(screen.getByTestId('baf-enterprise-node-design'))
     expect(screen.getByTestId('baf-enterprise-doc-code').getAttribute('aria-pressed')).toBe('true')
@@ -756,6 +761,9 @@ describe('baf-commands catalog parity (2026-10-21 指令集)', () => {
       expect(row?.desc, entry.id).toBe(entry.desc)
       expect(row?.stars, entry.id).toBe(entry.stars)
       expect(row?.effect.length, entry.id).toBeGreaterThan(0)
+      // 【变更】2026-10-22 (批次十一 3): every entry now also states what
+      // running it leaves behind (结果).
+      expect(row?.result.length, entry.id).toBeGreaterThan(0)
     }
     // State-bound vs global split: every BAF_COMMANDS row names ≥1 main-chain
     // node; every global row names none.
@@ -797,24 +805,47 @@ describe('StandardsCommandsOverview · 指令集 flow chart (2026-10-21 指令�
     const { props } = harness(readyState())
     render(<StandardsCommandsOverview {...props} />)
     expect(screen.getByTestId('baf-commands-detail').getAttribute('data-node')).toBe('intake')
-    // The intake rows carry id + ★ + 用途 + 效果 (the full, non-compact row).
+    // The intake rows carry id + ★ + 作用 + 功能 (the full, non-compact row).
     const open = screen.getByTestId('baf-command-baf_workflow_open')
     expect(open.textContent).toContain('/baf-workflow-open')
     expect(open.textContent).toContain('启动变更：先分类')
     expect(open.textContent).toContain('★★★')
-    expect(open.textContent).toContain('分类定了')
+    expect(open.textContent).toContain('分类确认卡')
     expect(screen.getByTestId('baf-command-baf_go')).toBeDefined()
     // Clicking another node swaps the detail column.
     fireEvent.click(screen.getByTestId('baf-commands-node-verify'))
     expect(screen.getByTestId('baf-commands-detail').getAttribute('data-node')).toBe('verify')
     expect(screen.getByTestId('baf-command-baf_check_quality')).toBeDefined()
     expect(screen.getByTestId('baf-command-baf_check_guard')).toBeDefined()
-    // The global band: compact rows (no 效果 line), every global command present.
+    // 【变更】2026-10-22 (批次十一 3): the global band became its OWN BIG CARD
+    // with FULL rows — 用途/效果/结果 all present, like the state rows.
     const band = screen.getByTestId('baf-commands-global')
     expect(band.textContent).toContain('cmdGlobalTitle')
+    expect(band.textContent).toContain('cmdGlobalIntro')
     expect(screen.getByTestId('baf-command-baf_help').textContent).toContain('列出全部命令与用法')
-    expect(screen.getByTestId('baf-command-baf_help').textContent).not.toContain('迷路时的第一站')
+    expect(screen.getByTestId('baf-command-baf_help').textContent).toContain('迷路时的第一站')
+    expect(screen.getByTestId('baf-command-baf_help').textContent).toContain('指令速查表')
     expect(screen.getByTestId('baf-command-baf_update_rollback')).toBeDefined()
+  })
+
+  // 【变更】2026-10-22 (批次十一 3): two big cards (状态指令 / 全局指令), the
+  // 作用/功能/结果 captions on every row, and NO legend.
+  it('splits state and global commands into two cards with 作用/功能/结果 rows and no legend', () => {
+    const { props } = harness(readyState())
+    render(<StandardsCommandsOverview {...props} />)
+    const stateCard = screen.getByTestId('baf-commands-card')
+    expect(stateCard.textContent).toContain('cmdStateTitle')
+    expect(stateCard.textContent).toContain('cmdStateIntro')
+    // A state row answers all three captions.
+    const open = screen.getByTestId('baf-command-baf_workflow_open')
+    expect(open.textContent).toContain('cmdUseLabel')
+    expect(open.textContent).toContain('cmdEffectLabel')
+    expect(open.textContent).toContain('cmdResultLabel')
+    expect(open.textContent).toContain('changeId')
+    // The legend is gone on both surfaces.
+    expect(screen.queryByText('cmdLegendState')).toBeNull()
+    expect(screen.queryByText('cmdLegendGlobal')).toBeNull()
+    expect(screen.queryByText('enterpriseLegendDocs')).toBeNull()
   })
 
   it('renders the chart with no baseline at all (a product constant)', () => {

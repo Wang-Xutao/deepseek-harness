@@ -8,6 +8,13 @@
  * note. Missing reports paint 未运行 — never a fabricated verdict. Push-fed:
  * the same `baf-workflow/projection-appended` subscription the 工作流图 tab
  * uses, plus a manual 刷新.
+ * 【变更】2026-10-22 (批次十一 5): the surface is now a CLICK-TO-INSPECT split
+ * — a state-colored step rail on the left (one node per step, metrics at a
+ * glance) and a detail pane on the right that answers, for the clicked step:
+ * 工具/类型/命令/状态/指标, 作用 (what it is for), and 执行结果 (the real
+ * numbers this workspace's reports carry — coverage line vs threshold, lint
+ * error counts, report timestamps, the HTML report opener). Same data
+ * contract as 批次十; presentation only.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
@@ -64,47 +71,133 @@ const NODE_EN: Record<TestFlowStepId, WorkflowTabKey> = {
   format: 'tflow.nodeEn.format',
 }
 
+/** 作用 key per step (批次十一 5 detail pane). */
+const NODE_PURPOSE: Record<TestFlowStepId, WorkflowTabKey> = {
+  build: 'tflow.desc.build',
+  test: 'tflow.desc.test',
+  instrument: 'tflow.desc.instrument',
+  report: 'tflow.desc.report',
+  gate: 'tflow.desc.gate',
+  lint: 'tflow.desc.lint',
+  analyze: 'tflow.desc.analyze',
+  format: 'tflow.desc.format',
+}
+
 const STATE_TEXT: Record<'passed' | 'failed' | 'idle', WorkflowTabKey> = {
   passed: 'tflow.state.passed',
   failed: 'tflow.state.failed',
   idle: 'tflow.state.idle',
 }
 
-/** One chain row. */
-function StepRow({ id, command, state, metric, stateLabel, enLabel, nameLabel, toolChip, children }: {
+type StepState = 'passed' | 'failed' | 'idle'
+
+/**
+ * The detail pane's 执行结果 lines for one step — REAL numbers from the
+ * payload, never a fabricated verdict. Each entry is one rendered line; the
+ * tuple's third slot colors the line (ok/bad/muted).
+ */
+function resultLines(
+  id: TestFlowStepId,
+  status: WorkflowTabTestFlowStatus | undefined,
+  t: (key: WorkflowTabKey) => string,
+): Array<{ text: string; tone: StepState }> {
+  const ready = status?.status === 'ready' ? status : undefined
+  const coverage = ready?.coverage
+  const statics = ready?.staticAnalysis
+  const chainAt = coverage?.generatedAt
+  switch (id) {
+    case 'build':
+    case 'test':
+    case 'instrument':
+      return chainAt === undefined
+        ? [{ text: t('tflow.chainIdle'), tone: 'idle' }]
+        : [{ text: t('tflow.chainDone').replace('{at}', chainAt), tone: 'passed' }]
+    case 'report':
+      return chainAt === undefined
+        ? [{ text: t('tflow.chainIdle'), tone: 'idle' }]
+        : [
+          { text: t('tflow.chainDone').replace('{at}', chainAt), tone: 'passed' },
+          ...(ready?.reportHtmlExists === true && ready.reportHtmlRel !== undefined
+            ? [{ text: `${t('tflow.reportPath')}：${ready.reportHtmlRel}`, tone: 'idle' as StepState }]
+            : []),
+        ]
+    case 'gate': {
+      if (coverage === undefined) return [{ text: t('tflow.chainIdle'), tone: 'idle' }]
+      if (coverage.passed === undefined) return [{ text: t('tflow.gateUndecided'), tone: 'idle' }]
+      const line = coverage.line === undefined ? '—' : String(coverage.line)
+      const minPct = coverage.minimum ?? (ready?.thresholdLine !== undefined
+        ? Math.round(ready.thresholdLine * 100)
+        : undefined)
+      const value = t('tflow.coverageValue')
+        .replace('{line}', line)
+        .replace('{min}', minPct === undefined ? '—' : String(minPct))
+      return [{ text: value, tone: coverage.passed ? 'passed' : 'failed' }]
+    }
+    case 'lint':
+    case 'analyze': {
+      if (statics === undefined) return [{ text: t('tflow.staticIdle'), tone: 'idle' }]
+      const lines = [{ text: t('tflow.staticValue').replace('{n}', String(statics.errors ?? '—')), tone: (statics.errors ?? 0) > 0 ? ('failed' as StepState) : ('passed' as StepState) }]
+      if (statics.generatedAt !== undefined) {
+        lines.push({ text: t('tflow.chainDone').replace('{at}', statics.generatedAt), tone: 'passed' })
+      }
+      return lines
+    }
+    case 'format':
+    default:
+      return [{ text: t('tflow.formatIdle'), tone: 'idle' }]
+  }
+}
+
+/** One rail node — index + state dot + names + the at-a-glance metric. */
+function StepNode({ id, index, command, state, metric, stateLabel, enLabel, nameLabel, toolChip, selected, onPick }: {
   id: TestFlowStepId
+  index: number
   command: string
-  state: 'passed' | 'failed' | 'idle'
-  // `| undefined` admitted: the view passes outcome.metric straight from the
-  // projector, whose report-derived metrics are optional.
+  state: StepState
   metric?: string | undefined
   stateLabel: string
   enLabel: string
   nameLabel: string
   toolChip: string
-  children?: ReactNode
+  selected: boolean
+  onPick: () => void
 }) {
   return (
-    <li
-      className={clsx(css.step, state === 'passed' ? css.passed : state === 'failed' ? css.failed : css.idle)}
-      data-testid={`baf-test-flow-step-${id}`}
-      data-state={state}
-    >
-      <span className={css.dot} aria-hidden />
-      <div className={css.stepMain}>
-        <span className={css.stepName}>
-          {nameLabel}
-          <span className={css.stepEn}>{enLabel}</span>
-          <span className={css.stepEn}>{toolChip}</span>
+    <li className={clsx(css.node, state === 'passed' ? css.passed : state === 'failed' ? css.failed : css.idle)}>
+      <button
+        type="button"
+        className={clsx(css.nodeBtn, selected ? css.nodeSelected : undefined)}
+        data-testid={`baf-test-flow-step-${id}`}
+        data-state={state}
+        aria-pressed={selected}
+        onClick={onPick}
+      >
+        <span className={css.nodeIdx}>{String(index + 1).padStart(2, '0')}</span>
+        <span className={css.dot} aria-hidden />
+        <span className={css.nodeMain}>
+          <span className={css.nodeName}>
+            {nameLabel}
+            <span className={css.nodeEn}>{enLabel}</span>
+          </span>
+          <span className={css.nodeTool}>{toolChip}</span>
+          <span className={clsx(css.nodeCmd, css.ellipsis)} title={command}>{command}</span>
         </span>
-        <span className={css.stepCmd} title={command}>{command}</span>
-      </div>
-      <div className={css.stepSide}>
-        {metric !== undefined && metric !== '' && <span className={css.metric} title={metric}>{metric}</span>}
-        {children}
-        <span className={css.stateText}>{stateLabel}</span>
-      </div>
+        <span className={css.nodeSide}>
+          {metric !== undefined && metric !== '' && <span className={clsx(css.metric, css.ellipsis)} title={metric}>{metric}</span>}
+          <span className={clsx(css.stateText, css[state])}>{stateLabel}</span>
+        </span>
+      </button>
     </li>
+  )
+}
+
+/** One label-left / value-right line in the detail pane. */
+function KvRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className={css.kvRow}>
+      <span className={css.kvKey}>{label}</span>
+      <span className={css.kvVal}>{children}</span>
+    </div>
   )
 }
 
@@ -117,6 +210,10 @@ export function TestFlowView({ refresh, openArtifact, subscribe, t }: TestFlowVi
   const [status, setStatus] = useState<WorkflowTabTestFlowStatus | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
+  // null = nothing picked yet: the detail follows the FIRST step (gcc 编译)
+  // until the user clicks.
+  const [picked, setPicked] = useState<TestFlowStepId | null>(null)
+  const selected = picked ?? TEST_FLOW_STEPS[0]?.id ?? 'build'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -147,6 +244,9 @@ export function TestFlowView({ refresh, openArtifact, subscribe, t }: TestFlowVi
   const minPct = coverage?.minimum ?? (status?.thresholdLine !== undefined
     ? Math.round(status.thresholdLine * 100)
     : undefined)
+  const step = TEST_FLOW_STEPS.find(entry => entry.id === selected) ?? TEST_FLOW_STEPS[0]
+  const outcome = outcomes[selected]
+  const results = resultLines(selected, status, t)
 
   return (
     <div className={css.root} data-testid="baf-test-flow-view">
@@ -201,20 +301,55 @@ export function TestFlowView({ refresh, openArtifact, subscribe, t }: TestFlowVi
             <div className={css.hint} data-testid="baf-test-flow-nocwd">{t('tflow.noCwd')}</div>
           )
           : (
-            <ol className={css.chain} aria-label={t('tflow.aria')}>
-              {TEST_FLOW_STEPS.map(step => (
-                <StepRow
-                  key={step.id}
-                  id={step.id}
-                  command={step.command}
-                  state={outcomes[step.id].state}
-                  metric={step.id === 'format' ? t('tflow.formatNote') : outcomes[step.id].metric}
-                  stateLabel={t(STATE_TEXT[outcomes[step.id].state])}
-                  nameLabel={t(NODE_LABEL[step.id])}
-                  enLabel={t(NODE_EN[step.id])}
-                  toolChip={`${step.tool} · ${t(step.required ? 'tflow.required' : 'tflow.optional')}`}
-                >
-                  {step.id === 'report' && status?.reportHtmlExists === true && status.reportHtmlRel !== undefined && (
+            <div className={css.split}>
+              {/* 批次十一 5: the step rail — one state-colored node per step,
+                  metric at a glance; click picks the detail pane's step. */}
+              <ol className={css.rail} aria-label={t('tflow.aria')}>
+                {TEST_FLOW_STEPS.map((entry, index) => (
+                  <StepNode
+                    key={entry.id}
+                    id={entry.id}
+                    index={index}
+                    command={entry.command}
+                    state={outcomes[entry.id].state}
+                    metric={entry.id === 'format' ? t('tflow.formatNote') : outcomes[entry.id].metric}
+                    stateLabel={t(STATE_TEXT[outcomes[entry.id].state])}
+                    nameLabel={t(NODE_LABEL[entry.id])}
+                    enLabel={t(NODE_EN[entry.id])}
+                    toolChip={`${entry.tool} · ${t(entry.required ? 'tflow.required' : 'tflow.optional')}`}
+                    selected={entry.id === selected}
+                    onPick={() => { setPicked(entry.id) }}
+                  />
+                ))}
+              </ol>
+              {/* The detail pane — everything the clicked step can say. */}
+              <div className={css.detail} data-testid="baf-test-flow-detail" data-step={selected}>
+                <div className={clsx(css.detailHead, outcome.state === 'passed' ? css.passed : outcome.state === 'failed' ? css.failed : css.idle)}>
+                  <span className={css.detailName}>
+                    {t(NODE_LABEL[selected])}
+                    <span className={css.nodeEn}>{t(NODE_EN[selected])}</span>
+                  </span>
+                  <span className={clsx(css.stateBadge, css[outcome.state])}>
+                    {t(STATE_TEXT[outcome.state])}
+                  </span>
+                </div>
+                <div className={css.kvGrid}>
+                  <KvRow label={t('tflow.labelTool')}>{step?.tool}</KvRow>
+                  <KvRow label={t('tflow.labelType')}>{t(step?.required === true ? 'tflow.required' : 'tflow.optional')}</KvRow>
+                  <KvRow label={t('tflow.labelCommand')}>
+                    <span className={css.mono}>{step?.command}</span>
+                  </KvRow>
+                </div>
+                <div className={css.sectionLabel}>{t('tflow.labelPurpose')}</div>
+                <p className={css.purpose}>{t(NODE_PURPOSE[selected])}</p>
+                <div className={clsx(css.sectionLabel, css.resultHead)}>
+                  {t('tflow.labelResult')}
+                </div>
+                <div className={clsx(css.resultCard, outcome.state === 'failed' ? css.resultBad : undefined)}>
+                  {results.map(line => (
+                    <div key={line.text} className={clsx(css.resultLine, css[line.tone])}>{line.text}</div>
+                  ))}
+                  {selected === 'report' && status?.reportHtmlExists === true && status.reportHtmlRel !== undefined && (
                     <button
                       type="button"
                       className={css.openBtn}
@@ -225,9 +360,10 @@ export function TestFlowView({ refresh, openArtifact, subscribe, t }: TestFlowVi
                       {t('tflow.openReport')}
                     </button>
                   )}
-                </StepRow>
-              ))}
-            </ol>
+                </div>
+                <div className={css.pickHint}>{t('tflow.pickHint')}</div>
+              </div>
+            </div>
           )}
         {!noCwd && (
           <div className={css.band} data-testid="baf-test-flow-band">

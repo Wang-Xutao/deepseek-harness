@@ -3,6 +3,10 @@
  * the SAME theme-following token block the 工作流图 tab uses, so the two
  * conversation tabs read as one family (gold accent, same card/ink/danger
  * aliases; only the middle column is new: a status-colored step chain).
+ * 【变更】2026-10-22 (批次十一 5): the chain becomes a CLICK-TO-INSPECT split —
+ * a state-colored step RAIL on the left and a DETAIL pane on the right
+ * (label/value rows, 作用 copy, 执行结果 lines, the report opener). Below
+ * ~44rem the split stacks: rail first, detail under it.
  */
 .root {
   --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
@@ -100,7 +104,7 @@
 .refreshBtn:hover { border-color: var(--wf-accent); }
 .refreshBtn:disabled { opacity: 0.5; cursor: default; }
 
-/* ── step chain ────────────────────────────────────────────────── */
+/* ── body: the rail | detail split (批次十一 5) ─────────────────── */
 
 .body {
   flex: 1;
@@ -109,38 +113,73 @@
   padding: 1rem 1.1rem 1.2rem;
 }
 
-.chain {
-  max-width: 46rem;
-  margin: 0 auto;
+.split {
+  display: grid;
+  grid-template-columns: minmax(21rem, 24rem) minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+  animation: tfFadeUp 0.22s ease-out both;
+}
+
+/* ── left: the step rail ───────────────────────────────────────── */
+
+.rail {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   list-style: none;
   padding: 0;
-  margin-block-start: 0.2rem;
+  margin: 0;
 }
 
-.step {
+.node {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.55rem 0.85rem;
-  background: var(--wf-card);
-  border: 1px solid var(--wf-line);
-  border-radius: 10px;
-  animation: tfFadeUp 0.22s ease-out both;
 }
 
-/* The vertical connector: every step after the first reaches up to its
-   predecessor — a plain border keeps the chain readable without SVG. */
-.step + .step::before {
+/* The vertical connector: every node after the first reaches up to its
+   predecessor — a dotted line keeps the chain readable without SVG. */
+.node + .node::before {
   content: '';
   position: absolute;
-  left: 1.55rem;
+  left: 1.5rem;
   top: -0.5rem;
   height: 0.5rem;
   border-left: 2px dotted color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
+}
+
+.nodeBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.nodeBtn:hover { border-color: color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line)); }
+.nodeBtn:focus-visible {
+  outline: 2px solid var(--wf-accent);
+  outline-offset: 1px;
+}
+
+.nodeSelected {
+  border-color: color-mix(in srgb, var(--wf-accent) 75%, var(--wf-line));
+  background: color-mix(in srgb, var(--wf-accent) 10%, var(--wf-card));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wf-accent) 45%, transparent);
+}
+
+.nodeIdx {
+  flex: none;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--wf-muted);
 }
 
 .dot {
@@ -157,9 +196,9 @@
 .failed { border-color: color-mix(in srgb, var(--wf-danger) 45%, var(--wf-line)); }
 .passed { border-color: color-mix(in srgb, var(--wf-ok) 40%, var(--wf-line)); }
 
-.stepMain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.12rem; }
+.nodeMain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.12rem; }
 
-.stepName {
+.nodeName {
   display: flex;
   align-items: baseline;
   gap: 0.45rem;
@@ -167,23 +206,33 @@
   font-weight: 700;
 }
 
-.stepEn {
+.nodeEn {
   font-size: 0.62rem;
   font-weight: 500;
   color: var(--wf-muted);
   letter-spacing: 0.02em;
 }
 
-.stepCmd {
+.nodeTool {
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: color-mix(in srgb, var(--wf-accent) 85%, var(--wf-ink));
+}
+
+.nodeCmd {
   font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
   font-size: 0.66rem;
   color: var(--wf-muted);
+}
+
+.ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.stepSide { flex: none; display: flex; align-items: center; gap: 0.5rem; }
+.nodeSide { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 0.18rem; }
 
 .stateText { font-size: 0.72rem; font-weight: 700; }
 .passed .stateText { color: var(--wf-ok); }
@@ -195,12 +244,156 @@
   color: var(--wf-muted);
   font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
   max-width: 12rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
+/* ── right: the detail pane ────────────────────────────────────── */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.9rem 1rem 1rem;
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 12px;
+  animation: tfFadeUp 0.22s ease-out both;
+}
+
+.detailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--wf-line);
+  border-left: 3px solid var(--wf-line);
+  background: color-mix(in srgb, var(--wf-muted) 8%, var(--wf-card));
+}
+
+.detailHead.passed {
+  border-color: color-mix(in srgb, var(--wf-ok) 40%, var(--wf-line));
+  border-left-color: var(--wf-ok);
+  background: color-mix(in srgb, var(--wf-ok) 7%, var(--wf-card));
+}
+
+.detailHead.failed {
+  border-color: color-mix(in srgb, var(--wf-danger) 45%, var(--wf-line));
+  border-left-color: var(--wf-danger);
+  background: color-mix(in srgb, var(--wf-danger) 7%, var(--wf-card));
+}
+
+.detailName {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.stateBadge {
+  flex: none;
+  padding: 0.16rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--wf-muted);
+  background: color-mix(in srgb, var(--wf-muted) 14%, var(--wf-card));
+  border: 1px solid color-mix(in srgb, var(--wf-muted) 35%, transparent);
+}
+
+.stateBadge.passed {
+  color: var(--wf-ok);
+  background: color-mix(in srgb, var(--wf-ok) 12%, var(--wf-card));
+  border-color: color-mix(in srgb, var(--wf-ok) 45%, transparent);
+}
+
+.stateBadge.failed {
+  color: var(--wf-danger);
+  background: color-mix(in srgb, var(--wf-danger) 12%, var(--wf-card));
+  border-color: color-mix(in srgb, var(--wf-danger) 45%, transparent);
+}
+
+.kvGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.45rem 1rem;
+}
+
+.kvRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  padding: 0.42rem 0.65rem;
+  background: color-mix(in srgb, var(--wf-muted) 6%, var(--wf-card));
+  border: 1px solid var(--wf-line);
+  border-radius: 8px;
+}
+
+.kvKey {
+  flex: none;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--wf-muted);
+}
+
+.kvVal {
+  min-width: 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+}
+
+.sectionLabel {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wf-muted);
+}
+
+.purpose {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.7;
+  color: var(--wf-ink);
+}
+
+.resultCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.65rem 0.8rem;
+  background: color-mix(in srgb, var(--wf-muted) 6%, var(--wf-card));
+  border: 1px solid var(--wf-line);
+  border-radius: 8px;
+}
+
+.resultBad {
+  border-color: color-mix(in srgb, var(--wf-danger) 45%, var(--wf-line));
+  background: color-mix(in srgb, var(--wf-danger) 6%, var(--wf-card));
+}
+
+.resultLine {
+  font-size: 0.74rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.resultLine.passed { color: var(--wf-ok); font-weight: 600; }
+.resultLine.failed { color: var(--wf-danger); font-weight: 600; }
+.resultLine.idle { color: var(--wf-muted); }
+
 .openBtn {
+  align-self: flex-start;
+  margin-top: 0.2rem;
   padding: 0.22rem 0.6rem;
   font-size: 0.66rem;
   font-weight: 700;
@@ -212,6 +405,14 @@
 }
 
 .openBtn:hover { background: color-mix(in srgb, var(--wf-accent) 20%, var(--wf-card)); }
+
+.pickHint {
+  margin-top: auto;
+  padding-top: 0.4rem;
+  font-size: 0.66rem;
+  color: var(--wf-muted);
+  border-top: 1px dashed var(--wf-line);
+}
 
 /* ── hints / band ──────────────────────────────────────────────── */
 
@@ -240,7 +441,7 @@
 }
 
 .band {
-  max-width: 46rem;
+  max-width: 72rem;
   margin: 0.9rem auto 0;
   padding: 0.7rem 1rem;
   background: color-mix(in srgb, var(--wf-accent) 8%, var(--wf-card));
@@ -258,4 +459,12 @@
   color: var(--wf-muted);
   text-transform: uppercase;
   margin-bottom: 0.25rem;
+}
+
+/* Narrow panes (the conversation Tab can be half-width): stack the split,
+   rail first — every node stays reachable, the detail follows underneath. */
+@media (max-width: 44rem) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

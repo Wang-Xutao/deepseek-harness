@@ -320,19 +320,17 @@
 
 .docBody {
   /* 批次八 3.2: the modal bounds the pane — the body flexes to the panel's
-     full height and scrolls in place. */
+     full height and scrolls in place.
+     【变更】2026-10-22 (批次十一 4): the mono pre-wrap look is GONE — the body
+     now hosts the shared MarkdownText renderer, so it only owns the scroll,
+     the surface tint, and a readable measure for long documents. */
   flex: 1 1 auto;
   min-height: 0;
   margin: 8px 0 0;
-  padding: 12px;
+  padding: 4px 16px 12px 12px;
   overflow: auto;
   border-radius: 6px;
   background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 12px;
-  line-height: 19px;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 /* 【变更】2026-10-21 (批次八 3.4): the 单元测试 card — real values read from
@@ -1155,11 +1153,20 @@
   gap: 8px;
 }
 
+/* 【变更】2026-10-22 (批次十一 3): the 全局指令 card's responsive grid — full
+ * (non-compact) rows, two columns where the width allows. */
+.cmdListGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .cmdRow {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
+  gap: 4px;
+  padding: 10px 12px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
 }
@@ -1188,16 +1195,34 @@
   letter-spacing: 1px;
 }
 
-.cmdDesc {
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-primary);
+/* One captioned explain line: 作用 / 功能 / 运行结果. */
+.cmdField {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
-.cmdEffect {
+.cmdFieldKey {
+  flex: none;
+  width: 30px;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   line-height: 17px;
+}
+
+.cmdFieldValue {
+  flex: 1;
+  min-width: 0;
   color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+/* The 作用 line quotes the help table — keep it primary-weight like before. */
+.cmdFieldDesc {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .cmdGlobalBand {
@@ -1209,14 +1234,6 @@
 
 .cmdGlobalBand .qualityGroupLabel {
   margin-bottom: 10px;
-}
-
-.cmdListCompact {
-  gap: 6px;
-}
-
-.cmdListCompact .cmdRow {
-  padding: 6px 10px;
 }
 
 /* 【变更】2026-10-21 (批次十 测试流图): the 测试流图 card's detail rows —

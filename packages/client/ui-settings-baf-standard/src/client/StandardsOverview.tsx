@@ -584,7 +584,7 @@ export function StandardsCommandsOverview(props: StandardsPanelProps) {
   return (
     <section className={css.block} data-testid="baf-standard-commands">
       <StatusSurface state={state} summary={state.summary} t={t} suppressNoBaseline />
-      <CommandsCard state={state} t={t} />
+      <CommandsCard t={t} />
     </section>
   )
 }

@@ -26,6 +26,26 @@
   margin-top: 4px;
 }
 
+/* 【变更】2026-10-22 (批次十一 2): the 导出/导入 row — always present, so the
+   hint explains the whole-file replace before anyone clicks 导入. */
+.configRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.configHint {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* The real file picker stays invisible; the visible 导入 button clicks it. */
+.fileInput {
+  display: none;
+}
+
 /* 【变更】2026-10-12 (问题 2.1): bulk 自动更新 as a Switch — same visual
    weight as the per-card footer switch, aligned with the pill buttons. */
 .autoBulkSwitch {

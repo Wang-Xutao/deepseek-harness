@@ -71,6 +71,10 @@ export interface FeaturedSectionState {
   bulk: 'install' | 'enable' | 'disable' | undefined
   /** Whether a version check is running. */
   checking: boolean
+  /** 【变更】2026-10-22 (批次十一 2): whether a manifest export is running. */
+  exporting: boolean
+  /** Whether a manifest import is running. */
+  importing: boolean
   /** Confirmation the Host asked for, shown on its card until answered. */
   confirm: FeaturedConfirm | undefined
   /** Last finished operation's message, shown as a status line. */
@@ -105,6 +109,18 @@ export interface FeaturedSectionFace {
   bulkSetEnabled(enabled: boolean): void
   /** Probe registries for newer versions inside each entry's range. */
   checkUpdates(): void
+  /**
+   * 【变更】2026-10-22 (批次十一 2): export the effective recommended list as
+   * canonical manifest text; the section saves it as a config file.
+   * @returns The JSON text on success, or undefined when the Host refused.
+   */
+  exportConfig(): Promise<string | undefined>
+  /**
+   * 【变更】2026-10-22 (批次十一 2): import a chosen config file's text as the
+   * new recommended list; a rejected document changes nothing.
+   * @param text The chosen file's full contents.
+   */
+  importConfig(text: string): void
   /** Answer the pending confirmation: approve retries, decline drops it. */
   acceptConfirm(approve: boolean): void
   /** The card's title in the active locale. */
@@ -136,6 +152,8 @@ export class FeaturedSectionController {
       busy: undefined,
       bulk: undefined,
       checking: false,
+      exporting: false,
+      importing: false,
       confirm: undefined,
       notice: undefined,
       progress: undefined,
@@ -223,6 +241,65 @@ export class FeaturedSectionController {
   }
 
   /** @inheritdoc */
+  exportConfig(): Promise<string | undefined> {
+    const snapshot = this.store.getSnapshot()
+    if (snapshot.exporting || snapshot.importing) return Promise.resolve(undefined)
+    this.store.update((draft) => {
+      draft.exporting = true
+      draft.notice = undefined
+    })
+    return (async () => {
+      const response = await this.ctx.remote.featuredPlugins.exportManifest()
+      let text: string | undefined
+      this.store.update((draft) => {
+        draft.exporting = false
+        if (!response.ok) {
+          draft.notice = this.noticeOf('failed', response.error.message)
+          return
+        }
+        if (!response.value.ok) {
+          draft.notice = this.noticeOf('failed', response.value.error ?? '')
+          return
+        }
+        text = response.value.text
+        draft.notice = this.noticeOf('ok', '')
+      })
+      return text
+    })()
+  }
+
+  /** @inheritdoc */
+  importConfig(text: string): void {
+    const snapshot = this.store.getSnapshot()
+    if (snapshot.importing || snapshot.exporting) return
+    this.store.update((draft) => {
+      draft.importing = true
+      draft.notice = undefined
+    })
+    void (async () => {
+      const response = await this.ctx.remote.featuredPlugins.importManifest(text)
+      this.store.update((draft) => {
+        draft.importing = false
+        if (!response.ok) {
+          draft.notice = this.noticeOf('failed', response.error.message)
+          return
+        }
+        // 【变更】2026-10-22 (批次十一 2): the success line carries the applied
+        // entry count; a rejection quotes the Host's validation problems.
+        draft.notice = response.value.ok
+          ? this.noticeOf('ok', this.ctx.locale.resolveText({
+            zh: `清单已导入，共 ${String(response.value.count ?? '?')} 个插件生效。`,
+            en: `List imported — ${String(response.value.count ?? '?')} plugins now apply.`,
+          }))
+          : this.noticeOf('failed', response.value.problems ?? '')
+      })
+      // The Host's change event re-reads the cards; load defensively in case
+      // this client missed it.
+      await this.load()
+    })()
+  }
+
+  /** @inheritdoc */
   acceptConfirm(approve: boolean): void {
     const confirm = this.store.getSnapshot().confirm
     if (confirm === undefined) return
@@ -270,6 +347,8 @@ export class FeaturedSectionController {
       bulkInstall: () => this.bulkInstall(),
       bulkSetEnabled: enabled => this.bulkSetEnabled(enabled),
       checkUpdates: () => this.checkUpdates(),
+      exportConfig: () => this.exportConfig(),
+      importConfig: text => this.importConfig(text),
       acceptConfirm: approve => this.acceptConfirm(approve),
       nameOf: card => this.ctx.locale.resolveText({ zh: card.nameZh, en: card.nameEn }),
       descriptionOf: card => this.ctx.locale.resolveText({ zh: card.descriptionZh, en: card.descriptionEn }),

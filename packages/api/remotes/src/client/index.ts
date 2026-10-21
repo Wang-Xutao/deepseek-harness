@@ -43,7 +43,8 @@ export type {
   ReadOnlyReason, Registry, RestartReason,
 } from '@deepseek-ai/dsh-plugin-manager/types'
 export type {
-  FeaturedBulkOutcome, FeaturedBulkResult, FeaturedInstallOptions, FeaturedListResult,
+  FeaturedBulkOutcome, FeaturedBulkResult, FeaturedExportResult, FeaturedImportResult, FeaturedInstallOptions,
+  FeaturedListResult,
   FeaturedManifest, FeaturedManifestPlugin, FeaturedPluginCard, FeaturedPluginState, FeaturedResult,
 } from '@deepseek-ai/dsh-baf-featured/types'
 export type {} from '@deepseek-ai/dsh-plugin-manager/remote'

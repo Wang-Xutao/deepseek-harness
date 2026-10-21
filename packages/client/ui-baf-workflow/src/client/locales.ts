@@ -41,6 +41,28 @@ export type WorkflowTabKey =
   | 'tflow.nodeEn.lint'
   | 'tflow.nodeEn.analyze'
   | 'tflow.nodeEn.format'
+  // 【变更】2026-10-22 (批次十一 5): the click-to-inspect split — detail-pane
+  // labels, per-step 作用 copy, and the 执行结果 line templates.
+  | 'tflow.pickHint'
+  | 'tflow.labelTool'
+  | 'tflow.labelType'
+  | 'tflow.labelCommand'
+  | 'tflow.labelPurpose'
+  | 'tflow.labelResult'
+  | 'tflow.reportPath'
+  | 'tflow.chainDone'
+  | 'tflow.chainIdle'
+  | 'tflow.gateUndecided'
+  | 'tflow.staticIdle'
+  | 'tflow.formatIdle'
+  | 'tflow.desc.build'
+  | 'tflow.desc.test'
+  | 'tflow.desc.instrument'
+  | 'tflow.desc.report'
+  | 'tflow.desc.gate'
+  | 'tflow.desc.lint'
+  | 'tflow.desc.analyze'
+  | 'tflow.desc.format'
   | 'strip.current'
   | 'strip.totalTime'
   | 'strip.totalTokens'
@@ -358,7 +380,7 @@ export const en: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-21 (批次十 测试流图): the session test-flow tab + its copy.
   'view.testFlow': 'Test flow',
   'settings.testFlowTab.title': 'Test flow tab',
-  'settings.testFlowTab.description': 'Turn off to hide the Test flow tab (unit-test results) on the conversation view.',
+  'settings.testFlowTab.description': 'Turn off to hide the Test flow tab on the conversation view.',
   'tflow.verdictCoverage': 'Coverage',
   'tflow.verdictStatic': 'Static',
   'tflow.verdictReport': 'Report at',
@@ -393,6 +415,27 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.nodeEn.lint': 'Style lint (cpplint)',
   'tflow.nodeEn.analyze': 'cppcheck',
   'tflow.nodeEn.format': 'clang-format',
+  // 【变更】2026-10-22 (批次十一 5): detail-pane copy for the click-to-inspect split.
+  'tflow.pickHint': 'Click a step on the left to inspect its details and results here.',
+  'tflow.labelTool': 'Tool',
+  'tflow.labelType': 'Type',
+  'tflow.labelCommand': 'Command',
+  'tflow.labelPurpose': 'Purpose',
+  'tflow.labelResult': 'Result',
+  'tflow.reportPath': 'HTML report',
+  'tflow.chainDone': 'Ran with the /baf-quality chain (report at {at})',
+  'tflow.chainIdle': 'Not run yet — run /baf-quality check to fill in this pane.',
+  'tflow.gateUndecided': 'Coverage report exists but carries no pass verdict.',
+  'tflow.staticIdle': 'Not run yet — run /baf-quality lint to fill in this pane.',
+  'tflow.formatIdle': 'Formatting keeps no report; the final clang-format runs after lint is clean, before code freeze.',
+  'tflow.desc.build': 'Compiles the production sources and test stubs with gcc and links the Unity/CMock test executables — the first step of the check chain: if it does not compile, the tests, instrumentation and coverage below never happen.',
+  'tflow.desc.test': 'Drives every unit test through ceedling. The daily path skips coverage instrumentation and stays fast — regress here first after a code change, then run the full check chain once green.',
+  'tflow.desc.instrument': 'Rebuilds the sources with gcov coverage instrumentation (check path only — the daily test run is not instrumented), producing the data gcovr later scores.',
+  'tflow.desc.report': 'Aggregates the instrumented data with gcovr into an overall line-coverage verdict, and writes the HTML/Cobertura reports into the workspace report directory for browser review.',
+  'tflow.desc.gate': 'Reads the coverage report and decides the verdict: line coverage ≥ the threshold (default 80%) passes; the conclusion lands in ut-coverage.json, and a missing report counts as failed.',
+  'tflow.desc.lint': 'Checks style and banned constructs with cpplint under the SORA-tuned rule set (driven by the repo-root CPPLINT.cfg, not the Google defaults); runs together with cppcheck inside one /baf-quality lint.',
+  'tflow.desc.analyze': 'Hunts defect and undefined-behavior classes with cppcheck; third-party, test and build directories are exempt per the suppression file, and the error count feeds the static verdict above.',
+  'tflow.desc.format': 'Applies the final layout pass (clang-format -i) to the .c/.h files this change touched — only after lint is clean, before code freeze; no source edits afterwards.',
   'strip.current': 'Current',
   'strip.totalTime': 'Change time',
   'strip.totalTokens': 'Session tokens',
@@ -678,7 +721,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-21 (批次十 测试流图): 会话测试流图页签 + 工作流通用开关行。
   'view.testFlow': '测试流图',
   'settings.testFlowTab.title': '测试流图',
-  'settings.testFlowTab.description': '关闭后，对话 Tab 不再显示「测试流图」（单元测试结果）。',
+  // 【变更】2026-10-22 (批次十一 1): 描述去掉括注（单元测试结果）——页签名已自明。
+  'settings.testFlowTab.description': '关闭后，对话 Tab 不再显示「测试流图」。',
   'tflow.verdictCoverage': '覆盖率',
   'tflow.verdictStatic': '静态检查',
   'tflow.verdictReport': '报告时间',
@@ -713,6 +757,27 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.nodeEn.lint': 'Style lint (cpplint)',
   'tflow.nodeEn.analyze': 'cppcheck',
   'tflow.nodeEn.format': 'clang-format',
+  // 【变更】2026-10-22 (批次十一 5): 点击步骤后的右侧详情文案（作用/结果）。
+  'tflow.pickHint': '点击左侧步骤，可在此查看它的详细信息与执行结果。',
+  'tflow.labelTool': '工具',
+  'tflow.labelType': '类型',
+  'tflow.labelCommand': '命令',
+  'tflow.labelPurpose': '作用',
+  'tflow.labelResult': '执行结果',
+  'tflow.reportPath': 'HTML 报告',
+  'tflow.chainDone': '已随 /baf-quality 链执行（报告时间 {at}）',
+  'tflow.chainIdle': '尚未运行——执行 /baf-quality check 后此处显示结果。',
+  'tflow.gateUndecided': '覆盖率报告已生成，但未包含达标结论。',
+  'tflow.staticIdle': '尚未运行——执行 /baf-quality lint 后此处显示结果。',
+  'tflow.formatIdle': '格式化不落独立报告；最终 clang-format 在 lint 修完后、代码冻结前执行。',
+  'tflow.desc.build': '用 gcc 编译生产源码与测试桩，链接 Unity/CMock 测试可执行件，是整条 check 链的第一步：编译不过，后面的测试、插桩与覆盖率都无从谈起。',
+  'tflow.desc.test': '用 ceedling 驱动全部单元测试。日常路径不做覆盖率插桩、速度快——改完代码先用它快速回归，绿了再走 check 全链。',
+  'tflow.desc.instrument': '用 gcov 对源码做覆盖率插桩并重新编译，仅 check 路径执行（日常 test 不插桩），产出供 gcovr 统计的行覆盖数据。',
+  'tflow.desc.report': '用 gcovr 汇总插桩数据，得出整体行覆盖率结论，并把 HTML/Cobertura 报告落盘到工作区报告目录，供浏览器逐文件回看。',
+  'tflow.desc.gate': '读取覆盖率报告做达标判定：行覆盖率 ≥ 阈值（默认 80%）通过，结论写入 ut-coverage.json；报告未生成按未通过处理。',
+  'tflow.desc.lint': '用 cpplint 按 SORA 定制规则（由仓根 CPPLINT.cfg 驱动，非 Google 默认集）做风格与禁项检查；与 cppcheck 同在 /baf-quality lint 一次执行。',
+  'tflow.desc.analyze': '用 cppcheck 做缺陷与未定义行为类静态分析；第三方、测试与构建目录按抑制文件豁免，错误数计入顶部静态检查结论。',
+  'tflow.desc.format': '对本轮触及的 .c/.h 做最终排版（clang-format -i）——必须等 lint 修完才执行，代码冻结前完成，此后不再改源码。',
   'strip.current': '当前',
   'strip.totalTime': '变更耗时',
   'strip.totalTokens': '会话 tokens',

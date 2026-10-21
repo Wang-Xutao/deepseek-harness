@@ -134,17 +134,10 @@ export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpris
           canvas (.hooksFlowWrap) is the one border; the old .card wrapper drew a
           second thin frame around it (客户截图指认的多余边框). */}
       {/* 【变更】2026-10-20 (批次七 2.1): the card title + description rows are
-          gone — the tab label already says 企业规范; the legend below carries
-          the reading cues. */}
+          gone — the tab label already says 企业规范.
+          【变更】2026-10-22 (批次十一 4): the legend row is DELETED (客户指定)
+          — the node accents explain themselves; the canvas starts immediately. */}
       <div className={css.hooksFlowWrap}>
-        <div className={css.hooksLegend}>
-          <span className={css.hooksLegendItem}>
-            <span className={css.hooksLegendDot} aria-hidden />{t('enterpriseLegendDocs')}
-          </span>
-          <span className={css.hooksLegendItem}>
-            <span className={join(css.hooksLegendDot, css.hooksLegendDotIdle)} aria-hidden />{t('enterpriseNodeNone')}
-          </span>
-        </div>
         <div className={css.hooksSplit}>
           <div
             className={css.hooksFlowCanvas}
