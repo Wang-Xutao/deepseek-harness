@@ -14,21 +14,28 @@ function t(key: string): string {
 }
 
 describe('WorkflowSection tabs', () => {
-  it('renders five tabs and filters slot contributions per active panel', () => {
+  it('renders six tabs — 指令集 between 确认门 and 企业规范 — and filters slot contributions per active panel', () => {
     const renderSlot = vi.fn((_name: string, _owner: object, opts?: { only?: string }) => (
       <span data-testid={`slot-${opts?.only ?? 'all'}`} />
     ))
     render(<WorkflowSection t={t as never} renderSlot={renderSlot as never} />)
 
-    expect(screen.getByTestId('workflow-tab-general')).toBeDefined()
-    expect(screen.getByTestId('workflow-tab-project')).toBeDefined()
-    expect(screen.getByTestId('workflow-tab-gates')).toBeDefined()
-    expect(screen.getByTestId('workflow-tab-standard')).toBeDefined()
-    expect(screen.getByTestId('workflow-tab-quality')).toBeDefined()
+    // 【变更】2026-10-21 (指令集): the commands tab rides index 3, between
+    // 确认门 (gates) and 企业规范 (standard) — the customer-named position.
+    expect([...document.querySelectorAll('[role="tab"]')].map(tab => tab.getAttribute('data-testid'))).toEqual([
+      'workflow-tab-general',
+      'workflow-tab-project',
+      'workflow-tab-gates',
+      'workflow-tab-commands',
+      'workflow-tab-standard',
+      'workflow-tab-quality',
+    ])
 
     expect(renderSlot).toHaveBeenCalledWith('settings.workflow.item', {}, { only: 'trace-graph' })
     expect(renderSlot).toHaveBeenCalledWith('settings.workflow.item', {}, { only: 'workflow-tab' })
 
+    fireEvent.click(screen.getByTestId('workflow-tab-commands'))
+    expect(renderSlot).toHaveBeenCalledWith('settings.workflow.item', {}, { only: 'baf-standard-commands' })
     fireEvent.click(screen.getByTestId('workflow-tab-gates'))
     expect(renderSlot).toHaveBeenCalledWith('settings.workflow.item', {}, { only: 'baf-gates-overview' })
   })

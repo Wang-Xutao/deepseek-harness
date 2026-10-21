@@ -5780,6 +5780,9 @@ importers:
       '@deepseek-ai/dsh-baf-standard':
         specifier: workspace:^
         version: link:../../baf/baf-standard
+      '@deepseek-ai/dsh-baf-workflow':
+        specifier: workspace:^
+        version: link:../../baf/baf-workflow
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../locale

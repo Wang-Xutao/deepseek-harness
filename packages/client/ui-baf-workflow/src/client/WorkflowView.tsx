@@ -129,6 +129,11 @@ export interface WorkflowViewInjected {
    * (pair it in the same useEffect that created the scheduler).
    */
   subscribe: (onChange: () => void) => () => void
+  /**
+   * 【变更】2026-10-21 (配置按钮): open the main-stage 工作流 configuration
+   * page (the one the sidebar's 工作流 entry opens) — the strip's 配置 button.
+   */
+  openWorkflowConfig: () => void
 }
 
 export type WorkflowViewProps =
@@ -539,6 +544,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   const {
     t, refresh, startIntake, advance, transition, resume,
     gateResolve, gateRevise, openArtifact, routePreview, useProjection, subscribe, dashboard,
+    openWorkflowConfig,
     sessionId, useSessionStatus,
   } = props
   const preset = useProjection('agentPreset')
@@ -1154,6 +1160,18 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           onClick={() => void runSilent(() => refresh())}
         >
           {t('action.refresh')}
+        </button>
+        {/* 【变更】2026-10-21 (配置按钮): open the main-stage 工作流 config page —
+            the settings the graph's gates/hooks/standards render in (确认门 /
+            指令集 / 企业规范 / 质量监控 tabs). */}
+        <button
+          type="button"
+          className={clsx(css.btn, css.btnGhost)}
+          disabled={busy}
+          data-testid="strip-workflow-config"
+          onClick={() => { openWorkflowConfig() }}
+        >
+          {t('action.config')}
         </button>
         {/* §22.14 P3 — abandon gate Tab surface. The abandon gate only ever
             fires when an active change is parked on a non-terminal node; the

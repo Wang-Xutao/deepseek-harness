@@ -190,6 +190,19 @@ const MODE_LINES = [
 ] as const
 
 /**
+ * 【变更】2026-10-21 (指令集 tab): the raw help tables for the settings page's
+ * 指令集 mirror — `ui-settings-baf-standard` keeps a browser-side copy of the
+ * command list (desc + stars verbatim from these lines) and its parity spec
+ * deep-compares the copy against this export so the two can never drift.
+ */
+export const HELP_TABLES = {
+  core: HELP_CORE,
+  flow: HELP_FLOW,
+  check: HELP_CHECK,
+  update: HELP_UPDATE,
+} as const
+
+/**
  * Register BAF slash commands into the receiving agent's command layer.
  * @param ctx - agent standing-mount context with `commands`.
  */

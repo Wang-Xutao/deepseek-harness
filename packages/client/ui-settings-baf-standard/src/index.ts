@@ -18,8 +18,10 @@
  * @module @deepseek-ai/dsh-client-ui-settings-baf-standard
  */
 
+import { exec } from 'node:child_process'
 import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
+import { promisify } from 'node:util'
 import { load as loadYaml } from 'js-yaml'
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -31,7 +33,8 @@ import {
 import { commitGuardHookInstalled, installCommitGuardHook } from '@deepseek-ai/dsh-baf-guard/commit-hook'
 import { scaffoldWorkspace } from '@deepseek-ai/dsh-baf-scaffold'
 import {
-  readEnterpriseDoc,
+  applyEnterpriseStandards, detectAppliedEnterprisePacks,
+  enterpriseAssetsRoot, readEnterpriseDoc,
   STANDARD_AREAS, STANDARD_PLACEHOLDER, summarizeStandard,
 } from '@deepseek-ai/dsh-baf-standard'
 // Type-only: pulls the session store's Context merge (ctx.sessions).
@@ -42,6 +45,9 @@ import type {
   BafStandardSaveProtectedResult,
   BafStandardFieldRow, BafStandardFieldState, BafStandardPackageCard,
   BafStandardRulesDocResult, BafStandardStatPathResult, BafStandardSummaryResult,
+  BafQualityConfigurationResult, BafQualityEnvironmentResult,
+  BafQualityInstallResult, BafQualityInstallStep, BafQualityReportResult,
+  BafQualityToolRow,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -186,6 +192,168 @@ export function resolveWorkspaceCwd(
   }
   if (workspaceRoot !== undefined && workspaceRoot !== '') return workspaceRoot
   return undefined
+}
+
+// ── 质量监控 (2026-10-21 重构): environment probe / 一键安装 / 配置 readout ──
+
+const execShell = promisify(exec)
+
+/** Per-tool version-probe budget (missing tools fail fast on ENOENT). */
+const QUALITY_PROBE_TIMEOUT_MS = 4_000
+
+/** One gem/pip install's wall-clock budget (network-bound; no RPC timeout). */
+const QUALITY_INSTALL_TIMEOUT_MS = 300_000
+
+/** The unit-test toolchain members, in presentation order. */
+const QUALITY_TOOLS: ReadonlyArray<{ key: string; cmd: string; required: boolean }> = [
+  { key: 'gcc', cmd: 'gcc --version', required: true },
+  { key: 'ruby', cmd: 'ruby --version', required: true },
+  { key: 'ceedling', cmd: 'ceedling version', required: true },
+  { key: 'gcovr', cmd: 'gcovr --version', required: true },
+  { key: 'cpplint', cmd: 'cpplint --version', required: false },
+  { key: 'cppcheck', cmd: 'cppcheck --version', required: false },
+]
+
+/** Whether a shell failure was the timeout guard rather than a real failure. */
+function qualTimedOut(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'killed' in error && error.killed === true
+}
+
+/**
+ * Pull the version token out of a `--version` first line — the first
+ * whitespace token that looks like `N(.N)+`, so `gcc (Rev3, …) 13.2.0`,
+ * `ruby 3.2.2 (…)`, `ceedling 1.0.1`, `Cppcheck 2.13` all resolve without a
+ * per-tool parser.
+ */
+export function readToolVersion(stdout: string): string | undefined {
+  const firstLine = stdout.trim().split(/\r?\n/, 1)[0] ?? ''
+  for (const token of firstLine.split(/\s+/)) {
+    const match = token.match(/\d+(?:\.\d+)+/)
+    if (match !== null) return match[0]
+  }
+  return undefined
+}
+
+/** One-line, tail-clamped rendering of a command's output for step details. */
+function tailOf(text: string, max = 160): string {
+  const flat = text.trim().split(/\r?\n/).map(line => line.trim()).filter(line => line !== '').join(' · ')
+  return flat.length <= max ? flat : `${flat.slice(0, max)}…`
+}
+
+/** The manual-install hints for prerequisites 一键安装 cannot provision. */
+const QUALITY_MANUAL_HINTS: Readonly<Record<string, string>> = {
+  gcc: '需手动安装 GCC（MinGW-w64 或 MSYS2）并加入 PATH',
+  ruby: '需手动安装 Ruby（RubyInstaller）并加入 PATH，gem 随附',
+  cppcheck: '需手动安装 Cppcheck 并加入 PATH',
+}
+
+/** Shipped defaults when neither workspace nor asset config is readable. */
+const QUALITY_DEFAULTS = {
+  thresholdLine: 0.8,
+  gateMode: 'shadow',
+  reportHtmlRel: 'build/coverage/coverage_report.html',
+  testDir: 'test/**',
+  buildDir: 'build',
+} as const
+
+/**
+ * 【变更】2026-10-21 (质量监控重构 1.4): read the 配置 card's values — the
+ * workspace's own quality config (`.baf/quality/ceedling-config.json` +
+ * `project.yml`) with the SHIPPED asset defaults as fallback, so the card
+ * quotes what the workspace will actually run. Context-free (testable against
+ * a temp dir); `readQualityReport` reuses this to resolve the report path.
+ * @param workspaceRoot - absolute workspace root.
+ * @returns configuration readout (`no-workspace` only via the Remote).
+ */
+export async function readQualityConfiguration(
+  workspaceRoot: string,
+): Promise<BafQualityConfigurationResult> {
+  const readJson = async (path: string): Promise<Record<string, unknown> | undefined> => {
+    try {
+      const parsed: unknown = JSON.parse(await readFile(path, 'utf8'))
+      return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const assets = enterpriseAssetsRoot()
+  const workspaceConfig = await readJson(join(workspaceRoot, '.baf', 'quality', 'ceedling-config.json'))
+  const config = workspaceConfig ?? await readJson(join(assets, 'quality', 'ceedling', 'config.json'))
+  // project.yml is Ceedling's symbol-key YAML (":project:" → key ":project").
+  const readProject = async (path: string): Promise<Record<string, unknown> | undefined> => {
+    try {
+      const parsed: unknown = loadYaml(await readFile(path, 'utf8'))
+      return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const project = await readProject(join(workspaceRoot, 'project.yml'))
+    ?? await readProject(join(assets, 'quality', 'ceedling', 'project.yml'))
+
+  const asString = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+
+  const thresholdRaw = config?.threshold_line
+  const reportHtmlRel = asString(config?.report_html) ?? QUALITY_DEFAULTS.reportHtmlRel
+  const projectBlock = project?.[':project'] as Record<string, unknown> | undefined
+  const pathsBlock = project?.[':paths'] as Record<string, unknown> | undefined
+  const testEntry = asString((pathsBlock?.[':test'] as readonly string[] | undefined)?.[0])
+  let reportHtmlExists = false
+  try {
+    await stat(join(workspaceRoot, reportHtmlRel))
+    reportHtmlExists = true
+  } catch {
+    reportHtmlExists = false
+  }
+  return {
+    status: 'ready',
+    source: workspaceConfig !== undefined ? 'workspace' : 'builtin',
+    // '+:test/**' is Ceedling's include-glob prefix — strip for display.
+    testDir: testEntry?.replace(/^\+:/, '') ?? QUALITY_DEFAULTS.testDir,
+    buildDir: asString(projectBlock?.[':build_root']) ?? QUALITY_DEFAULTS.buildDir,
+    reportDir: dirname(reportHtmlRel),
+    thresholdLine: typeof thresholdRaw === 'number' && Number.isFinite(thresholdRaw)
+      ? thresholdRaw
+      : QUALITY_DEFAULTS.thresholdLine,
+    gateMode: asString(config?.gate_mode) ?? QUALITY_DEFAULTS.gateMode,
+    reportHtmlRel,
+    reportHtmlExists,
+  }
+}
+
+/**
+ * Probe one toolchain member (2026-10-21 质量监控重构 1.3). The command string
+ * is a literal — nothing from the workspace is interpolated — so a shell is
+ * safe and is the only thing that works: on Windows the gem/pip shims are
+ * `.cmd`/`.bat`, which `execFile` refuses with `shell: false` (CVE-2024-27980);
+ * the shell resolves them through PATHEXT. Timeout → `unknown` (§20.5: a slow
+ * tool must not be reported as absent), ENOENT → `missing`.
+ */
+export async function probeQualityTool(
+  tool: { key: string; cmd: string; required: boolean },
+  timeoutMs = QUALITY_PROBE_TIMEOUT_MS,
+): Promise<BafQualityToolRow> {
+  try {
+    const { stdout } = await execShell(tool.cmd, { timeout: timeoutMs, windowsHide: true })
+    const version = readToolVersion(stdout)
+    return version === undefined
+      ? { key: tool.key, state: 'missing', required: tool.required }
+      : { key: tool.key, state: 'ok', version, required: tool.required }
+  } catch (error: unknown) {
+    if (qualTimedOut(error)) return { key: tool.key, state: 'unknown', required: tool.required }
+    // A CLI that prints its version then exits non-zero is still usable.
+    const stdout = (error as { stdout?: unknown }).stdout
+    const version = typeof stdout === 'string' ? readToolVersion(stdout) : undefined
+    return version === undefined
+      ? { key: tool.key, state: 'missing', required: tool.required }
+      : { key: tool.key, state: 'ok', version, required: tool.required }
+  }
+}
+
+/** Probe every toolchain member in parallel (presentation order preserved). */
+async function probeQualityTools(): Promise<BafQualityToolRow[]> {
+  return Promise.all(QUALITY_TOOLS.map(tool => probeQualityTool(tool)))
 }
 
 /**
@@ -534,6 +702,169 @@ export class BafStandardConfigRemote extends TypertRemoteService {
       }
     } catch (error) {
       return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /**
+   * 【变更】2026-10-21 (质量监控重构 1.3): the 环境 card's payload — one row per
+   * unit-test toolchain member with the version the machine actually answers
+   * (spawned `--version`, shell-resolved so Windows shims work), plus whether
+   * the workspace already carries the quality pack assets (project.yml et al).
+   * `supported` gates ONLY on the required members (gcc/ruby/ceedling/gcovr);
+   * the 静态分析 members are shown but never block. Zero-arg (typert arity is
+   * exact; see summary's 变更 note).
+   * @returns probe rows + workspace support verdict.
+   */
+  @Remote
+  async qualityEnvironment(): Promise<BafQualityEnvironmentResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace', tools: [], supported: false, assetsInstalled: false }
+    const tools = await probeQualityTools()
+    return {
+      status: 'ready',
+      cwd,
+      tools,
+      supported: tools.filter(tool => tool.required).every(tool => tool.state === 'ok'),
+      assetsInstalled: detectAppliedEnterprisePacks(cwd).includes('quality'),
+    }
+  }
+
+  /**
+   * 【变更】2026-10-21 (质量监控重构 1.3): the 环境 card's 一键安装 — applies the
+   * quality pack assets into the workspace (the same no-overwrite/backup
+   * semantics `/baf-standard-init` uses), installs the gem/pip tools that CAN
+   * be auto-installed, and reports a manual hint for each prerequisite that
+   * cannot (gcc / ruby / cppcheck). The button click IS the human
+   * confirmation. Steps run sequentially and every step's outcome rides the
+   * wire — a failed step never aborts the rest. Zero-arg (typert arity).
+   * @returns per-step install report.
+   */
+  @Remote
+  async installQualityToolchain(): Promise<BafQualityInstallResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace', steps: [] }
+    const steps: BafQualityInstallStep[] = []
+
+    // 1. Workspace assets (project.yml / .baf/quality/* / CPPLINT.cfg …).
+    try {
+      const changes = applyEnterpriseStandards({ workspaceRoot: cwd, packs: ['quality'] })
+      steps.push({
+        id: 'assets',
+        ok: true,
+        detail: `新增 ${changes.created.length} · 跳过 ${changes.skipped.length}` +
+          `${changes.stackPinned ? ' · 已固化 stack' : ''}`,
+      })
+    } catch (error) {
+      steps.push({
+        id: 'assets',
+        ok: false,
+        detail: error instanceof Error ? error.message : String(error),
+      })
+    }
+
+    // 2+3. The gem tools (ceedling pinned to project.yml's 1.0.1; gcovr any).
+    const probes = await probeQualityTools()
+    const rowOf = (key: string): BafQualityToolRow | undefined => probes.find(row => row.key === key)
+    const rubyOk = rowOf('ruby')?.state === 'ok'
+    for (const step of [
+      { id: 'ceedling', cmd: 'gem install ceedling -v 1.0.1 --no-document' },
+      { id: 'gcovr', cmd: 'gem install gcovr --no-document' },
+    ]) {
+      if (!rubyOk) {
+        steps.push({ id: step.id, ok: false, detail: '未执行：先安装 Ruby（gem 依赖 Ruby 运行时）' })
+        continue
+      }
+      try {
+        const { stdout, stderr } = await execShell(step.cmd, {
+          timeout: QUALITY_INSTALL_TIMEOUT_MS,
+          windowsHide: true,
+        })
+        steps.push({
+          id: step.id,
+          ok: true,
+          detail: tailOf(`${stdout} ${stderr}`) === '' ? '安装完成' : tailOf(`${stdout} ${stderr}`),
+        })
+      } catch (error) {
+        if (qualTimedOut(error)) {
+          steps.push({ id: step.id, ok: false, detail: `超时（>${QUALITY_INSTALL_TIMEOUT_MS / 1000}s），可重试` })
+          continue
+        }
+        const out = error as { stdout?: unknown; stderr?: unknown; message?: unknown }
+        const text = tailOf(`${String(out.stdout ?? '')} ${String(out.stderr ?? '')}`) ||
+          (typeof out.message === 'string' ? tailOf(out.message) : '安装失败')
+        steps.push({ id: step.id, ok: false, detail: text })
+      }
+    }
+
+    // 4. cpplint via pip (python not probed as a row — failure detail carries
+    // the python -m pip fallback so the customer can retry by hand).
+    try {
+      const { stdout, stderr } = await execShell('pip install cpplint', {
+        timeout: QUALITY_INSTALL_TIMEOUT_MS,
+        windowsHide: true,
+      })
+      steps.push({
+        id: 'cpplint',
+        ok: true,
+        detail: tailOf(`${stdout} ${stderr}`) === '' ? '安装完成' : tailOf(`${stdout} ${stderr}`),
+      })
+    } catch (error) {
+      if (qualTimedOut(error)) {
+        steps.push({ id: 'cpplint', ok: false, detail: `超时（>${QUALITY_INSTALL_TIMEOUT_MS / 1000}s），可重试` })
+      } else {
+        const out = error as { stdout?: unknown; stderr?: unknown; message?: unknown }
+        const text = tailOf(`${String(out.stdout ?? '')} ${String(out.stderr ?? '')}`) ||
+          (typeof out.message === 'string' ? tailOf(out.message) : '安装失败')
+        steps.push({ id: 'cpplint', ok: false, detail: `${text}（可改用 python -m pip install cpplint）` })
+      }
+    }
+
+    // 5. Manual hints for the prerequisites no command can install here.
+    for (const key of ['gcc', 'ruby', 'cppcheck'] as const) {
+      if (rowOf(key)?.state !== 'ok') {
+        const hint = QUALITY_MANUAL_HINTS[key]
+        steps.push({ id: `manual-${key}`, ok: false, detail: hint ?? `需手动安装 ${key}` })
+      }
+    }
+
+    return { status: 'ready', steps }
+  }
+
+  /**
+   * 【变更】2026-10-21 (质量监控重构 1.4): the 配置 card's payload — the
+   * workspace's quality config values (test/report/build dirs, line-coverage
+   * threshold, gate mode, the HTML report path + whether it exists). See
+   * {@link readQualityConfiguration} for the workspace→builtin fallback.
+   * Zero-arg (typert arity is exact).
+   * @returns configuration readout.
+   */
+  @Remote
+  async qualityConfiguration(): Promise<BafQualityConfigurationResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace', source: 'builtin', ...QUALITY_DEFAULTS, reportHtmlExists: false, reportDir: dirname(QUALITY_DEFAULTS.reportHtmlRel) }
+    return readQualityConfiguration(cwd)
+  }
+
+  /**
+   * 【变更】2026-10-21 (质量监控重构 1.4): the 配置 card's 测试报告 modal payload
+   * — the configured `report_html` file's full text (HTML only, rendered in a
+   * sandboxed iframe client-side). Missing report → `missing` (the card shows
+   * the run-a-test hint); IO trouble → `unreadable` with the reason. Zero-arg
+   * (typert arity is exact).
+   * @returns report content or its absence.
+   */
+  @Remote
+  async readQualityReport(): Promise<BafQualityReportResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    const config = await readQualityConfiguration(cwd)
+    const path = join(cwd, config.reportHtmlRel)
+    try {
+      const content = await readFile(path, 'utf8')
+      return { status: 'ready', path, content }
+    } catch {
+      if (!config.reportHtmlExists) return { status: 'missing', path }
+      return { status: 'unreadable', reason: `无法读取 ${config.reportHtmlRel}` }
     }
   }
 }

@@ -21,6 +21,8 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
   BafEnterpriseDocResult, BafStandardNodeHooks, BafStandardSummaryResult,
+  BafQualityConfigurationResult, BafQualityEnvironmentResult,
+  BafQualityInstallResult, BafQualityInstallStep, BafQualityReportResult,
 } from '../types.ts'
 
 /** What the row renders; `summary` carries the status it loaded with. */
@@ -61,6 +63,31 @@ export interface StandardsOverviewState {
   generating: boolean
   /** Last generate outcome line (cleared on next action). */
   generateNotice: string | undefined
+  /**
+   * 【变更】2026-10-21 (质量监控重构 1.3): the 环境 card's probe answer
+   * (undefined until the first probe lands; survives summary reloads — the
+   * probe is its own Remote round, not part of the summary).
+   */
+  qualityEnv: BafQualityEnvironmentResult | undefined
+  /** An environment probe is in flight. */
+  qualityEnvLoading: boolean
+  /** Last environment-probe failure line (cleared on the next probe). */
+  qualityEnvNotice: string | undefined
+  /** A 一键安装 run is in flight (its steps arrive once it settles). */
+  qualityInstallRunning: boolean
+  /** The last 一键安装 per-step report. */
+  qualityInstallSteps: readonly BafQualityInstallStep[] | undefined
+  /** Last 一键安装 failure line (cleared on the next run). */
+  qualityInstallNotice: string | undefined
+  /**
+   * 【变更】2026-10-21 (质量监控重构 1.4): the 配置 card's readout (undefined
+   * until the first load lands).
+   */
+  qualityConfig: BafQualityConfigurationResult | undefined
+  /** Monotonic token for stale 测试报告 fetches (compare-and-drop). */
+  qualityReportSeq: number
+  /** The open 测试报告 modal's payload; undefined while closed or fetching. */
+  qualityReport: BafQualityReportResult | undefined
 }
 
 /** The registration-side face the row's slot entry injects. */
@@ -112,6 +139,19 @@ export interface StandardsOverviewFace {
   clearHooksNotice(): void
   /** Run the scaffold (生成配置文件 button on the no-baseline empty state). */
   generateBaseline(): Promise<void>
+  /**
+   * 【变更】2026-10-21 (质量监控重构 1.3): probe the unit-test toolchain into
+   * `qualityEnv` (the 环境 card's mount action; re-runs re-probe).
+   */
+  probeQualityEnvironment(): Promise<void>
+  /** Run 一键安装 (assets + gem/pip installs), then re-probe + reload config. */
+  installQualityToolchain(): Promise<void>
+  /** 【变更】2026-10-21 (质量监控重构 1.4): load the 配置 card's readout. */
+  loadQualityConfiguration(): Promise<void>
+  /** Fetch the 测试报告 HTML into the preview modal (stale answers dropped). */
+  openQualityReport(): Promise<void>
+  /** Close the 测试报告 modal. */
+  closeQualityReport(): void
 }
 
 /** Initial state: loading, viewer closed. */
@@ -129,6 +169,15 @@ const INITIAL: StandardsOverviewState = {
   hooksNotice: undefined,
   generating: false,
   generateNotice: undefined,
+  qualityEnv: undefined,
+  qualityEnvLoading: false,
+  qualityEnvNotice: undefined,
+  qualityInstallRunning: false,
+  qualityInstallSteps: undefined,
+  qualityInstallNotice: undefined,
+  qualityConfig: undefined,
+  qualityReportSeq: 0,
+  qualityReport: undefined,
 }
 
 /** The slice of the Session Remote the path gestures call (structural — the
@@ -194,6 +243,11 @@ export class StandardsController {
       saveNodeHooks: () => this.saveNodeHooks(),
       clearHooksNotice: () => this.clearHooksNotice(),
       generateBaseline: () => this.generateBaseline(),
+      probeQualityEnvironment: () => this.probeQualityEnvironment(),
+      installQualityToolchain: () => this.installQualityToolchain(),
+      loadQualityConfiguration: () => this.loadQualityConfiguration(),
+      openQualityReport: () => this.openQualityReport(),
+      closeQualityReport: () => this.closeQualityReport(),
     }
   }
 
@@ -501,5 +555,132 @@ export class StandardsController {
       // validation remains the authoritative gate).
       return true
     }
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-21 (质量监控重构 1.3): one toolchain probe round into
+   * `qualityEnv`. Failures settle into the notice line (never left hanging);
+   * a probe already in flight is joined, not duplicated.
+   */
+  async probeQualityEnvironment(): Promise<void> {
+    if (this.store.getSnapshot().qualityEnvLoading) return
+    this.store.update((state) => {
+      state.qualityEnvLoading = true
+      state.qualityEnvNotice = undefined
+    })
+    let notice: string | undefined
+    let result: BafQualityEnvironmentResult | undefined
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.qualityEnvironment()
+      if (response.ok) {
+        result = response.value
+      } else {
+        notice = response.error.message
+      }
+    } catch (error) {
+      notice = error instanceof Error ? error.message : String(error)
+    }
+    this.store.update((state) => {
+      state.qualityEnvLoading = false
+      state.qualityEnvNotice = notice
+      if (result !== undefined) state.qualityEnv = result
+    })
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-21 (质量监控重构 1.3): run 一键安装, fold its per-step report,
+   * then re-probe the environment and reload the 配置 readout so the verdict
+   * flips without a manual refresh. Double-runs are ignored while in flight
+   * (installs are minutes-long; a stacked second run helps nobody).
+   */
+  async installQualityToolchain(): Promise<void> {
+    if (this.store.getSnapshot().qualityInstallRunning) return
+    this.store.update((state) => {
+      state.qualityInstallRunning = true
+      state.qualityInstallNotice = undefined
+    })
+    let notice: string | undefined
+    let outcome: BafQualityInstallResult | undefined
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.installQualityToolchain()
+      if (response.ok) {
+        outcome = response.value
+        if (response.value.status === 'error') notice = response.value.message ?? response.value.status
+      } else {
+        notice = response.error.message
+      }
+    } catch (error) {
+      notice = error instanceof Error ? error.message : String(error)
+    }
+    this.store.update((state) => {
+      state.qualityInstallRunning = false
+      state.qualityInstallNotice = notice
+      if (outcome !== undefined) state.qualityInstallSteps = outcome.steps
+    })
+    // Fresh verdict + config (assets may have just landed in the workspace).
+    await this.probeQualityEnvironment()
+    await this.loadQualityConfiguration()
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-21 (质量监控重构 1.4): one 配置 readout round. Failures
+   * settle into the notice line; a stale load never clobbers a newer answer's
+   * fields because the whole readout lands atomically.
+   */
+  async loadQualityConfiguration(): Promise<void> {
+    let notice: string | undefined
+    let result: BafQualityConfigurationResult | undefined
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.qualityConfiguration()
+      if (response.ok) {
+        result = response.value
+      } else {
+        notice = response.error.message
+      }
+    } catch (error) {
+      notice = error instanceof Error ? error.message : String(error)
+    }
+    this.store.update((state) => {
+      state.qualityEnvNotice = notice ?? state.qualityEnvNotice
+      if (result !== undefined) state.qualityConfig = result
+    })
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-21 (质量监控重构 1.4): fetch the 测试报告 HTML into the
+   * preview modal. A stale answer for a superseded open is dropped by the
+   * sequence token; transport failures settle as `unreadable`.
+   */
+  async openQualityReport(): Promise<void> {
+    const seq = this.store.getSnapshot().qualityReportSeq + 1
+    this.store.update((state) => {
+      state.qualityReportSeq = seq
+      state.qualityReport = undefined
+    })
+    let result: BafQualityReportResult
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.readQualityReport()
+      result = response.ok
+        ? response.value
+        : { status: 'unreadable', reason: response.error.message }
+    } catch (error) {
+      result = { status: 'unreadable', reason: error instanceof Error ? error.message : String(error) }
+    }
+    this.store.update((state) => {
+      if (state.qualityReportSeq !== seq) return
+      state.qualityReport = result
+    })
+  }
+
+  /** @inheritdoc */
+  closeQualityReport(): void {
+    this.store.update((state) => {
+      state.qualityReportSeq += 1
+      state.qualityReport = undefined
+    })
   }
 }

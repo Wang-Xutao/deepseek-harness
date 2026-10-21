@@ -12,6 +12,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// 【变更】2026-10-21 (配置按钮): the layout service (selectPanel) + its
+// MainPanelId brand, for the strip's 配置 button opening the 工作流 page.
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import type {} from './remote-types.ts'
@@ -36,7 +40,7 @@ export type { WorkflowTabKey } from './locales.ts'
 
 /** Required services. */
 export const inject = [
-  'slots', 'locale', 'remote', 'remote.bafWorkflowView', 'sessions', 'uiSession', 'sidebarRight',
+  'slots', 'locale', 'remote', 'remote.bafWorkflowView', 'sessions', 'uiSession', 'sidebarRight', 'layout',
 ] as const
 
 /**
@@ -230,6 +234,12 @@ export function apply(ctx: ClientContext): void {
             const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
             if (cwd !== undefined && cwd === event.cwd) listener()
           }),
+        // 【变更】2026-10-21 (配置按钮): open the main-stage 工作流 config page —
+        // the same panel the sidebar's 工作流 entry selects (ui-baf-tracegraph's
+        // 'workflow' MainPanelId); the strip's 配置 button fires this.
+        openWorkflowConfig: () => {
+          ctx.layout.selectPanel('workflow' as MainPanelId)
+        },
       }
     },
   }, WorkflowView)

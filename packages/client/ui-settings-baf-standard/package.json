@@ -84,6 +84,7 @@
     "@deepseek-ai/dsh-baf-quality": "workspace:^",
     "@deepseek-ai/dsh-baf-scaffold": "workspace:^",
     "@deepseek-ai/dsh-baf-standard": "workspace:^",
+    "@deepseek-ai/dsh-baf-workflow": "workspace:^",
     "@deepseek-ai/dsh-client-locale": "workspace:^",
     "@deepseek-ai/dsh-client-store": "workspace:*",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",

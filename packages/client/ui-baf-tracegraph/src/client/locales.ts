@@ -82,6 +82,7 @@ export type WorkflowKey =
   | 'tabs.general'
   | 'tabs.project'
   | 'tabs.gates'
+  | 'tabs.commands'
   | 'tabs.standard'
   | 'tabs.quality'
   | 'traceGraph.title'
@@ -242,6 +243,7 @@ export const zhWorkflow: Record<WorkflowKey, string> = {
   'tabs.general': '通用',
   'tabs.project': '项目工程',
   'tabs.gates': '确认门',
+  'tabs.commands': '指令集',
   'tabs.standard': '企业规范',
   'tabs.quality': '质量监控',
   'traceGraph.title': '轨迹图',
@@ -256,6 +258,7 @@ export const enWorkflow: Record<WorkflowKey, string> = {
   'tabs.general': 'General',
   'tabs.project': 'Project engineering',
   'tabs.gates': 'Confirmation gates',
+  'tabs.commands': 'Commands',
   'tabs.standard': 'Enterprise standards',
   'tabs.quality': 'Quality monitoring',
   'traceGraph.title': 'Trace Graph',

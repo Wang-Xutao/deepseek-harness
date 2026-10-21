@@ -17,6 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from './remote-types.ts'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import {
+  StandardsCommandsOverview,
   StandardsEnterpriseOverview,
   StandardsProjectOverview,
   StandardsQualityOverview,
@@ -74,4 +75,14 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: injectFace,
   }, StandardsQualityOverview))
+
+  // 【变更】2026-10-21 (指令集): the per-state baf-command flow chart (the
+  // 指令集 tab between 确认门 and 企业规范 renders exactly this row).
+  ctx.slots.inject('settings.workflow.item', () => ctx.slots.register({
+    name: 'settings.workflow.item',
+    id: 'baf-standard-commands',
+    order: 23,
+    locale: NS,
+    inject: injectFace,
+  }, StandardsCommandsOverview))
 }

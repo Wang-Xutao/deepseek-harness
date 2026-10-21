@@ -172,6 +172,7 @@ export type WorkflowTabKey =
   | 'action.resumeHelp'
   | 'action.refresh'
   | 'action.dashboard'
+  | 'action.config'
   | 'action.newChange'
   | 'action.newChangeHelp'
   | 'dashboard.activeChanges'
@@ -475,6 +476,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'action.resumeHelp': 'Drift never clears itself. Pick the stage to re-enter — everything after it is re-run.',
   'action.refresh': 'Refresh',
   'action.dashboard': 'Changes',
+  'action.config': 'Configure',
   'action.newChange': 'New change',
   'action.newChangeHelp': 'Starts intake for a new change (no source writes until confirmed).',
   'dashboard.title': 'Change dashboard',
@@ -767,6 +769,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'action.resumeHelp': '漂移不会自行消失。请选择要重新进入的阶段——它之后的阶段会重跑。',
   'action.refresh': '刷新',
   'action.dashboard': '变更总览',
+  'action.config': '配置',
   'action.newChange': '新建变更',
   'action.newChangeHelp': '启动 intake；确认前不写源码。',
   'dashboard.title': '变更总览',

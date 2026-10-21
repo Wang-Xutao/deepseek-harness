@@ -18,6 +18,7 @@ interface WorkflowSettingsTab {
     | 'tabs.general'
     | 'tabs.project'
     | 'tabs.gates'
+    | 'tabs.commands'
     | 'tabs.standard'
     | 'tabs.quality'
   slotIds: readonly string[]
@@ -27,6 +28,9 @@ const WORKFLOW_TABS: readonly WorkflowSettingsTab[] = [
   { id: 'general', labelKey: 'tabs.general', slotIds: ['trace-graph', 'workflow-tab'] },
   { id: 'project', labelKey: 'tabs.project', slotIds: ['baf-standard-project'] },
   { id: 'gates', labelKey: 'tabs.gates', slotIds: ['baf-gates-overview'] },
+  // 【变更】2026-10-21 (指令集): the per-state baf-command chart, between
+  // 确认门 and 企业规范 (客户指定位置).
+  { id: 'commands', labelKey: 'tabs.commands', slotIds: ['baf-standard-commands'] },
   { id: 'standard', labelKey: 'tabs.standard', slotIds: ['baf-standard-enterprise'] },
   { id: 'quality', labelKey: 'tabs.quality', slotIds: ['baf-standard-quality'] },
 ]

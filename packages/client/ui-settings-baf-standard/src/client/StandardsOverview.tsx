@@ -19,13 +19,15 @@ import { useEffect, useState } from 'react'
 import type {
   InjectFace, PropsLocale, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import type { BafStandardCardId, BafStandardFieldRow, BafStandardSummaryResult } from '../types.ts'
+import type { BafStandardSummaryResult } from '../types.ts'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import { NodeHooksCard } from './NodeHooksCard.tsx'
 import { EnterpriseDocsCard } from './EnterpriseDocsCard.tsx'
 import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
-import { QualityDocsCard } from './QualityDocsCard.tsx'
-import { UnitTestCard } from './UnitTestCard.tsx'
+import { QualityEnvironmentCard } from './QualityEnvironmentCard.tsx'
+import { QualityConfigCard } from './QualityConfigCard.tsx'
+import { QualityStandardsCard } from './QualityStandardsCard.tsx'
+import { CommandsCard } from './CommandsCard.tsx'
 import { type BafStandardKey } from './locales.ts'
 import css from './StandardsOverview.module.css'
 
@@ -72,22 +74,6 @@ export function joinEntry(cwd: string, entry: string): string {
   return `${cwd.replace(/\/+$/, '')}/${cleaned}`
 }
 
-const QUALITY_CARD_IDS: readonly BafStandardCardId[] = ['quality']
-
-const CARD_META: Record<BafStandardCardId, readonly [BafStandardKey, BafStandardKey, BafStandardKey]> = {
-  workflow: ['cardTitleWorkflow', 'cardDescWorkflow', 'cardCommandWorkflow'],
-  route: ['cardTitleRoute', 'cardDescRoute', 'cardCommandRoute'],
-  openspec: ['cardTitleOpenspec', 'cardDescOpenspec', 'cardCommandOpenspec'],
-  standard: ['cardTitleStandard', 'cardDescStandard', 'cardCommandStandard'],
-  quality: ['cardTitleQuality', 'cardDescQuality', 'cardCommandQuality'],
-  guard: ['cardTitleGuard', 'cardDescGuard', 'cardCommandGuard'],
-}
-
-const AVAILABILITY_TEXT: Record<string, BafStandardKey> = {
-  ready: 'stateAvailabilityReady',
-  policy_missing: 'stateAvailabilityMissing',
-}
-
 /** Shared inject + locale props for all standards panels. */
 export type StandardsPanelProps =
   PropsRuntime<'settings.workflow.item'>
@@ -96,47 +82,6 @@ export type StandardsPanelProps =
 
 /** @deprecated Use StandardsEnterpriseOverview — kept for spec imports. */
 export type StandardsOverviewProps = StandardsPanelProps
-
-function FieldTable({ fields, t }: {
-  fields: readonly BafStandardFieldRow[]
-  t: PropsLocale<'baf.standard'>['t']
-}) {
-  return (
-    <table className={css.fields}>
-      <thead>
-        <tr><th>{t('fieldLabel')}</th><th>{t('valueLabel')}</th></tr>
-      </thead>
-      <tbody>
-        {fields.map(field => (
-          <tr key={field.field} data-testid={`baf-standard-field-${field.field}`}>
-            <td className={css.fieldPath}>{field.field}</td>
-            <td className={field.state === 'tbd' ? css.valueTbd : css.value}>
-              {field.field === 'standard.availability'
-                ? t(AVAILABILITY_TEXT[field.value] ?? 'stateAvailabilityMissing')
-                : field.value}
-              {field.state === 'tbd' ? <span className={css.chipTbd}>{t('stateTbd')}</span> : null}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-function PanelHead({ titleKey, descKey, t }: {
-  titleKey: BafStandardKey
-  descKey: BafStandardKey
-  t: StandardsPanelProps['t']
-}) {
-  return (
-    <div className={css.head}>
-      <div>
-        <div className={css.title}>{t(titleKey)}</div>
-        <div className={css.description}>{t(descKey)}</div>
-      </div>
-    </div>
-  )
-}
 
 function StatusSurface({ state, summary, t, suppressNoBaseline }: {
   state: StandardsOverviewState
@@ -166,22 +111,6 @@ function StatusSurface({ state, summary, t, suppressNoBaseline }: {
     return <div className={css.status} data-testid="baf-standard-empty">{t('statusNoBaseline')}</div>
   }
   return null
-}
-
-function PackageCard({ cardId, fields, t }: {
-  cardId: BafStandardCardId
-  fields: readonly BafStandardFieldRow[]
-  t: StandardsPanelProps['t']
-}) {
-  const [titleKey, descKey, commandKey] = CARD_META[cardId]
-  return (
-    <div className={css.card} data-testid={`baf-standard-card-${cardId}`}>
-      <div className={css.cardTitle}>{t(titleKey)}</div>
-      <div className={css.cardDesc}>{t(descKey)}</div>
-      <div className={css.cardCommand}>{t(commandKey)}</div>
-      <FieldTable fields={fields} t={t} />
-    </div>
-  )
 }
 
 /**
@@ -574,42 +503,57 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
   )
 }
 
-/** 质量监控 tab — REAL baf-quality toolchain docs + the baseline's stack card. */
+/**
+ * 质量监控 tab — 【变更】2026-10-21 (质量监控重构 1.1–1.6, 客户决策): the tab
+ * head, the old 单元测试 card, the toolchain-docs card and the baseline stack
+ * (baf-quality · 质量门禁) card are all DELETED; the tab is now THREE cards —
+ * 环境 (real probed toolchain versions + workspace support verdict + 一键安装),
+ * 配置 (workspace unit-test config values + the HTML 测试报告 preview modal),
+ * and 规范 (every UT-related standards document, categorized).
+ */
 export function StandardsQualityOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
   const {
-    openEnterpriseDoc, closeEnterpriseDoc, openPath, statWorkspacePath, t,
+    openEnterpriseDoc, closeEnterpriseDoc, openPath, t,
+    probeQualityEnvironment, installQualityToolchain,
+    loadQualityConfiguration, openQualityReport, closeQualityReport,
   } = props
-  const cards = (summary?.cards ?? []).filter(card => QUALITY_CARD_IDS.includes(card.id))
-  // 【变更】2026-10-21 (批次八 3.2/3.4): ONE full-screen modal per tab — both
-  // the UT card and the toolchain card open documents through the shared store
-  // field, so the tab (not each card) renders the single viewer.
+  // 【变更】2026-10-21 (批次八 3.2/3.4): ONE full-screen doc modal per tab —
+  // the 规范 card opens documents through the shared store field, so the tab
+  // (not the card) renders the single viewer.
   const viewer = viewerOf(state.enterpriseDocId, state.enterpriseDoc)
+  // 【变更】2026-10-21 (质量监控重构 1.3/1.4): the probe + config readout are
+  // their own Remote rounds (not part of the summary) — fire them on every
+  // tab mount so the verdict tracks the machine, not the activation-time
+  // snapshot. Both self-gate double-runs in the controller.
+  useEffect(() => {
+    void probeQualityEnvironment()
+    void loadQualityConfiguration()
+  }, [probeQualityEnvironment, loadQualityConfiguration])
 
   return (
     <section className={css.blockQuality} data-testid="baf-standard-quality">
-      <PanelHead titleKey="panelQualityTitle" descKey="panelQualityDescription" t={t} />
       <StatusSurface state={state} summary={summary} t={t} />
-      {/* 【变更】2026-10-21 (批次八 3.4): the unit-test 查漏补缺 card — the real
-          Ceedling/Unity/CMock toolchain values, paths, coverage threshold and
-          report artifacts (workspace-aware 打开), ahead of the toolchain docs. */}
-      <UnitTestCard
-        state={state}
-        summary={summary}
-        t={t}
-        openEnterpriseDoc={openEnterpriseDoc}
-        openPath={openPath}
-        statWorkspacePath={statWorkspacePath}
-      />
-      {/* 【变更】2026-10-20 (批次七 2.5): the static gate-mechanism card is
-          REPLACED by the REAL baf-quality toolchain — environment setup,
-          configuration, and the toolchain's own standards docs, read from the
-          bafplugin-migrated package assets through the shared doc viewer. */}
-      <QualityDocsCard
-        state={state}
-        t={t}
-        openEnterpriseDoc={openEnterpriseDoc}
-      />
+      <div className={css.stack}>
+        <QualityEnvironmentCard
+          state={state}
+          t={t}
+          onRecheck={() => { void probeQualityEnvironment() }}
+          onInstall={() => { void installQualityToolchain() }}
+        />
+        <QualityConfigCard
+          state={state}
+          t={t}
+          onPreview={() => { void openQualityReport() }}
+          onClosePreview={() => { closeQualityReport() }}
+          onOpenPath={(path) => { void openPath(path) }}
+        />
+        <QualityStandardsCard
+          state={state}
+          t={t}
+          openEnterpriseDoc={openEnterpriseDoc}
+        />
+      </div>
       {viewer !== undefined ? (
         <EnterpriseDocViewer
           viewer={viewer}
@@ -618,13 +562,24 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
           onClose={() => { closeEnterpriseDoc() }}
         />
       ) : null}
-      {summary?.status === 'ready' ? (
-        <div className={css.qualityGrid}>
-          {cards.map(card => (
-            <PackageCard key={card.id} cardId={card.id} fields={card.fields} t={t} />
-          ))}
-        </div>
-      ) : null}
+    </section>
+  )
+}
+
+/**
+ * 指令集 tab — 【变更】2026-10-21 (指令集): every baf command, on the same
+ * flow-chart anatomy the 企业规范 tab uses. Each state node counts its
+ * state-bound commands; the detail column explains each (做什么用 / 有什么
+ * 效果); the global band below the chart carries the any-state commands.
+ * Pure display — the customer drives commands in the session, not here.
+ */
+export function StandardsCommandsOverview(props: StandardsPanelProps) {
+  const { state } = usePanelState(props)
+  const { t } = props
+  return (
+    <section className={css.block} data-testid="baf-standard-commands">
+      <StatusSurface state={state} summary={state.summary} t={t} suppressNoBaseline />
+      <CommandsCard state={state} t={t} />
     </section>
   )
 }

@@ -12,20 +12,29 @@
  * standards as a workflow flow chart (canvas → per-node doc list → in-card
  * document viewer through `enterpriseDoc`), plus the client/host catalog
  * parity guard.
+ * 【变更】2026-10-21 (质量监控重构 + 指令集): the 单元测试/质量门禁/工具链文档
+ * cards RETIRE — 质量监控 is now 环境 (probed tool versions + verdict +
+ * 一键安装) / 配置 (workspace config values + 测试报告 modal) / 规范
+ * (categorized UT docs); the new 指令集 tab mirrors baf-workflow's HELP_TABLES
+ * on the same flow-chart anatomy (desc/stars parity-guarded).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 
 afterEach(cleanup)
 import { useSyncExternalStore } from 'react'
 import {
-  StandardsEnterpriseOverview, StandardsProjectOverview, StandardsQualityOverview,
-  toRelativeEntry,
+  StandardsCommandsOverview, StandardsEnterpriseOverview, StandardsProjectOverview,
+  StandardsQualityOverview, toRelativeEntry,
 } from '../src/client/StandardsOverview.tsx'
 import { ENTERPRISE_DOC_ROWS, QUALITY_DOC_ROWS } from '../src/client/enterprise-docs-catalog.ts'
+import {
+  BAF_COMMANDS, BAF_GLOBAL_COMMANDS,
+} from '../src/client/baf-commands-catalog.ts'
 // Host source of truth for the parity guard (vitest runs in node — node:fs OK).
 import { ENTERPRISE_DOCS, QUALITY_DOCS } from '@deepseek-ai/dsh-baf-standard/src/enterprise-docs.ts'
+import { HELP_TABLES } from '@deepseek-ai/dsh-baf-workflow/src/commands.ts'
 import {
   StandardsController, type StandardsOverviewFace, type StandardsOverviewState,
 } from '../src/client/standards-store.ts'
@@ -124,6 +133,13 @@ function harness(initial: StandardsOverviewState, faceOverrides: Partial<Standar
     saveNodeHooks: vi.fn(),
     clearHooksNotice: vi.fn(),
     generateBaseline: vi.fn(),
+    // 【变更】2026-10-21 (质量监控重构 1.3/1.4): the quality faces the tab's
+    // mount effects fire and the cards route through.
+    probeQualityEnvironment: vi.fn(),
+    installQualityToolchain: vi.fn(),
+    loadQualityConfiguration: vi.fn(),
+    openQualityReport: vi.fn(),
+    closeQualityReport: vi.fn(),
     ...faceOverrides,
   }
   const { hooks: _hooks, ...actions } = face
@@ -160,6 +176,15 @@ function readyState(overrides: Partial<StandardsOverviewState> = {}): StandardsO
     hooksNotice: undefined,
     generating: false,
     generateNotice: undefined,
+    qualityEnv: undefined,
+    qualityEnvLoading: false,
+    qualityEnvNotice: undefined,
+    qualityInstallRunning: false,
+    qualityInstallSteps: undefined,
+    qualityInstallNotice: undefined,
+    qualityConfig: undefined,
+    qualityReportSeq: 0,
+    qualityReport: undefined,
     ...overrides,
   }
 }
@@ -180,6 +205,15 @@ function notReadyState(status: StandardsOverviewState['status'], summary: BafSta
     hooksNotice: undefined,
     generating: false,
     generateNotice: undefined,
+    qualityEnv: undefined,
+    qualityEnvLoading: false,
+    qualityEnvNotice: undefined,
+    qualityInstallRunning: false,
+    qualityInstallSteps: undefined,
+    qualityInstallNotice: undefined,
+    qualityConfig: undefined,
+    qualityReportSeq: 0,
+    qualityReport: undefined,
   }
 }
 
@@ -476,105 +510,318 @@ describe('StandardsController · enterpriseDoc viewer (批次六 5)', () => {
   })
 })
 
-describe('StandardsQualityOverview · real baf-quality toolchain (批次七 2.5)', () => {
-  it('renders the unit-test card — toolchain/env rows, report paths with workspace-aware 打开, UT docs (批次八 3.4)', async () => {
-    const statWorkspacePath = vi.fn().mockImplementation(
-      (entry: string) => Promise.resolve(entry === 'build/coverage/coverage_report.html'))
-    const { props } = harness(readyState(), { statWorkspacePath })
-    render(<StandardsQualityOverview {...props} />)
-    const card = screen.getByTestId('baf-ut-card')
-    // 工具栏和环境 — the real ceedling values (project.yml / README sourced).
-    expect(card.textContent).toContain('utTitle')
-    expect(card.textContent).toContain('gcc · ruby · ceedling 1.0.1 (gem) · gcovr')
-    expect(card.textContent).toContain('baf-quality check --delta')
-    // 路径与覆盖率 — the mirrored test layout + the config.json threshold.
-    expect(card.textContent).toContain('test/<rel>/test_<module>.c')
-    expect(card.textContent).toContain('行覆盖 ≥ 80%')
-    // The three report artifacts stat the workspace: html exists → awake 打开;
-    // the xml does not → 未生成 and a disabled button.
-    const htmlRow = screen.getByTestId('baf-ut-report-build-coverage-coverage_report-html')
-    const xmlRow = screen.getByTestId('baf-ut-report-build-coverage-coverage_report-xml')
-    await waitFor(() => {
-      expect((htmlRow.querySelector('button') as HTMLButtonElement).disabled).toBe(false)
-      expect((xmlRow.querySelector('button') as HTMLButtonElement).disabled).toBe(true)
+describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监控重构)', () => {
+  /** A ready state whose 环境 probe answered fully supported (all 4 required
+   * tools ok) and whose 配置 readout quotes the workspace file. */
+  function qualityReadyState(overrides: Partial<StandardsOverviewState> = {}): StandardsOverviewState {
+    return readyState({
+      qualityEnv: {
+        status: 'ready',
+        cwd: '/ws',
+        supported: true,
+        assetsInstalled: true,
+        tools: [
+          { key: 'gcc', state: 'ok', version: '13.2.0', required: true },
+          { key: 'ruby', state: 'ok', version: '3.2.2', required: true },
+          { key: 'ceedling', state: 'ok', version: '1.0.1', required: true },
+          { key: 'gcovr', state: 'ok', version: '7.2', required: true },
+          { key: 'cpplint', state: 'missing', required: false },
+          { key: 'cppcheck', state: 'unknown', required: false },
+        ],
+      },
+      qualityConfig: {
+        status: 'ready',
+        source: 'workspace',
+        testDir: 'test/**',
+        buildDir: 'build',
+        reportDir: 'build/coverage',
+        thresholdLine: 0.8,
+        gateMode: 'shadow',
+        reportHtmlRel: 'build/coverage/coverage_report.html',
+        reportHtmlExists: true,
+      },
+      ...overrides,
     })
-    expect(xmlRow.textContent).toContain('utReportMissing')
-    // 相关文档 — the six UT docs (catalog ids across both catalogs).
-    for (const id of ['ut', 'utlist', 'uttpl', 'env-ut', 'cfg-project', 'cfg-config']) {
-      expect(screen.getByTestId(`baf-ut-doc-${id}`)).toBeDefined()
-    }
-    // Clicking one opens the shared full-screen modal (batch-8 3.2 anatomy).
-    const openEnterpriseDoc = vi.fn()
-    const pick = harness(readyState(), { openEnterpriseDoc })
-    cleanup()
-    render(<StandardsQualityOverview {...pick.props} />)
-    fireEvent.click(screen.getByTestId('baf-ut-doc-uttpl'))
-    expect(openEnterpriseDoc).toHaveBeenCalledWith('uttpl')
-  })
+  }
 
-  it('lists the grouped real assets even without a baseline — 环境搭建 / 配置 / 规范文档', () => {
-    const { props } = harness(notReadyState('no-baseline', { status: 'no-baseline' }))
+  it('probes the environment and loads the config on every tab mount (1.3/1.4)', () => {
+    const probeQualityEnvironment = vi.fn()
+    const loadQualityConfiguration = vi.fn()
+    const { props } = harness(readyState(), { probeQualityEnvironment, loadQualityConfiguration })
     render(<StandardsQualityOverview {...props} />)
-    // The toolchain card is NOT baseline-gated: the bafplugin-migrated assets
-    // ship with the product, so the groups render with no workspace at all.
-    const card = screen.getByTestId('baf-quality-docs-card')
-    expect(card.textContent).toContain('qualityToolchainTitle')
-    const groups = [...document.querySelectorAll('[data-testid^="baf-quality-group-"]')]
-    expect(groups.map(group => group.getAttribute('data-testid'))).toEqual([
-      'baf-quality-group-env',
-      'baf-quality-group-config',
-      'baf-quality-group-standard',
-    ])
-    // 环境搭建 carries the ceedling + static-analysis READMEs.
-    expect(screen.getByTestId('baf-quality-doc-env-ut').textContent).toContain('Ceedling')
-    expect(screen.getByTestId('baf-quality-doc-env-static').textContent).toContain('cpplint')
-    // 配置 carries the toolchain's config files (project.yml et al).
-    expect(screen.getByTestId('baf-quality-doc-cfg-project').textContent).toContain('project.yml')
-    // 规范文档 re-uses the enterprise catalog ids with the applies-at meta —
-    // titles can never drift from the flow chart's list.
-    expect(screen.getByTestId('baf-quality-doc-static').textContent).toContain('enterpriseDocApplies')
-    // The stack card (project parameters) stays baseline-gated.
-    expect(screen.queryByTestId('baf-standard-card-quality')).toBeNull()
-    expect(screen.getByTestId('baf-standard-empty').textContent).toContain('statusNoBaseline')
+    expect(probeQualityEnvironment).toHaveBeenCalledTimes(1)
+    expect(loadQualityConfiguration).toHaveBeenCalledTimes(1)
   })
 
-  it('opens a toolchain doc in the SHARED right-hand viewer and closes it', () => {
+  it('renders the 环境 card — verdict banner, REAL per-tool versions, assets on; the old cards are gone (1.1/1.3/1.6)', () => {
+    const { props } = harness(qualityReadyState())
+    render(<StandardsQualityOverview {...props} />)
+    // 1.1/1.6: the old 单元测试 card and the baf-quality · 质量门禁 stack card
+    // are deleted — nothing renders under their testids.
+    expect(screen.queryByTestId('baf-ut-card')).toBeNull()
+    expect(screen.queryByTestId('baf-standard-card-quality')).toBeNull()
+    const card = screen.getByTestId('baf-quality-env-card')
+    expect(card.textContent).toContain('qolEnvTitle')
+    expect(screen.getByTestId('baf-quality-env-verdict').textContent).toContain('qolEnvSupported')
+    // The tool table quotes the versions the probes ACTUALLY answered.
+    const table = screen.getByTestId('baf-quality-env-table')
+    expect(table.textContent).toContain('13.2.0')
+    expect(table.textContent).toContain('1.0.1')
+    const gcc = screen.getByTestId('baf-quality-env-tool-gcc')
+    expect(gcc.textContent).toContain('GCC')
+    expect(gcc.textContent).toContain('qolEnvRequired')
+    expect(gcc.textContent).toContain('qolEnvOk')
+    // Optional members gate nothing: a missing cpplint and an unknown cppcheck
+    // keep the verdict green with their own chips.
+    const cpplint = screen.getByTestId('baf-quality-env-tool-cpplint')
+    expect(cpplint.textContent).toContain('qolEnvOptional')
+    expect(cpplint.textContent).toContain('qolEnvMissing')
+    expect(screen.getByTestId('baf-quality-env-tool-cppcheck').textContent).toContain('qolEnvUnknown')
+    expect(card.textContent).toContain('qolEnvAssetsOn')
+    // Supported + assets installed → no install button at all.
+    expect(screen.queryByTestId('baf-quality-env-install')).toBeNull()
+  })
+
+  it('shows the danger verdict naming the missing members and runs 一键安装 (1.3)', () => {
+    const installQualityToolchain = vi.fn()
+    const env = qualityReadyState().qualityEnv
+    const broken = qualityReadyState({
+      qualityEnv: env === undefined ? undefined : {
+        ...env,
+        supported: false,
+        assetsInstalled: false,
+        tools: env.tools.map(tool => tool.key === 'gcc'
+          ? { key: tool.key, state: 'missing' as const, required: tool.required }
+          : tool),
+      },
+    })
+    const { props } = harness(broken, { installQualityToolchain })
+    render(<StandardsQualityOverview {...props} />)
+    expect(screen.getByTestId('baf-quality-env-verdict').textContent)
+      .toContain('qolEnvUnsupported：GCC')
+    expect(screen.getByTestId('baf-quality-env-tool-gcc').textContent).toContain('—')
+    fireEvent.click(screen.getByTestId('baf-quality-env-install'))
+    expect(installQualityToolchain).toHaveBeenCalledTimes(1)
+    // The per-step install report renders with ✓/✗ marks once a run settles.
+    cleanup()
+    const reported = harness(qualityReadyState({
+      qualityEnv: env === undefined ? undefined : { ...env, supported: false, assetsInstalled: false },
+      qualityInstallSteps: [
+        { id: 'assets', ok: true, detail: '已写入 4 个资产文件（备份 0）' },
+        { id: 'gem:ceedling', ok: false, detail: '未执行：先安装 Ruby' },
+      ],
+    }))
+    render(<StandardsQualityOverview {...reported.props} />)
+    const steps = screen.getByTestId('baf-quality-env-steps')
+    expect(screen.getByTestId('baf-quality-env-step-assets').textContent).toContain('已写入 4 个资产文件')
+    expect(screen.getByTestId('baf-quality-env-step-gem:ceedling').textContent).toContain('未执行：先安装 Ruby')
+    expect(steps.textContent).toContain('✓')
+    expect(steps.textContent).toContain('✗')
+  })
+
+  it('renders the 配置 card — the five workspace config rows + the source foot (1.4)', () => {
+    const { props } = harness(qualityReadyState())
+    render(<StandardsQualityOverview {...props} />)
+    const card = screen.getByTestId('baf-quality-config-card')
+    expect(card.textContent).toContain('qolCfgTitle')
+    expect(screen.getByTestId('baf-quality-config-test-dir').textContent).toContain('test/**')
+    expect(screen.getByTestId('baf-quality-config-report-dir').textContent).toContain('build/coverage')
+    expect(screen.getByTestId('baf-quality-config-build-dir').textContent).toContain('build')
+    expect(screen.getByTestId('baf-quality-config-threshold').textContent).toContain('≥ 80%')
+    expect(screen.getByTestId('baf-quality-config-threshold').textContent).toContain('shadow')
+    expect(screen.getByTestId('baf-quality-config-report').textContent)
+      .toContain('build/coverage/coverage_report.html')
+    expect(screen.getByTestId('baf-quality-config-source').textContent).toContain('qolCfgSourceWorkspace')
+    // The report exists → the 预览 button rides the row.
+    expect(screen.getByTestId('baf-quality-config-report-preview')).toBeDefined()
+  })
+
+  it('previews the 测试报告 in the sandboxed modal and closes on the scrim (1.4)', () => {
+    const openQualityReport = vi.fn()
+    const { props } = harness(qualityReadyState(), { openQualityReport })
+    render(<StandardsQualityOverview {...props} />)
+    fireEvent.click(screen.getByTestId('baf-quality-config-report-preview'))
+    expect(openQualityReport).toHaveBeenCalledTimes(1)
+    // In flight (report undefined) → the loading line; no iframe yet.
+    expect(screen.getByTestId('baf-quality-report-modal').textContent).toContain('qolReportLoading')
+    expect(screen.queryByTestId('baf-quality-report-frame')).toBeNull()
+    cleanup()
+
+    // Ready → the sandboxed iframe carries the report markup verbatim. The
+    // modal is LOCAL open state — the 预览 click opens it with the answer
+    // already in the store.
+    const openPath = vi.fn()
+    const closeQualityReport = vi.fn()
+    const ready = harness(qualityReadyState({
+      qualityReport: {
+        status: 'ready',
+        path: '/ws/build/coverage/coverage_report.html',
+        content: '<html><body><h1>Line Coverage</h1>84%</body></html>',
+      },
+    }), { openPath, closeQualityReport })
+    render(<StandardsQualityOverview {...ready.props} />)
+    fireEvent.click(screen.getByTestId('baf-quality-config-report-preview'))
+    const frame = screen.getByTestId('baf-quality-report-frame') as HTMLIFrameElement
+    expect(frame.getAttribute('srcDoc')).toContain('Line Coverage')
+    expect(frame.getAttribute('sandbox')).toBe('')
+    fireEvent.click(screen.getByTestId('baf-quality-report-open-file'))
+    expect(openPath).toHaveBeenCalledWith('/ws/build/coverage/coverage_report.html')
+    fireEvent.click(screen.getByTestId('baf-quality-report-scrim'))
+    expect(closeQualityReport).toHaveBeenCalledTimes(1)
+    cleanup()
+
+    // Missing report → its own line, no 打开文件 button.
+    const missing = harness(qualityReadyState({
+      qualityReport: { status: 'missing', path: '/ws/build/coverage/coverage_report.html' },
+    }))
+    render(<StandardsQualityOverview {...missing.props} />)
+    fireEvent.click(screen.getByTestId('baf-quality-config-report-preview'))
+    expect(screen.getByTestId('baf-quality-report-missing').textContent).toContain('qolReportMissing')
+    expect(screen.queryByTestId('baf-quality-report-open-file')).toBeNull()
+  })
+
+  it('quotes 未生成 (no 预览 button) when the workspace has no report yet (1.4)', () => {
+    const config = qualityReadyState().qualityConfig
+    const { props } = harness(qualityReadyState({
+      qualityConfig: config === undefined ? undefined : { ...config, reportHtmlExists: false },
+    }))
+    render(<StandardsQualityOverview {...props} />)
+    const report = screen.getByTestId('baf-quality-config-report')
+    expect(report.textContent).toContain('qolCfgReportMissing')
+    expect(screen.queryByTestId('baf-quality-config-report-preview')).toBeNull()
+  })
+
+  it('renders the 规范 card — four categorized UT doc groups; clicks open the shared viewer (1.5)', () => {
     const openEnterpriseDoc = vi.fn()
     const { props } = harness(readyState(), { openEnterpriseDoc })
     render(<StandardsQualityOverview {...props} />)
-    // No id open → no viewer pane beside the groups.
-    expect(screen.queryByTestId('baf-enterprise-doc-viewer')).toBeNull()
-    fireEvent.click(screen.getByTestId('baf-quality-doc-cfg-cpplint'))
-    expect(openEnterpriseDoc).toHaveBeenCalledWith('cfg-cpplint')
-    cleanup()
-
-    // Ready payload → the shared viewer pane carries the file body + gestures,
-    // and the clicked row shows as the selected one.
-    const openPath = vi.fn()
-    const closeEnterpriseDoc = vi.fn()
-    const ready = harness(readyState({
-      enterpriseDocId: 'cfg-cpplint',
-      enterpriseDoc: {
-        status: 'ready', id: 'cfg-cpplint', titleZh: 'CPPLINT.cfg（SORA 风格定制）', titleEn: 'CPPLINT.cfg (SORA style)',
-        path: 'D:/assets/quality/static-analysis/CPPLINT.cfg', content: 'set noparent\nlinelength=120\n',
-      },
-    }), { openPath, closeEnterpriseDoc })
-    render(<StandardsQualityOverview {...ready.props} />)
-    expect(screen.getByTestId('baf-enterprise-doc-body').textContent).toContain('linelength=120')
-    expect(screen.getByTestId('baf-quality-doc-cfg-cpplint').getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByTestId('baf-enterprise-doc-open-file'))
-    expect(openPath).toHaveBeenCalledWith('D:/assets/quality/static-analysis/CPPLINT.cfg')
-    // 批次八 3.2: the scrim click closes the full-screen modal.
-    fireEvent.click(screen.getByTestId('baf-enterprise-doc-scrim'))
-    expect(closeEnterpriseDoc).toHaveBeenCalledTimes(1)
+    const card = screen.getByTestId('baf-quality-docs-card')
+    expect(card.textContent).toContain('qolDocTitle')
+    const groups = [...document.querySelectorAll('[data-testid^="baf-quality-group-"]')]
+    expect(groups.map(group => group.getAttribute('data-testid'))).toEqual([
+      'baf-quality-group-ut',
+      'baf-quality-group-static',
+      'baf-quality-group-env',
+      'baf-quality-group-config',
+    ])
+    // 测试纪律 carries the enterprise UT SKILLs with the applies-at meta.
+    expect(screen.getByTestId('baf-quality-doc-ut').textContent).toContain('enterpriseDocApplies')
+    expect(screen.getByTestId('baf-quality-doc-utlist')).toBeDefined()
+    // 静态分析 / 环境搭建 / 配置模板 carry their catalog rows.
+    expect(screen.getByTestId('baf-quality-doc-static')).toBeDefined()
+    expect(screen.getByTestId('baf-quality-doc-env-ut').textContent).toContain('Ceedling')
+    expect(screen.getByTestId('baf-quality-doc-cfg-project').textContent).toContain('project.yml')
+    expect(screen.getByTestId('baf-quality-doc-cfg-cpplint')).toBeDefined()
+    expect(screen.getByTestId('baf-quality-doc-uttpl')).toBeDefined()
+    // A click routes through the shared full-screen viewer face.
+    fireEvent.click(screen.getByTestId('baf-quality-doc-uttpl'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('uttpl')
   })
 
-  it('projects the stack card once the baseline is ready', () => {
-    const { props } = harness(readyState())
+  it('renders the guidance states when no workspace is bound', () => {
+    const { props } = harness(notReadyState('no-workspace', { status: 'no-workspace' }))
     render(<StandardsQualityOverview {...props} />)
-    expect(screen.getByTestId('baf-quality-docs-card')).toBeDefined()
-    // cards: [] in the fixture — the grid renders nothing without the card.
-    expect(screen.queryByTestId('baf-standard-card-quality')).toBeNull()
+    expect(screen.getByTestId('baf-standard-empty').textContent).toContain('statusNoWorkspace')
+    // The cards still render — each answers its own no-workspace copy.
+    expect(screen.getByTestId('baf-quality-env-verdict').textContent).toContain('qolEnvProbing')
+    expect(screen.getByTestId('baf-quality-config-card').textContent).toContain('qolCfgLoading')
+  })
+})
+
+describe('baf-commands catalog parity (2026-10-21 指令集)', () => {
+  it('mirrors baf-workflow HELP_TABLES — every command, desc + stars verbatim, nothing extra', () => {
+    // Parse the four host tables' `/cmd  desc · ★★` lines.
+    const host: Array<{ id: string; desc: string; stars: number }> = []
+    for (const lines of [HELP_TABLES.core, HELP_TABLES.flow, HELP_TABLES.check, HELP_TABLES.update]) {
+      for (const line of lines) {
+        const match = /^(\/\S+)\s+(.*) · (★+)$/u.exec(line)
+        if (match === null) throw new Error(`unparsable help line: ${line}`)
+        const id = match[1]
+        const desc = match[2]
+        const stars = match[3]
+        if (id === undefined || desc === undefined || stars === undefined) {
+          throw new Error(`unparsable help line: ${line}`)
+        }
+        host.push({ id, desc, stars: stars.length })
+      }
+    }
+    const mirror = [...BAF_COMMANDS, ...BAF_GLOBAL_COMMANDS]
+    // Same size, no duplicate ids on either side.
+    expect(mirror.length).toBe(host.length)
+    expect(new Set(mirror.map(command => command.id)).size).toBe(mirror.length)
+    expect(new Set(host.map(entry => entry.id)).size).toBe(host.length)
+    for (const entry of host) {
+      const row = mirror.find(command => command.id === entry.id)
+      expect(row, entry.id).toBeDefined()
+      expect(row?.desc, entry.id).toBe(entry.desc)
+      expect(row?.stars, entry.id).toBe(entry.stars)
+      expect(row?.effect.length, entry.id).toBeGreaterThan(0)
+    }
+    // State-bound vs global split: every BAF_COMMANDS row names ≥1 main-chain
+    // node; every global row names none.
+    const CHAIN = ['intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive']
+    for (const command of BAF_COMMANDS) {
+      expect(command.nodes.length, command.id).toBeGreaterThan(0)
+      for (const node of command.nodes) expect(CHAIN, `${command.id}:${node}`).toContain(node)
+    }
+    for (const command of BAF_GLOBAL_COMMANDS) expect(command.nodes, command.id).toEqual([])
+  })
+})
+
+describe('StandardsCommandsOverview · 指令集 flow chart (2026-10-21 指令集)', () => {
+  it('renders the 8-node canvas — command-count accents, inline en names, arrowhead edges', () => {
+    const { props } = harness(readyState())
+    render(<StandardsCommandsOverview {...props} />)
+    const nodes = [...document.querySelectorAll('[data-testid^="baf-commands-node-"]')]
+    expect(nodes.map(node => node.getAttribute('data-testid'))).toEqual([
+      'baf-commands-node-intake',
+      'baf-commands-node-open',
+      'baf-commands-node-clarify',
+      'baf-commands-node-design',
+      'baf-commands-node-plan',
+      'baf-commands-node-implement',
+      'baf-commands-node-verify',
+      'baf-commands-node-archive',
+    ])
+    // Route-canvas parity: the SVG chain edges carry arrowheads.
+    expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0)
+    // One name line per card: the locale-keyed zh label with the en name inline.
+    const intake = screen.getByTestId('baf-commands-node-intake')
+    expect(intake.textContent).toContain('hooksNodeIntake')
+    expect(intake.textContent).toContain('Intake')
+    // The accent counts the commands bound to the node (intake: open + go).
+    expect(intake.textContent).toContain(`2 ${'cmdAccentUnit'}`)
+  })
+
+  it('defaults the detail to the first node and swaps it on click; global band rides below', () => {
+    const { props } = harness(readyState())
+    render(<StandardsCommandsOverview {...props} />)
+    expect(screen.getByTestId('baf-commands-detail').getAttribute('data-node')).toBe('intake')
+    // The intake rows carry id + ★ + 用途 + 效果 (the full, non-compact row).
+    const open = screen.getByTestId('baf-command-baf_workflow_open')
+    expect(open.textContent).toContain('/baf-workflow-open')
+    expect(open.textContent).toContain('启动变更：先分类')
+    expect(open.textContent).toContain('★★★')
+    expect(open.textContent).toContain('分类定了')
+    expect(screen.getByTestId('baf-command-baf_go')).toBeDefined()
+    // Clicking another node swaps the detail column.
+    fireEvent.click(screen.getByTestId('baf-commands-node-verify'))
+    expect(screen.getByTestId('baf-commands-detail').getAttribute('data-node')).toBe('verify')
+    expect(screen.getByTestId('baf-command-baf_check_quality')).toBeDefined()
+    expect(screen.getByTestId('baf-command-baf_check_guard')).toBeDefined()
+    // The global band: compact rows (no 效果 line), every global command present.
+    const band = screen.getByTestId('baf-commands-global')
+    expect(band.textContent).toContain('cmdGlobalTitle')
+    expect(screen.getByTestId('baf-command-baf_help').textContent).toContain('列出全部命令与用法')
+    expect(screen.getByTestId('baf-command-baf_help').textContent).not.toContain('迷路时的第一站')
+    expect(screen.getByTestId('baf-command-baf_update_rollback')).toBeDefined()
+  })
+
+  it('renders the chart with no baseline at all (a product constant)', () => {
+    const { props } = harness(notReadyState('no-baseline', { status: 'no-baseline', cwd: '/ws' }))
+    render(<StandardsCommandsOverview {...props} />)
+    expect(screen.getByTestId('baf-commands-card')).toBeDefined()
+    expect(screen.getByTestId('baf-commands-detail').getAttribute('data-node')).toBe('intake')
   })
 })
 

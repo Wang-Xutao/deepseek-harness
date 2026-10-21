@@ -141,6 +141,96 @@ export interface BafStandardRulesDocResult {
 }
 
 /**
+ * 【变更】2026-10-21 (质量监控重构 1.3): `qualityEnvironment()` outcome — the
+ * 质量监控 tab's 环境 card. One row per unit-test toolchain member with the
+ * version the workspace actually answers (spawned `--version`, shell-resolved
+ * so Windows gem/pip shims work), plus whether the workspace already carries
+ * the quality pack assets (project.yml et al). `supported` is false when any
+ * REQUIRED tool is missing or unknown.
+ */
+export interface BafQualityToolRow {
+  /** Stable tool id (`gcc` / `ruby` / `ceedling` / …). */
+  readonly key: string
+  /** ok = version answered; missing = not runnable; unknown = probe timed out. */
+  readonly state: 'ok' | 'missing' | 'unknown'
+  /** The version the workspace answered (ok only). */
+  readonly version?: string
+  /** False for the 静态分析 members (cpplint/cppcheck) — shown, not gating. */
+  readonly required: boolean
+}
+
+/** {@link BafQualityEnvironmentResult} — see the Remote's qualityEnvironment. */
+export interface BafQualityEnvironmentResult {
+  readonly status: 'ready' | 'no-workspace'
+  readonly cwd?: string
+  /** Probe rows in presentation order. */
+  readonly tools: readonly BafQualityToolRow[]
+  /** False when any required tool is missing/unknown. */
+  readonly supported: boolean
+  /** Whether the quality pack assets are already applied in the workspace. */
+  readonly assetsInstalled: boolean
+}
+
+/** One 一键安装 step's outcome. */
+export interface BafQualityInstallStep {
+  /** Step id (`assets` / `ceedling` / `gcovr` / `cpplint`). */
+  readonly id: string
+  readonly ok: boolean
+  /** Customer-readable one-liner (created counts, install output tail, hint). */
+  readonly detail: string
+}
+
+/**
+ * 【变更】2026-10-21 (质量监控重构 1.3): `installQualityToolchain()` outcome —
+ * the 环境 card's 一键安装. Applies the quality pack assets into the
+ * workspace, then installs the missing Ruby-gem / pip tools; prerequisites
+ * that cannot be auto-installed (gcc / ruby / cppcheck) report a manual hint.
+ */
+export interface BafQualityInstallResult {
+  readonly status: 'ready' | 'no-workspace' | 'error'
+  readonly steps: readonly BafQualityInstallStep[]
+  /** Customer-readable problem line (error only). */
+  readonly message?: string
+}
+
+/**
+ * 【变更】2026-10-21 (质量监控重构 1.4): `qualityConfiguration()` outcome — the
+ * 质量监控 tab's 配置 card. Values read from the WORKSPACE's quality config
+ * (`.baf/quality/config.json` / `.baf/quality/ceedling-config.json`, whichever
+ * exists) with the shipped product defaults as the fallback, so the card
+ * quotes what the workspace will actually run.
+ */
+export interface BafQualityConfigurationResult {
+  readonly status: 'ready' | 'no-workspace'
+  /** Where the values came from — the workspace file or the shipped defaults. */
+  readonly source: 'workspace' | 'builtin'
+  /** Unit-test source layout (`:paths.:test`, project.yml). */
+  readonly testDir: string
+  /** Build root (`:build_root`, project.yml). */
+  readonly buildDir: string
+  /** Directory of the HTML coverage report (dirname of report_html). */
+  readonly reportDir: string
+  /** Line-coverage threshold fraction (config.json threshold_line). */
+  readonly thresholdLine: number
+  /** Gate mode riding the threshold (config.json gate_mode). */
+  readonly gateMode: string
+  /** Workspace-relative HTML report path (the 测试报告 row's preview target). */
+  readonly reportHtmlRel: string
+  /** Whether the HTML report currently exists in the workspace. */
+  readonly reportHtmlExists: boolean
+}
+
+/**
+ * 【变更】2026-10-21 (质量监控重构 1.4): `readQualityReport()` outcome — the
+ * 配置 card's 测试报告 modal payload (HTML only, per the customer decision).
+ */
+export type BafQualityReportResult =
+  | { readonly status: 'ready'; readonly path: string; readonly content: string }
+  | { readonly status: 'missing'; readonly path: string }
+  | { readonly status: 'no-workspace' }
+  | { readonly status: 'unreadable'; readonly reason: string }
+
+/**
  * 【变更】2026-10-20 (批次六 5): `enterpriseDoc()` outcome — one REAL enterprise
  * standard document read from the package assets (bafplugin-migrated; a
  * product constant, never workspace- or baseline-dependent). The client

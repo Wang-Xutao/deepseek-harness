@@ -948,3 +948,273 @@
 .hiddenFileInput {
   display: none;
 }
+
+/* 【变更】2026-10-21 (质量监控重构 1.2–1.4): the 环境/配置/规范 cards — the
+ * verdict banner + tool table with state chips, the 一键安装 report, the
+ * config source footnote, and the 测试报告 preview frame. */
+
+.envVerdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.envVerdictOk {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #3fb972) 12%, transparent);
+  color: var(--dsw-alias-state-success-primary, #3fb972);
+}
+
+.envVerdictBad {
+  background: color-mix(in srgb, var(--dsw-alias-state-danger-label, #d4574e) 12%, transparent);
+  color: var(--dsw-alias-state-danger-label, #d4574e);
+}
+
+.envVerdictNeutral {
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  color: var(--dsw-alias-label-secondary);
+}
+
+.envDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.envTable {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.envTable th {
+  padding: 4px 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.envTable td {
+  padding: 6px 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* 【变更】2026-10-21: px columns slimmed (108/110/84 → 100/68/68) so the flexing
+ * 用途 column keeps a readable share even at narrow panel widths (fixed layout
+ * starves leftover columns first). */
+.envColTool {
+  width: 100px;
+}
+
+.envColVersion {
+  width: 68px;
+}
+
+.envColState {
+  width: 68px;
+}
+
+.envToolName {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.envTag {
+  margin-left: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.envToolRole {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.envToolVersion {
+  font-family: var(--dsw-alias-font-mono, monospace);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.envChip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.envChipOk {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #3fb972) 12%, transparent);
+  color: var(--dsw-alias-state-success-primary, #3fb972);
+}
+
+.envChipMissing {
+  background: color-mix(in srgb, var(--dsw-alias-state-danger-label, #d4574e) 12%, transparent);
+  color: var(--dsw-alias-state-danger-label, #d4574e);
+}
+
+.envChipUnknown {
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.envAssetsOn {
+  color: var(--dsw-alias-state-success-primary, #3fb972);
+}
+
+.envActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.envSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.envStepsLabel {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.envStep {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.envStepMark {
+  flex: none;
+  font-weight: 600;
+}
+
+.envStepOk {
+  color: var(--dsw-alias-state-success-primary, #3fb972);
+}
+
+.envStepBad {
+  color: var(--dsw-alias-state-danger-label, #d4574e);
+}
+
+.envStepDetail {
+  color: var(--dsw-alias-label-secondary);
+  word-break: break-all;
+}
+
+.cfgSource {
+  margin-top: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.reportFrame {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  margin: 8px 0 0;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: #fff;
+}
+
+/* 【变更】2026-10-21 (指令集): the per-state command rows — mono id + stars,
+ * then 用途 (desc) and 效果 (effect); compact rows (global band) drop the
+ * effect line. */
+
+.cmdList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cmdRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+
+.cmdHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cmdName {
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  word-break: break-all;
+}
+
+.cmdStars {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 1px;
+}
+
+.cmdDesc {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.cmdEffect {
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.cmdGlobalBand {
+  margin-top: 14px;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+
+.cmdGlobalBand .qualityGroupLabel {
+  margin-bottom: 10px;
+}
+
+.cmdListCompact {
+  gap: 6px;
+}
+
+.cmdListCompact .cmdRow {
+  padding: 6px 10px;
+}
