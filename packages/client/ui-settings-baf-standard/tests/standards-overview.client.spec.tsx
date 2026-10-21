@@ -1598,3 +1598,77 @@ describe('StandardsOverview mount refresh (六问题批 4.1 web 验证修复)', 
     expect(face.refreshIfClean).toHaveBeenCalledTimes(2)
   })
 })
+
+// 【变更】2026-10-21 (批次十 测试流图): the 质量监控 tab's flow chart — catalog
+// parity against baf-quality's TEST_FLOW_STEPS plus the card's own render /
+// interaction contract.
+import { QUALITY_FLOW_STEPS } from '../src/client/quality-flow-catalog.ts'
+import { TEST_FLOW_STEPS as HOST_TEST_FLOW_STEPS } from '@deepseek-ai/dsh-baf-quality/src/test-flow.ts'
+
+describe('quality-flow catalog parity (批次十 测试流图)', () => {
+  it('mirrors baf-quality TEST_FLOW_STEPS — id/tool/required in execution order', () => {
+    expect(QUALITY_FLOW_STEPS.map(step => [step.id, step.tool, step.required]))
+      .toEqual(HOST_TEST_FLOW_STEPS.map(step => [step.id, step.tool, step.required]))
+  })
+
+  it('every step carries a command, ≥0 doc ids that resolve in the catalogs, and workspace-relative artifacts', () => {
+    const known = new Set([...ENTERPRISE_DOC_ROWS, ...QUALITY_DOC_ROWS].map(row => row.id))
+    for (const step of QUALITY_FLOW_STEPS) {
+      expect(step.command.length, `${step.id} command empty`).toBeGreaterThan(0)
+      expect(step.docIds.length, `${step.id} no docs`).toBeGreaterThan(0)
+      for (const id of step.docIds) expect(known.has(id), `${step.id} unknown doc ${id}`).toBe(true)
+      for (const path of step.artifacts) {
+        expect(path.startsWith('.baf/') || path.startsWith('build/'), `${step.id}:${path}`)
+          .toBe(true)
+      }
+    }
+  })
+})
+
+describe('QualityFlowCard · 测试流图 chart (批次十)', () => {
+  it('renders the 8-node canvas in execution order with arrowhead edges + the discipline band', () => {
+    const { props } = harness(readyState())
+    render(<StandardsQualityOverview {...props} />)
+    const nodes = [...document.querySelectorAll('[data-testid^="baf-quality-flow-node-"]')]
+    expect(nodes.map(node => node.getAttribute('data-testid'))).toEqual([
+      'baf-quality-flow-node-build',
+      'baf-quality-flow-node-test',
+      'baf-quality-flow-node-instrument',
+      'baf-quality-flow-node-report',
+      'baf-quality-flow-node-gate',
+      'baf-quality-flow-node-lint',
+      'baf-quality-flow-node-analyze',
+      'baf-quality-flow-node-format',
+    ])
+    // Route-canvas parity: 7 vertical SVG edges, arrowheaded.
+    expect(document.querySelectorAll('svg path[marker-end]').length).toBe(7)
+    // The band carries the cross-step discipline.
+    expect(screen.getByTestId('baf-quality-flow-band').textContent).toContain('qolFlowBandTitle')
+  })
+
+  it('defaults the detail to the first step, swaps on click, and routes doc chips through the viewer face', () => {
+    const openEnterpriseDoc = vi.fn()
+    const { props } = harness(readyState(), { openEnterpriseDoc })
+    render(<StandardsQualityOverview {...props} />)
+    expect(screen.getByTestId('baf-quality-flow-detail').getAttribute('data-node')).toBe('build')
+    expect(screen.getByTestId('baf-quality-flow-detail').textContent).toContain('ceedling test:all')
+    // Click the gate step: command + 规范要点 swap in.
+    fireEvent.click(screen.getByTestId('baf-quality-flow-node-gate'))
+    expect(screen.getByTestId('baf-quality-flow-detail').getAttribute('data-node')).toBe('gate')
+    expect(screen.getByTestId('baf-quality-flow-detail').textContent).toContain('baf-quality check')
+    expect(screen.getByTestId('baf-quality-flow-detail').textContent).toContain('qolFlowRuleGate')
+    // Its 依据规范 chips open the shared full-screen viewer.
+    fireEvent.click(screen.getByTestId('baf-quality-flow-doc-ut'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('ut')
+    // The gate step lists its on-disk 产物.
+    expect(screen.getByTestId('baf-quality-flow-detail').textContent)
+      .toContain('.baf/reports/ut-coverage.json')
+  })
+
+  it('marks 必装/选装 on the node accents (the legend keys ride the card)', () => {
+    const { props } = harness(readyState())
+    render(<StandardsQualityOverview {...props} />)
+    expect(screen.getByTestId('baf-quality-flow-node-build').textContent).toContain('qolEnvRequired')
+    expect(screen.getByTestId('baf-quality-flow-node-lint').textContent).toContain('qolEnvOptional')
+  })
+})

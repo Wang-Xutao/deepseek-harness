@@ -349,3 +349,139 @@ export interface WorkflowDashboardView {
 
 /** Empty template used when Remote is unavailable — still shows the full graph. */
 export { buildClientTemplateTabView as buildClientEmptyTabView } from './graph-template.ts'
+
+/*
+ * 【变更】2026-10-21 (批次十 测试流图): the session Tab「测试流图」— client mirror
+ * of the host's `testFlowStatus` payload (defensive reads of the workspace's
+ * `.baf/reports/*.json` + quality config) and the same 8-step execution order
+ * baf-quality's TEST_FLOW_STEPS owns. Labels ride the locale keys; a spec
+ * asserts id/tool/required parity against the host list.
+ */
+
+/** Coverage half of the mirror (`ut-coverage.json`, every field optional). */
+export interface WorkflowTabTestFlowCoverage {
+  readonly line?: number
+  readonly minimum?: number
+  readonly passed?: boolean
+  readonly generatedAt?: string
+}
+
+/** Static-analysis half (`static-analysis.json`; cpplint+cppcheck run as one lint). */
+export interface WorkflowTabTestFlowStatic {
+  readonly errors?: number
+  readonly passed?: boolean
+  readonly generatedAt?: string
+}
+
+/** The full `testFlowStatus` mirror. */
+export interface WorkflowTabTestFlowStatus {
+  readonly status: 'ready' | 'no-cwd'
+  readonly coverage?: WorkflowTabTestFlowCoverage
+  readonly staticAnalysis?: WorkflowTabTestFlowStatic
+  readonly thresholdLine?: number
+  readonly gateMode?: string
+  readonly reportHtmlRel?: string
+  readonly reportHtmlExists?: boolean
+}
+
+/** Step ids in the normative execution order (check 链 → lint → 最终 format). */
+export type TestFlowStepId =
+  | 'build' | 'test' | 'instrument' | 'report'
+  | 'gate' | 'lint' | 'analyze' | 'format'
+
+/** What one step's status dot renders. */
+export type TestFlowStepState = 'passed' | 'failed' | 'idle'
+
+/** One chart step: display fields only (the zh label lives in the locale keys). */
+export interface WorkflowTabTestFlowStep {
+  readonly id: TestFlowStepId
+  readonly tool: string
+  readonly required: boolean
+  readonly command: string
+}
+
+/** The 8 steps, mirroring baf-quality TEST_FLOW_STEPS in execution order. */
+export const TEST_FLOW_STEPS: readonly WorkflowTabTestFlowStep[] = [
+  { id: 'build', tool: 'gcc', required: true, command: 'ceedling test:all' },
+  { id: 'test', tool: 'ceedling', required: true, command: 'baf-quality test · ceedling test:all' },
+  { id: 'instrument', tool: 'gcov', required: true, command: 'ceedling gcov:all' },
+  { id: 'report', tool: 'gcovr', required: true, command: 'gcovr（check 内聚合）' },
+  { id: 'gate', tool: 'baf-quality', required: true, command: 'baf-quality check' },
+  { id: 'lint', tool: 'cpplint', required: false, command: 'baf-quality lint（cpplint）' },
+  { id: 'analyze', tool: 'cppcheck', required: false, command: 'baf-quality lint（cppcheck）' },
+  { id: 'format', tool: 'clang-format', required: false, command: 'clang-format -i <触及的 .c/.h>' },
+]
+
+/** How one step resolved, plus the metric line the row appends (already localized by the view). */
+// metric explicitly admits undefined: projectTestFlowSteps computes it from
+// optional report fields, and exactOptionalPropertyTypes would reject the
+// `string | undefined` assignment against a bare optional.
+export interface TestFlowStepOutcome {
+  readonly state: TestFlowStepState
+  /** Extra fact for the row's metric slot (percent / error count / timestamp). */
+  readonly metric?: string | undefined
+}
+
+/**
+ * Pure projection: the status payload → per-step outcome. The check-chain
+ * steps (build/test/instrument/report) share the coverage report's presence;
+ * the gate reads its verdict; lint/analyze share the static report (cpplint +
+ * cppcheck run inside ONE `/baf-quality lint`, so one JSON feeds both rows);
+ * format keeps no on-disk report and stays idle with its discipline note.
+ * @param status - the host payload.
+ * @returns outcome per step id.
+ */
+export function projectTestFlowSteps(status: WorkflowTabTestFlowStatus | undefined): Readonly<Record<TestFlowStepId, TestFlowStepOutcome>> {
+  // Object.fromEntries loses key literal types; every TEST_FLOW_STEPS id is a
+  // TestFlowStepId so the Record shape holds — assert once, the return spread
+  // below then overrides all eight keys explicitly.
+  const empty = Object.fromEntries(TEST_FLOW_STEPS.map(step => [step.id, { state: 'idle' } as TestFlowStepOutcome])) as Record<TestFlowStepId, TestFlowStepOutcome>
+  if (status === undefined || status.status !== 'ready') return empty
+  const coverage = status.coverage
+  const statics = status.staticAnalysis
+  const chainState: TestFlowStepState = coverage === undefined ? 'idle' : 'passed'
+  const gateState: TestFlowStepState = coverage === undefined
+    ? 'idle'
+    : coverage.passed === true
+      ? 'passed'
+      : coverage.passed === false
+        ? 'failed'
+        // Report present but no verdict field — 未判定, not a fake pass.
+        : 'idle'
+  const staticState: TestFlowStepState = statics === undefined
+    ? 'idle'
+    : statics.passed === true || statics.errors === 0
+      ? 'passed'
+      : statics.passed === false || (statics.errors ?? 0) > 0
+        ? 'failed'
+        : 'idle'
+  const percent = (value: number | undefined): string | undefined =>
+    value === undefined ? undefined : `${(value * 100).toFixed(value * 100 % 1 === 0 ? 0 : 1)}%`
+  // The report carries percents (line=83.3, minimum=80); thresholdLine from
+  // the config is a 0-1 fraction — normalize both to display percents.
+  const linePct = coverage?.line !== undefined ? `${coverage.line}%` : undefined
+  const minPct = coverage?.minimum !== undefined
+    ? `${coverage.minimum}%`
+    : status.thresholdLine !== undefined ? percent(status.thresholdLine) : undefined
+  return {
+    ...empty,
+    build: { state: chainState },
+    test: { state: chainState },
+    instrument: { state: chainState },
+    report: {
+      state: chainState,
+      metric: coverage?.generatedAt,
+    },
+    gate: {
+      state: gateState,
+      metric: linePct === undefined && minPct === undefined ? undefined
+        : `${linePct ?? '—'}（≥ ${minPct ?? '—'}）`,
+    },
+    lint: { state: staticState },
+    analyze: {
+      state: staticState,
+      metric: statics?.errors === undefined ? statics?.generatedAt : `${statics.errors}`,
+    },
+    format: { state: 'idle' },
+  }
+}

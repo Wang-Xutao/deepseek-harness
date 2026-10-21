@@ -204,7 +204,10 @@ const QUALITY_PROBE_TIMEOUT_MS = 4_000
 /** One gem/pip install's wall-clock budget (network-bound; no RPC timeout). */
 const QUALITY_INSTALL_TIMEOUT_MS = 300_000
 
-/** The unit-test toolchain members, in presentation order. */
+/** The unit-test toolchain members, in presentation order.
+ * 【变更】2026-10-21 (批次十 测试流图): clang-format joins as a probed member —
+ * the 测试流图's final step runs it, so the 环境 card must surface its presence
+ * (选装：format 是代码冻结步骤，缺席只警示，不阻塞 UT 环境 supported 判定)。 */
 const QUALITY_TOOLS: ReadonlyArray<{ key: string; cmd: string; required: boolean }> = [
   { key: 'gcc', cmd: 'gcc --version', required: true },
   { key: 'ruby', cmd: 'ruby --version', required: true },
@@ -212,6 +215,7 @@ const QUALITY_TOOLS: ReadonlyArray<{ key: string; cmd: string; required: boolean
   { key: 'gcovr', cmd: 'gcovr --version', required: true },
   { key: 'cpplint', cmd: 'cpplint --version', required: false },
   { key: 'cppcheck', cmd: 'cppcheck --version', required: false },
+  { key: 'clang-format', cmd: 'clang-format --version', required: false },
 ]
 
 /** Whether a shell failure was the timeout guard rather than a real failure. */
@@ -245,6 +249,7 @@ const QUALITY_MANUAL_HINTS: Readonly<Record<string, string>> = {
   gcc: '需手动安装 GCC（MinGW-w64 或 MSYS2）并加入 PATH',
   ruby: '需手动安装 Ruby（RubyInstaller）并加入 PATH，gem 随附',
   cppcheck: '需手动安装 Cppcheck 并加入 PATH',
+  'clang-format': '需手动安装 LLVM/Clang（clang-format 随附）并加入 PATH',
 }
 
 /** Shipped defaults when neither workspace nor asset config is readable. */
@@ -820,7 +825,7 @@ export class BafStandardConfigRemote extends TypertRemoteService {
     }
 
     // 5. Manual hints for the prerequisites no command can install here.
-    for (const key of ['gcc', 'ruby', 'cppcheck'] as const) {
+    for (const key of ['gcc', 'ruby', 'cppcheck', 'clang-format'] as const) {
       if (rowOf(key)?.state !== 'ok') {
         const hint = QUALITY_MANUAL_HINTS[key]
         steps.push({ id: `manual-${key}`, ok: false, detail: hint ?? `需手动安装 ${key}` })

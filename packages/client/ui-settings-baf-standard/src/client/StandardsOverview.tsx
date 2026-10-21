@@ -26,6 +26,7 @@ import { EnterpriseDocsCard } from './EnterpriseDocsCard.tsx'
 import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
 import { QualityEnvironmentCard } from './QualityEnvironmentCard.tsx'
 import { QualityConfigCard } from './QualityConfigCard.tsx'
+import { QualityFlowCard } from './QualityFlowCard.tsx'
 import { QualityStandardsCard } from './QualityStandardsCard.tsx'
 import { CommandsCard } from './CommandsCard.tsx'
 import { type BafStandardKey } from './locales.ts'
@@ -548,6 +549,10 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
           onClosePreview={() => { closeQualityReport() }}
           onOpenPath={(path) => { void openPath(path) }}
         />
+        {/* 【变更】2026-10-21 (批次十 测试流图): the execution-flow chart rides
+            right after 配置 — the config above says WHERE the pieces live, the
+            chart says in WHICH ORDER they run and WHICH standard governs each. */}
+        <QualityFlowCard t={t} openEnterpriseDoc={openEnterpriseDoc} />
         <QualityStandardsCard
           state={state}
           t={t}

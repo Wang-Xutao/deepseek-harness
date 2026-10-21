@@ -14,13 +14,24 @@ export const WORKFLOW_TAB_PREF_KEY = 'baf.workflow-tab.pref'
 /** Default keeps the 工作流 tab visible — it is the preset's primary surface. */
 export const DEFAULT_SHOW_WORKFLOW_TAB = true
 
+/**
+ * 【变更】2026-10-21 (批次十 测试流图): the 测试流图 tab rides the SAME snapshot
+ * (one persisted device-local object for every BAF workflow tab switch). Read
+ * with `!== false` everywhere — a snapshot persisted before this key existed
+ * must keep the new tab visible, not silently hide it.
+ */
+export const DEFAULT_SHOW_TEST_FLOW_TAB = true
+
 /** Device-local 工作流 Tab preferences. */
 export interface BafWorkflowTabSettings {
   /** Whether the conversation tab 「工作流」 is mounted. */
   showWorkflowTab: boolean
+  /** Whether the conversation tab 「测试流图」 is mounted (批次十). */
+  showTestFlowTab: boolean
 }
 
 /** Opening snapshot before any persisted value is read. */
 export const INITIAL_WORKFLOW_TAB_PREFS: BafWorkflowTabSettings = {
   showWorkflowTab: DEFAULT_SHOW_WORKFLOW_TAB,
+  showTestFlowTab: DEFAULT_SHOW_TEST_FLOW_TAB,
 }

@@ -159,6 +159,53 @@ export interface BafWorkflowRoutePreviewRequest {
 }
 
 /**
+ * 【变更】2026-10-21 (批次十 测试流图): the coverage half of the session Tab's
+ * 测试流图 verdict — a defensive read of `.baf/reports/ut-coverage.json`
+ * (written by the quality pipeline's check chain; every field optional).
+ */
+export interface BafWorkflowTestFlowCoverage {
+  /** Line coverage in percent, when the report carries it. */
+  readonly line?: number
+  /** The gate's minimum in percent, when the report carries it. */
+  readonly minimum?: number
+  /** The gate verdict the report settled on. */
+  readonly passed?: boolean
+  /** Report timestamp (ISO-ish), when present. */
+  readonly generatedAt?: string
+}
+
+/**
+ * The static-analysis half — a defensive read of
+ * `.baf/reports/static-analysis.json` (cpplint + cppcheck run inside one
+ * `/baf-quality lint`; the JSON carries no per-tool split, so the 测试流图
+ * feeds the same read to both lint nodes with a footnote).
+ */
+export interface BafWorkflowTestFlowStatic {
+  readonly errors?: number
+  readonly passed?: boolean
+  readonly generatedAt?: string
+}
+
+/**
+ * The full `testFlowStatus` payload: what the session's 测试流图 paints.
+ * `no-cwd` (session without a workspace) renders the tab's guidance hint
+ * instead of a fake all-idle chart.
+ */
+export interface BafWorkflowTestFlowStatus {
+  readonly status: 'ready' | 'no-cwd'
+  readonly coverage?: BafWorkflowTestFlowCoverage
+  readonly staticAnalysis?: BafWorkflowTestFlowStatic
+  /** Gate threshold from the workspace quality config (0-1 fraction). */
+  readonly thresholdLine?: number
+  /** Gate mode (`shadow` = observe-only). */
+  readonly gateMode?: string
+  /** Workspace-relative HTML coverage report path (from the same config). */
+  readonly reportHtmlRel?: string
+  /** Whether that HTML report exists on disk right now. */
+  readonly reportHtmlExists?: boolean
+}
+
+/**
  * 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 payload — a read-only
  * projection of both gate layers (the confirm-gate registry and the per-stage
  * completion gates), declared here as the typert boundary contract.

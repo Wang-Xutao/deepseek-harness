@@ -3,7 +3,8 @@
  * @module @deepseek-ai/dsh-client-ui-baf-workflow
  */
 
-import { resolve } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
   BafError,
@@ -89,6 +90,7 @@ import type {
   BafWorkflowRoutePreviewRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
+  BafWorkflowTestFlowStatus,
   BafWorkflowTransitionRequest,
 } from './types.ts'
 
@@ -126,6 +128,9 @@ export type {
   BafWorkflowRoutePreviewRequest,
   BafWorkflowSessionRequest,
   BafWorkflowStartIntakeRequest,
+  BafWorkflowTestFlowCoverage,
+  BafWorkflowTestFlowStatic,
+  BafWorkflowTestFlowStatus,
   BafWorkflowTransitionRequest,
 } from './types.ts'
 
@@ -306,6 +311,85 @@ export async function readSessionRouteScan(
     return sessionModel === undefined ? { audits: entries } : { audits: entries, sessionModel }
   } finally {
     observation[Symbol.dispose]?.()
+  }
+}
+
+/**
+ * 【变更】2026-10-21 (批次十 测试流图): read what the session Tab's 测试流图
+ * paints, from the artifacts the quality pipeline actually leaves on disk —
+ * `.baf/reports/ut-coverage.json` (check 链：编译→测试→插桩→报告→覆盖率门禁)
+ * and `.baf/reports/static-analysis.json` (lint：cpplint+cppcheck)， plus the
+ * workspace quality config for the threshold / gate mode / report path. The
+ * SAME defensive-read contract `status-blockers` holds: every field optional,
+ * a missing/unreadable file simply stays `undefined` (the tab paints 未运行，
+ * never a fabricated verdict). Context-free (testable against a temp dir).
+ * @param cwd - absolute workspace root.
+ * @returns the 测试流图 status payload.
+ */
+export async function readTestFlowStatus(cwd: string): Promise<BafWorkflowTestFlowStatus> {
+  const readJson = async (path: string): Promise<Record<string, unknown> | undefined> => {
+    try {
+      const parsed: unknown = JSON.parse(await readFile(path, 'utf8'))
+      return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const asNumber = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined
+  const asString = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+  const asBool = (value: unknown): boolean | undefined => typeof value === 'boolean' ? value : undefined
+
+  const coverageRaw = await readJson(join(cwd, '.baf', 'reports', 'ut-coverage.json'))
+  const staticRaw = await readJson(join(cwd, '.baf', 'reports', 'static-analysis.json'))
+  const config = await readJson(join(cwd, '.baf', 'quality', 'ceedling-config.json'))
+  const reportHtmlRel = asString(config?.report_html) ?? 'build/coverage/coverage_report.html'
+  let reportHtmlExists = false
+  try {
+    await stat(join(cwd, reportHtmlRel))
+    reportHtmlExists = true
+  } catch {
+    reportHtmlExists = false
+  }
+  // generated_at snake_key on disk (the pipeline's own writer); surfaced as
+  // camelCase on the wire like every other Remote payload. Each field binds
+  // to a const FIRST — a re-called helper can't be narrowed through the
+  // conditional spread, and exactOptionalPropertyTypes would reject the
+  // `number | undefined` widening.
+  const line = asNumber(coverageRaw?.line)
+  const minimum = asNumber(coverageRaw?.minimum)
+  const coveragePassed = asBool(coverageRaw?.passed)
+  const coverageAt = asString(coverageRaw?.generated_at)
+  const coverage = coverageRaw === undefined ? undefined : {
+    ...(line === undefined ? {} : { line }),
+    ...(minimum === undefined ? {} : { minimum }),
+    ...(coveragePassed === undefined ? {} : { passed: coveragePassed }),
+    ...(coverageAt === undefined ? {} : { generatedAt: coverageAt }),
+  }
+  const staticErrors = asNumber(staticRaw?.errors)
+  const staticPassed = asBool(staticRaw?.passed)
+  const staticAt = asString(staticRaw?.generated_at)
+  const staticAnalysis = staticRaw === undefined ? undefined : {
+    ...(staticErrors === undefined ? {} : { errors: staticErrors }),
+    ...(staticPassed === undefined ? {} : { passed: staticPassed }),
+    ...(staticAt === undefined ? {} : { generatedAt: staticAt }),
+  }
+  const thresholdLine = asNumber(config?.threshold_line)
+  const gateMode = asString(config?.gate_mode)
+  // exactOptionalPropertyTypes: narrow to defined-and-non-empty BEFORE the
+  // spread — spreading the `{...} | undefined` variable would widen the
+  // property past the declared `coverage?: BafWorkflowTestFlowCoverage`.
+  const coverageOut = coverage !== undefined && Object.keys(coverage).length > 0 ? coverage : undefined
+  const staticOut = staticAnalysis !== undefined && Object.keys(staticAnalysis).length > 0 ? staticAnalysis : undefined
+  return {
+    status: 'ready',
+    ...(coverageOut === undefined ? {} : { coverage: coverageOut }),
+    ...(staticOut === undefined ? {} : { staticAnalysis: staticOut }),
+    ...(thresholdLine === undefined ? {} : { thresholdLine }),
+    ...(gateMode === undefined ? {} : { gateMode }),
+    reportHtmlRel,
+    reportHtmlExists,
   }
 }
 
@@ -1044,6 +1128,29 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   @Remote('gateOverview')
   gateOverview(): Promise<BafWorkflowGateOverview> {
     return Promise.resolve(projectGateOverview())
+  }
+
+  /**
+   * 【变更】2026-10-21 (批次十 测试流图): the session Tab's test-status read —
+   * what the workspace's quality reports say RIGHT NOW (see
+   * {@link readTestFlowStatus}). A session without a cwd answers `no-cwd` so
+   * the tab renders its guidance hint instead of a fake all-idle chart;
+   * anything else (dead session id) rethrows for the client's error strip.
+   * @param request - the session whose workspace owns the reports.
+   * @returns the 测试流图 status payload.
+   */
+  @Remote('testFlowStatus')
+  async testFlowStatus(request: BafWorkflowSessionRequest): Promise<BafWorkflowTestFlowStatus> {
+    let cwd: string
+    try {
+      cwd = await this.requireCwd(request.sessionId)
+    } catch (error) {
+      if (error instanceof RemoteError && error.code === 'baf-workflow/no-cwd') {
+        return { status: 'no-cwd' }
+      }
+      throw error
+    }
+    return readTestFlowStatus(cwd)
   }
 
   /**

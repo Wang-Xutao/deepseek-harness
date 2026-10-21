@@ -25,7 +25,9 @@ interface WorkflowSettingsTab {
 }
 
 const WORKFLOW_TABS: readonly WorkflowSettingsTab[] = [
-  { id: 'general', labelKey: 'tabs.general', slotIds: ['trace-graph', 'workflow-tab'] },
+  // 【变更】2026-10-21 (批次十 测试流图): 'test-flow-tab' joins 工作流通用 —
+  // the 测试流图 conversation-tab switch, right under the 工作流图 one.
+  { id: 'general', labelKey: 'tabs.general', slotIds: ['trace-graph', 'workflow-tab', 'test-flow-tab'] },
   { id: 'project', labelKey: 'tabs.project', slotIds: ['baf-standard-project'] },
   { id: 'gates', labelKey: 'tabs.gates', slotIds: ['baf-gates-overview'] },
   // 【变更】2026-10-21 (指令集): the per-state baf-command chart, between

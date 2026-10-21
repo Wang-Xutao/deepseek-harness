@@ -1,0 +1,261 @@
+/*
+ * 【变更】2026-10-21 (批次十 测试流图): the session Tab「测试流图」surface —
+ * the SAME theme-following token block the 工作流图 tab uses, so the two
+ * conversation tabs read as one family (gold accent, same card/ink/danger
+ * aliases; only the middle column is new: a status-colored step chain).
+ */
+.root {
+  --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  --wf-accent-soft: color-mix(in srgb, var(--wf-accent) 72%, #fff);
+  --wf-card: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas, #fff));
+  --wf-ink: var(--dsw-alias-text-primary, #1f2937);
+  --wf-muted: var(--dsw-alias-text-secondary, #64748b);
+  --wf-line: var(--dsw-alias-border-subtle, #d7dee8);
+  --wf-danger: var(--dsw-alias-text-danger, #dc2626);
+  --wf-ok: var(--dsw-alias-text-success, #16a34a);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--wf-ink);
+  background:
+    radial-gradient(800px 360px at 50% -8%, color-mix(in srgb, var(--wf-accent) 14%, transparent), transparent 58%),
+    var(--dsw-alias-bg-canvas, #f6f8fb);
+}
+
+@keyframes tfFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── verdict strip ─────────────────────────────────────────────── */
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  flex: none;
+  border-bottom: 1px solid var(--wf-line);
+  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--wf-card) 88%, transparent);
+}
+
+.stripBrand {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #1a1406;
+  background: linear-gradient(135deg, var(--wf-accent-soft), var(--wf-accent));
+  border-radius: 4px;
+  padding: 0.16rem 0.38rem;
+}
+
+.stripItem {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: baseline;
+  font-size: 0.74rem;
+}
+
+.stripLabel {
+  color: var(--wf-muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.stripValue { font-weight: 700; color: var(--wf-ink); }
+.stripOk { color: var(--wf-ok); }
+.stripBad { color: var(--wf-danger); }
+.stripMuted { color: var(--wf-muted); }
+
+.gateChip {
+  padding: 0.12rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-accent) 14%, var(--wf-card));
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+}
+
+.refreshBtn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.refreshBtn:hover { border-color: var(--wf-accent); }
+.refreshBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── step chain ────────────────────────────────────────────────── */
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1.1rem 1.2rem;
+}
+
+.chain {
+  max-width: 46rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin-block-start: 0.2rem;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 10px;
+  animation: tfFadeUp 0.22s ease-out both;
+}
+
+/* The vertical connector: every step after the first reaches up to its
+   predecessor — a plain border keeps the chain readable without SVG. */
+.step + .step::before {
+  content: '';
+  position: absolute;
+  left: 1.55rem;
+  top: -0.5rem;
+  height: 0.5rem;
+  border-left: 2px dotted color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
+}
+
+.dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--wf-line);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-line) 35%, transparent);
+}
+
+.passed .dot { background: var(--wf-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-ok) 22%, transparent); }
+.failed .dot { background: var(--wf-danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-danger) 22%, transparent); }
+.failed { border-color: color-mix(in srgb, var(--wf-danger) 45%, var(--wf-line)); }
+.passed { border-color: color-mix(in srgb, var(--wf-ok) 40%, var(--wf-line)); }
+
+.stepMain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.12rem; }
+
+.stepName {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.stepEn {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--wf-muted);
+  letter-spacing: 0.02em;
+}
+
+.stepCmd {
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  color: var(--wf-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stepSide { flex: none; display: flex; align-items: center; gap: 0.5rem; }
+
+.stateText { font-size: 0.72rem; font-weight: 700; }
+.passed .stateText { color: var(--wf-ok); }
+.failed .stateText { color: var(--wf-danger); }
+.idle .stateText { color: var(--wf-muted); }
+
+.metric {
+  font-size: 0.66rem;
+  color: var(--wf-muted);
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openBtn {
+  padding: 0.22rem 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  background: color-mix(in srgb, var(--wf-accent) 12%, var(--wf-card));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.openBtn:hover { background: color-mix(in srgb, var(--wf-accent) 20%, var(--wf-card)); }
+
+/* ── hints / band ──────────────────────────────────────────────── */
+
+.hint {
+  max-width: 34rem;
+  margin: 2rem auto;
+  padding: 1rem 1.2rem;
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--wf-muted);
+  background: var(--wf-card);
+  border: 1px dashed var(--wf-line);
+  border-radius: 12px;
+}
+
+.errorBar {
+  margin: 0 auto 0.6rem;
+  max-width: 46rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.72rem;
+  color: var(--wf-danger);
+  background: color-mix(in srgb, var(--wf-danger) 8%, var(--wf-card));
+  border: 1px solid color-mix(in srgb, var(--wf-danger) 35%, var(--wf-line));
+  border-radius: 8px;
+}
+
+.band {
+  max-width: 46rem;
+  margin: 0.9rem auto 0;
+  padding: 0.7rem 1rem;
+  background: color-mix(in srgb, var(--wf-accent) 8%, var(--wf-card));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 40%, var(--wf-line));
+  border-radius: 10px;
+  font-size: 0.7rem;
+  line-height: 1.65;
+  color: var(--wf-ink);
+}
+
+.bandTitle {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--wf-muted);
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}

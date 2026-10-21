@@ -3,6 +3,44 @@
  */
 export type WorkflowTabKey =
   | 'view.workflow'
+  // 【变更】2026-10-21 (批次十 测试流图): the session tab + its settings row.
+  | 'view.testFlow'
+  | 'settings.testFlowTab.title'
+  | 'settings.testFlowTab.description'
+  | 'tflow.verdictCoverage'
+  | 'tflow.verdictStatic'
+  | 'tflow.verdictReport'
+  | 'tflow.coverageValue'
+  | 'tflow.staticValue'
+  | 'tflow.gateMode'
+  | 'tflow.state.passed'
+  | 'tflow.state.failed'
+  | 'tflow.state.idle'
+  | 'tflow.required'
+  | 'tflow.optional'
+  | 'tflow.openReport'
+  | 'tflow.noCwd'
+  | 'tflow.loadFailed'
+  | 'tflow.aria'
+  | 'tflow.bandTitle'
+  | 'tflow.band'
+  | 'tflow.formatNote'
+  | 'tflow.node.build'
+  | 'tflow.node.test'
+  | 'tflow.node.instrument'
+  | 'tflow.node.report'
+  | 'tflow.node.gate'
+  | 'tflow.node.lint'
+  | 'tflow.node.analyze'
+  | 'tflow.node.format'
+  | 'tflow.nodeEn.build'
+  | 'tflow.nodeEn.test'
+  | 'tflow.nodeEn.instrument'
+  | 'tflow.nodeEn.report'
+  | 'tflow.nodeEn.gate'
+  | 'tflow.nodeEn.lint'
+  | 'tflow.nodeEn.analyze'
+  | 'tflow.nodeEn.format'
   | 'strip.current'
   | 'strip.totalTime'
   | 'strip.totalTokens'
@@ -317,6 +355,44 @@ export const en: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-06 (问题 1): the tab shows the workflow GRAPH — renamed
   // from 'Workflow' to 'Workflow graph'.
   'view.workflow': 'Workflow graph',
+  // 【变更】2026-10-21 (批次十 测试流图): the session test-flow tab + its copy.
+  'view.testFlow': 'Test flow',
+  'settings.testFlowTab.title': 'Test flow tab',
+  'settings.testFlowTab.description': 'Turn off to hide the Test flow tab (unit-test results) on the conversation view.',
+  'tflow.verdictCoverage': 'Coverage',
+  'tflow.verdictStatic': 'Static',
+  'tflow.verdictReport': 'Report at',
+  'tflow.coverageValue': '{line}% (min {min}%)',
+  'tflow.staticValue': '{n} errors',
+  'tflow.gateMode': 'gate mode',
+  'tflow.state.passed': 'Passed',
+  'tflow.state.failed': 'Failed',
+  'tflow.state.idle': 'Not run',
+  'tflow.required': 'required',
+  'tflow.optional': 'optional',
+  'tflow.openReport': 'Open report',
+  'tflow.noCwd': 'This session has no workspace folder — the test flow reads the workspace quality reports produced by /baf-quality check and /baf-quality lint.',
+  'tflow.loadFailed': 'Test-flow status read failed — ',
+  'tflow.aria': 'Unit-test execution flow with results',
+  'tflow.bandTitle': 'Discipline',
+  'tflow.band': 'Order: check (gcc build → ceedling tests → gcov instrumentation → gcovr report → coverage gate ≥80%) → lint (cpplint + cppcheck, fixed) → final clang-format; no mid-stream formatting. Entries: /baf-quality check · /baf-quality lint.',
+  'tflow.formatNote': 'no standalone report; the code-freeze check governs',
+  'tflow.node.build': 'gcc build',
+  'tflow.node.test': 'ceedling unit tests',
+  'tflow.node.instrument': 'gcov instrumentation',
+  'tflow.node.report': 'gcovr report',
+  'tflow.node.gate': 'Coverage gate',
+  'tflow.node.lint': 'cpplint style lint',
+  'tflow.node.analyze': 'cppcheck static analysis',
+  'tflow.node.format': 'clang-format',
+  'tflow.nodeEn.build': 'Build (gcc)',
+  'tflow.nodeEn.test': 'Ceedling test',
+  'tflow.nodeEn.instrument': 'Instrument (gcov)',
+  'tflow.nodeEn.report': 'Report (gcovr)',
+  'tflow.nodeEn.gate': 'Coverage gate',
+  'tflow.nodeEn.lint': 'Style lint (cpplint)',
+  'tflow.nodeEn.analyze': 'cppcheck',
+  'tflow.nodeEn.format': 'clang-format',
   'strip.current': 'Current',
   'strip.totalTime': 'Change time',
   'strip.totalTokens': 'Session tokens',
@@ -599,6 +675,44 @@ export const en: Record<WorkflowTabKey, string> = {
 export const zh: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-06 (问题 1): 页签呈现的是工作流图，改名「工作流图」。
   'view.workflow': '工作流图',
+  // 【变更】2026-10-21 (批次十 测试流图): 会话测试流图页签 + 工作流通用开关行。
+  'view.testFlow': '测试流图',
+  'settings.testFlowTab.title': '测试流图',
+  'settings.testFlowTab.description': '关闭后，对话 Tab 不再显示「测试流图」（单元测试结果）。',
+  'tflow.verdictCoverage': '覆盖率',
+  'tflow.verdictStatic': '静态检查',
+  'tflow.verdictReport': '报告时间',
+  'tflow.coverageValue': '{line}%（≥ {min}%）',
+  'tflow.staticValue': '{n} 项错误',
+  'tflow.gateMode': '门禁模式',
+  'tflow.state.passed': '通过',
+  'tflow.state.failed': '未通过',
+  'tflow.state.idle': '未运行',
+  'tflow.required': '必装',
+  'tflow.optional': '选装',
+  'tflow.openReport': '打开报告',
+  'tflow.noCwd': '本会话未绑定工作区目录——测试流图读取工作区质量报告（由 /baf-quality check · /baf-quality lint 生成）。',
+  'tflow.loadFailed': '测试流状态读取失败 —',
+  'tflow.aria': '单元测试执行流程与结果',
+  'tflow.bandTitle': '执行纪律',
+  'tflow.band': '顺序：check（gcc 编译 → ceedling 单元测试 → gcov 插桩 → gcovr 报告 → 覆盖率门禁 ≥80%）→ lint（cpplint + cppcheck 修完）→ 最终 clang-format；禁止中途格式化。入口指令：/baf-quality check · /baf-quality lint。',
+  'tflow.formatNote': '无独立报告；以代码冻结检查为准',
+  'tflow.node.build': 'gcc 编译',
+  'tflow.node.test': 'ceedling 单元测试',
+  'tflow.node.instrument': 'gcov 覆盖率插桩',
+  'tflow.node.report': 'gcovr 报告生成',
+  'tflow.node.gate': '覆盖率检查',
+  'tflow.node.lint': 'cpplint 风格检查',
+  'tflow.node.analyze': 'cppcheck 静态分析',
+  'tflow.node.format': 'clang-format 格式化',
+  'tflow.nodeEn.build': 'Build (gcc)',
+  'tflow.nodeEn.test': 'Ceedling test',
+  'tflow.nodeEn.instrument': 'Instrument (gcov)',
+  'tflow.nodeEn.report': 'Report (gcovr)',
+  'tflow.nodeEn.gate': 'Coverage gate',
+  'tflow.nodeEn.lint': 'Style lint (cpplint)',
+  'tflow.nodeEn.analyze': 'cppcheck',
+  'tflow.nodeEn.format': 'clang-format',
   'strip.current': '当前',
   'strip.totalTime': '变更耗时',
   'strip.totalTokens': '会话 tokens',

@@ -22,10 +22,13 @@ import type {} from './remote-types.ts'
 import { WorkflowView, type WorkflowViewInjected } from './WorkflowView.tsx'
 import { WorkflowTabRow, type WorkflowTabRowInjected } from './WorkflowTabRow.tsx'
 import { GatesOverviewRow, type GatesOverviewRowInjected } from './GatesOverviewRow.tsx'
+// 【变更】2026-10-21 (批次十 测试流图): the session tab + its 工作流通用 row.
+import { TestFlowView, type TestFlowViewInjected } from './TestFlowView.tsx'
+import { TestFlowTabRow, type TestFlowTabRowInjected } from './TestFlowTabRow.tsx'
 import {
   INITIAL_WORKFLOW_TAB_PREFS, WORKFLOW_TAB_PREF_KEY, type BafWorkflowTabSettings,
 } from '../workflow-tab-settings.ts'
-import { buildClientEmptyTabView, type WorkflowTabView } from './tab-types.ts'
+import { buildClientEmptyTabView, type WorkflowTabView, type WorkflowTabTestFlowStatus } from './tab-types.ts'
 import { en, zh, NS, type WorkflowTabKey } from './locales.ts'
 import { isBafGatePending } from './gate-ask.ts'
 import { bindGateOpenArtifact } from './BafGateComposer.tsx'
@@ -120,7 +123,9 @@ export function apply(ctx: ClientContext): void {
   const settingsInject = (): WorkflowTabRowInjected => ({
     hooks: { settings: observePrefs() },
     setShowWorkflowTab: async (value) => {
-      prefs.set({ showWorkflowTab: value })
+      // set() is wholesale (no patch API) — spread the current snapshot so
+      // sibling switches (批次十's showTestFlowTab) survive the update.
+      prefs.set({ ...prefs.getSnapshot(), showWorkflowTab: value })
     },
   })
   // The 工作流 settings section (owned by ui-baf-tracegraph) declares this
@@ -132,6 +137,23 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: settingsInject,
   }, WorkflowTabRow))
+
+  // 【变更】2026-10-21 (批次十 测试流图): the 测试流图 visibility switch — the
+  // row right under the 工作流图 one, same snapshot, same Switch primitive.
+  // `!== false` read: a pre-批次十 snapshot must keep the new tab visible.
+  const testFlowSettingsInject = (): TestFlowTabRowInjected => ({
+    hooks: { settings: observePrefs() },
+    setShowTestFlowTab: async (value) => {
+      prefs.set({ ...prefs.getSnapshot(), showTestFlowTab: value })
+    },
+  })
+  ctx.slots.inject('settings.workflow.item', () => ctx.slots.register({
+    name: 'settings.workflow.item',
+    id: 'test-flow-tab',
+    order: 11,
+    locale: NS,
+    inject: testFlowSettingsInject,
+  }, TestFlowTabRow))
 
   // 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 read-only row — loads the
   // static registry projection on the user's first expand (user-triggered, so
@@ -244,22 +266,56 @@ export function apply(ctx: ClientContext): void {
     },
   }, WorkflowView)
 
-  // Tabs are global to the conversation chrome: keep the entry mounted only
+  // 【变更】2026-10-21 (批次十 测试流图): the session 测试流图 tab — order 30,
+  // right after the 工作流图 (order 25). Read-only: one testFlowStatus pull
+  // (its own Remote — the workspace's quality reports), the same push channel
+  // and artifact-opener the 工作流图 tab uses.
+  const installTestFlowView = (): (() => void) => ctx.slots.register({
+    name: 'conversation.view',
+    id: 'baf-test-flow',
+    order: 30,
+    locale: NS,
+    label: () => t('view.testFlow'),
+    inject: (sessionId: SessionId): TestFlowViewInjected => {
+      const remote = ctx.remote.bafWorkflowView
+      return {
+        refresh: async () => unwrap(await remote.testFlowStatus({ sessionId })) as WorkflowTabTestFlowStatus,
+        openArtifact: (path: string) => {
+          const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+          ctx.sidebarRight.openResource(fileAddressFor(sessionId, cwd, path))
+        },
+        subscribe: (listener: () => void): (() => void) =>
+          ctx.remote.$on('baf-workflow/projection-appended', (event) => {
+            const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+            if (cwd !== undefined && cwd === event.cwd) listener()
+          }),
+      }
+    },
+  }, TestFlowView)
+
+  // Tabs are global to the conversation chrome: keep the entries mounted only
   // while the *current* session's agentPreset is baf AND the device-local
-  // 是否显示工作流 Tab switch is on (demo23 问题 5 — the switch unmounts the
-  // tab immediately, no restart).
+  // visibility switches are on (demo23 问题 5 — a switch unmounts its tab
+  // immediately, no restart).
   ctx.effect(() => {
     let disposeView: (() => void) | undefined
+    let disposeTestFlow: (() => void) | undefined
     let disposePreset: (() => void) | undefined
 
-    const setWanted = (wanted: boolean): void => {
-      if (wanted) {
+    const setWanted = (mountWorkflow: boolean, mountTestFlow: boolean): void => {
+      if (mountWorkflow) {
         if (disposeView === undefined) disposeView = installView()
-        return
-      }
-      if (disposeView !== undefined) {
+      } else if (disposeView !== undefined) {
         disposeView()
         disposeView = undefined
+      }
+      // 【变更】2026-10-21 (批次十): `!== false` — pre-批次十 snapshots lack the
+      // key and must keep the new tab visible.
+      if (mountTestFlow) {
+        if (disposeTestFlow === undefined) disposeTestFlow = installTestFlowView()
+      } else if (disposeTestFlow !== undefined) {
+        disposeTestFlow()
+        disposeTestFlow = undefined
       }
     }
 
@@ -274,11 +330,13 @@ export function apply(ctx: ClientContext): void {
       const binding = sessionId === undefined ? undefined : ctx.sessions.binding(sessionId)
       const face = binding?.session.projections.faceOf('agentPreset')
       if (face === undefined) {
-        setWanted(false)
+        setWanted(false, false)
         return
       }
       const read = (): void => {
-        setWanted(face.getSnapshot() === 'baf' && prefs.getSnapshot().showWorkflowTab)
+        const isBaf = face.getSnapshot() === 'baf'
+        const snap = prefs.getSnapshot()
+        setWanted(isBaf && snap.showWorkflowTab, isBaf && snap.showTestFlowTab !== false)
       }
       read()
       disposePreset = face.subscribe(read)
@@ -294,6 +352,7 @@ export function apply(ctx: ClientContext): void {
       offList()
       disposePreset?.()
       disposeView?.()
+      disposeTestFlow?.()
     }
-  }, 'ui-baf-workflow: tab gated by current agentPreset and the workflow-tab preference')
+  }, 'ui-baf-workflow: tabs gated by current agentPreset and the workflow-tab preferences')
 }

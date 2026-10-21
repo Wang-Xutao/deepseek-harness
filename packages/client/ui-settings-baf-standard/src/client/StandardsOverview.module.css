@@ -1218,3 +1218,74 @@
 .cmdListCompact .cmdRow {
   padding: 6px 10px;
 }
+
+/* 【变更】2026-10-21 (批次十 测试流图): the 测试流图 card's detail rows —
+ * label-left / value-right lines in the hooksEditor column (命令 mono, 做什么,
+ * 规范要点, 依据规范 chips, 产物 mono rows), plus the discipline band text. */
+.qflowRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qflowRow {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qflowKey {
+  flex: none;
+  width: 52px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.qflowMono {
+  font-family: var(--dsw-alias-font-mono, monospace);
+  color: var(--dsw-alias-label-primary);
+  word-break: break-all;
+}
+
+.qflowChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qflowDocChip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qflowDocChip:hover,
+.qflowDocChip:focus-visible {
+  color: var(--dsw-alias-label-primary);
+  border-color: var(--dsw-alias-state-primary-primary, #4a67d8);
+}
+
+.qflowArtifact {
+  font-family: var(--dsw-alias-font-mono, monospace);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 17px;
+  word-break: break-all;
+}
+
+.qflowBandText {
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--dsw-alias-label-secondary);
+}
