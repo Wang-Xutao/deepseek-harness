@@ -60,6 +60,15 @@
   background: var(--dsw-alias-bg-layer-1);
 }
 
+/* 【变更】2026-10-21 (批次八 1): the 暂不可用 card grays out — faded +
+ * desaturated next to its live neighbours, so availability reads at a glance
+ * without hunting the badge text. The card carries no actions in this state,
+ * so the treatment is purely visual (no extra disabled semantics needed). */
+.cardUnavailable {
+  opacity: 0.55;
+  filter: grayscale(0.9);
+}
+
 .cardUpdateDot {
   position: absolute;
   top: 10px;

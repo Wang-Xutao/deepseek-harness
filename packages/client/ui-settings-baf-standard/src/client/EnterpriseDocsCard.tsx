@@ -129,7 +129,10 @@ export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpris
   }
 
   return (
-    <div className={css.card} data-testid="baf-enterprise-docs-card">
+    <div className={css.cardFlow} data-testid="baf-enterprise-docs-card">
+      {/* 【变更】2026-10-21 (批次八 3.1): the wrapper is BORDERLESS — the framed
+          canvas (.hooksFlowWrap) is the one border; the old .card wrapper drew a
+          second thin frame around it (客户截图指认的多余边框). */}
       {/* 【变更】2026-10-20 (批次七 2.1): the card title + description rows are
           gone — the tab label already says 企业规范; the legend below carries
           the reading cues. */}
@@ -239,19 +242,19 @@ export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpris
               <div className={css.docHint}>{t('enterpriseDocsPick')}</div>
             </div>
           </div>
-          {/* 【变更】2026-10-20 (批次七 2.3): the opened document rides as a
-              third right column of the split (canvas | detail | document) —
-              the same side-pane anatomy as opening a file. */}
-          {viewer !== undefined ? (
-            <EnterpriseDocViewer
-              viewer={viewer}
-              t={t}
-              onOpenFile={(path) => { void openPath(path) }}
-              onClose={() => { closeEnterpriseDoc() }}
-            />
-          ) : null}
+          {/* 【变更】2026-10-21 (批次八 3.2): the opened document renders as a
+              FULL-SCREEN modal (fixed to the viewport) — mounted at the card
+              root so it escapes the flow frame entirely. */}
         </div>
       </div>
+      {viewer !== undefined ? (
+        <EnterpriseDocViewer
+          viewer={viewer}
+          t={t}
+          onOpenFile={(path) => { void openPath(path) }}
+          onClose={() => { closeEnterpriseDoc() }}
+        />
+      ) : null}
     </div>
   )
 }

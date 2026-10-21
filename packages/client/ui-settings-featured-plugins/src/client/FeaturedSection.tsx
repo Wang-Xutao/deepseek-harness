@@ -170,8 +170,14 @@ export function FeaturedSection(props: FeaturedSectionProps) {
             {state.plugins.map(card => (
               <li
                 key={card.id}
-                className={css.card}
+                // 【变更】2026-10-21 (批次八 1): an UNAVAILABLE card grays out
+                // (reduced opacity + desaturated) — the state badge alone read
+                // too subtle; the whole card now says "not usable" at a glance.
+                className={card.state === 'unavailable'
+                  ? `${css.card} ${css.cardUnavailable}`
+                  : css.card}
                 data-testid={`featured-card-${card.id}`}
+                data-unavailable={card.state === 'unavailable' || undefined}
                 data-update-available={card.updateAvailable || undefined}
               >
                 {card.updateAvailable ? (

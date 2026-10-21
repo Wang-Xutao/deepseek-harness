@@ -560,45 +560,9 @@
   background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 10%, var(--wf-card)), var(--wf-card));
 }
 
-/* 【变更】2026-10-20 (批次四 4): the rail's opening 变更 banner — the id in bold
-   mono with the current node underneath, accent-tinted so the sidebar reader
-   sees change-xx without hunting for it. */
-.changeBannerCard {
-  border-color: color-mix(in srgb, var(--wf-accent) 45%, var(--wf-line));
-  background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 12%, var(--wf-card)), var(--wf-card));
-}
-
-.changeBannerRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.changeBannerLabel {
-  flex: none;
-  font-size: 0.62rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--wf-muted);
-}
-
-.changeBannerId {
-  min-width: 0;
-  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--wf-ink);
-  word-break: break-all;
-  text-align: right;
-}
-
-.changeBannerMeta {
-  margin-top: 0.2rem;
-  font-size: 0.68rem;
-  color: var(--wf-muted);
-}
+/* 【变更】2026-10-21 (批次八 2): the .changeBanner* family retires — the rail's
+   opening 变更 banner is deleted (the strip above the graph already carries
+   the change id + current node). */
 
 /* §22.14 P3 — workspace-level pendingGate card highlight (scaffold today). */
 .cardGate {

@@ -23,7 +23,9 @@ import type { BafStandardCardId, BafStandardFieldRow, BafStandardSummaryResult }
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import { NodeHooksCard } from './NodeHooksCard.tsx'
 import { EnterpriseDocsCard } from './EnterpriseDocsCard.tsx'
+import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
 import { QualityDocsCard } from './QualityDocsCard.tsx'
+import { UnitTestCard } from './UnitTestCard.tsx'
 import { type BafStandardKey } from './locales.ts'
 import css from './StandardsOverview.module.css'
 
@@ -575,13 +577,30 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
 /** 质量监控 tab — REAL baf-quality toolchain docs + the baseline's stack card. */
 export function StandardsQualityOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
-  const { openEnterpriseDoc, closeEnterpriseDoc, openPath, t } = props
+  const {
+    openEnterpriseDoc, closeEnterpriseDoc, openPath, statWorkspacePath, t,
+  } = props
   const cards = (summary?.cards ?? []).filter(card => QUALITY_CARD_IDS.includes(card.id))
+  // 【变更】2026-10-21 (批次八 3.2/3.4): ONE full-screen modal per tab — both
+  // the UT card and the toolchain card open documents through the shared store
+  // field, so the tab (not each card) renders the single viewer.
+  const viewer = viewerOf(state.enterpriseDocId, state.enterpriseDoc)
 
   return (
     <section className={css.blockQuality} data-testid="baf-standard-quality">
       <PanelHead titleKey="panelQualityTitle" descKey="panelQualityDescription" t={t} />
       <StatusSurface state={state} summary={summary} t={t} />
+      {/* 【变更】2026-10-21 (批次八 3.4): the unit-test 查漏补缺 card — the real
+          Ceedling/Unity/CMock toolchain values, paths, coverage threshold and
+          report artifacts (workspace-aware 打开), ahead of the toolchain docs. */}
+      <UnitTestCard
+        state={state}
+        summary={summary}
+        t={t}
+        openEnterpriseDoc={openEnterpriseDoc}
+        openPath={openPath}
+        statWorkspacePath={statWorkspacePath}
+      />
       {/* 【变更】2026-10-20 (批次七 2.5): the static gate-mechanism card is
           REPLACED by the REAL baf-quality toolchain — environment setup,
           configuration, and the toolchain's own standards docs, read from the
@@ -590,9 +609,15 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
         state={state}
         t={t}
         openEnterpriseDoc={openEnterpriseDoc}
-        closeEnterpriseDoc={closeEnterpriseDoc}
-        openPath={openPath}
       />
+      {viewer !== undefined ? (
+        <EnterpriseDocViewer
+          viewer={viewer}
+          t={t}
+          onOpenFile={(path) => { void openPath(path) }}
+          onClose={() => { closeEnterpriseDoc() }}
+        />
+      ) : null}
       {summary?.status === 'ready' ? (
         <div className={css.qualityGrid}>
           {cards.map(card => (

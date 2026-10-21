@@ -8,7 +8,6 @@
  */
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import type { StandardsPanelProps } from './StandardsOverview.tsx'
-import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
 import { NODE_LABEL_KEYS } from './EnterpriseDocsCard.tsx'
 import { ENTERPRISE_DOC_ROWS, QUALITY_DOC_ROWS } from './enterprise-docs-catalog.ts'
 import css from './StandardsOverview.module.css'
@@ -48,16 +47,13 @@ function QualityRow({ id, titleZh, titleEn, meta, selected, onOpen }: {
   )
 }
 
-/** The quality toolchain card — grouped real-asset rows + shared viewer pane. */
-export function QualityDocsCard({ state, t, openEnterpriseDoc, closeEnterpriseDoc, openPath }: {
+/** The quality toolchain card — grouped real-asset rows (click → tab modal). */
+export function QualityDocsCard({ state, t, openEnterpriseDoc }: {
   state: StandardsOverviewState
   t: StandardsPanelProps['t']
   openEnterpriseDoc: StandardsOverviewFace['openEnterpriseDoc']
-  closeEnterpriseDoc: StandardsOverviewFace['closeEnterpriseDoc']
-  openPath: StandardsOverviewFace['openPath']
 }) {
   const openId = state.enterpriseDocId
-  const viewer = viewerOf(openId, state.enterpriseDoc)
 
   // Group presentation: 环境搭建 → 配置 → 规范文档 (the standards rows borrow
   // the enterprise catalog's display fields so titles can never drift).
@@ -121,14 +117,6 @@ export function QualityDocsCard({ state, t, openEnterpriseDoc, closeEnterpriseDo
           ))}
           <div className={css.docHint}>{t('qualityDocsPick')}</div>
         </div>
-        {viewer !== undefined ? (
-          <EnterpriseDocViewer
-            viewer={viewer}
-            t={t}
-            onOpenFile={(path) => { void openPath(path) }}
-            onClose={() => { closeEnterpriseDoc() }}
-          />
-        ) : null}
       </div>
     </div>
   )

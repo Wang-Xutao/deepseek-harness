@@ -62,6 +62,16 @@ export const ENTERPRISE_DOCS: readonly EnterpriseDocEntry[] = [
     nodes: ['design', 'implement'],
   },
   {
+    // 【变更】2026-10-21 (批次八 3.3): the audit found baf-standard's Python
+    // standards skill was never migrated — shipped byte-exact and cataloged so
+    // the 企业规范 chart no longer misses a whole language's standard.
+    id: 'python',
+    titleZh: 'SORA Python 工具/脚本编码规范',
+    titleEn: 'Python coding standards',
+    rel: 'skills/sora-python-code-standards/SKILL.md',
+    nodes: ['design', 'implement'],
+  },
+  {
     id: 'risk',
     titleZh: '高风险代码评审清单',
     titleEn: 'High-risk review checklist',
@@ -126,7 +136,7 @@ export type EnterpriseDocRead =
  * `ut` / `utlist`) and the quality UI re-uses those ids instead of duplicating
  * entries here, so an id resolves in exactly one catalog.
  */
-export type QualityDocGroup = 'env' | 'config'
+export type QualityDocGroup = 'env' | 'config' | 'ut'
 
 /** One cataloged quality-toolchain document. */
 export interface QualityDocEntry {
@@ -185,6 +195,17 @@ export const QUALITY_DOCS: readonly QualityDocEntry[] = [
     titleEn: 'cppcheck suppressions',
     rel: 'quality/static-analysis/cppcheck-suppressions.xml',
     group: 'config',
+  },
+  {
+    // 【变更】2026-10-21 (批次八 3.4): the UT module template — gen-ut scaffolds
+    // new test files from it; the 质量监控 UT card catalogs it so the template
+    // is previewable/openable like every other real asset (group `ut` is
+    // rendered by the UT card, not the toolchain card's env/config groups).
+    id: 'uttpl',
+    titleZh: '单元测试模块模板 test_module.template.c',
+    titleEn: 'UT module template',
+    rel: 'quality/ceedling/test/test_module.template.c',
+    group: 'ut',
   },
 ]
 

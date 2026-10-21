@@ -1100,10 +1100,9 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               : t(`node.${view.current}` as WorkflowTabKey)}
           </span>
         </span>
-        <span className={css.stripItem} title={t('mode.help')}>
-          <span className={css.stripLabel}>{t('strip.mode')}</span>
-          <span className={css.stripValue}>{modeLabel(view.mode, t)}</span>
-        </span>
+        {/* 【变更】2026-10-21 (批次八 2): the strip's 模式 item is deleted — the
+            rail's intake card shows the mode (and its confirm state) one glance
+            away; the strip keeps change id / node / time / tokens. */}
         <span className={css.stripItem}>
           <span className={css.stripLabel}>{t('strip.totalTime')}</span>
           {/* 【变更】2026-09-25 (用户需求 工作流 3): per-second interpolated
@@ -1671,26 +1670,10 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
 
         <aside className={css.rail} style={{ width: railWidth }}>
           <div className={css.railScroll}>
-            {/* 【变更】2026-10-20 (批次四 4): the rail opens with the active
-                change banner — id in bold mono + the current node, so the
-                sidebar reader sees change-xx without hunting for it. */}
-            {view.changeId !== null && (
-              <section
-                className={clsx(css.card, css.changeBannerCard)}
-                data-testid="rail-change-banner"
-                aria-label={`变更 ${view.changeId}`}
-              >
-                <div className={css.changeBannerRow}>
-                  <span className={css.changeBannerLabel}>当前变更</span>
-                  <span className={css.changeBannerId}>{view.changeId}</span>
-                </div>
-                <div className={css.changeBannerMeta}>
-                  {view.current === null
-                    ? t('strip.idle')
-                    : t(`node.${view.current}` as WorkflowTabKey)}
-                </div>
-              </section>
-            )}
+            {/* 【变更】2026-10-21 (批次八 2): the rail's change banner
+                (当前变更 + node status) is deleted — the strip above the graph
+                already shows the change id and the current node; the rail opens
+                straight into the intake card. */}
             {view.intake !== undefined && (
               <section className={clsx(css.card, css.cardAccent)} aria-label={t('intake.title')}>
                 <h3 className={css.cardTitle}>{t('intake.title')}</h3>

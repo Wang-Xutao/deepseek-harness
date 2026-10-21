@@ -261,28 +261,42 @@
   line-height: 16px;
 }
 
-/* 【变更】2026-10-20 (批次七 2.3 v2): the document pane DOCKS to the card's
-   right edge as an absolute drawer — the workflow content column is ~730px
-   wide, so a third inline column never fits beside canvas+detail; a docked
-   overlay (like an opened file pane in an IDE) is right-side at ANY width. */
-.docSide {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 6;
-  box-sizing: border-box;
+/* 【变更】2026-10-21 (批次八 3.1): the 企业规范 card's wrapper is BARE — the
+   framed canvas (.hooksFlowWrap) is the single border; the retired .card
+   wrapper drew a second frame around it. */
+.cardFlow {
   display: flex;
   flex-direction: column;
-  width: min(460px, 84%);
-  padding: 12px 12px 12px 14px;
-  border-left: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 0 8px 8px 0;
-  /* 批次七 2.3 v3: this page never defines --dsw-alias-bg-primary (body is
-     plain white, cards transparent), so without a fallback the drawer rendered
-     TRANSPARENT and the rows beneath bled through the document text. */
+}
+
+/* 【变更】2026-10-21 (批次八 3.2): the document viewer is a FULL-SCREEN modal —
+   fixed scrim over the viewport, the document centered in a large panel. No
+   close button: the scrim click (or Escape, handled in the component) closes.
+   The page never defines --dsw-alias-bg-primary (plain white body), so the
+   panel keeps the batch-七 #ffffff fallback. */
+.docModalScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(15, 17, 21, 0.45);
+}
+
+.docModal {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(1080px, 100%);
+  height: 100%;
+  max-height: 900px;
+  padding: 14px 16px;
+  border-radius: 12px;
   background: var(--dsw-alias-bg-primary, #ffffff);
-  box-shadow: -14px 0 28px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
+  outline: none;
 }
 
 .docViewerHead {
@@ -305,20 +319,82 @@
 }
 
 .docBody {
-  /* 批次七 2.3 v2: the drawer bounds the pane, so the body flexes to the full
-     pane height instead of a fixed max-height cap. */
+  /* 批次八 3.2: the modal bounds the pane — the body flexes to the panel's
+     full height and scrolls in place. */
   flex: 1 1 auto;
   min-height: 0;
   margin: 8px 0 0;
-  padding: 8px;
+  padding: 12px;
   overflow: auto;
   border-radius: 6px;
   background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
   font-family: var(--dsw-alias-font-mono, monospace);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 19px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* 【变更】2026-10-21 (批次八 3.4): the 单元测试 card — real values read from
+   the shipped baf-quality assets (config.json / project.yml / the UT SKILL):
+   label-left / mono-value-right info rows, report rows carrying an 打开 button
+   that wakes only when the file exists in the CURRENT workspace. */
+
+.utCard {
+  margin-top: 12px;
+}
+
+.utSection {
+  margin-top: 10px;
+}
+
+.utSectionLabel {
+  margin: 0 0 6px;
+  padding-left: 7px;
+  border-left: 2px solid color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 55%, transparent);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.utRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.utRow:last-child {
+  border-bottom: none;
+}
+
+.utRowLabel {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.utRowValue {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  text-align: right;
+  word-break: break-all;
+}
+
+.utRowActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.utPending {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
 }
 
 /* 【变更】2026-10-18 (项目工程 1.1–1.3): clickable path rows + AI 禁改路径 card. */

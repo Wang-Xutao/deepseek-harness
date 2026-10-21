@@ -15,7 +15,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, fireEvent } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 afterEach(cleanup)
 import { useSyncExternalStore } from 'react'
@@ -284,8 +284,8 @@ describe('StandardsEnterpriseOverview · real-standards flow chart (批次六 5)
     // The SVG chain edges carry arrowheads (route-canvas parity).
     expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0)
     // The accent line carries the applying standards' SHORT tags (zh locale).
-    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('编码 · SRI · 高风险')
-    expect(screen.getByTestId('baf-enterprise-node-implement').textContent).toContain('编码 · SRI · 静态 · UT')
+    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('编码 · SRI · Python · 高风险')
+    expect(screen.getByTestId('baf-enterprise-node-implement').textContent).toContain('编码 · SRI · Python · 静态 · UT')
   })
 
   it('defaults the detail column to the first node WITH standards and swaps it on click; archive is honestly bare', () => {
@@ -308,6 +308,7 @@ describe('StandardsEnterpriseOverview · real-standards flow chart (批次六 5)
     expect(rows.map(row => row.getAttribute('data-testid'))).toEqual([
       'baf-enterprise-doc-code',
       'baf-enterprise-doc-sri',
+      'baf-enterprise-doc-python',
       'baf-enterprise-doc-static',
       'baf-enterprise-doc-ut',
     ])
@@ -361,19 +362,19 @@ describe('StandardsEnterpriseOverview · real-standards flow chart (批次六 5)
     }), { closeEnterpriseDoc })
     render(<StandardsEnterpriseOverview {...unreadable.props} />)
     expect(screen.getByTestId('baf-enterprise-doc-viewer').textContent).toContain('ENOENT: gone')
-    // 关闭 routes through the close face.
-    fireEvent.click(screen.getByTestId('baf-enterprise-doc-close'))
+    // 批次八 3.2: no close button — the scrim click routes through the close face.
+    fireEvent.click(screen.getByTestId('baf-enterprise-doc-scrim'))
     expect(closeEnterpriseDoc).toHaveBeenCalledTimes(1)
   })
 
   it('picks the accent chip tags by the tracked locale (zh shorts vs en shorts)', () => {
     const zh = harness(readyState())
     render(<StandardsEnterpriseOverview {...zh.props} />)
-    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('编码 · SRI · 高风险')
+    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('编码 · SRI · Python · 高风险')
     cleanup()
     const en = harness(readyState({ localeActive: 'en' }))
     render(<StandardsEnterpriseOverview {...en.props} />)
-    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('Coding · SRI · High-risk')
+    expect(screen.getByTestId('baf-enterprise-node-design').textContent).toContain('Coding · SRI · Python · High-risk')
     expect(screen.getByTestId('baf-enterprise-node-design').textContent).not.toContain('编码')
   })
 })
@@ -476,6 +477,41 @@ describe('StandardsController · enterpriseDoc viewer (批次六 5)', () => {
 })
 
 describe('StandardsQualityOverview · real baf-quality toolchain (批次七 2.5)', () => {
+  it('renders the unit-test card — toolchain/env rows, report paths with workspace-aware 打开, UT docs (批次八 3.4)', async () => {
+    const statWorkspacePath = vi.fn().mockImplementation(
+      (entry: string) => Promise.resolve(entry === 'build/coverage/coverage_report.html'))
+    const { props } = harness(readyState(), { statWorkspacePath })
+    render(<StandardsQualityOverview {...props} />)
+    const card = screen.getByTestId('baf-ut-card')
+    // 工具栏和环境 — the real ceedling values (project.yml / README sourced).
+    expect(card.textContent).toContain('utTitle')
+    expect(card.textContent).toContain('gcc · ruby · ceedling 1.0.1 (gem) · gcovr')
+    expect(card.textContent).toContain('baf-quality check --delta')
+    // 路径与覆盖率 — the mirrored test layout + the config.json threshold.
+    expect(card.textContent).toContain('test/<rel>/test_<module>.c')
+    expect(card.textContent).toContain('行覆盖 ≥ 80%')
+    // The three report artifacts stat the workspace: html exists → awake 打开;
+    // the xml does not → 未生成 and a disabled button.
+    const htmlRow = screen.getByTestId('baf-ut-report-build-coverage-coverage_report-html')
+    const xmlRow = screen.getByTestId('baf-ut-report-build-coverage-coverage_report-xml')
+    await waitFor(() => {
+      expect((htmlRow.querySelector('button') as HTMLButtonElement).disabled).toBe(false)
+      expect((xmlRow.querySelector('button') as HTMLButtonElement).disabled).toBe(true)
+    })
+    expect(xmlRow.textContent).toContain('utReportMissing')
+    // 相关文档 — the six UT docs (catalog ids across both catalogs).
+    for (const id of ['ut', 'utlist', 'uttpl', 'env-ut', 'cfg-project', 'cfg-config']) {
+      expect(screen.getByTestId(`baf-ut-doc-${id}`)).toBeDefined()
+    }
+    // Clicking one opens the shared full-screen modal (batch-8 3.2 anatomy).
+    const openEnterpriseDoc = vi.fn()
+    const pick = harness(readyState(), { openEnterpriseDoc })
+    cleanup()
+    render(<StandardsQualityOverview {...pick.props} />)
+    fireEvent.click(screen.getByTestId('baf-ut-doc-uttpl'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('uttpl')
+  })
+
   it('lists the grouped real assets even without a baseline — 环境搭建 / 配置 / 规范文档', () => {
     const { props } = harness(notReadyState('no-baseline', { status: 'no-baseline' }))
     render(<StandardsQualityOverview {...props} />)
@@ -528,7 +564,8 @@ describe('StandardsQualityOverview · real baf-quality toolchain (批次七 2.5)
     expect(screen.getByTestId('baf-quality-doc-cfg-cpplint').getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(screen.getByTestId('baf-enterprise-doc-open-file'))
     expect(openPath).toHaveBeenCalledWith('D:/assets/quality/static-analysis/CPPLINT.cfg')
-    fireEvent.click(screen.getByTestId('baf-enterprise-doc-close'))
+    // 批次八 3.2: the scrim click closes the full-screen modal.
+    fireEvent.click(screen.getByTestId('baf-enterprise-doc-scrim'))
     expect(closeEnterpriseDoc).toHaveBeenCalledTimes(1)
   })
 

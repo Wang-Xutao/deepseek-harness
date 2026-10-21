@@ -4,7 +4,6 @@
 export type WorkflowTabKey =
   | 'view.workflow'
   | 'strip.current'
-  | 'strip.mode'
   | 'strip.totalTime'
   | 'strip.totalTokens'
   | 'strip.empty'
@@ -318,7 +317,6 @@ export const en: Record<WorkflowTabKey, string> = {
   // from 'Workflow' to 'Workflow graph'.
   'view.workflow': 'Workflow graph',
   'strip.current': 'Current',
-  'strip.mode': 'Mode',
   'strip.totalTime': 'Change time',
   'strip.totalTokens': 'Session tokens',
   'strip.empty': 'No active change — reference graph (template)',
@@ -600,7 +598,6 @@ export const zh: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-06 (问题 1): 页签呈现的是工作流图，改名「工作流图」。
   'view.workflow': '工作流图',
   'strip.current': '当前',
-  'strip.mode': '模式',
   'strip.totalTime': '变更耗时',
   'strip.totalTokens': '会话 tokens',
   'strip.empty': '暂无变更 — 参考图（模板）',

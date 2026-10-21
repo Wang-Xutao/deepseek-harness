@@ -18,6 +18,7 @@
     "src/client/EnterpriseDocsCard.tsx",
     "src/client/EnterpriseDocViewer.tsx",
     "src/client/QualityDocsCard.tsx",
+    "src/client/UnitTestCard.tsx",
     "src/client/NodeHooksCard.tsx",
     "src/client/remote-types.ts",
     "src/client/standards-store.ts",

@@ -142,6 +142,11 @@ describe('FeaturedSection', () => {
     expect(screen.getByText('unavailableHint')).toBeTruthy()
     expect(screen.queryByTestId('featured-install')).toBeNull()
     expect(screen.queryByTestId('featured-remove')).toBeNull()
+    // 批次八 1: the unavailable card grays out (faded + desaturated) and
+    // carries the data-unavailable marker; a live card does neither.
+    const unavailable = screen.getByText('stateUnavailable').closest('[data-unavailable]')
+    expect(unavailable).toBeTruthy()
+    expect((unavailable as HTMLElement).className).toContain('cardUnavailable')
   })
 
   it('shows the risk confirmation on the refused card and forwards the answer', () => {

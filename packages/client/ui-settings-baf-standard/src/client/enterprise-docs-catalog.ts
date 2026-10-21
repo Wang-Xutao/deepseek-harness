@@ -60,6 +60,15 @@ export const ENTERPRISE_DOC_ROWS: readonly EnterpriseDocRow[] = [
     nodes: ['design', 'implement'],
   },
   {
+    // 批次八 3.3: migrated with the audit fix (see host catalog).
+    id: 'python',
+    titleZh: 'SORA Python 工具/脚本编码规范',
+    titleEn: 'Python coding standards',
+    shortZh: 'Python',
+    shortEn: 'Python',
+    nodes: ['design', 'implement'],
+  },
+  {
     id: 'risk',
     titleZh: '高风险代码评审清单',
     titleEn: 'High-risk review checklist',
@@ -116,7 +125,7 @@ export const ENTERPRISE_DOC_ROWS: readonly EnterpriseDocRow[] = [
  * in ENTERPRISE_DOC_ROWS and the quality UI references those ids, so an id
  * resolves in exactly one catalog.
  */
-export type QualityDocGroup = 'env' | 'config'
+export type QualityDocGroup = 'env' | 'config' | 'ut'
 
 /** One mirrored quality document (display fields only — no path, no IO). */
 export interface QualityDocRow {
@@ -163,5 +172,11 @@ export const QUALITY_DOC_ROWS: readonly QualityDocRow[] = [
     titleZh: 'cppcheck 抑制文件',
     titleEn: 'cppcheck suppressions',
     group: 'config',
+  },
+  {
+    id: 'uttpl',
+    titleZh: '单元测试模块模板 test_module.template.c',
+    titleEn: 'UT module template',
+    group: 'ut',
   },
 ]
