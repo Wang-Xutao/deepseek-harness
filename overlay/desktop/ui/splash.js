@@ -1,13 +1,23 @@
 ;(function applyVersion() {
   const params = new URLSearchParams(window.location.search)
   const raw = (params.get('version') ?? '').trim()
-  if (raw.length === 0) return
-  // Strip product prefixes so the footer shows a compact "vX.Y.Z" only.
-  const version = raw
-    .replace(/^baf-dsh(?:\s+desktop)?\s*/i, '')
-    .replace(/^v/i, '')
-  const el = document.getElementById('version')
-  if (el) el.textContent = `v${version}`
+  if (raw.length > 0) {
+    // Strip product prefixes so the footer shows a compact "vX.Y.Z" only.
+    const version = raw
+      .replace(/^baf-dsh(?:\s+desktop)?\s*/i, '')
+      .replace(/^v/i, '')
+    const el = document.getElementById('version')
+    if (el) el.textContent = `v${version}`
+  }
+  // 【变更】2026-10-22 (批次十四 1): first launch (main passed first=1 — no
+  // Node binary cached yet) — reveal the top-right 首次启动 hint after a 3s
+  // grace so a launch that finishes quickly never flashes it.
+  if (params.get('first') === '1') {
+    window.setTimeout(() => {
+      const hint = document.getElementById('firstHint')
+      if (hint) hint.hidden = false
+    }, 3000)
+  }
 })()
 
 const statuses = [

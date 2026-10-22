@@ -68,6 +68,31 @@ export type WorkflowTabKey =
   | 'tflow.runFailed'
   | 'tflow.runToolMissing'
   | 'tflow.runNoCwd'
+  // 【变更】2026-10-22 (批次十四 5): the failed run's 错误解析 box — a cause
+  // line and a fix line, one pair per classifier rule.
+  | 'tflow.errTitle'
+  | 'tflow.errCause'
+  | 'tflow.errFix'
+  | 'tflow.errTimeoutCause'
+  | 'tflow.errTimeoutFix'
+  | 'tflow.errToolCause'
+  | 'tflow.errToolFix'
+  | 'tflow.errCfgCause'
+  | 'tflow.errCfgFix'
+  | 'tflow.errPathCause'
+  | 'tflow.errPathFix'
+  | 'tflow.errCompileCause'
+  | 'tflow.errCompileFix'
+  | 'tflow.errTestCause'
+  | 'tflow.errTestFix'
+  | 'tflow.errCoverageCause'
+  | 'tflow.errCoverageFix'
+  | 'tflow.errStaticCause'
+  | 'tflow.errStaticFix'
+  | 'tflow.errPermCause'
+  | 'tflow.errPermFix'
+  | 'tflow.errGenericCause'
+  | 'tflow.errGenericFix'
   // 【变更】2026-10-22 (批次十三 1/2/4): the 全部运行 sweep + its summary note,
   // the disabled-stage surfaces, and the 工作流图 jump chips' target labels.
   | 'tflow.runAll'
@@ -337,9 +362,8 @@ export type WorkflowTabKey =
   | 'gates.canvasAria'
   | 'gates.confirmCount'
   | 'gates.stageGate'
-  // 【变更】2026-10-19 (流程图样式对齐批): route-parity canvas copy — legend dot
-  // label + the 详-mode detail section heading (canvas pills carry the summary).
-  | 'gates.legendState'
+  // 【变更】2026-10-22 (批次十四 2): 'gates.legendState' retired with the
+  // legend bar (客户决策：删除图例). The 详-mode detail section heading stays.
   | 'gates.detailTitle'
   // 【变更】2026-10-20 (批次五 2.1): the 门禁明细 section labels (阶段门禁 /
   // 进入下一步的条件 / 确认门) layering the selected node's group.
@@ -469,6 +493,30 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.runFailed': 'Run failed (exit {code})',
   'tflow.runToolMissing': 'baf-quality not found — install the quality toolchain first (工作流 · 测试流 · 环境).',
   'tflow.runNoCwd': 'This session has no workspace folder.',
+  // 【变更】2026-10-22 (批次十四 5): the failed run's 错误解析 box.
+  'tflow.errTitle': 'Error analysis',
+  'tflow.errCause': 'Cause',
+  'tflow.errFix': 'How to fix',
+  'tflow.errTimeoutCause': 'The command timed out — it did not finish within the limit and was terminated.',
+  'tflow.errTimeoutFix': 'Retry once; if it still times out, narrow the scope (e.g. a single test file), or paste the output into the chat for AI analysis.',
+  'tflow.errToolCause': 'Tool "{tool}" was not found — it is not installed or not on PATH, so the command never really ran.',
+  'tflow.errToolFix': 'Open 工作流 · 测试流 · 环境 and click 一键安装: gem/pip tools install automatically; GCC / Ruby / Cppcheck / LLVM follow the manual steps in the install report.',
+  'tflow.errCfgCause': 'The workspace is missing the config file this step reads (the default template has not been written yet).',
+  'tflow.errCfgFix': 'Open 工作流 · 测试流 · 环境 and click 一键安装 to copy the default config templates into the workspace, then rerun.',
+  'tflow.errPathCause': 'A file or directory the command needs does not exist in the workspace — it never really ran.',
+  'tflow.errPathFix': 'Check the path named in the output against the workspace tree (the layout may differ from what the command assumes); create the missing directory, or adjust the command here.',
+  'tflow.errCompileCause': 'Compilation failed — the first error in the output names the file and the line.',
+  'tflow.errCompileFix': 'Fix the syntax/linker error at that spot and rerun; or paste the output into the chat for AI help.',
+  'tflow.errTestCause': 'Not all unit tests passed — the failing cases are listed as FAILED in the output.',
+  'tflow.errTestFix': 'Check the FAILED case names, fix the code or the cases, then rerun this stage.',
+  'tflow.errCoverageCause': 'Line coverage is below the gate threshold.',
+  'tflow.errCoverageFix': 'Add tests for the uncovered branches, or check the threshold in .baf/quality/ceedling-config.json.',
+  'tflow.errStaticCause': 'Static analysis found issues — the counts are in the output summary lines.',
+  'tflow.errStaticFix': 'Fix each file:line entry; exemptions belong in CPPLINT.cfg / cppcheck-suppressions.xml.',
+  'tflow.errPermCause': 'A file is locked or permission is denied, so the command cannot read what it needs.',
+  'tflow.errPermFix': 'Close the program holding the file (IDE, antivirus scan) and retry; run as administrator if needed.',
+  'tflow.errGenericCause': 'The command ended with exit code {code} and matched no known error pattern.',
+  'tflow.errGenericFix': 'Check the error lines at the end of the output; paste it into the chat for AI help.',
   // 【变更】2026-10-22 (批次十三 1/2/4): the 全部运行 sweep, the disabled-stage
   // surfaces, and the 工作流图 jump chips.
   'tflow.runAll': 'Run all',
@@ -716,7 +764,6 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.canvasAria': 'Workflow confirmation-gate flow chart',
   'gates.confirmCount': 'confirm gates',
   'gates.stageGate': 'stage gate:',
-  'gates.legendState': 'state node',
   'gates.detailTitle': 'Gate details',
   'gates.sectionStage': 'Stage gate',
   'gates.sectionEdge': 'Condition to advance',
@@ -836,6 +883,30 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.runFailed': '运行失败（退出码 {code}）',
   'tflow.runToolMissing': '未找到 baf-quality 命令——请先安装质量工具链（工作流 · 测试流 · 环境）。',
   'tflow.runNoCwd': '本会话未绑定工作区目录。',
+  // 【变更】2026-10-22 (批次十四 5): 运行失败的错误解析卡。
+  'tflow.errTitle': '错误解析',
+  'tflow.errCause': '原因',
+  'tflow.errFix': '解决方法',
+  'tflow.errTimeoutCause': '命令超时——在时限内没有跑完，已被自动终止。',
+  'tflow.errTimeoutFix': '先直接重试一次；若仍超时，缩小运行范围（如只跑单个测试文件），或把输出贴进会话让 AI 分析耗时点。',
+  'tflow.errToolCause': '未找到工具「{tool}」——它还没安装、或不在 PATH 里，命令并没有真正执行。',
+  'tflow.errToolFix': '到 工作流 · 测试流 · 环境 卡点「一键安装」：gem/pip 类工具会自动安装，GCC / Ruby / Cppcheck / LLVM 按安装报告的提示手动安装。',
+  'tflow.errCfgCause': '工程里缺少这一步要读的配置文件（默认模板还没有写入工程目录）。',
+  'tflow.errCfgFix': '到 工作流 · 测试流 · 环境 卡点「一键安装」，把配置文件按默认模板复制进工程后再运行。',
+  'tflow.errPathCause': '命令要访问的文件或目录在工程里不存在——命令并没有真正执行成功。',
+  'tflow.errPathFix': '对照输出里报错的路径检查工程目录结构（可能与命令假设的不一致）；缺少的目录先创建，或在这里调整命令。',
+  'tflow.errCompileCause': '源码编译失败——输出里第一个 error 标出了出错的文件与行号。',
+  'tflow.errCompileFix': '按提示修复对应位置的语法/链接错误后重跑；也可以把输出贴进会话，让 AI 定位。',
+  'tflow.errTestCause': '单元测试没有全部通过——未通过的用例在输出里以 FAILED 列出。',
+  'tflow.errTestFix': '查看 FAILED 用例名，修正实现或用例后重跑这一步。',
+  'tflow.errCoverageCause': '行覆盖率低于门禁阈值。',
+  'tflow.errCoverageFix': '为未覆盖的分支补充测试；或到 .baf/quality/ceedling-config.json 确认阈值设置是否符合预期。',
+  'tflow.errStaticCause': '静态检查发现了问题——数量见输出的统计行。',
+  'tflow.errStaticFix': '按输出中的 文件:行号 逐条修复；需要豁免的条目写进 CPPLINT.cfg / cppcheck-suppressions.xml。',
+  'tflow.errPermCause': '文件被占用或权限不足，命令读不到需要的文件。',
+  'tflow.errPermFix': '关闭占用该文件的程序（IDE、杀毒扫描等）后重试；必要时以管理员身份运行。',
+  'tflow.errGenericCause': '命令以退出码 {code} 结束，没有命中已知的错误模式。',
+  'tflow.errGenericFix': '查看输出末尾的错误行；也可以把整段输出贴进会话，让 AI 协助分析。',
   // 【变更】2026-10-22 (批次十三 1/2/4): 全部运行链、关闭步骤的展示、工作流图跳转键。
   'tflow.runAll': '全部运行',
   'tflow.chainRunning': '运行中…',
@@ -1092,7 +1163,6 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.canvasAria': '工作流确认门流程图',
   'gates.confirmCount': '确认门',
   'gates.stageGate': '阶段门：',
-  'gates.legendState': '状态节点',
   'gates.detailTitle': '门禁明细',
   'gates.sectionStage': '阶段门禁',
   'gates.sectionEdge': '进入下一步的条件',

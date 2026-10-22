@@ -1017,8 +1017,12 @@ export class BafStandardConfigRemote extends TypertRemoteService {
     const steps: BafQualityInstallStep[] = []
 
     // 1. Workspace assets (project.yml / .baf/quality/* / CPPLINT.cfg …).
+    // 【变更】2026-10-22 (批次十四 3, 客户决策「安装环境时配置文件按默认模板复制进
+    // 项目工程」): the `c` pack joins `quality` so the copy covers EVERY config
+    // file the 环境 card's 配置文件 column lists — including `.clang-format`
+    // (the `c` pack's own mapping), which a quality-only apply never wrote.
     try {
-      const changes = applyEnterpriseStandards({ workspaceRoot: cwd, packs: ['quality'] })
+      const changes = applyEnterpriseStandards({ workspaceRoot: cwd, packs: ['quality', 'c'] })
       steps.push({
         id: 'assets',
         ok: true,

@@ -324,39 +324,9 @@
   background: var(--dsw-alias-bg-elevated, transparent);
 }
 
-.legendBar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 10px 12px 0;
-}
-
-.legendItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.legendDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--tier-color, #7b8fc7);
-}
-
-.legendPillDot {
-  box-sizing: border-box;
-  width: 14px;
-  height: 8px;
-  border: 1px dashed var(--dsw-alias-label-tertiary, #8b949e);
-  border-radius: 999px;
-}
-
-/* 【变更】2026-10-20 (批次五 2.6): legendOnceChip left with the 一次性 legend
-   item / once badges. */
+/* 【变更】2026-10-22 (批次十四 2): .legendBar / .legendItem / .legendDot /
+   .legendPillDot deleted with the legend bar itself (客户决策：删除图例).
+   批次五 2.6's legendOnceChip had already left with the 一次性 badges. */
 
 .flowCanvas {
   position: relative;

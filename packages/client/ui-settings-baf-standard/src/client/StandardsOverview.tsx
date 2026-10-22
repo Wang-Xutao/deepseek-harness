@@ -553,6 +553,10 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
           onRecheck={() => { void probeQualityEnvironment() }}
           onInstall={() => { void installQualityToolchain() }}
           onAiHelp={aiHelpQualityInstall}
+          /* 【变更】2026-10-22 (批次十四 3): the 配置文件 column's preview modal. */
+          openQualityAsset={(rel) => { void openQualityAsset(rel) }}
+          closeQualityAsset={closeQualityAsset}
+          onOpenPath={(path) => { void openPath(path) }}
         />
         <QualityFlowCard
           state={state}

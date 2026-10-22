@@ -394,8 +394,13 @@ function openSplash(): void {
   const splashVersion = app.getVersion()
     || readJsonVersion(join(desktopRoot(), 'package.json'))
     || seedVersions().bafDsh
+  // 【变更】2026-10-22 (批次十四 1): first launch — no Node binary has been
+  // discovered/cached yet (the cache is only written inside startDshProcess,
+  // which runs AFTER the splash), so this walk is the slow one: surface the
+  // 首次启动 hint so the long wait is explained, not silent.
+  const firstLaunch = prefs.nodeBinary === undefined
   void splashWindow.loadFile(uiPath('splash.html'), {
-    query: { version: splashVersion },
+    query: firstLaunch ? { version: splashVersion, first: '1' } : { version: splashVersion },
   })
 }
 

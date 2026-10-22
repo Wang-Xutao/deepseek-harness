@@ -636,7 +636,19 @@ describe('StandardsQualityOverview · 测试流画布重构 (2026-10-22 批次�
     expect(cpplint.textContent).toContain('qolEnvOptional')
     expect(cpplint.textContent).toContain('qolEnvMissing')
     expect(screen.getByTestId('baf-quality-env-tool-cppcheck').textContent).toContain('qolEnvUnknown')
-    expect(card.textContent).toContain('qolEnvAssetsOn')
+    // 【变更】2026-10-22 (批次十四 3): the 质量资产 row is GONE — the 配置文件
+    // column (after 用途) lists each tool's config files instead; a missing
+    // file dims with 未写入, a tool with no config file reads —.
+    expect(card.textContent).not.toContain('qolEnvAssetsOn')
+    expect(gcc.textContent).toContain('project.yml')
+    expect(screen.getByTestId('baf-quality-env-tool-ceedling').textContent)
+      .toContain('.baf/quality/ceedling-config.json')
+    expect(screen.getByTestId('baf-quality-env-tool-ruby').textContent).toContain('qolEnvCfgNone')
+    expect(screen.getByTestId('baf-quality-env-cfg-cpplint-CPPLINT-cfg').textContent).toContain('qolEnvCfgMissing')
+    // Click a chip → the shared preview modal opens (打开 rides the header
+    // once the file reads).
+    fireEvent.click(screen.getByTestId('baf-quality-env-cfg-gcc-project-yml'))
+    expect(screen.getByTestId('baf-quality-asset-modal')).toBeTruthy()
     // Supported + assets installed → no install button at all.
     expect(screen.queryByTestId('baf-quality-env-install')).toBeNull()
   })

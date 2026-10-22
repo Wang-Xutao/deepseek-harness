@@ -28,6 +28,8 @@ html, body {
 .panel {
   width: 100%;
   height: 100%;
+  /* 【变更】2026-10-22 (批次十四 1): positioning context for the firstHint pin. */
+  position: relative;
   border-radius: var(--radius);
   overflow: hidden;
   background: #ffffff;
@@ -43,6 +45,26 @@ html, body {
   justify-content: flex-start;
   gap: 0;
   padding: 28px 24px 18px;
+}
+
+/*
+ * 【变更】2026-10-22 (批次十四 1): first-launch hint chip, pinned to the
+ * panel's top-right (the .panel rule above gains position: relative for the
+ * pin). Accent-tinted to read as guidance, not an error.
+ */
+.firstHint {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  margin: 0;
+  max-width: 190px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-align: left;
+  color: var(--accent);
+  background: rgba(94, 115, 255, 0.1);
 }
 
 .main {

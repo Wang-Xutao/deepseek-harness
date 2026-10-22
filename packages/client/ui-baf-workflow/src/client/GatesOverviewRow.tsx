@@ -561,12 +561,8 @@ function GatesFlow({ data, t }: {
   return (
     <div className={css.flow} data-testid="baf-gates-flow" aria-label={t('gates.canvasAria')}>
       <div className={css.flowWrap}>
-        {/* 【变更】2026-10-20 (批次五 2.6): the 一次性 legend item left with the
-            once badges (state node + 确认门 pill remain). */}
-        <div className={css.legendBar}>
-          <span className={css.legendItem}><span className={join(css.legendDot, css.nodeMain)} aria-hidden />{t('gates.legendState')}</span>
-          <span className={css.legendItem}><span className={css.legendPillDot} aria-hidden />{t('gates.confirmCount')}</span>
-        </div>
+        {/* 【变更】2026-10-22 (批次十四 2): the legend bar (状态节点 / 确认门) is
+            DELETED — the node anatomy is self-explanatory now, no legend. */}
         {/* 【变更】2026-10-20 (批次三 4.5): the canvas and the 门禁明细 split
             the frame left-right (the 状态脚本 split layout); clicking a canvas
             card swaps the right column to that node. */}

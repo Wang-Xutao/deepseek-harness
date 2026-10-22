@@ -196,6 +196,103 @@ function resultLines(
 }
 
 /**
+ * 【变更】2026-10-22 (批次十四 5): one failed run's plain-language verdict —
+ * 原因 + 解决方法. Pure ordered pattern rules over the REAL exit code and
+ * output tail (never a fabricated detail); the FIRST match wins, and the
+ * step's own domain is the fallback when no pattern fires.
+ */
+export interface RunErrorAnalysis {
+  readonly cause: string
+  readonly fix: string
+}
+
+/** Shell "command not found" phrasings (Windows + POSIX, zh + en). */
+const TOOL_ABSENT_RE = /not recognized|不是内部或外部命令|无法将|command not found/i
+
+/** File-level "cannot read it" phrasings — pairs with a config name below. */
+const FILE_ABSENT_RE = new RegExp([
+  'no such file|enoent|errno -2',
+  'cannot (open|load|find)|cannot find the (file|path)',
+  'could not (find|open|load)|failed to (load|open|find)',
+  '找不到|无法打开|系统找不到',
+].join('|'), 'i')
+
+/** Config file names a missing-template rule can name (settings-page twin). */
+const CONFIG_FILE_NAMES = [
+  'project.yml', '.baf/quality/ceedling-config.json', 'CPPLINT.cfg', 'cppcheck-suppressions.xml', '.clang-format',
+] as const
+
+/** Known tool tokens, most-specific first (gcovr before gcov). */
+const TOOL_TOKENS = ['baf-quality', 'ceedling', 'gcovr', 'cpplint', 'cppcheck', 'clang-format', 'gcov', 'gcc', 'ruby'] as const
+
+export function analyzeRunFailure(
+  stage: TestFlowStepId,
+  tool: string,
+  result: WorkflowTabStageRunResult,
+  t: (key: WorkflowTabKey) => string,
+): RunErrorAnalysis | undefined {
+  if (result.status === 'no-cwd' || result.status === 'disabled') return undefined
+  const failed = result.status === 'tool-missing'
+    || (result.status === 'ready' && (result.exitCode ?? 0) !== 0)
+  if (!failed) return undefined
+  const out = (result.output ?? '').toLowerCase()
+  // 1 — timeout: the host kills the spawn at its limit (exit 124).
+  if (result.exitCode === 124 || /timed? out|超时/.test(out)) {
+    return { cause: t('tflow.errTimeoutCause'), fix: t('tflow.errTimeoutFix') }
+  }
+  // 2 — tool missing: never really ran. Name the tool the output names, else
+  // the step's own primary tool.
+  if (result.status === 'tool-missing' || TOOL_ABSENT_RE.test(out)) {
+    const named = TOOL_TOKENS.find(token => out.includes(token))
+      ?? (tool !== '' ? tool : 'baf-quality')
+    return {
+      cause: t('tflow.errToolCause').replace('{tool}', named),
+      fix: t('tflow.errToolFix'),
+    }
+  }
+  // 3 — config file missing: a known template name + a file-level miss.
+  if (FILE_ABSENT_RE.test(out) && CONFIG_FILE_NAMES.some(name => out.includes(name.toLowerCase()))) {
+    return { cause: t('tflow.errCfgCause'), fix: t('tflow.errCfgFix') }
+  }
+  // 3b — 【变更】2026-10-22 (批次十四 5 复核): a file-level miss naming NO
+  // config template — the command reached for a source/build path the
+  // workspace doesn't have (live case: clang-format's input dir "source").
+  // Only reached after rule 3, so a template miss keeps its install fix.
+  if (FILE_ABSENT_RE.test(out)) {
+    return { cause: t('tflow.errPathCause'), fix: t('tflow.errPathFix') }
+  }
+  // 4 — locked / permission denied.
+  if (/permission denied|访问被拒绝|eperm|eacces|正在被另一(个|程序)/.test(out)) {
+    return { cause: t('tflow.errPermCause'), fix: t('tflow.errPermFix') }
+  }
+  // 5 — static findings FIRST: lint/analyze output is full of "error" +
+  // ".c:line" refs, so the compile pattern below would eat every finding —
+  // for these stages failing IS the finding.
+  if (stage === 'lint' || stage === 'analyze') {
+    return { cause: t('tflow.errStaticCause'), fix: t('tflow.errStaticFix') }
+  }
+  // 6 — compile/link failure: an error anchored to a .c/.h file (or the
+  // compile steps without a more specific pattern).
+  if ((/\berror\b/.test(out) && /\.(c|h)\b/.test(out)) || /undefined reference|multiple definition/.test(out)
+    || stage === 'build' || stage === 'instrument') {
+    return { cause: t('tflow.errCompileCause'), fix: t('tflow.errCompileFix') }
+  }
+  // 7 — unit-test failure: ceedling lists failing cases as FAILED.
+  if (/\bfailed\b/.test(out) || stage === 'test') {
+    return { cause: t('tflow.errTestCause'), fix: t('tflow.errTestFix') }
+  }
+  // 8 — coverage below the gate threshold.
+  if (/coverage/.test(out) || stage === 'gate' || stage === 'report') {
+    return { cause: t('tflow.errCoverageCause'), fix: t('tflow.errCoverageFix') }
+  }
+  // 9 — nothing matched: the honest generic verdict with the real exit code.
+  return {
+    cause: t('tflow.errGenericCause').replace('{code}', String(result.exitCode ?? '—')),
+    fix: t('tflow.errGenericFix'),
+  }
+}
+
+/**
  * 【变更】2026-10-22 (批次十三 2): the run button's glyph — a play triangle at
  * rest, a spinning ring while running (SVG per the no-emoji-icon rule; the
  * label text beside it carries the meaning for screen readers).
@@ -492,6 +589,10 @@ export function TestFlowView({
   const outcome = outcomes[selected]
   const results = resultLines(selected, status, t)
   const runResult = runResults[selected]
+  // 批次十四 5 — the failed run's 原因/解决方法 verdict (undefined when clean).
+  const runAnalysis = runResult === undefined
+    ? undefined
+    : analyzeRunFailure(selected, step?.tool ?? '', runResult, t)
 
   return (
     <div className={css.root} data-testid="baf-test-flow-view">
@@ -737,6 +838,24 @@ export function TestFlowView({
                         <span className={css.runCmd}>{`${(runResult.durationMs / 1000).toFixed(1)}s`}</span>
                       )}
                     </div>
+                    {/* 批次十四 5 — the failed run's 错误解析 box: what went
+                        wrong + how to fix it, ahead of the raw output tail. */}
+                    {runAnalysis !== undefined && (
+                      <div
+                        className={css.runAnalysis}
+                        data-testid={`baf-test-flow-run-analysis-${selected}`}
+                      >
+                        <div className={css.runAnalysisTitle}>{t('tflow.errTitle')}</div>
+                        <div className={css.runAnalysisRow}>
+                          <span className={css.runAnalysisKey}>{t('tflow.errCause')}</span>
+                          <span className={css.runAnalysisVal}>{runAnalysis.cause}</span>
+                        </div>
+                        <div className={css.runAnalysisRow}>
+                          <span className={css.runAnalysisKey}>{t('tflow.errFix')}</span>
+                          <span className={css.runAnalysisVal}>{runAnalysis.fix}</span>
+                        </div>
+                      </div>
+                    )}
                     {runResult.command !== undefined && <div className={css.runCmd}>{runResult.command}</div>}
                     {runResult.output !== undefined && runResult.output !== '' && (
                       <pre className={css.runOut}>{runResult.output}</pre>

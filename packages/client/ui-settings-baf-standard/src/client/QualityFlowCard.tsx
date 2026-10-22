@@ -10,7 +10,7 @@
  * (关上游 → 下游自动停用；开下游 → 上游自动补开). A leading 前置 band holds the
  * environment-setup docs (the toolchain card above is the real prerequisite).
  */
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import type { StandardsPanelProps } from './StandardsOverview.tsx'
@@ -22,7 +22,10 @@ import css from './StandardsOverview.module.css'
 const join = (...names: ReadonlyArray<string | undefined>): string =>
   names.filter((name): name is string => name !== undefined && name !== '').join('')
 
-/** The 8 steps, mirroring the session 测试流图's order/labels/commands. */
+/** The 8 steps, mirroring the session 测试流图's order/labels/commands.
+ * 【变更】2026-10-22 (批次十四 4): each step also carries its 环境 probe key
+ * (`envTool`, the live tool-state chip's source — undefined = no probed member
+ * to quote) and whether it sits on the coverage 主链 or stands independent. */
 const STAGES: ReadonlyArray<{
   readonly id: string
   readonly nameKey: BafStandardKey
@@ -34,6 +37,10 @@ const STAGES: ReadonlyArray<{
   readonly assets: readonly string[]
   /** 规范 chips (catalog ids) — click opens the full-screen viewer. */
   readonly docs: readonly string[]
+  /** The 环境 probe row this step's tool-state chip quotes. */
+  readonly envTool?: string
+  /** True = on the coverage 主链 (build→gate); false = independent step. */
+  readonly chain: boolean
 }> = [
   {
     id: 'build',
@@ -43,6 +50,8 @@ const STAGES: ReadonlyArray<{
     command: 'baf-quality test（编译在测试构建内）',
     assets: ['project.yml'],
     docs: ['cfg-project'],
+    envTool: 'gcc',
+    chain: true,
   },
   {
     id: 'test',
@@ -52,6 +61,8 @@ const STAGES: ReadonlyArray<{
     command: 'baf-quality test',
     assets: ['project.yml', '.baf/quality/ceedling-config.json', '.baf/quality/ceedling-README.md'],
     docs: ['ut', 'utlist', 'cfg-config', 'uttpl'],
+    envTool: 'ceedling',
+    chain: true,
   },
   {
     id: 'instrument',
@@ -61,6 +72,8 @@ const STAGES: ReadonlyArray<{
     command: 'baf-quality check（gcov 插桩）',
     assets: ['project.yml'],
     docs: [],
+    envTool: 'gcc',
+    chain: true,
   },
   {
     id: 'report',
@@ -70,6 +83,8 @@ const STAGES: ReadonlyArray<{
     command: 'baf-quality check（gcovr 报告）',
     assets: ['.baf/quality/ceedling-config.json'],
     docs: [],
+    envTool: 'gcovr',
+    chain: true,
   },
   {
     id: 'gate',
@@ -79,6 +94,7 @@ const STAGES: ReadonlyArray<{
     command: 'baf-quality check（覆盖率门禁）',
     assets: ['.baf/quality/ceedling-config.json'],
     docs: [],
+    chain: true,
   },
   {
     id: 'lint',
@@ -88,6 +104,8 @@ const STAGES: ReadonlyArray<{
     command: 'baf-quality lint（cpplint）',
     assets: ['CPPLINT.cfg', '.baf/quality/static-analysis-README.md'],
     docs: ['static', 'cfg-cpplint'],
+    envTool: 'cpplint',
+    chain: false,
   },
   {
     id: 'analyze',
@@ -97,6 +115,8 @@ const STAGES: ReadonlyArray<{
     command: 'baf-quality lint（cppcheck）',
     assets: ['cppcheck-suppressions.xml'],
     docs: ['cfg-cppcheck'],
+    envTool: 'cppcheck',
+    chain: false,
   },
   {
     id: 'format',
@@ -106,6 +126,8 @@ const STAGES: ReadonlyArray<{
     command: 'clang-format -i <配置路径>',
     assets: ['.clang-format'],
     docs: ['code'],
+    envTool: 'clang-format',
+    chain: false,
   },
 ]
 
@@ -130,6 +152,17 @@ const assetExists = (state: StandardsOverviewState, rel: string): boolean | unde
   state.qualityAssets?.status === 'ready'
     ? state.qualityAssets.assets.find(asset => asset.rel === rel)?.exists
     : undefined
+
+/** 【变更】2026-10-22 (批次十四 4): one stage's tool verdict from the 环境 probe
+ * (undefined when the probe is not ready or the stage has no probed member —
+ * the chip simply doesn't render, never a fabricated state). */
+const envToolState = (
+  state: StandardsOverviewState,
+  envTool: string | undefined,
+): 'ok' | 'missing' | 'unknown' | undefined => {
+  if (envTool === undefined || state.qualityEnv?.status !== 'ready') return undefined
+  return state.qualityEnv.tools.find(tool => tool.key === envTool)?.state
+}
 
 /** The 测试报告 preview modal — same scrim/Escape contract (migrated from the
  * retired 配置 card; HTML renders in a sandboxed iframe, scripts stay off). */
@@ -206,8 +239,10 @@ function ReportModal({ report, t, onOpenFile, onClose }: {
   )
 }
 
-/** The 资产 preview modal — migrated verbatim from the retired 资产 card. */
-function AssetModal({ rel, asset, t, onOpenFile, onClose }: {
+/** The 资产 preview modal — migrated verbatim from the retired 资产 card.
+ * 【变更】2026-10-22 (批次十四 3): exported — the 环境 card's new 配置文件
+ * column previews the SAME modal (打开 button top-right included). */
+export function AssetModal({ rel, asset, t, onOpenFile, onClose }: {
   rel: string
   asset: StandardsOverviewState['qualityAsset']
   t: StandardsPanelProps['t']
@@ -276,17 +311,38 @@ function ValueChip({ text, title }: { text: string; title?: string | undefined }
   return <span className={css.qflowMonoChip} title={title}>{text}</span>
 }
 
+/** 【变更】2026-10-22 (批次十四 4): the connector between two flow nodes — a
+ * brand-gradient rail segment ending in a chevron, drawn at the idx bubbles'
+ * x-position so the eight numbered steps read as ONE vertical flow. */
+function FlowLink() {
+  return (
+    <div className={css.qflowLink} aria-hidden="true">
+      {/* 批次十四 4 复核: 15px chevron so the rail's arrowhead reads at one
+          glance with the 2px rail (still centred on the bubbles' axis). */}
+      <svg viewBox="0 0 12 10" width="15" height="12" focusable="false">
+        <path d="M1 3 L6 8 L11 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  )
+}
+
 /**
  * One flow node — the numbered-node anatomy (idx / name+en / tool / command)
  * plus the two switches and the three chip rows.
+ * 【变更】2026-10-22 (批次十四 4): the head also carries the live tool-state
+ * chip (环境 probe) and the 主链/独立 phase tag — the canvas reads complete at
+ * a glance without leaving the page.
  */
-function FlowNode({ stage, index, config, enabled, haltOnError, exists, saving, t, onToggle, onPreviewAsset, onOpenDoc, onPreviewReport }: {
+function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exists, saving, t,
+  onToggle, onPreviewAsset, onOpenDoc, onPreviewReport }: {
   stage: (typeof STAGES)[number]
   index: number
   /** The 配置 readout (undefined while loading / no-workspace). */
   config: StandardsOverviewState['qualityConfig']
   enabled: boolean
   haltOnError: boolean
+  /** The 环境 probe's verdict for this stage's tool (undefined = not probed). */
+  toolState: 'ok' | 'missing' | 'unknown' | undefined
   /** Look up one 资产 chip's on-disk existence. */
   exists: (rel: string) => boolean | undefined
   saving: boolean
@@ -301,6 +357,9 @@ function FlowNode({ stage, index, config, enabled, haltOnError, exists, saving, 
   if (config?.status === 'ready') {
     if (stage.id === 'build') valueChips.push({ text: `${t('qflowBuildDir')} ${config.buildDir}` })
     if (stage.id === 'test') valueChips.push({ text: `${t('qflowTestDir')} ${config.testDir}` })
+    // 批次十四 4 — the instrument step quotes the build tree it gcov-walks
+    // (it shares the build node's directory; previously it showed no value).
+    if (stage.id === 'instrument') valueChips.push({ text: `${t('qflowBuildDir')} ${config.buildDir}` })
     if (stage.id === 'report') valueChips.push({ text: `${t('qflowReportDir')} ${config.reportDir}` })
     if (stage.id === 'gate') {
       valueChips.push({
@@ -322,8 +381,23 @@ function FlowNode({ stage, index, config, enabled, haltOnError, exists, saving, 
           <span className={css.qflowName}>
             {t(stage.nameKey)}
             <span className={css.qflowEn}>{t(stage.enKey)}</span>
+            <span className={join(css.qflowPhase, stage.chain ? undefined : css.qflowPhaseSide)}>
+              {t(stage.chain ? 'qflowChainChip' : 'qflowSideChip')}
+            </span>
           </span>
-          <span className={css.qflowTool}>{stage.tool}</span>
+          <span className={css.qflowTool}>
+            {stage.tool}
+            {toolState !== undefined && (
+              <span
+                className={join(
+                  css.qflowToolState,
+                  toolState === 'ok' ? css.qflowToolOk : toolState === 'missing' ? css.qflowToolBad : undefined,
+                )}
+              >
+                {toolState === 'ok' ? t('qflowToolReady') : toolState === 'missing' ? t('qflowToolMissing') : t('qflowToolUnknown')}
+              </span>
+            )}
+          </span>
           <span className={css.qflowCmd} title={stage.command}>{stage.command}</span>
         </span>
         {/* 批次十三 4 — the two per-stage switches. The 失败中止 switch only
@@ -513,21 +587,26 @@ export function QualityFlowCard({
       ) : (
         <div className={css.qflowList}>
           {STAGES.map((stage, index) => (
-            <FlowNode
-              key={stage.id}
-              stage={stage}
-              index={index}
-              config={state.qualityConfig}
-              enabled={stages[stage.id]?.enabled !== false}
-              haltOnError={stages[stage.id]?.haltOnError !== false}
-              exists={rel => assetExists(state, rel)}
-              saving={state.qualityFlowSaving}
-              t={t}
-              onToggle={toggleQualityFlowStage}
-              onPreviewAsset={openAsset}
-              onOpenDoc={openEnterpriseDoc}
-              onPreviewReport={openReport}
-            />
+            <Fragment key={stage.id}>
+              {/* 批次十四 4 — the rail connector ties the numbered bubbles into
+                  ONE vertical flow (skipped before the first node). */}
+              {index > 0 && <FlowLink />}
+              <FlowNode
+                stage={stage}
+                index={index}
+                config={state.qualityConfig}
+                enabled={stages[stage.id]?.enabled !== false}
+                haltOnError={stages[stage.id]?.haltOnError !== false}
+                toolState={envToolState(state, stage.envTool)}
+                exists={rel => assetExists(state, rel)}
+                saving={state.qualityFlowSaving}
+                t={t}
+                onToggle={toggleQualityFlowStage}
+                onPreviewAsset={openAsset}
+                onOpenDoc={openEnterpriseDoc}
+                onPreviewReport={openReport}
+              />
+            </Fragment>
           ))}
         </div>
       )}

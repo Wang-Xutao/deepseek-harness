@@ -6,11 +6,19 @@
  * installs the gem/pip members (prerequisites that cannot be auto-installed
  * ride the install report with a manual hint). Replaces the old UnitTestCard's
  * hardcoded toolchain line — every version shown is real.
+ * 【变更】2026-10-22 (批次十四 3, 客户决策): the 质量资产 已应用到工作区 row is
+ * DELETED — replaced by a 配置文件 column right after 用途 listing each tool's
+ * required config files as chips; click previews the file in the shared
+ * AssetModal (打开 button top-right), a missing file dims with 未写入. The
+ * 一键安装 writes every listed file from the default templates (quality + c
+ * packs), so the column doubles as the per-file applied/not-applied readout.
  */
+import { useState } from 'react'
 import type { StandardsOverviewState } from './standards-store.ts'
 import type { StandardsPanelProps } from './StandardsOverview.tsx'
 import type { BafQualityToolRow } from '../types.ts'
 import type { BafStandardKey } from './locales.ts'
+import { AssetModal } from './QualityFlowCard.tsx'
 import css from './StandardsOverview.module.css'
 
 /** Join CSS-module names without a clsx dependency (filters dropped keys). */
@@ -39,6 +47,22 @@ const TOOL_ROLE: Readonly<Record<string, BafStandardKey>> = {
   'clang-format': 'qolEnvToolClangFormat',
 }
 
+/**
+ * 【变更】2026-10-22 (批次十四 3): the 配置文件 column — each tool's required
+ * config files (workspace-relative). Mirrors the 测试流 canvas's STAGES asset
+ * mapping keyed by tool; ruby is ceedling's runtime and carries no config of
+ * its own. Every listed file is a 一键安装 template target.
+ */
+const TOOL_CONFIG_FILES: Readonly<Record<string, readonly string[]>> = {
+  gcc: ['project.yml'],
+  ruby: [],
+  ceedling: ['project.yml', '.baf/quality/ceedling-config.json'],
+  gcovr: ['.baf/quality/ceedling-config.json'],
+  cpplint: ['CPPLINT.cfg'],
+  cppcheck: ['cppcheck-suppressions.xml'],
+  'clang-format': ['.clang-format'],
+}
+
 /** The state chip for one probe row. */
 function ToolStateChip({ tool, t }: { tool: BafQualityToolRow; t: StandardsPanelProps['t'] }) {
   if (tool.state === 'ok') return <span className={join(css.envChip, css.envChipOk)}>{t('qolEnvOk')}</span>
@@ -47,13 +71,15 @@ function ToolStateChip({ tool, t }: { tool: BafQualityToolRow; t: StandardsPanel
 }
 
 /**
- * The 环境 card — verdict banner + tool table + assets line + 一键安装 +
+ * The 环境 card — verdict banner + tool table + 一键安装 +
  * 【变更】2026-10-22 (批次十三 3): the 「AI 协助安装」 escape hatch — shown once
  * the install report carries a real failure or the env still probes
  * unsupported, so a machine-level gap (GCC/Ruby/Cppcheck/LLVM) always has a
  * next step beyond the manual hint.
  */
-export function QualityEnvironmentCard({ state, t, onRecheck, onInstall, onAiHelp }: {
+export function QualityEnvironmentCard({
+  state, t, onRecheck, onInstall, onAiHelp, openQualityAsset, closeQualityAsset, onOpenPath,
+}: {
   state: StandardsOverviewState
   t: StandardsPanelProps['t']
   /** 重新检测 — re-runs the Host probe round. */
@@ -62,6 +88,12 @@ export function QualityEnvironmentCard({ state, t, onRecheck, onInstall, onAiHel
   onInstall: () => void
   /** AI 协助安装 — opens a baf session with a prefilled install-help draft. */
   onAiHelp: () => void
+  /** 【变更】2026-10-22 (批次十四 3): fetch one 配置文件 chip's preview payload. */
+  openQualityAsset: (rel: string) => void
+  /** Clear the preview payload (the modal's close). */
+  closeQualityAsset: () => void
+  /** The modal's 打开 gesture (absolute path → default app). */
+  onOpenPath: (path: string) => void
 }) {
   const env = state.qualityEnv
   const loading = state.qualityEnvLoading
@@ -69,6 +101,25 @@ export function QualityEnvironmentCard({ state, t, onRecheck, onInstall, onAiHel
   const missingRequired = tools
     .filter(tool => tool.required && tool.state !== 'ok')
     .map(tool => TOOL_DISPLAY[tool.key] ?? tool.key)
+  // 批次十四 3 — the 配置文件 column's own preview modal state (the flow
+  // canvas keeps its own instance; both reuse the same AssetModal component,
+  // which handles Escape + scrim clicks itself).
+  const [cfgRel, setCfgRel] = useState<string | undefined>(undefined)
+
+  const openCfg = (rel: string): void => {
+    setCfgRel(rel)
+    openQualityAsset(rel)
+  }
+  const closeCfg = (): void => {
+    setCfgRel(undefined)
+    closeQualityAsset()
+  }
+
+  /** One config file's on-disk existence from the loaded 资产 list. */
+  const cfgExists = (rel: string): boolean | undefined =>
+    state.qualityAssets?.status === 'ready'
+      ? state.qualityAssets.assets.find(asset => asset.rel === rel)?.exists
+      : undefined
 
   // Verdict banner: probing → neutral, no-workspace → neutral guidance,
   // supported → success, else danger with the missing member names.
@@ -119,35 +170,51 @@ export function QualityEnvironmentCard({ state, t, onRecheck, onInstall, onAiHel
             <tr>
               <th className={css.envColTool}>{t('qolEnvColTool')}</th>
               <th>{t('qolEnvColRole')}</th>
+              {/* 【变更】2026-10-22 (批次十四 3): the new 配置文件 column — right
+                  after 用途, per the customer's word. */}
+              <th>{t('qolEnvColConfig')}</th>
               <th className={css.envColVersion}>{t('qolEnvColVersion')}</th>
               <th className={css.envColState}>{t('qolEnvColState')}</th>
             </tr>
           </thead>
           <tbody>
-            {tools.map(tool => (
-              <tr key={tool.key} data-testid={`baf-quality-env-tool-${tool.key}`}>
-                <td className={css.envToolName}>
-                  {TOOL_DISPLAY[tool.key] ?? tool.key}
-                  <span className={css.envTag}>{tool.required ? t('qolEnvRequired') : t('qolEnvOptional')}</span>
-                </td>
-                <td className={css.envToolRole} title={t(TOOL_ROLE[tool.key] ?? 'qolEnvColRole')}>{t(TOOL_ROLE[tool.key] ?? 'qolEnvColRole')}</td>
-                <td className={css.envToolVersion} title={tool.version ?? undefined}>
-                  {tool.state === 'ok' && tool.version !== undefined ? tool.version : '—'}
-                </td>
-                <td><ToolStateChip tool={tool} t={t} /></td>
-              </tr>
-            ))}
+            {tools.map((tool) => {
+              const files = TOOL_CONFIG_FILES[tool.key] ?? []
+              return (
+                <tr key={tool.key} data-testid={`baf-quality-env-tool-${tool.key}`}>
+                  <td className={css.envToolName}>
+                    {TOOL_DISPLAY[tool.key] ?? tool.key}
+                    <span className={css.envTag}>{tool.required ? t('qolEnvRequired') : t('qolEnvOptional')}</span>
+                  </td>
+                  <td className={css.envToolRole} title={t(TOOL_ROLE[tool.key] ?? 'qolEnvColRole')}>{t(TOOL_ROLE[tool.key] ?? 'qolEnvColRole')}</td>
+                  <td className={css.envToolCfg}>
+                    {files.length === 0
+                      ? <span className={css.envCfgNone}>{t('qolEnvCfgNone')}</span>
+                      : files.map((rel) => {
+                        const onDisk = cfgExists(rel)
+                        return (
+                          <button
+                            key={rel}
+                            type="button"
+                            className={join(css.envCfgChip, onDisk === false ? css.envCfgChipMissing : undefined)}
+                            data-testid={`baf-quality-env-cfg-${tool.key}-${rel.replace(/[^a-z0-9]+/gi, '-')}`}
+                            title={rel}
+                            onClick={() => { openCfg(rel) }}
+                          >
+                            {rel}{onDisk === false ? ` · ${t('qolEnvCfgMissing')}` : ''}
+                          </button>
+                        )
+                      })}
+                  </td>
+                  <td className={css.envToolVersion} title={tool.version ?? undefined}>
+                    {tool.state === 'ok' && tool.version !== undefined ? tool.version : '—'}
+                  </td>
+                  <td><ToolStateChip tool={tool} t={t} /></td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
-      ) : null}
-
-      {env?.status === 'ready' ? (
-        <div className={css.utRow}>
-          <span className={css.utRowLabel}>{t('qolEnvAssets')}</span>
-          <span className={join(css.utRowValue, env.assetsInstalled ? css.envAssetsOn : undefined)}>
-            {env.assetsInstalled ? t('qolEnvAssetsOn') : t('qolEnvAssetsOff')}
-          </span>
-        </div>
       ) : null}
 
       {showInstall ? (
@@ -211,6 +278,18 @@ export function QualityEnvironmentCard({ state, t, onRecheck, onInstall, onAiHel
             </div>
           ))}
         </div>
+      ) : null}
+
+      {/* 批次十四 3 — the 配置文件 chip's preview modal: the SAME component the
+          测试流 canvas's 资产 chips open (打开 top-right when the file reads). */}
+      {cfgRel !== undefined ? (
+        <AssetModal
+          rel={cfgRel}
+          asset={state.qualityAsset}
+          t={t}
+          onOpenFile={onOpenPath}
+          onClose={closeCfg}
+        />
       ) : null}
     </div>
   )

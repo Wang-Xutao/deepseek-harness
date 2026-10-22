@@ -712,34 +712,9 @@
   background: var(--dsw-alias-bg-elevated, transparent);
 }
 
-.hooksLegend {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 10px 12px 0;
-}
-
-.hooksLegendItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--dsw-alias-label-secondary);
-}
-
-/* 【变更】2026-10-20 (批次五 1.4): the legend dots follow the 确认门 palette —
- * the main-chain blue for 已配置, quiet gray for 未配置. */
-.hooksLegendDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #7b8fc7;
-}
-
-.hooksLegendDotIdle {
-  background: var(--dsw-alias-label-tertiary, #8b949e);
-}
+/* 【变更】2026-10-22 (批次十四 2): .hooksLegend / .hooksLegendItem /
+   .hooksLegendDot / .hooksLegendDotIdle deleted with the legend row itself
+   (客户决策：项目工程流程图删除图例). */
 
 .hooksSplit {
   display: flex;
@@ -1063,6 +1038,55 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* 【变更】2026-10-22 (批次十四 3): the 配置文件 column — per-tool config file
+ * chips (click → preview modal); a missing file dims dashed. Table cells are
+ * nowrap/ellipsis by default, so this cell opts back into wrapping chips. */
+.envToolCfg {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.envCfgChip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin: 1px 0;
+  padding: 0 8px;
+  height: 18px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.envCfgChip:hover,
+.envCfgChip:focus-visible {
+  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  color: var(--dsw-alias-label-primary);
+}
+
+.envCfgChip:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  outline-offset: 1px;
+}
+
+.envCfgChipMissing {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.envCfgNone {
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .envToolVersion {
   font-family: var(--dsw-alias-font-mono, monospace);
   color: var(--dsw-alias-label-secondary);
@@ -1346,10 +1370,45 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* 【变更】2026-10-22 (批次十四 4): the canvas reads as ONE vertical flow — the
+ * nodes sit on a brand-gradient rail (FlowLink connectors between cards), the
+ * idx bubbles go gradient-filled with a soft glow, and each card gains an
+ * inset accent edge + hover lift. Accent derives from the same brand token
+ * the 确认门/工作流图 canvases use, so the three flow surfaces agree. */
 .qflowList {
+  --qf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
   display: flex;
   flex-direction: column;
-  gap: 10px;
+}
+
+.qflowLink {
+  position: relative;
+  height: 22px;
+  margin: 1px 0;
+  color: color-mix(in srgb, var(--qf-accent) 72%, var(--dsw-alias-label-tertiary, #8b949e));
+}
+
+.qflowLink::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: 0;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--qf-accent) 55%, transparent),
+    color-mix(in srgb, var(--qf-accent) 85%, transparent)
+  );
+}
+
+/* The 2px rail sits at the idx bubbles' centre (card 12px padding + 13px
+   bubble radius = 25px), so the 15px chevron centres on the same x. */
+.qflowLink svg {
+  position: absolute;
+  left: 18px;
+  bottom: 0;
 }
 
 .qflowNode {
@@ -1359,12 +1418,35 @@
   padding: 10px 12px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--qf-accent) 4%, transparent),
+      color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent)
+    );
+  /* 批次十四 4 复核: a hair of outer elevation so each card reads as its own
+     step on the rail (the connector alone separated them too weakly). */
+  box-shadow:
+    inset 2px 0 0 color-mix(in srgb, var(--qf-accent) 45%, transparent),
+    0 1px 4px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .qflowNode:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--qf-accent) 45%, var(--dsw-alias-border-l2));
+    box-shadow:
+      inset 2px 0 0 color-mix(in srgb, var(--qf-accent) 65%, transparent),
+      0 4px 12px rgba(0, 0, 0, 0.08);
+  }
 }
 
 .qflowNodeOff {
   opacity: 0.62;
   border-style: dashed;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
 }
 
 .qflowNodeHead {
@@ -1381,10 +1463,54 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  color: var(--dsw-alias-label-secondary);
+  border: none;
+  /* 批次十四 4 复核: the gradient's end stop folds in ~14% dark ink so the
+     white numeral clears 4.5:1 even against a light amber accent. */
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--qf-accent) 62%, #ffffff),
+    color-mix(in srgb, var(--qf-accent) 86%, #1f2430)
+  );
+  color: var(--dsw-alias-label-primary-inverted, #fff);
   font-size: 11px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--qf-accent) 16%, transparent);
+}
+
+.qflowPhase {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 0.5px solid color-mix(in srgb, var(--qf-accent) 45%, transparent);
+  color: color-mix(in srgb, var(--qf-accent) 80%, var(--dsw-alias-label-secondary));
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.qflowPhaseSide {
+  border-color: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.qflowToolState {
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.qflowToolOk {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #3fb972) 12%, transparent);
+  color: var(--dsw-alias-state-success-primary, #3fb972);
+}
+
+.qflowToolBad {
+  background: color-mix(in srgb, var(--dsw-alias-state-danger-label, #d4574e) 12%, transparent);
+  color: var(--dsw-alias-state-danger-label, #d4574e);
 }
 
 .qflowNodeMain {

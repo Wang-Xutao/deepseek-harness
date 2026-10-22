@@ -9,6 +9,13 @@
 <body>
   <div class="shell">
     <div class="panel">
+      <!--
+        【变更】2026-10-22 (批次十四 1): first-launch hint, top-right. The main
+        process passes first=1 when no Node binary is cached yet (the cache is
+        only written after the splash, during the slow first discovery walk).
+        splash.js reveals it after ~3s so a fast launch never flashes it.
+      -->
+      <p id="firstHint" class="firstHint" hidden>首次启动正在初始化运行环境，耗时可能较长，请耐心等待</p>
       <div class="main">
         <div class="logos" aria-hidden="true">
           <!--

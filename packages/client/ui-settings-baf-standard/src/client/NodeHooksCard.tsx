@@ -490,14 +490,8 @@ export function NodeHooksCard({ state, summary, t, openPath, statWorkspacePath, 
         </span>
       </div>
       <div className={css.hooksFlowWrap}>
-        <div className={css.hooksLegend}>
-          <span className={css.hooksLegendItem}>
-            <span className={css.hooksLegendDot} aria-hidden />{t('hooksLegendConfigured')}
-          </span>
-          <span className={css.hooksLegendItem}>
-            <span className={join(css.hooksLegendDot, css.hooksLegendDotIdle)} aria-hidden />{t('hooksEmpty')}
-          </span>
-        </div>
+        {/* 【变更】2026-10-22 (批次十四 2): the legend row (已配置脚本 / 未配置
+            脚本) is DELETED — the canvas cards state it themselves, no legend. */}
         <div className={css.hooksSplit}>
           <div
             className={css.hooksFlowCanvas}

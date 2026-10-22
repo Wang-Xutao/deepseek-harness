@@ -647,6 +647,51 @@
   font-weight: 700;
 }
 
+/* 【变更】2026-10-22 (批次十四 5): the failed run's 错误解析 box — a danger-
+   edged card between the headline and the raw output tail. */
+.runAnalysis {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--wf-danger) 30%, var(--wf-line));
+  border-left: 3px solid var(--wf-danger);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--wf-danger) 4%, var(--wf-card));
+}
+
+.runAnalysisTitle {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--wf-danger);
+  letter-spacing: 0.04em;
+}
+
+.runAnalysisRow {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 0.5rem;
+  align-items: baseline;
+}
+
+.runAnalysisKey {
+  flex-shrink: 0;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--wf-muted);
+  background: color-mix(in srgb, var(--wf-muted) 12%, var(--wf-card));
+}
+
+.runAnalysisVal {
+  font-size: 0.68rem;
+  line-height: 1.6;
+  color: var(--wf-ink);
+  overflow-wrap: anywhere;
+}
+
 .runCmd {
   font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
   font-size: 0.66rem;
