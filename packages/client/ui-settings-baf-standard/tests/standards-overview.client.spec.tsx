@@ -20,7 +20,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, fireEvent } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 afterEach(cleanup)
 import { useSyncExternalStore } from 'react'
@@ -140,6 +140,10 @@ function harness(initial: StandardsOverviewState, faceOverrides: Partial<Standar
     loadQualityConfiguration: vi.fn(),
     openQualityReport: vi.fn(),
     closeQualityReport: vi.fn(),
+    // 【变更】2026-10-22 (批次十二 3): the 资产 card's faces.
+    loadQualityAssets: vi.fn(),
+    openQualityAsset: vi.fn(),
+    closeQualityAsset: vi.fn(),
     ...faceOverrides,
   }
   const { hooks: _hooks, ...actions } = face
@@ -185,6 +189,9 @@ function readyState(overrides: Partial<StandardsOverviewState> = {}): StandardsO
     qualityConfig: undefined,
     qualityReportSeq: 0,
     qualityReport: undefined,
+    qualityAssets: undefined,
+    qualityAssetSeq: 0,
+    qualityAsset: undefined,
     ...overrides,
   }
 }
@@ -214,6 +221,9 @@ function notReadyState(status: StandardsOverviewState['status'], summary: BafSta
     qualityConfig: undefined,
     qualityReportSeq: 0,
     qualityReport: undefined,
+    qualityAssets: undefined,
+    qualityAssetSeq: 0,
+    qualityAsset: undefined,
   }
 }
 
@@ -1630,76 +1640,83 @@ describe('StandardsOverview mount refresh (六问题批 4.1 web 验证修复)', 
   })
 })
 
-// 【变更】2026-10-21 (批次十 测试流图): the 质量监控 tab's flow chart — catalog
-// parity against baf-quality's TEST_FLOW_STEPS plus the card's own render /
-// interaction contract.
-import { QUALITY_FLOW_STEPS } from '../src/client/quality-flow-catalog.ts'
-import { TEST_FLOW_STEPS as HOST_TEST_FLOW_STEPS } from '@deepseek-ai/dsh-baf-quality/src/test-flow.ts'
+// 【变更】2026-10-22 (批次十二 3, 客户决策): the 质量监控 tab's 资产 card —
+// the explicit quality-pack file list with 预览 + 打开 per row. Replaces the
+// old QualityFlowCard tests (the 执行流程 chart moved to the session tab).
+import { QUALITY_ASSET_FILES } from '../src/index.ts'
 
-describe('quality-flow catalog parity (批次十 测试流图)', () => {
-  it('mirrors baf-quality TEST_FLOW_STEPS — id/tool/required in execution order', () => {
-    expect(QUALITY_FLOW_STEPS.map(step => [step.id, step.tool, step.required]))
-      .toEqual(HOST_TEST_FLOW_STEPS.map(step => [step.id, step.tool, step.required]))
-  })
-
-  it('every step carries a command, ≥0 doc ids that resolve in the catalogs, and workspace-relative artifacts', () => {
-    const known = new Set([...ENTERPRISE_DOC_ROWS, ...QUALITY_DOC_ROWS].map(row => row.id))
-    for (const step of QUALITY_FLOW_STEPS) {
-      expect(step.command.length, `${step.id} command empty`).toBeGreaterThan(0)
-      expect(step.docIds.length, `${step.id} no docs`).toBeGreaterThan(0)
-      for (const id of step.docIds) expect(known.has(id), `${step.id} unknown doc ${id}`).toBe(true)
-      for (const path of step.artifacts) {
-        expect(path.startsWith('.baf/') || path.startsWith('build/'), `${step.id}:${path}`)
-          .toBe(true)
-      }
-    }
+describe('quality-assets catalog parity (批次十二 3)', () => {
+  it('lists the 7 files applyEnterpriseStandards writes, each with a unique role key', () => {
+    expect(QUALITY_ASSET_FILES.map(row => row.rel)).toEqual([
+      'project.yml',
+      '.baf/quality/ceedling-config.json',
+      'CPPLINT.cfg',
+      'cppcheck-suppressions.xml',
+      '.clang-format',
+      '.baf/quality/ceedling-README.md',
+      '.baf/quality/static-analysis-README.md',
+    ])
+    expect(new Set(QUALITY_ASSET_FILES.map(row => row.roleKey)).size).toBe(QUALITY_ASSET_FILES.length)
   })
 })
 
-describe('QualityFlowCard · 测试流图 chart (批次十)', () => {
-  it('renders the 8-node canvas in execution order with arrowhead edges + the discipline band', () => {
-    const { props } = harness(readyState())
-    render(<StandardsQualityOverview {...props} />)
-    const nodes = [...document.querySelectorAll('[data-testid^="baf-quality-flow-node-"]')]
-    expect(nodes.map(node => node.getAttribute('data-testid'))).toEqual([
-      'baf-quality-flow-node-build',
-      'baf-quality-flow-node-test',
-      'baf-quality-flow-node-instrument',
-      'baf-quality-flow-node-report',
-      'baf-quality-flow-node-gate',
-      'baf-quality-flow-node-lint',
-      'baf-quality-flow-node-analyze',
-      'baf-quality-flow-node-format',
-    ])
-    // Route-canvas parity: 7 vertical SVG edges, arrowheaded.
-    expect(document.querySelectorAll('svg path[marker-end]').length).toBe(7)
-    // The band carries the cross-step discipline.
-    expect(screen.getByTestId('baf-quality-flow-band').textContent).toContain('qolFlowBandTitle')
+describe('QualityAssetsCard · 质量资产 (批次十二 3)', () => {
+  const assetsState = () => readyState({
+    qualityAssets: {
+      status: 'ready',
+      cwd: 'D:/demo/ws',
+      assets: [
+        { rel: 'project.yml', roleKey: 'assetProject', exists: true },
+        { rel: 'CPPLINT.cfg', roleKey: 'assetCpplint', exists: false },
+      ],
+    },
   })
 
-  it('defaults the detail to the first step, swaps on click, and routes doc chips through the viewer face', () => {
-    const openEnterpriseDoc = vi.fn()
-    const { props } = harness(readyState(), { openEnterpriseDoc })
+  it('mounts via the tab and fires the list load once', () => {
+    const loadQualityAssets = vi.fn()
+    const { props } = harness(readyState(), { loadQualityAssets })
     render(<StandardsQualityOverview {...props} />)
-    expect(screen.getByTestId('baf-quality-flow-detail').getAttribute('data-node')).toBe('build')
-    expect(screen.getByTestId('baf-quality-flow-detail').textContent).toContain('ceedling test:all')
-    // Click the gate step: command + 规范要点 swap in.
-    fireEvent.click(screen.getByTestId('baf-quality-flow-node-gate'))
-    expect(screen.getByTestId('baf-quality-flow-detail').getAttribute('data-node')).toBe('gate')
-    expect(screen.getByTestId('baf-quality-flow-detail').textContent).toContain('baf-quality check')
-    expect(screen.getByTestId('baf-quality-flow-detail').textContent).toContain('qolFlowRuleGate')
-    // Its 依据规范 chips open the shared full-screen viewer.
-    fireEvent.click(screen.getByTestId('baf-quality-flow-doc-ut'))
-    expect(openEnterpriseDoc).toHaveBeenCalledWith('ut')
-    // The gate step lists its on-disk 产物.
-    expect(screen.getByTestId('baf-quality-flow-detail').textContent)
-      .toContain('.baf/reports/ut-coverage.json')
+    expect(loadQualityAssets).toHaveBeenCalledTimes(1)
+    // The list is undefined → the loading line stands.
+    expect(screen.getByTestId('baf-quality-assets-card').textContent).toContain('qolAssetLoading')
   })
 
-  it('marks 必装/选装 on the node accents (the legend keys ride the card)', () => {
-    const { props } = harness(readyState())
+  it('renders per-row role, 预览/打开 for existing files, and the missing chip otherwise', () => {
+    const { props } = harness(assetsState())
     render(<StandardsQualityOverview {...props} />)
-    expect(screen.getByTestId('baf-quality-flow-node-build').textContent).toContain('qolEnvRequired')
-    expect(screen.getByTestId('baf-quality-flow-node-lint').textContent).toContain('qolEnvOptional')
+    const projectRow = screen.getByTestId('baf-quality-asset-project-yml')
+    expect(projectRow.textContent).toContain('qolAssetRoleProject')
+    expect(screen.getByTestId('baf-quality-asset-project-yml-preview')).toBeTruthy()
+    expect(screen.getByTestId('baf-quality-asset-project-yml-open')).toBeTruthy()
+    // Missing file: no gestures, just the chip (slug keeps the file's case).
+    expect(screen.getByTestId('baf-quality-asset-CPPLINT-cfg').textContent).toContain('qolAssetMissing')
+    expect(screen.queryByTestId('baf-quality-asset-CPPLINT-cfg-preview')).toBeNull()
+  })
+
+  it('routes 预览 through openQualityAsset and renders the modal payload when it lands', async () => {
+    const { store, props } = harness(assetsState(), {
+      openQualityAsset: vi.fn().mockImplementation(async () => {
+        store.update((state) => {
+          state.qualityAsset = { status: 'ready', path: 'D:/demo/ws/project.yml', content: 'project: demo' }
+        })
+      }),
+    })
+    render(<StandardsQualityOverview {...props} />)
+    fireEvent.click(screen.getByTestId('baf-quality-asset-project-yml-preview'))
+    await waitFor(() => {
+      expect(props.openQualityAsset).toHaveBeenCalledWith('project.yml')
+      expect(screen.getByTestId('baf-quality-asset-modal')).toBeTruthy()
+    })
+    expect(screen.getByTestId('baf-quality-asset-content').textContent).toContain('project: demo')
+    // Escape closes (drops the in-flight fetch with it).
+    fireEvent.click(screen.getByTestId('baf-quality-asset-scrim'))
+    expect(screen.queryByTestId('baf-quality-asset-modal')).toBeNull()
+  })
+
+  it('routes the row 打开 gesture through openPath with the cwd-joined absolute path', () => {
+    const { props } = harness(assetsState())
+    render(<StandardsQualityOverview {...props} />)
+    fireEvent.click(screen.getByTestId('baf-quality-asset-project-yml-open'))
+    expect(props.openPath).toHaveBeenCalledWith('D:/demo/ws/project.yml')
   })
 })

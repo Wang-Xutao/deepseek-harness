@@ -398,19 +398,109 @@ export interface WorkflowTabTestFlowStep {
   readonly tool: string
   readonly required: boolean
   readonly command: string
+  /**
+   * 【变更】2026-10-22 (批次十二 2.6): workspace config files this step reads —
+   * git-managed quality assets (project.yml / CPPLINT.cfg / …). Rendered as
+   * preview-able chips in the detail pane (modal preview + sidebar open).
+   */
+  readonly configFiles: readonly string[]
 }
 
-/** The 8 steps, mirroring baf-quality TEST_FLOW_STEPS in execution order. */
+/**
+ * The 8 steps, mirroring baf-quality TEST_FLOW_STEPS in execution order.
+ * 【变更】2026-10-22 (批次十二 2.4): every command is the baf-wrapped form —
+ * the `baf-quality` CLI subcommand that owns the stage (raw ceedling/gcovr
+ * strings are gone; the wrapper's own contract: test→ceedling test:all,
+ * check→gcov 插桩+gcovr+门禁, lint→cpplint+cppcheck). format keeps the raw
+ * `clang-format -i` (the wrapper has no format subcommand — the discipline's
+ * final step is raw by design; 批次十二 2.5 makes its path configurable).
+ */
 export const TEST_FLOW_STEPS: readonly WorkflowTabTestFlowStep[] = [
-  { id: 'build', tool: 'gcc', required: true, command: 'ceedling test:all' },
-  { id: 'test', tool: 'ceedling', required: true, command: 'baf-quality test · ceedling test:all' },
-  { id: 'instrument', tool: 'gcov', required: true, command: 'ceedling gcov:all' },
-  { id: 'report', tool: 'gcovr', required: true, command: 'gcovr（check 内聚合）' },
-  { id: 'gate', tool: 'baf-quality', required: true, command: 'baf-quality check' },
-  { id: 'lint', tool: 'cpplint', required: false, command: 'baf-quality lint（cpplint）' },
-  { id: 'analyze', tool: 'cppcheck', required: false, command: 'baf-quality lint（cppcheck）' },
-  { id: 'format', tool: 'clang-format', required: false, command: 'clang-format -i <触及的 .c/.h>' },
+  {
+    id: 'build',
+    tool: 'gcc',
+    required: true,
+    command: 'baf-quality test（gcc 编译 + 测试桩）',
+    configFiles: ['project.yml'],
+  },
+  {
+    id: 'test',
+    tool: 'ceedling',
+    required: true,
+    command: 'baf-quality test',
+    configFiles: ['project.yml', '.baf/quality/ceedling-config.json'],
+  },
+  {
+    id: 'instrument',
+    tool: 'gcov',
+    required: true,
+    command: 'baf-quality check（gcov 插桩）',
+    configFiles: ['project.yml'],
+  },
+  {
+    id: 'report',
+    tool: 'gcovr',
+    required: true,
+    command: 'baf-quality check（gcovr 报告）',
+    configFiles: ['.baf/quality/ceedling-config.json'],
+  },
+  {
+    id: 'gate',
+    tool: 'baf-quality',
+    required: true,
+    command: 'baf-quality check（覆盖率门禁）',
+    configFiles: ['.baf/quality/ceedling-config.json'],
+  },
+  {
+    id: 'lint',
+    tool: 'cpplint',
+    required: true,
+    command: 'baf-quality lint（cpplint）',
+    configFiles: ['CPPLINT.cfg'],
+  },
+  {
+    id: 'analyze',
+    tool: 'cppcheck',
+    required: true,
+    command: 'baf-quality lint（cppcheck）',
+    configFiles: ['cppcheck-suppressions.xml'],
+  },
+  {
+    id: 'format',
+    tool: 'clang-format',
+    required: true,
+    command: 'clang-format -i <配置路径>',
+    configFiles: ['.clang-format'],
+  },
 ]
+
+/**
+ * 【变更】2026-10-22 (批次十二 2.1): one per-stage manual run's outcome — the
+ * host Remote spawned the stage's baf-wrapped command in the workspace root
+ * and this is what came back (exit code + captured tail; never a fabricated
+ * verdict).
+ */
+export interface WorkflowTabStageRunResult {
+  /** ready = the command ran (exit 0 or not); missing = no workspace; absent = the wrapper/tool was not found. */
+  readonly status: 'ready' | 'no-cwd' | 'tool-missing'
+  /** The command the host actually spawned (echo for the result card). */
+  readonly command?: string
+  readonly exitCode?: number
+  /** Truncated combined output tail. */
+  readonly output?: string
+  /** Wall-clock duration in ms. */
+  readonly durationMs?: number
+}
+
+/** 【变更】2026-10-22 (批次十二 2.6): one config file's preview payload. */
+export interface WorkflowTabFileReadResult {
+  readonly status: 'ready' | 'missing' | 'unreadable'
+  /** Absolute path (for the open button + the modal header). */
+  readonly path?: string
+  /** Full text (size-capped host-side). */
+  readonly content?: string
+  readonly reason?: string
+}
 
 /** How one step resolved, plus the metric line the row appends (already localized by the view). */
 // metric explicitly admits undefined: projectTestFlowSteps computes it from

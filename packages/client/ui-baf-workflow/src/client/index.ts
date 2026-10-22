@@ -172,7 +172,11 @@ export function apply(ctx: ClientContext): void {
   const installView = (): (() => void) => ctx.slots.register({
     name: 'conversation.view',
     id: 'baf-workflow',
-    order: 25,
+    // 【变更】2026-10-22 (批次十二 1): 12 — the middle chart of the contiguous
+    // trio right after 轨迹 (10): 轨迹图 11 (ui-baf-tracegraph) · 工作流图 12 ·
+    // 测试流图 13. Below every other registrant (上下文 = 30), so the strip
+    // order is fixed across hide/show cycles regardless of load order.
+    order: 12,
     locale: NS,
     label: () => t('view.workflow'),
     inject: (sessionId: SessionId): WorkflowViewInjected => {
@@ -266,14 +270,19 @@ export function apply(ctx: ClientContext): void {
     },
   }, WorkflowView)
 
-  // 【变更】2026-10-21 (批次十 测试流图): the session 测试流图 tab — order 30,
-  // right after the 工作流图 (order 25). Read-only: one testFlowStatus pull
-  // (its own Remote — the workspace's quality reports), the same push channel
-  // and artifact-opener the 工作流图 tab uses.
+  // 【变更】2026-10-21 (批次十 测试流图): the session 测试流图 tab — the last of
+  // the contiguous chart trio right after 轨迹: 轨迹图 11 · 工作流图 12 ·
+  // 测试流图 13 (【变更】2026-10-22 批次十二 1 — was 30, after the 上下文 tab;
+  // unique orders below every other registrant fix the position for good).
+  // One testFlowStatus pull (its own Remote — the workspace's quality
+  // reports), the same push channel and artifact-opener the 工作流图 tab uses;
+  // 【变更】2026-10-22 (批次十二 2.1/2.3/2.6): the per-stage 运行 Remote, the
+  // config-file preview Remote, and the strip's 配置 button (same panel the
+  // 工作流图 tab's opens).
   const installTestFlowView = (): (() => void) => ctx.slots.register({
     name: 'conversation.view',
     id: 'baf-test-flow',
-    order: 30,
+    order: 13,
     locale: NS,
     label: () => t('view.testFlow'),
     inject: (sessionId: SessionId): TestFlowViewInjected => {
@@ -289,6 +298,20 @@ export function apply(ctx: ClientContext): void {
             const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
             if (cwd !== undefined && cwd === event.cwd) listener()
           }),
+        // 【变更】2026-10-22 (批次十二 2.1): one node's 运行 — the host spawns
+        // the stage's baf-wrapped command in the workspace root.
+        runStage: async (stage, arg) => unwrap(await remote.runTestFlowStage({
+          sessionId,
+          stage,
+          arg,
+        })) as import('./tab-types.ts').WorkflowTabStageRunResult,
+        // 【变更】2026-10-22 (批次十二 2.6): one config file's preview payload.
+        readFile: async path => unwrap(await remote.readWorkspaceFile({ sessionId, path })) as import('./tab-types.ts').WorkflowTabFileReadResult,
+        // 【变更】2026-10-22 (批次十二 2.3): open the 工作流 config page — the
+        // same panel the 工作流图 tab's 配置 button selects.
+        openWorkflowConfig: () => {
+          ctx.layout.selectPanel('workflow' as MainPanelId)
+        },
       }
     },
   }, TestFlowView)

@@ -333,6 +333,24 @@
   background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
 }
 
+/* 【变更】2026-10-22 (批次十二 3): the 资产 preview modal's body — raw config
+   text (yaml/xml/cfg), so it keeps the mono pre-wrap look the doc body shed. */
+.assetPre {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  font-family: var(--dsw-alias-font-mono, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--dsw-alias-label-primary);
+}
+
 /* 【变更】2026-10-21 (批次八 3.4): the 单元测试 card — real values read from
    the shipped baf-quality assets (config.json / project.yml / the UT SKILL):
    label-left / mono-value-right info rows, report rows carrying an 打开 button

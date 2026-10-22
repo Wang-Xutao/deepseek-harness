@@ -7,6 +7,10 @@
  * a state-colored step RAIL on the left and a DETAIL pane on the right
  * (label/value rows, 作用 copy, 执行结果 lines, the report opener). Below
  * ~44rem the split stacks: rail first, detail under it.
+ * 【变更】2026-10-22 (批次十二 2.1/2.3/2.5/2.6): per-node 运行 buttons on the
+ * rail, the strip's 配置 button, the format step's configurable path row, the
+ * detail pane's 配置文件 chips + preview modal, and the per-stage run-result
+ * block; the 执行纪律 band is gone (2.2).
  */
 .root {
   --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
@@ -86,7 +90,9 @@
   font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
 }
 
-.refreshBtn {
+/* 批次十二 2.3 — the strip's 配置 button (same panel the 工作流图 tab opens);
+   it takes the auto margin, the 刷新 button follows it. */
+.configBtn {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
@@ -101,7 +107,25 @@
   cursor: pointer;
 }
 
+.configBtn:hover { border-color: var(--wf-accent); }
+.configBtn:focus-visible { outline: 2px solid var(--wf-accent); outline-offset: 1px; }
+
+.refreshBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
 .refreshBtn:hover { border-color: var(--wf-accent); }
+.refreshBtn:focus-visible { outline: 2px solid var(--wf-accent); outline-offset: 1px; }
 .refreshBtn:disabled { opacity: 0.5; cursor: default; }
 
 /* ── body: the rail | detail split (批次十一 5) ─────────────────── */
@@ -134,7 +158,34 @@
 
 .node {
   position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
 }
+
+/* 批次十二 2.1 — the per-node 运行 button: a compact sibling of the pick
+   button (never nested inside it), same state coloring. */
+.nodeRun {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.55rem;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  background: color-mix(in srgb, var(--wf-accent) 12%, var(--wf-card));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.nodeRun:hover { background: color-mix(in srgb, var(--wf-accent) 22%, var(--wf-card)); }
+.nodeRun:focus-visible { outline: 2px solid var(--wf-accent); outline-offset: 1px; }
+.nodeRun:disabled { opacity: 0.5; cursor: default; }
+.nodeRun.running { color: var(--wf-accent); }
 
 /* The vertical connector: every node after the first reaches up to its
    predecessor — a dotted line keeps the chain readable without SVG. */
@@ -414,7 +465,201 @@
   border-top: 1px dashed var(--wf-line);
 }
 
-/* ── hints / band ──────────────────────────────────────────────── */
+/* ── 批次十二 2.6: 配置文件 chips + the preview modal ───────────── */
+
+.cfgChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.cfgChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.6rem;
+  font: inherit;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--wf-ink);
+  background: color-mix(in srgb, var(--wf-accent) 10%, var(--wf-card));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 45%, var(--wf-line));
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.cfgChip:hover { background: color-mix(in srgb, var(--wf-accent) 20%, var(--wf-card)); }
+.cfgChip:focus-visible { outline: 2px solid var(--wf-accent); outline-offset: 1px; }
+.cfgChip.missing { border-style: dashed; color: var(--wf-muted); }
+
+/* 批次十二 2.5 — the format step's configurable path row. */
+.fmtRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.42rem 0.65rem;
+  background: color-mix(in srgb, var(--wf-muted) 6%, var(--wf-card));
+  border: 1px solid var(--wf-line);
+  border-radius: 8px;
+}
+
+.fmtInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0.24rem 0.5rem;
+  font: inherit;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  color: var(--wf-ink);
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 6px;
+}
+
+.fmtInput:focus { outline: 2px solid var(--wf-accent); outline-offset: 0; border-color: var(--wf-accent); }
+
+/* 批次十二 2.1 — the per-stage run result block under 执行结果. */
+.runBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--wf-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--wf-muted) 5%, var(--wf-card));
+}
+
+.runBlock.bad {
+  border-color: color-mix(in srgb, var(--wf-danger) 40%, var(--wf-line));
+  background: color-mix(in srgb, var(--wf-danger) 5%, var(--wf-card));
+}
+
+.runBlock.ok {
+  border-color: color-mix(in srgb, var(--wf-ok) 40%, var(--wf-line));
+  background: color-mix(in srgb, var(--wf-ok) 5%, var(--wf-card));
+}
+
+.runHead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.runCmd {
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  color: var(--wf-muted);
+  overflow-wrap: anywhere;
+}
+
+.runOut {
+  margin: 0;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.4rem 0.55rem;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.64rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--wf-ink);
+  background: color-mix(in srgb, var(--wf-ink) 4%, var(--wf-card));
+  border: 1px solid var(--wf-line);
+  border-radius: 6px;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: color-mix(in srgb, #000 42%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(56rem, 100%);
+  max-height: min(80vh, 52rem);
+  background: var(--wf-card);
+  color: var(--wf-ink);
+  border: 1px solid var(--wf-line);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.modalHead {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--wf-accent) 8%, var(--wf-card));
+}
+
+.modalTitle {
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.modalPath {
+  min-width: 0;
+  flex: 1;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  color: var(--wf-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modalClose {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.6rem;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.modalClose:hover { border-color: var(--wf-accent); }
+
+.modalBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0.8rem 1rem;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.modalFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  border-top: 1px solid var(--wf-line);
+}
+
+/* ── hints ─────────────────────────────────────────────────────── */
 
 .hint {
   max-width: 34rem;
@@ -438,27 +683,6 @@
   background: color-mix(in srgb, var(--wf-danger) 8%, var(--wf-card));
   border: 1px solid color-mix(in srgb, var(--wf-danger) 35%, var(--wf-line));
   border-radius: 8px;
-}
-
-.band {
-  max-width: 72rem;
-  margin: 0.9rem auto 0;
-  padding: 0.7rem 1rem;
-  background: color-mix(in srgb, var(--wf-accent) 8%, var(--wf-card));
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 40%, var(--wf-line));
-  border-radius: 10px;
-  font-size: 0.7rem;
-  line-height: 1.65;
-  color: var(--wf-ink);
-}
-
-.bandTitle {
-  font-size: 0.64rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: var(--wf-muted);
-  text-transform: uppercase;
-  margin-bottom: 0.25rem;
 }
 
 /* Narrow panes (the conversation Tab can be half-width): stack the split,

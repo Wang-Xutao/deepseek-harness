@@ -231,6 +231,38 @@ export type BafQualityReportResult =
   | { readonly status: 'unreadable'; readonly reason: string }
 
 /**
+ * 【变更】2026-10-22 (批次十二 3, 客户决策): one 质量资产 row — WHAT the
+ * quality pack actually lays into the workspace (project.yml / CPPLINT.cfg /
+ * …), whether it is on disk right now, and what it governs. The 资产 card
+ * lists these with 预览 + 打开 per row.
+ */
+export interface BafQualityAssetRow {
+  /** Workspace-relative path (git-managed; the apply pack's destination). */
+  readonly rel: string
+  /** What the file governs (locale key, resolved client-side). */
+  readonly roleKey: 'assetProject' | 'assetGateConfig' | 'assetCpplint' | 'assetSuppressions' | 'assetClangFormat' | 'assetUtReadme' | 'assetStaticReadme'
+  /** Whether the file exists in the workspace right now. */
+  readonly exists: boolean
+}
+
+/** `qualityAssets()` outcome — the explicit 质量资产 list + existence. */
+export interface BafQualityAssetsResult {
+  readonly status: 'ready' | 'no-workspace'
+  readonly cwd?: string
+  readonly assets: readonly BafQualityAssetRow[]
+}
+
+/**
+ * 【变更】2026-10-22 (批次十二 3): `readQualityAsset()` outcome — one 资产
+ * file's preview payload (text, size-capped).
+ */
+export type BafQualityAssetReadResult =
+  | { readonly status: 'ready'; readonly path: string; readonly content: string }
+  | { readonly status: 'missing'; readonly path: string }
+  | { readonly status: 'no-workspace' }
+  | { readonly status: 'unreadable'; readonly reason: string }
+
+/**
  * 【变更】2026-10-20 (批次六 5): `enterpriseDoc()` outcome — one REAL enterprise
  * standard document read from the package assets (bafplugin-migrated; a
  * product constant, never workspace- or baseline-dependent). The client

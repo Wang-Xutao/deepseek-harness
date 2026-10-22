@@ -3,8 +3,10 @@
  * @module @deepseek-ai/dsh-client-ui-baf-workflow
  */
 
+import { exec } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { promisify } from 'node:util'
 import { Context } from '@deepseek-ai/cordis'
 import {
   BafError,
@@ -82,6 +84,8 @@ import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typer
 import type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowFileReadRequest,
+  BafWorkflowFileReadResult,
   BafWorkflowGateOverview,
   BafWorkflowGateResolveRequest,
   BafWorkflowGateReviseRequest,
@@ -89,6 +93,8 @@ import type {
   BafWorkflowRoutePreview,
   BafWorkflowRoutePreviewRequest,
   BafWorkflowSessionRequest,
+  BafWorkflowStageRunRequest,
+  BafWorkflowStageRunResult,
   BafWorkflowStartIntakeRequest,
   BafWorkflowTestFlowStatus,
   BafWorkflowTransitionRequest,
@@ -116,6 +122,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 export type {
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowFileReadRequest,
+  BafWorkflowFileReadResult,
   BafWorkflowGateConfirmRow,
   BafWorkflowGateOptionRow,
   BafWorkflowGateOverview,
@@ -127,6 +135,8 @@ export type {
   BafWorkflowRoutePreview,
   BafWorkflowRoutePreviewRequest,
   BafWorkflowSessionRequest,
+  BafWorkflowStageRunRequest,
+  BafWorkflowStageRunResult,
   BafWorkflowStartIntakeRequest,
   BafWorkflowTestFlowCoverage,
   BafWorkflowTestFlowStatic,
@@ -312,6 +322,48 @@ export async function readSessionRouteScan(
   } finally {
     observation[Symbol.dispose]?.()
   }
+}
+
+/** promisified shell exec (批次十二 2.1 — the per-stage run executor). */
+const execShell = promisify(exec)
+
+/** Wall-clock budget for one per-stage manual run (批次十二 2.1). */
+export const TEST_FLOW_STAGE_TIMEOUT_MS = 300_000
+
+/** Preview payload cap for readWorkspaceFile (批次十二 2.6). */
+export const WORKSPACE_FILE_PREVIEW_CAP = 256 * 1024
+
+/**
+ * 【变更】2026-10-22 (批次十二 2.1 + 2.4): the baf-wrapped command one 测试流图
+ * stage runs as — the `baf-quality` CLI's own subcommand contract (the wrapper
+ * ships with the quality pack; `test` → ceedling test:all, `check` → gcov
+ * 插桩 + gcovr + 覆盖率门禁, `lint` → cpplint + cppcheck). build shares `test`
+ * (ceedling compiles inside the test build — no compile-only subcommand);
+ * format is NOT here (raw `clang-format -i <arg>`, built by the caller).
+ * @param stage - the step id.
+ * @returns the shell command string.
+ */
+export function testFlowStageCommand(
+  stage: 'build' | 'test' | 'instrument' | 'report' | 'gate' | 'lint' | 'analyze',
+): string {
+  switch (stage) {
+    case 'build':
+    case 'test':
+      return 'baf-quality test'
+    case 'instrument':
+    case 'report':
+    case 'gate':
+      return 'baf-quality check'
+    case 'lint':
+    case 'analyze':
+      return 'baf-quality lint'
+  }
+}
+
+/** Keep the last `max` chars of a stage run's combined output (result card). */
+function tailOfStage(text: string, max = 1200): string {
+  const trimmed = text.trim()
+  return trimmed.length <= max ? trimmed : `… [前略] ${trimmed.slice(trimmed.length - max)}`
 }
 
 /**
@@ -1151,6 +1203,121 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       throw error
     }
     return readTestFlowStatus(cwd)
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十二 2.1 + 2.4): one 测试流图 node's 运行 button —
+   * spawn the stage's baf-wrapped command in the workspace root and report the
+   * REAL outcome (exit code + captured tail, never a fabricated verdict). The
+   * command map is the wrapper's own contract (baf-quality-cli.cjs): `test` →
+   * ceedling test:all, `check` → gcov 插桩 + gcovr + 门禁, `lint` → cpplint +
+   * cppcheck; build shares `test` (ceedling compiles inside the test build —
+   * the wrapper has no compile-only subcommand), and format keeps the raw
+   * `clang-format -i <arg>` (the discipline's final step; no wrapper
+   * subcommand by design — 2.5 makes the path configurable).
+   *
+   * A wrapper the shell cannot resolve answers `tool-missing` with the exact
+   * command echoed, so the customer can run it by hand.
+   * @param request - session + stage (+ the format node's configured path).
+   * @returns the spawned command's outcome.
+   */
+  @Remote('runTestFlowStage')
+  async runTestFlowStage(request: BafWorkflowStageRunRequest): Promise<BafWorkflowStageRunResult> {
+    let cwd: string
+    try {
+      cwd = await this.requireCwd(request.sessionId)
+    } catch (error) {
+      if (error instanceof RemoteError && error.code === 'baf-workflow/no-cwd') {
+        return { status: 'no-cwd' }
+      }
+      throw error
+    }
+    const formatPath = request.arg.trim() === '' ? 'source' : request.arg.trim()
+    const command = request.stage === 'format'
+      ? `clang-format -i ${formatPath}`
+      : testFlowStageCommand(request.stage)
+    const started = Date.now()
+    try {
+      const { stdout, stderr } = await execShell(command, {
+        cwd,
+        timeout: TEST_FLOW_STAGE_TIMEOUT_MS,
+        maxBuffer: 4 * 1024 * 1024,
+        windowsHide: true,
+      })
+      return {
+        status: 'ready',
+        command,
+        exitCode: 0,
+        output: tailOfStage(`${stdout}\n${stderr}`),
+        durationMs: Date.now() - started,
+      }
+    } catch (error) {
+      const out = error as { stdout?: unknown; stderr?: unknown; code?: unknown; killed?: unknown; message?: unknown }
+      const combined = `${String(out.stdout ?? '')}\n${String(out.stderr ?? '')}`
+      // Windows shell "not recognized" (exit 9009 / localized message) or a
+      // unix ENOENT means the wrapper is absent — distinct from a failed run.
+      const toolMissing = out.code === 'ENOENT'
+        || out.code === 9009
+        || /not recognized|不是内部或外部命令|无法将|command not found/i.test(combined)
+      if (out.killed === true) {
+        return {
+          status: 'ready',
+          command,
+          exitCode: 124,
+          output: `${tailOfStage(combined)}\n[超时 >${TEST_FLOW_STAGE_TIMEOUT_MS / 1000}s，已终止 — 可重试或改在会话内运行]`,
+          durationMs: Date.now() - started,
+        }
+      }
+      return {
+        status: toolMissing ? 'tool-missing' : 'ready',
+        command,
+        ...(toolMissing ? {} : { exitCode: typeof out.code === 'number' ? out.code : 1 }),
+        output: tailOfStage(combined) || (typeof out.message === 'string' ? tailOfStage(out.message) : ''),
+        durationMs: Date.now() - started,
+      }
+    }
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十二 2.6): one config file's preview payload — the
+   * 测试流图 detail pane's 配置文件 chips. Workspace-relative paths only (no
+   * absolute, no `..` — the resolved path must stay inside the workspace
+   * root); text is size-capped so a pathological file cannot flood the wire.
+   * @param request - session + workspace-relative path.
+   * @returns the file's text or its absence.
+   */
+  @Remote('readWorkspaceFile')
+  async readWorkspaceFile(request: BafWorkflowFileReadRequest): Promise<BafWorkflowFileReadResult> {
+    let cwd: string
+    try {
+      cwd = await this.requireCwd(request.sessionId)
+    } catch (error) {
+      if (error instanceof RemoteError && error.code === 'baf-workflow/no-cwd') {
+        return { status: 'missing', reason: 'no-cwd' }
+      }
+      throw error
+    }
+    const rel = request.path.replace(/\\/g, '/')
+    if (rel === '' || rel.startsWith('/') || /^[a-zA-Z]:/.test(rel) || rel.split('/').includes('..')) {
+      return { status: 'unreadable', path: rel, reason: '仅支持工作区相对路径' }
+    }
+    const abs = resolve(join(cwd, rel))
+    if (!abs.startsWith(resolve(cwd))) {
+      return { status: 'unreadable', path: rel, reason: '仅支持工作区相对路径' }
+    }
+    try {
+      const content = await readFile(abs, 'utf8')
+      return {
+        status: 'ready',
+        path: abs,
+        content: content.length > WORKSPACE_FILE_PREVIEW_CAP
+          ? `${content.slice(0, WORKSPACE_FILE_PREVIEW_CAP)}\n… [截断，共 ${content.length} 字符]`
+          : content,
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      return /ENOENT/i.test(reason) ? { status: 'missing', path: abs } : { status: 'unreadable', path: abs, reason }
+    }
   }
 
   /**

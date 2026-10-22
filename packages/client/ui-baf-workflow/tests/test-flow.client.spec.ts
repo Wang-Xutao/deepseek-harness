@@ -34,6 +34,35 @@ describe('测试流图 catalog parity (批次十)', () => {
       expect(step.command.length, `${step.id} command empty`).toBeGreaterThan(0)
     }
   })
+
+  // 【变更】2026-10-22 (批次十二 2.6): every step names its 配置文件 — the
+  // in-tab preview modal's targets. All entries must be workspace-relative
+  // (the Host's readWorkspaceFile rejects anything else).
+  it('carries workspace-relative 配置文件 for every step (批次十二)', () => {
+    for (const step of TEST_FLOW_STEPS) {
+      expect(step.configFiles.length, `${step.id} no config files`).toBeGreaterThan(0)
+      for (const rel of step.configFiles) {
+        expect(rel.startsWith('/') || /^[a-zA-Z]:/.test(rel), `${step.id}:${rel} absolute`).toBe(false)
+        expect(rel.split('/').includes('..'), `${step.id}:${rel} escapes`).toBe(false)
+      }
+    }
+    // The format step names the clang-format rules; lint names cpplint's.
+    expect(TEST_FLOW_STEPS.find(step => step.id === 'format')?.configFiles).toContain('.clang-format')
+    expect(TEST_FLOW_STEPS.find(step => step.id === 'lint')?.configFiles).toContain('CPPLINT.cfg')
+  })
+
+  // 【变更】2026-10-22 (批次十二 2.1/2.4): the 运行 buttons spawn the baf-wrapped
+  // CLI — one wrapper subcommand per chain, format stays raw clang-format.
+  it('maps each stage to its baf-quality wrapper command (批次十二)', async () => {
+    const { testFlowStageCommand } = await import('../src/index.ts')
+    expect(testFlowStageCommand('build')).toBe('baf-quality test')
+    expect(testFlowStageCommand('test')).toBe('baf-quality test')
+    expect(testFlowStageCommand('instrument')).toBe('baf-quality check')
+    expect(testFlowStageCommand('report')).toBe('baf-quality check')
+    expect(testFlowStageCommand('gate')).toBe('baf-quality check')
+    expect(testFlowStageCommand('lint')).toBe('baf-quality lint')
+    expect(testFlowStageCommand('analyze')).toBe('baf-quality lint')
+  })
 })
 
 describe('projectTestFlowSteps outcome mapping', () => {

@@ -22,9 +22,6 @@ export type WorkflowTabKey =
   | 'tflow.noCwd'
   | 'tflow.loadFailed'
   | 'tflow.aria'
-  | 'tflow.bandTitle'
-  | 'tflow.band'
-  | 'tflow.formatNote'
   | 'tflow.node.build'
   | 'tflow.node.test'
   | 'tflow.node.instrument'
@@ -63,6 +60,21 @@ export type WorkflowTabKey =
   | 'tflow.desc.lint'
   | 'tflow.desc.analyze'
   | 'tflow.desc.format'
+  // 【变更】2026-10-22 (批次十二 2.1/2.3/2.5/2.6): the per-stage 运行 buttons,
+  // the strip 配置 button, the format step's path row, and the 配置文件
+  // preview modal.
+  | 'tflow.run'
+  | 'tflow.runDone'
+  | 'tflow.runFailed'
+  | 'tflow.runToolMissing'
+  | 'tflow.runNoCwd'
+  | 'tflow.cfgFiles'
+  | 'tflow.cfgPreview'
+  | 'tflow.cfgOpen'
+  | 'tflow.cfgClose'
+  | 'tflow.cfgMissing'
+  | 'tflow.cfgLoading'
+  | 'tflow.fmtPathLabel'
   | 'strip.current'
   | 'strip.totalTime'
   | 'strip.totalTokens'
@@ -396,9 +408,8 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.noCwd': 'This session has no workspace folder — the test flow reads the workspace quality reports produced by /baf-quality check and /baf-quality lint.',
   'tflow.loadFailed': 'Test-flow status read failed — ',
   'tflow.aria': 'Unit-test execution flow with results',
-  'tflow.bandTitle': 'Discipline',
-  'tflow.band': 'Order: check (gcc build → ceedling tests → gcov instrumentation → gcovr report → coverage gate ≥80%) → lint (cpplint + cppcheck, fixed) → final clang-format; no mid-stream formatting. Entries: /baf-quality check · /baf-quality lint.',
-  'tflow.formatNote': 'no standalone report; the code-freeze check governs',
+  // 【变更】2026-10-22 (批次十二 2.2): the 执行纪律 band copy is gone — the
+  // discipline line no longer renders anywhere (customer deletion).
   'tflow.node.build': 'gcc build',
   'tflow.node.test': 'ceedling unit tests',
   'tflow.node.instrument': 'gcov instrumentation',
@@ -427,7 +438,9 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.chainIdle': 'Not run yet — run /baf-quality check to fill in this pane.',
   'tflow.gateUndecided': 'Coverage report exists but carries no pass verdict.',
   'tflow.staticIdle': 'Not run yet — run /baf-quality lint to fill in this pane.',
-  'tflow.formatIdle': 'Formatting keeps no report; the final clang-format runs after lint is clean, before code freeze.',
+  // 【变更】2026-10-22 (批次十二 2.5): the 无独立报告 note is gone; the format
+  // step carries a configurable path instead.
+  'tflow.formatIdle': 'The final clang-format runs after lint is clean, before code freeze — use the 运行 button (it formats the configured path).',
   'tflow.desc.build': 'Compiles the production sources and test stubs with gcc and links the Unity/CMock test executables — the first step of the check chain: if it does not compile, the tests, instrumentation and coverage below never happen.',
   'tflow.desc.test': 'Drives every unit test through ceedling. The daily path skips coverage instrumentation and stays fast — regress here first after a code change, then run the full check chain once green.',
   'tflow.desc.instrument': 'Rebuilds the sources with gcov coverage instrumentation (check path only — the daily test run is not instrumented), producing the data gcovr later scores.',
@@ -436,6 +449,20 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.desc.lint': 'Checks style and banned constructs with cpplint under the SORA-tuned rule set (driven by the repo-root CPPLINT.cfg, not the Google defaults); runs together with cppcheck inside one /baf-quality lint.',
   'tflow.desc.analyze': 'Hunts defect and undefined-behavior classes with cppcheck; third-party, test and build directories are exempt per the suppression file, and the error count feeds the static verdict above.',
   'tflow.desc.format': 'Applies the final layout pass (clang-format -i) to the .c/.h files this change touched — only after lint is clean, before code freeze; no source edits afterwards.',
+  // 【变更】2026-10-22 (批次十二 2.1/2.3/2.5/2.6): the per-stage run, the
+  // format path row, and the 配置文件 preview modal.
+  'tflow.run': 'Run',
+  'tflow.runDone': 'Run finished (exit 0)',
+  'tflow.runFailed': 'Run failed (exit {code})',
+  'tflow.runToolMissing': 'baf-quality not found — install the quality toolchain first (工作流 · 质量监控 · 环境).',
+  'tflow.runNoCwd': 'This session has no workspace folder.',
+  'tflow.cfgFiles': 'Config files',
+  'tflow.cfgPreview': 'Config file preview',
+  'tflow.cfgOpen': 'Open file',
+  'tflow.cfgClose': 'Close',
+  'tflow.cfgMissing': 'File not found — install the quality assets first (工作流 · 质量监控 · 环境 · 一键安装).',
+  'tflow.cfgLoading': 'Reading…',
+  'tflow.fmtPathLabel': 'Format path',
   'strip.current': 'Current',
   'strip.totalTime': 'Change time',
   'strip.totalTokens': 'Session tokens',
@@ -738,9 +765,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.noCwd': '本会话未绑定工作区目录——测试流图读取工作区质量报告（由 /baf-quality check · /baf-quality lint 生成）。',
   'tflow.loadFailed': '测试流状态读取失败 —',
   'tflow.aria': '单元测试执行流程与结果',
-  'tflow.bandTitle': '执行纪律',
-  'tflow.band': '顺序：check（gcc 编译 → ceedling 单元测试 → gcov 插桩 → gcovr 报告 → 覆盖率门禁 ≥80%）→ lint（cpplint + cppcheck 修完）→ 最终 clang-format；禁止中途格式化。入口指令：/baf-quality check · /baf-quality lint。',
-  'tflow.formatNote': '无独立报告；以代码冻结检查为准',
+  // 【变更】2026-10-22 (批次十二 2.2): 执行纪律横幅已删除——纪律文案不再出现。
   'tflow.node.build': 'gcc 编译',
   'tflow.node.test': 'ceedling 单元测试',
   'tflow.node.instrument': 'gcov 覆盖率插桩',
@@ -769,7 +794,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.chainIdle': '尚未运行——执行 /baf-quality check 后此处显示结果。',
   'tflow.gateUndecided': '覆盖率报告已生成，但未包含达标结论。',
   'tflow.staticIdle': '尚未运行——执行 /baf-quality lint 后此处显示结果。',
-  'tflow.formatIdle': '格式化不落独立报告；最终 clang-format 在 lint 修完后、代码冻结前执行。',
+  // 【变更】2026-10-22 (批次十二 2.5): 「无独立报告」注记已删除，改为可配置路径。
+  'tflow.formatIdle': '最终 clang-format 在 lint 修完后、代码冻结前执行——用「运行」按钮（对配置的路径执行 clang-format -i）。',
   'tflow.desc.build': '用 gcc 编译生产源码与测试桩，链接 Unity/CMock 测试可执行件，是整条 check 链的第一步：编译不过，后面的测试、插桩与覆盖率都无从谈起。',
   'tflow.desc.test': '用 ceedling 驱动全部单元测试。日常路径不做覆盖率插桩、速度快——改完代码先用它快速回归，绿了再走 check 全链。',
   'tflow.desc.instrument': '用 gcov 对源码做覆盖率插桩并重新编译，仅 check 路径执行（日常 test 不插桩），产出供 gcovr 统计的行覆盖数据。',
@@ -778,6 +804,19 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.desc.lint': '用 cpplint 按 SORA 定制规则（由仓根 CPPLINT.cfg 驱动，非 Google 默认集）做风格与禁项检查；与 cppcheck 同在 /baf-quality lint 一次执行。',
   'tflow.desc.analyze': '用 cppcheck 做缺陷与未定义行为类静态分析；第三方、测试与构建目录按抑制文件豁免，错误数计入顶部静态检查结论。',
   'tflow.desc.format': '对本轮触及的 .c/.h 做最终排版（clang-format -i）——必须等 lint 修完才执行，代码冻结前完成，此后不再改源码。',
+  // 【变更】2026-10-22 (批次十二 2.1/2.3/2.5/2.6): 单阶段运行、格式化路径行、配置文件预览弹窗。
+  'tflow.run': '运行',
+  'tflow.runDone': '运行完成（退出码 0）',
+  'tflow.runFailed': '运行失败（退出码 {code}）',
+  'tflow.runToolMissing': '未找到 baf-quality 命令——请先安装质量工具链（工作流 · 质量监控 · 环境）。',
+  'tflow.runNoCwd': '本会话未绑定工作区目录。',
+  'tflow.cfgFiles': '配置文件',
+  'tflow.cfgPreview': '配置文件预览',
+  'tflow.cfgOpen': '打开文件',
+  'tflow.cfgClose': '关闭',
+  'tflow.cfgMissing': '文件不存在——请先安装质量资产（工作流 · 质量监控 · 环境 · 一键安装）。',
+  'tflow.cfgLoading': '读取中…',
+  'tflow.fmtPathLabel': '格式化路径',
   'strip.current': '当前',
   'strip.totalTime': '变更耗时',
   'strip.totalTokens': '会话 tokens',

@@ -21,6 +21,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
   BafEnterpriseDocResult, BafStandardNodeHooks, BafStandardSummaryResult,
+  BafQualityAssetReadResult, BafQualityAssetsResult,
   BafQualityConfigurationResult, BafQualityEnvironmentResult,
   BafQualityInstallResult, BafQualityInstallStep, BafQualityReportResult,
 } from '../types.ts'
@@ -88,6 +89,15 @@ export interface StandardsOverviewState {
   qualityReportSeq: number
   /** The open 测试报告 modal's payload; undefined while closed or fetching. */
   qualityReport: BafQualityReportResult | undefined
+  /**
+   * 【变更】2026-10-22 (批次十二 3, 客户决策): the 资产 card's explicit file
+   * list (undefined until the first load lands).
+   */
+  qualityAssets: BafQualityAssetsResult | undefined
+  /** Monotonic token for stale 资产 preview fetches (compare-and-drop). */
+  qualityAssetSeq: number
+  /** The open 资产 preview modal's payload; undefined while closed or fetching. */
+  qualityAsset: BafQualityAssetReadResult | undefined
 }
 
 /** The registration-side face the row's slot entry injects. */
@@ -152,6 +162,12 @@ export interface StandardsOverviewFace {
   openQualityReport(): Promise<void>
   /** Close the 测试报告 modal. */
   closeQualityReport(): void
+  /** 【变更】2026-10-22 (批次十二 3): load the 资产 card's explicit file list. */
+  loadQualityAssets(): Promise<void>
+  /** Fetch one 资产 file's preview into the modal (stale answers dropped). */
+  openQualityAsset(rel: string): Promise<void>
+  /** Close the 资产 preview modal. */
+  closeQualityAsset(): void
 }
 
 /** Initial state: loading, viewer closed. */
@@ -178,6 +194,9 @@ const INITIAL: StandardsOverviewState = {
   qualityConfig: undefined,
   qualityReportSeq: 0,
   qualityReport: undefined,
+  qualityAssets: undefined,
+  qualityAssetSeq: 0,
+  qualityAsset: undefined,
 }
 
 /** The slice of the Session Remote the path gestures call (structural — the
@@ -248,6 +267,9 @@ export class StandardsController {
       loadQualityConfiguration: () => this.loadQualityConfiguration(),
       openQualityReport: () => this.openQualityReport(),
       closeQualityReport: () => this.closeQualityReport(),
+      loadQualityAssets: () => this.loadQualityAssets(),
+      openQualityAsset: (rel: string) => this.openQualityAsset(rel),
+      closeQualityAsset: () => this.closeQualityAsset(),
     }
   }
 
@@ -681,6 +703,65 @@ export class StandardsController {
     this.store.update((state) => {
       state.qualityReportSeq += 1
       state.qualityReport = undefined
+    })
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-22 (批次十二 3, 客户决策): one 资产 list round. Failures
+   * settle into the environment notice line (the card's only status lane).
+   */
+  async loadQualityAssets(): Promise<void> {
+    let notice: string | undefined
+    let result: BafQualityAssetsResult | undefined
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.qualityAssets()
+      if (response.ok) {
+        result = response.value
+      } else {
+        notice = response.error.message
+      }
+    } catch (error) {
+      notice = error instanceof Error ? error.message : String(error)
+    }
+    this.store.update((state) => {
+      state.qualityEnvNotice = notice ?? state.qualityEnvNotice
+      if (result !== undefined) state.qualityAssets = result
+    })
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-22 (批次十二 3): fetch one 资产 file's preview into the
+   * modal. A stale answer for a superseded open is dropped by the sequence
+   * token; transport failures settle as `unreadable`.
+   */
+  async openQualityAsset(rel: string): Promise<void> {
+    const seq = this.store.getSnapshot().qualityAssetSeq + 1
+    this.store.update((state) => {
+      state.qualityAssetSeq = seq
+      state.qualityAsset = undefined
+    })
+    let result: BafQualityAssetReadResult
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.readQualityAsset(rel)
+      result = response.ok
+        ? response.value
+        : { status: 'unreadable', reason: response.error.message }
+    } catch (error) {
+      result = { status: 'unreadable', reason: error instanceof Error ? error.message : String(error) }
+    }
+    this.store.update((state) => {
+      if (state.qualityAssetSeq !== seq) return
+      state.qualityAsset = result
+    })
+  }
+
+  /** @inheritdoc */
+  closeQualityAsset(): void {
+    this.store.update((state) => {
+      state.qualityAssetSeq += 1
+      state.qualityAsset = undefined
     })
   }
 }

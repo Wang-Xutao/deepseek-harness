@@ -26,7 +26,7 @@ import { EnterpriseDocsCard } from './EnterpriseDocsCard.tsx'
 import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
 import { QualityEnvironmentCard } from './QualityEnvironmentCard.tsx'
 import { QualityConfigCard } from './QualityConfigCard.tsx'
-import { QualityFlowCard } from './QualityFlowCard.tsx'
+import { QualityAssetsCard } from './QualityAssetsCard.tsx'
 import { QualityStandardsCard } from './QualityStandardsCard.tsx'
 import { CommandsCard } from './CommandsCard.tsx'
 import { type BafStandardKey } from './locales.ts'
@@ -518,6 +518,7 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
     openEnterpriseDoc, closeEnterpriseDoc, openPath, t,
     probeQualityEnvironment, installQualityToolchain,
     loadQualityConfiguration, openQualityReport, closeQualityReport,
+    loadQualityAssets, openQualityAsset, closeQualityAsset,
   } = props
   // 【变更】2026-10-21 (批次八 3.2/3.4): ONE full-screen doc modal per tab —
   // the 规范 card opens documents through the shared store field, so the tab
@@ -527,10 +528,12 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
   // their own Remote rounds (not part of the summary) — fire them on every
   // tab mount so the verdict tracks the machine, not the activation-time
   // snapshot. Both self-gate double-runs in the controller.
+  // 【变更】2026-10-22 (批次十二 3): the 资产 list joins the mount round.
   useEffect(() => {
     void probeQualityEnvironment()
     void loadQualityConfiguration()
-  }, [probeQualityEnvironment, loadQualityConfiguration])
+    void loadQualityAssets()
+  }, [probeQualityEnvironment, loadQualityConfiguration, loadQualityAssets])
 
   return (
     <section className={css.blockQuality} data-testid="baf-standard-quality">
@@ -549,10 +552,17 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
           onClosePreview={() => { closeQualityReport() }}
           onOpenPath={(path) => { void openPath(path) }}
         />
-        {/* 【变更】2026-10-21 (批次十 测试流图): the execution-flow chart rides
-            right after 配置 — the config above says WHERE the pieces live, the
-            chart says in WHICH ORDER they run and WHICH standard governs each. */}
-        <QualityFlowCard t={t} openEnterpriseDoc={openEnterpriseDoc} />
+        {/* 【变更】2026-10-22 (批次十二 3, 客户决策): the 资产 card rides right
+            after 配置 — the explicit quality-pack file list (project.yml et al)
+            with 预览 + 打开 per row, replacing the old 执行流程 chart (that
+            story lives in the session tab's 测试流图 now). */}
+        <QualityAssetsCard
+          state={state}
+          t={t}
+          onPreview={(rel) => { void openQualityAsset(rel) }}
+          onClosePreview={() => { closeQualityAsset() }}
+          onOpenPath={(path) => { void openPath(path) }}
+        />
         <QualityStandardsCard
           state={state}
           t={t}

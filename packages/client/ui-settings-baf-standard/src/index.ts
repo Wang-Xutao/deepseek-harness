@@ -45,6 +45,7 @@ import type {
   BafStandardSaveProtectedResult,
   BafStandardFieldRow, BafStandardFieldState, BafStandardPackageCard,
   BafStandardRulesDocResult, BafStandardStatPathResult, BafStandardSummaryResult,
+  BafQualityAssetReadResult, BafQualityAssetRow, BafQualityAssetsResult,
   BafQualityConfigurationResult, BafQualityEnvironmentResult,
   BafQualityInstallResult, BafQualityInstallStep, BafQualityReportResult,
   BafQualityToolRow,
@@ -206,16 +207,18 @@ const QUALITY_INSTALL_TIMEOUT_MS = 300_000
 
 /** The unit-test toolchain members, in presentation order.
  * 【变更】2026-10-21 (批次十 测试流图): clang-format joins as a probed member —
- * the 测试流图's final step runs it, so the 环境 card must surface its presence
- * (选装：format 是代码冻结步骤，缺席只警示，不阻塞 UT 环境 supported 判定)。 */
+ * the 测试流图's final step runs it.
+ * 【变更】2026-10-22 (批次十二 3, 客户决策「没有选装，都是必装」): every member
+ * is required — the supported verdict gates on all seven, and the env table's
+ * 必装/选装 chips all read 必装. */
 const QUALITY_TOOLS: ReadonlyArray<{ key: string; cmd: string; required: boolean }> = [
   { key: 'gcc', cmd: 'gcc --version', required: true },
   { key: 'ruby', cmd: 'ruby --version', required: true },
   { key: 'ceedling', cmd: 'ceedling version', required: true },
   { key: 'gcovr', cmd: 'gcovr --version', required: true },
-  { key: 'cpplint', cmd: 'cpplint --version', required: false },
-  { key: 'cppcheck', cmd: 'cppcheck --version', required: false },
-  { key: 'clang-format', cmd: 'clang-format --version', required: false },
+  { key: 'cpplint', cmd: 'cpplint --version', required: true },
+  { key: 'cppcheck', cmd: 'cppcheck --version', required: true },
+  { key: 'clang-format', cmd: 'clang-format --version', required: true },
 ]
 
 /** Whether a shell failure was the timeout guard rather than a real failure. */
@@ -270,6 +273,27 @@ const QUALITY_DEFAULTS = {
  * @param workspaceRoot - absolute workspace root.
  * @returns configuration readout (`no-workspace` only via the Remote).
  */
+/**
+ * 【变更】2026-10-22 (批次十二 3, 客户决策): the 质量资产 answer made
+ * explicit — the exact files `applyEnterpriseStandards({packs:['quality','c']})`
+ * lays into the workspace and the quality flow reads. Workspace-relative,
+ * git-managed (per the customer: 这些配置文件需要在工程目录下受 git 控制). The
+ * 资产 card lists these rows with 预览/打开; {@link BafStandardConfigRemote.readQualityAsset}
+ * serves each row's text.
+ */
+export const QUALITY_ASSET_FILES: ReadonlyArray<{ rel: string; roleKey: BafQualityAssetRow['roleKey'] }> = [
+  { rel: 'project.yml', roleKey: 'assetProject' },
+  { rel: '.baf/quality/ceedling-config.json', roleKey: 'assetGateConfig' },
+  { rel: 'CPPLINT.cfg', roleKey: 'assetCpplint' },
+  { rel: 'cppcheck-suppressions.xml', roleKey: 'assetSuppressions' },
+  { rel: '.clang-format', roleKey: 'assetClangFormat' },
+  { rel: '.baf/quality/ceedling-README.md', roleKey: 'assetUtReadme' },
+  { rel: '.baf/quality/static-analysis-README.md', roleKey: 'assetStaticReadme' },
+]
+
+/** Preview payload cap for readQualityAsset (批次十二 3). */
+const QUALITY_ASSET_PREVIEW_CAP = 256 * 1024
+
 export async function readQualityConfiguration(
   workspaceRoot: string,
 ): Promise<BafQualityConfigurationResult> {
@@ -870,6 +894,57 @@ export class BafStandardConfigRemote extends TypertRemoteService {
     } catch {
       if (!config.reportHtmlExists) return { status: 'missing', path }
       return { status: 'unreadable', reason: `无法读取 ${config.reportHtmlRel}` }
+    }
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十二 3, 客户决策「质量资产是什么？需要明确列出」):
+   * the explicit 质量资产 list — every file the quality pack lays into the
+   * workspace, with live existence per row. Zero-arg (typert arity is exact).
+   * @returns the asset rows.
+   */
+  @Remote
+  async qualityAssets(): Promise<BafQualityAssetsResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace', assets: [] }
+    const assets: BafQualityAssetRow[] = await Promise.all(
+      QUALITY_ASSET_FILES.map(async entry => ({
+        rel: entry.rel,
+        roleKey: entry.roleKey,
+        exists: await stat(join(cwd, entry.rel)).then(() => true).catch(() => false),
+      })),
+    )
+    return { status: 'ready', cwd, assets }
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十二 3): one 资产 file's preview payload (the 资产
+   * card's modal). Workspace-relative only (no absolute, no `..`), text
+   * size-capped. `rel` is required (typert arity).
+   * @param rel - workspace-relative asset path.
+   * @returns the file's text or its absence.
+   */
+  @Remote
+  async readQualityAsset(rel: string): Promise<BafQualityAssetReadResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    const normalized = rel.replace(/\\/g, '/')
+    if (normalized === '' || normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized) || normalized.split('/').includes('..')) {
+      return { status: 'unreadable', reason: '仅支持工作区相对路径' }
+    }
+    const path = join(cwd, normalized)
+    try {
+      const content = await readFile(path, 'utf8')
+      return {
+        status: 'ready',
+        path,
+        content: content.length > QUALITY_ASSET_PREVIEW_CAP
+          ? `${content.slice(0, QUALITY_ASSET_PREVIEW_CAP)}\n… [截断，共 ${content.length} 字符]`
+          : content,
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      return /ENOENT/i.test(reason) ? { status: 'missing', path } : { status: 'unreadable', reason }
     }
   }
 }

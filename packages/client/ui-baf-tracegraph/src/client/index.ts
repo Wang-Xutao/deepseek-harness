@@ -165,7 +165,12 @@ export function apply(ctx: ClientContext): void {
   const installView = (): (() => void) => ctx.slots.register({
     name: 'conversation.view',
     id: 'trace-graph',
-    order: 20,
+    // 【变更】2026-10-22 (批次十二 1): 11 — the three chart tabs now sit
+    // CONTIGUOUS right after 轨迹 (10): 轨迹图 11 · 工作流图 12 · 测试流图 13
+    // (ui-baf-workflow). Unique orders below every other registrant (the
+    // billion-context 上下文 tab registers order 30) keep the strip position
+    // deterministic no matter the load order — hide/show cycles can't drift it.
+    order: 11,
     locale: NS,
     label: () => tView('view.trace-graph'),
     inject: viewInject,

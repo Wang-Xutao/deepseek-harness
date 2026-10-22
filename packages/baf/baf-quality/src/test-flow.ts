@@ -16,7 +16,7 @@ export interface TestFlowStep {
   readonly id: 'build' | 'test' | 'instrument' | 'report' | 'gate' | 'lint' | 'analyze' | 'format'
   /** The tool the step runs as (probe key where one exists). */
   readonly tool: 'gcc' | 'ceedling' | 'gcov' | 'gcovr' | 'baf-quality' | 'cpplint' | 'cppcheck' | 'clang-format'
-  /** Whether the tool is a required environment member (必装 vs 选装). */
+  /** Whether the tool is a required environment member (批次十二: all 必装). */
   readonly required: boolean
 }
 
@@ -24,6 +24,10 @@ export interface TestFlowStep {
  * The eight steps, in execution order. Order is normative — the standards
  * forbid `clang-format -i` before lint converges (代码冻结前最后一步), and the
  * coverage instrumentation only happens on the `check` path (日常 test 不插桩).
+ *
+ * 【变更】2026-10-22 (批次十二 3): every member is `required: true` — 客户决策
+ * 「没有选装，都是必装」. The former 必装/选装 split (lint/analyze/format optional)
+ * is gone; the two browser mirrors flip with this list (parity specs lock them).
  */
 export const TEST_FLOW_STEPS: readonly TestFlowStep[] = [
   { id: 'build', tool: 'gcc', required: true },
@@ -31,7 +35,7 @@ export const TEST_FLOW_STEPS: readonly TestFlowStep[] = [
   { id: 'instrument', tool: 'gcov', required: true },
   { id: 'report', tool: 'gcovr', required: true },
   { id: 'gate', tool: 'baf-quality', required: true },
-  { id: 'lint', tool: 'cpplint', required: false },
-  { id: 'analyze', tool: 'cppcheck', required: false },
-  { id: 'format', tool: 'clang-format', required: false },
+  { id: 'lint', tool: 'cpplint', required: true },
+  { id: 'analyze', tool: 'cppcheck', required: true },
+  { id: 'format', tool: 'clang-format', required: true },
 ]

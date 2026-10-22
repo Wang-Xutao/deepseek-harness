@@ -206,6 +206,52 @@ export interface BafWorkflowTestFlowStatus {
 }
 
 /**
+ * 【变更】2026-10-22 (批次十二 2.1): `runTestFlowStage` request — a node's
+ * 运行 button. `stage` picks the baf-wrapped command (testFlowStageCommand);
+ * `arg` carries the format node's configurable path (empty otherwise). All
+ * fields required (typert arity is exact — no optional params).
+ */
+export interface BafWorkflowStageRunRequest {
+  readonly sessionId: SessionId
+  readonly stage: 'build' | 'test' | 'instrument' | 'report' | 'gate' | 'lint' | 'analyze' | 'format'
+  /** Extra argument (the format node's configured path; '' for none). */
+  readonly arg: string
+}
+
+/** `runTestFlowStage` result — the spawned command's real outcome. */
+export interface BafWorkflowStageRunResult {
+  readonly status: 'ready' | 'no-cwd' | 'tool-missing'
+  /** The command the host actually spawned (echoed for the result card). */
+  readonly command?: string
+  readonly exitCode?: number
+  /** Truncated combined output tail. */
+  readonly output?: string
+  /** Wall-clock duration in ms. */
+  readonly durationMs?: number
+}
+
+/**
+ * 【变更】2026-10-22 (批次十二 2.6): `readWorkspaceFile` request — one
+ * workspace-relative config file's preview payload (the detail pane's 配置文件
+ * chips). All fields required (typert arity).
+ */
+export interface BafWorkflowFileReadRequest {
+  readonly sessionId: SessionId
+  /** Workspace-relative path (validated: no absolute, no `..` traversal). */
+  readonly path: string
+}
+
+/** `readWorkspaceFile` result — full text or its absence, size-capped. */
+export interface BafWorkflowFileReadResult {
+  readonly status: 'ready' | 'missing' | 'unreadable'
+  /** Absolute path (modal header + the open button). */
+  readonly path?: string
+  /** Full text (capped at {@link WORKSPACE_FILE_PREVIEW_CAP} chars). */
+  readonly content?: string
+  readonly reason?: string
+}
+
+/**
  * 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 payload — a read-only
  * projection of both gate layers (the confirm-gate registry and the per-stage
  * completion gates), declared here as the typert boundary contract.

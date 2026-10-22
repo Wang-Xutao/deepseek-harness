@@ -25,6 +25,7 @@ const TOOL_DISPLAY: Readonly<Record<string, string>> = {
   gcovr: 'gcovr',
   cpplint: 'cpplint',
   cppcheck: 'Cppcheck',
+  'clang-format': 'clang-format',
 }
 
 /** The 用途 column's locale keys (one per probed tool id). */
@@ -35,6 +36,7 @@ const TOOL_ROLE: Readonly<Record<string, BafStandardKey>> = {
   gcovr: 'qolEnvToolGcovr',
   cpplint: 'qolEnvToolCpplint',
   cppcheck: 'qolEnvToolCppcheck',
+  'clang-format': 'qolEnvToolClangFormat',
 }
 
 /** The state chip for one probe row. */
