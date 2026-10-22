@@ -3971,6 +3971,9 @@ importers:
 
   packages/client/ui-baf-workflow:
     dependencies:
+      '@deepseek-ai/dsh-baf-quality':
+        specifier: workspace:^
+        version: link:../../baf/baf-quality
       '@deepseek-ai/dsh-client-ui-settings':
         specifier: workspace:*
         version: link:../ui-settings

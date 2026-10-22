@@ -117,6 +117,7 @@
   ],
   "dependencies": {
     "clsx": "^2.0.0",
+    "@deepseek-ai/dsh-baf-quality": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "zod": "^4.4.3"
   }

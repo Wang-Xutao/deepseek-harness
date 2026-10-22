@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   BafStandardConfigRemote, projectStandardCards, resolveWorkspaceCwd,
   applyQualityTestFlowToggle, normalizeQualityTestFlowStages, readQualityTestFlowStages,
+  readToolVersion, decidePipShadowQuarantine,
   type CwdSessionStore,
 } from '../src/index.ts'
 
@@ -153,6 +154,35 @@ describe('projectStandardCards (pure projection)', () => {
       value: '<enterprise-tbd>', state: 'tbd',
     })
     expect(fields.get('standard.availability')).toMatchObject({ value: 'policy_missing', state: 'ok' })
+  })
+})
+
+describe('环境探针版本解析 + PATH 遮蔽修复 (批次十三复核 3)', () => {
+  it('readToolVersion parses the version off the first FOUR lines — Ceedling 1.x greets with a banner', () => {
+    // Ceedling 1.0.1 real output: banner on line 1, version on line 3.
+    expect(readToolVersion('Welcome to Ceedling!\n\n  Ceedling => 1.0.1-fb1ce6c\n  ---')).toBe('1.0.1')
+    // Single-line banners keep resolving.
+    expect(readToolVersion('gcovr 8.3')).toBe('8.3')
+    expect(readToolVersion('gcc (Rev3, Built by MSYS2 project) 13.2.0')).toBe('13.2.0')
+    // A version buried deeper than line 4 stays unknown (conservative).
+    expect(readToolVersion('a\nb\nc\nd\ne 1.2.3')).toBeUndefined()
+    expect(readToolVersion('')).toBeUndefined()
+  })
+
+  it('decidePipShadowQuarantine quarantines dead No-Python shims before the first working candidate', () => {
+    const dead = { path: 'C:/Users/x/.local/bin/cpplint.exe', output: "No Python at '\"C:/msys64/ucrt64/bin\\python.exe'", version: undefined }
+    const alive = { path: 'C:/Python312/Scripts/cpplint.exe', output: 'cpplint 2.0.2', version: '2.0.2' }
+    // Dead shim ahead of a working one → quarantine it, unblock the working one.
+    expect(decidePipShadowQuarantine([dead, alive]))
+      .toEqual({ quarantine: ['C:/Users/x/.local/bin/cpplint.exe'], working: 'C:/Python312/Scripts/cpplint.exe' })
+    // No working candidate anywhere → no repair (AI 协助安装's business).
+    expect(decidePipShadowQuarantine([dead])).toEqual({ quarantine: [], working: undefined })
+    // A candidate that fails WITHOUT the dead-shim signature is left alone (unknown breakage).
+    const odd = { path: 'C:/odd/cpplint.exe', output: 'some other error', version: undefined }
+    expect(decidePipShadowQuarantine([odd, alive]))
+      .toEqual({ quarantine: [], working: 'C:/Python312/Scripts/cpplint.exe' })
+    // Already-working first candidate → nothing to do.
+    expect(decidePipShadowQuarantine([alive, dead])).toEqual({ quarantine: [], working: 'C:/Python312/Scripts/cpplint.exe' })
   })
 })
 

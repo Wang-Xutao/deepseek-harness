@@ -228,16 +228,21 @@ function qualTimedOut(error: unknown): boolean {
 }
 
 /**
- * Pull the version token out of a `--version` first line — the first
- * whitespace token that looks like `N(.N)+`, so `gcc (Rev3, …) 13.2.0`,
- * `ruby 3.2.2 (…)`, `ceedling 1.0.1`, `Cppcheck 2.13` all resolve without a
- * per-tool parser.
+ * Pull the version token out of a `--version` banner — the first whitespace
+ * token that looks like `N(.N)+`, so `gcc (Rev3, …) 13.2.0`, `ruby 3.2.2 (…)`,
+ * `Cppcheck 2.13` all resolve without a per-tool parser.
+ * 【变更】2026-10-22 (批次十三复核 3): the scan covers the first FOUR lines, not
+ * just line 1 — Ceedling 1.x greets with a `Welcome to Ceedling!` banner and
+ * only names its version (`Ceedling => 1.0.1-…`) on line 3, which read as
+ *「未安装」even on a perfectly installed gem (the 复检-仍缺 false negative).
  */
 export function readToolVersion(stdout: string): string | undefined {
-  const firstLine = stdout.trim().split(/\r?\n/, 1)[0] ?? ''
-  for (const token of firstLine.split(/\s+/)) {
-    const match = token.match(/\d+(?:\.\d+)+/)
-    if (match !== null) return match[0]
+  const lines = stdout.trim().split(/\r?\n/, 4)
+  for (const line of lines) {
+    for (const token of (line ?? '').split(/\s+/)) {
+      const match = token.match(/\d+(?:\.\d+)+/)
+      if (match !== null) return match[0]
+    }
   }
   return undefined
 }
@@ -246,6 +251,102 @@ export function readToolVersion(stdout: string): string | undefined {
 function tailOf(text: string, max = 160): string {
   const flat = text.trim().split(/\r?\n/).map(line => line.trim()).filter(line => line !== '').join(' · ')
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`
+}
+
+/** The dead-venv launcher signature (批次十三复核 3): pip/pyinstaller shims
+ * print exactly this when their embedded interpreter path no longer exists. */
+const DEAD_PYTHON_SHIM_SIGNATURE = 'No Python at'
+
+/** One `where <tool>` candidate and what running it directly revealed. */
+export interface ToolCandidateOutcome {
+  readonly path: string
+  /** Combined stdout+stderr of `"<path>" --version`. */
+  readonly output: string
+  /** Version token parsed out of output — undefined when the candidate is dead. */
+  readonly version: string | undefined
+}
+
+/** The PATH-shadow repair verdict for one pip tool. */
+export interface PipShadowRepairPlan {
+  /** Dead shims sitting BEFORE the first working candidate — rename targets. */
+  readonly quarantine: readonly string[]
+  /** The first working candidate the bare command reaches after the repair. */
+  readonly working: string | undefined
+}
+
+/**
+ * Decide the PATH-shadow repair (批次十三复核 3, 2026-10-22). A pipx-style shim
+ * whose embedded interpreter was deleted (`No Python at …`) sits EARLIER on
+ * PATH than the working `Scripts\` shim, so `pip install` reads "already
+ * satisfied" while the bare command stays broken — the second root cause of
+ * 「一键安装后环境仍不完整」. Quarantining the dead shims before the first
+ * working candidate unblocks the bare command. Pure — the caller probes the
+ * candidates and owns the filesystem.
+ */
+export function decidePipShadowQuarantine(
+  candidates: readonly ToolCandidateOutcome[],
+): PipShadowRepairPlan {
+  const workingIndex = candidates.findIndex(candidate => candidate.version !== undefined)
+  if (workingIndex < 0) return { quarantine: [], working: undefined }
+  const quarantine = candidates.slice(0, workingIndex)
+    .filter(candidate => candidate.version === undefined && candidate.output.includes(DEAD_PYTHON_SHIM_SIGNATURE))
+    .map(candidate => candidate.path)
+  return { quarantine, working: candidates[workingIndex]?.path }
+}
+
+/**
+ * Probe every `where` candidate of a pip tool, quarantine dead shims, and
+ * re-probe the bare command. Windows-only by construction (PATH-shadowed
+ * launcher exes); returns a step for the install report, or undefined when
+ * there was nothing to repair (tool already ok, or no working candidate to
+ * unblock — the latter stays the verify round's / AI 协助安装's business).
+ */
+async function repairPipPathShadow(key: string): Promise<BafQualityInstallStep | undefined> {
+  try {
+    const { stdout } = await execShell(`where ${key}`, { timeout: QUALITY_PROBE_TIMEOUT_MS, windowsHide: true })
+    const candidates = stdout.trim().split(/\r?\n/).filter(line => line !== '')
+    if (candidates.length < 2) return undefined
+    const outcomes: ToolCandidateOutcome[] = []
+    for (const path of candidates) {
+      let output = ''
+      try {
+        const res = await execShell(`"${path}" --version`, { timeout: QUALITY_PROBE_TIMEOUT_MS, windowsHide: true })
+        output = `${res.stdout} ${res.stderr}`
+      } catch (error) {
+        const err = error as { stdout?: unknown; stderr?: unknown; message?: unknown }
+        output = `${String(err.stdout ?? '')} ${String(err.stderr ?? '')} ${String(err.message ?? '')}`
+      }
+      outcomes.push({ path, output, version: readToolVersion(output) })
+    }
+    const plan = decidePipShadowQuarantine(outcomes)
+    if (plan.working === undefined || plan.quarantine.length === 0) return undefined
+    const renamed: string[] = []
+    for (const dead of plan.quarantine) {
+      try {
+        const backup = `${dead}.dead-python-shim-${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`
+        await rename(dead, backup)
+        renamed.push(dead)
+      } catch {
+        // A locked/undead shim is reported, not fatal — the verify round names it.
+      }
+    }
+    let bareOk = false
+    if (renamed.length > 0) {
+      try {
+        const res = await execShell(`${key} --version`, { timeout: QUALITY_PROBE_TIMEOUT_MS, windowsHide: true })
+        bareOk = readToolVersion(res.stdout) !== undefined
+      } catch { bareOk = false }
+    }
+    return {
+      id: `repair-${key}`,
+      ok: bareOk,
+      detail: bareOk
+        ? `已隔离失效垫片 ${renamed.length} 个（指向已删除的 Python，重命名为 .dead-python-shim-*），放行 ${plan.working}`
+        : `检测到失效垫片（${plan.quarantine.join(' · ')}）但修复后命令仍不可用，可点「AI 协助安装」`,
+    }
+  } catch {
+    return undefined
+  }
 }
 
 /** The manual-install hints for prerequisites 一键安装 cannot provision. */
@@ -998,6 +1099,20 @@ export class BafStandardConfigRemote extends TypertRemoteService {
         const hint = QUALITY_MANUAL_HINTS[key]
         steps.push({ id: `manual-${key}`, ok: false, detail: hint ?? `需手动安装 ${key}` })
       }
+    }
+
+    // 4.5 【变更】2026-10-22 (批次十三复核 3): PATH-shadow repair — a pip tool can
+    // sit behind a dead pipx shim (embedded interpreter deleted) that `pip
+    // install` cannot displace ("already satisfied" while the bare command
+    // stays broken). Quarantine the dead shims so the bare command reaches the
+    // working Scripts\ shim; the final verify round then confirms for real.
+    for (const key of ['cpplint', 'gcovr'] as const) {
+      const tool = QUALITY_TOOLS.find(entry => entry.key === key)
+      if (tool === undefined || process.platform !== 'win32') continue
+      const preRepair = await probeQualityTool(tool)
+      if (preRepair.state === 'ok') continue
+      const step = await repairPipPathShadow(key)
+      if (step !== undefined) steps.push(step)
     }
 
     // 5. 【变更】2026-10-22 (批次十三 3, 客户决策「保证一键安装后环境 OK」): the

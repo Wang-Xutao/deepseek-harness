@@ -156,15 +156,23 @@
   margin: 0;
 }
 
+/* 【变更】2026-10-22 (复核 2): the li IS the card — border, surface and radius
+   moved up from .nodeBtn so the 运行 button renders INSIDE the card's visual
+   boundary (批次十二's sibling-in-the-row layout read as "卡片右侧"), while
+   pick/run stay sibling buttons (never nested). */
 .node {
   position: relative;
   display: flex;
   align-items: stretch;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  padding-right: 0.45rem;
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 10px;
 }
 
 /* 批次十二 2.1 — the per-node 运行 button: a compact sibling of the pick
-   button (never nested inside it), same state coloring. */
+   button (never nested inside it), now an in-card action chip. */
 .nodeRun {
   flex: none;
   align-self: center;
@@ -278,31 +286,42 @@
   border-left: 2px dotted color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
 }
 
+/* 【变更】2026-10-22 (复核 2): chrome-free transparent fill — the card surface
+   is .node now; hover/selected washes live there (and on .nodeSelected). */
 .nodeBtn {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 0.55rem 0.8rem;
   text-align: left;
   font: inherit;
   color: inherit;
-  background: var(--wf-card);
-  border: 1px solid var(--wf-line);
-  border-radius: 10px;
+  background: transparent;
+  border: none;
+  border-radius: 9px 0 0 9px;
   cursor: pointer;
 }
 
-.nodeBtn:hover { border-color: color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line)); }
 .nodeBtn:focus-visible {
   outline: 2px solid var(--wf-accent);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 
+/* card-level hovers: the whole card is one interactive unit. */
+.node:hover { border-color: color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line)); }
+
+/* 【变更】2026-10-22 (复核 2): selected ring wraps the WHOLE card (class moved
+   onto the li in StepNode). */
 .nodeSelected {
   border-color: color-mix(in srgb, var(--wf-accent) 75%, var(--wf-line));
   background: color-mix(in srgb, var(--wf-accent) 10%, var(--wf-card));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--wf-accent) 45%, transparent);
+}
+
+.nodeSelected .nodeRun {
+  background: color-mix(in srgb, var(--wf-accent) 16%, var(--wf-card));
 }
 
 .nodeIdx {

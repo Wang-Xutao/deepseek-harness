@@ -17,7 +17,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { classifyStageToolMissing, readTestFlowStageToggles, readTestFlowStatus } from '../src/index.ts'
+import { classifyStageToolMissing, readTestFlowStageToggles, readTestFlowStatus, stageSpawnCommand } from '../src/index.ts'
 
 const roots: string[] = []
 
@@ -181,5 +181,28 @@ describe('classifyStageToolMissing (批次十三 3)', () => {
     expect(classifyStageToolMissing(1, findings, 'baf-quality lint (cpplint)')).toBe(false)
     // A different tool's not-found line must not classify this command missing.
     expect(classifyStageToolMissing(1, "'other-tool' nope", 'baf-quality lint (cpplint)')).toBe(false)
+  })
+
+  /** 批次十三复核 3: the shipped wrapper spawns ceedling/gcovr/… in a fresh
+   * shell, so the not-found line can name the CHAIN member, not the wrapper. */
+  it('catches a missing chain member inside a wrapper run (quoted ceedling/gcovr lines)', () => {
+    expect(classifyStageToolMissing(1, "'ceedling' ��������\r\n", 'baf-quality test')).toBe(true)
+    expect(classifyStageToolMissing(1, "'gcovr' is not recognized", 'baf-quality check')).toBe(true)
+    expect(classifyStageToolMissing(1, "'cpplint' ��������", 'baf-quality lint')).toBe(true)
+  })
+})
+
+describe('stageSpawnCommand (批次十三复核 3 — shipped baf-quality CLI)', () => {
+  it('re-spawns baf-quality under node by absolute path, display contract intact', () => {
+    const cli = 'D:/repo/packages/baf/baf-quality/baf-quality-cli.cjs'
+    expect(stageSpawnCommand('baf-quality test', cli, 'C:/node/node.exe'))
+      .toBe('"C:/node/node.exe" "D:/repo/packages/baf/baf-quality/baf-quality-cli.cjs" test')
+    expect(stageSpawnCommand('baf-quality check --clean', cli, 'node.exe'))
+      .toBe('"node.exe" "D:/repo/packages/baf/baf-quality/baf-quality-cli.cjs" check --clean')
+  })
+
+  it('leaves raw clang-format and the enterprise PATH-wrapper fallback untouched', () => {
+    expect(stageSpawnCommand('clang-format -i source', 'D:/x.cjs', 'node.exe')).toBe('clang-format -i source')
+    expect(stageSpawnCommand('baf-quality lint', undefined, 'node.exe')).toBe('baf-quality lint')
   })
 })

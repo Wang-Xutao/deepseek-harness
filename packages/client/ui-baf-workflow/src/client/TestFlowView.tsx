@@ -245,12 +245,13 @@ function StepNode({
       className={clsx(
         css.node,
         off ? css.nodeOff : state === 'passed' ? css.passed : state === 'failed' ? css.failed : css.idle,
+        selected ? css.nodeSelected : undefined,
       )}
       data-enabled={off ? 'false' : 'true'}
     >
       <button
         type="button"
-        className={clsx(css.nodeBtn, selected ? css.nodeSelected : undefined)}
+        className={css.nodeBtn}
         data-testid={`baf-test-flow-step-${id}`}
         data-state={state}
         data-enabled={off ? 'false' : 'true'}
@@ -277,7 +278,8 @@ function StepNode({
       {/* 批次十二 2.1 — this node's independent 运行 button (a sibling of the
           pick button, never nested): spawns the stage's baf-wrapped command.
           批次十三 2 — play glyph + label; a stage switched OFF (批次十三 4)
-          refuses to run. */}
+          refuses to run. 复核 2 (2026-10-22) — the li carries the card chrome,
+          so this chip renders INSIDE the card (was: beside it, 卡片右侧). */}
       <button
         type="button"
         className={clsx(css.nodeRun, running ? css.running : undefined, off ? css.nodeRunOff : undefined)}

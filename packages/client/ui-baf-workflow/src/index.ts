@@ -4,8 +4,10 @@
  */
 
 import { exec } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { Context } from '@deepseek-ai/cordis'
 import {
@@ -408,14 +410,66 @@ function testFlowCommandFor(stage: BafWorkflowStageRunRequest['stage'], arg: str
  * command name).
  */
 export function classifyStageToolMissing(code: unknown, combined: string, command: string): boolean {
-  const toolName = (command.split(' ')[0] ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const shellNotFound = typeof code === 'number' && code === 1
-    && new RegExp(`^'${toolName}'`, 'm').test(combined)
-    && combined.trim().length <= 200
+  // 【变更】2026-10-22 (批次十三复核 3): the wrapper runs its subcommands in a
+  // fresh shell, so the shell's not-found line can name ANY chain member
+  // (`'ceedling' 不是内部或外部命令` inside a baf-quality check), not only the
+  // wrapper itself — probe every candidate token, not just command[0].
+  const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const tokens = new Set<string>()
+  const head = command.split(' ')[0] ?? ''
+  if (head !== '') tokens.add(head)
+  for (const tool of STAGE_TOOL_TOKENS) tokens.add(tool)
+  const shortOutput = typeof code === 'number' && code === 1 && combined.trim().length <= 200
+  const shellNotFound = shortOutput
+    && [...tokens].some(token => new RegExp(`^'${escapeRe(token)}'`, 'm').test(combined))
   return code === 'ENOENT'
     || code === 9009
     || /not recognized|不是内部或外部命令|无法将|command not found/i.test(combined)
     || shellNotFound
+}
+
+/**
+ * 【变更】2026-10-22 (批次十三复核 3): the toolchain members any stage command
+ * can reach — the classifier's not-found probe set.
+ */
+export const STAGE_TOOL_TOKENS = ['baf-quality', 'ceedling', 'gcovr', 'cpplint', 'cppcheck', 'clang-format', 'gcc', 'ruby'] as const
+
+/**
+ * 【变更】2026-10-22 (批次十三复核 3): the shipped `baf-quality` CLI resolves by
+ * absolute path — via the always-exported `package.json` root (a direct
+ * `./baf-quality-cli.cjs` export would trip the typert analyzer, which only
+ * walks TypeScript sources) plus an existence stat. Memoized; undefined when
+ * the layout lacks it — then the bare `baf-quality …` stays an
+ * enterprise-provided PATH wrapper.
+ */
+let bafQualityCliCache: string | undefined
+let bafQualityCliResolved = false
+function bafQualityCliPath(): string | undefined {
+  if (!bafQualityCliResolved) {
+    bafQualityCliResolved = true
+    try {
+      const pkgRoot = dirname(createRequire(import.meta.url).resolve('@deepseek-ai/dsh-baf-quality/package.json'))
+      const cli = join(pkgRoot, 'baf-quality-cli.cjs')
+      bafQualityCliCache = existsSync(cli) ? cli : undefined
+    } catch {
+      bafQualityCliCache = undefined
+    }
+  }
+  return bafQualityCliCache
+}
+
+/**
+ * The spawn form of a stage's display command (批次十三复核 3): `baf-quality …`
+ * becomes `"<node>" "<cli.cjs>" …` so the run needs nothing on PATH — the
+ * display contract stays `baf-quality test` and the UI is untouched. Pure.
+ * @param display - the customer-facing command (testFlowCommandFor output).
+ * @param cliPath - absolute baf-quality-cli.cjs path (undefined → display unchanged).
+ * @param execPath - the node executable to run the CLI under.
+ * @returns the shell command to spawn.
+ */
+export function stageSpawnCommand(display: string, cliPath: string | undefined, execPath: string): string {
+  if (cliPath === undefined || !display.startsWith('baf-quality ')) return display
+  return `"${execPath}" "${cliPath}"${display.slice('baf-quality'.length)}`
 }
 
 async function execTestFlowStage(
@@ -426,7 +480,7 @@ async function execTestFlowStage(
   const command = testFlowCommandFor(stage, arg)
   const started = Date.now()
   try {
-    const { stdout, stderr } = await execShell(command, {
+    const { stdout, stderr } = await execShell(stageSpawnCommand(command, bafQualityCliPath(), process.execPath), {
       cwd,
       timeout: TEST_FLOW_STAGE_TIMEOUT_MS,
       maxBuffer: 4 * 1024 * 1024,
