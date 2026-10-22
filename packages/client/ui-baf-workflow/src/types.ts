@@ -203,6 +203,19 @@ export interface BafWorkflowTestFlowStatus {
   readonly reportHtmlRel?: string
   /** Whether that HTML report exists on disk right now. */
   readonly reportHtmlExists?: boolean
+  /**
+   * 【变更】2026-10-22 (批次十三 4): the workspace's 测试流 stage switches
+   * (工作流 · 测试流 canvas), keyed by stage id — mirrors the settings
+   * package's `.baf/quality/test-flow.json` envelope. Absent when the
+   * file doesn't exist yet (all-on defaults apply client-side).
+   */
+  readonly stages?: Readonly<Record<string, BafWorkflowTestFlowStageToggle>>
+}
+
+/** One stage's switch pair inside `BafWorkflowTestFlowStatus.stages`. */
+export interface BafWorkflowTestFlowStageToggle {
+  readonly enabled: boolean
+  readonly haltOnError: boolean
 }
 
 /**
@@ -220,7 +233,7 @@ export interface BafWorkflowStageRunRequest {
 
 /** `runTestFlowStage` result — the spawned command's real outcome. */
 export interface BafWorkflowStageRunResult {
-  readonly status: 'ready' | 'no-cwd' | 'tool-missing'
+  readonly status: 'ready' | 'no-cwd' | 'tool-missing' | 'disabled'
   /** The command the host actually spawned (echoed for the result card). */
   readonly command?: string
   readonly exitCode?: number
@@ -228,6 +241,40 @@ export interface BafWorkflowStageRunResult {
   readonly output?: string
   /** Wall-clock duration in ms. */
   readonly durationMs?: number
+}
+
+/**
+ * 【变更】2026-10-22 (批次十三 1/4): `runTestFlowChain` request — the 测试流图's
+ * 全部运行 button. Same shape as a single-stage run: `arg` feeds the format
+ * node's configured path. All fields required (typert arity).
+ */
+export interface BafWorkflowChainRunRequest {
+  readonly sessionId: SessionId
+  readonly arg: string
+}
+
+/** One stage's outcome inside a `runTestFlowChain` sweep. */
+export interface BafWorkflowChainStageOutcome {
+  readonly stage: 'build' | 'test' | 'instrument' | 'report' | 'gate' | 'lint' | 'analyze' | 'format'
+  /** Whether the stage ran to a zero exit (or was skipped as disabled). */
+  readonly ok: boolean
+  /** True when the stage was OFF in the test-flow config and skipped. */
+  readonly skipped?: boolean
+  /** True when the failure was classified as a missing tool (not a real run failure). */
+  readonly toolMissing?: boolean
+  readonly exitCode?: number
+  readonly command?: string
+  /** Truncated combined output tail. */
+  readonly output?: string
+  readonly durationMs?: number
+}
+
+/** `runTestFlowChain` result — the whole enabled chain in canonical order. */
+export interface BafWorkflowChainRunResult {
+  readonly status: 'ready' | 'no-cwd'
+  readonly stages: readonly BafWorkflowChainStageOutcome[]
+  /** Wall-clock duration of the whole sweep in ms. */
+  readonly durationMs: number
 }
 
 /**

@@ -263,6 +263,44 @@ export type BafQualityAssetReadResult =
   | { readonly status: 'unreadable'; readonly reason: string }
 
 /**
+ * 【变更】2026-10-22 (批次十三 4): one 测试流 stage's persisted switches — the
+ * per-flow 启用 toggle and the 错误中止 toggle (chain runs stop after a failed
+ * stage only when its haltOnError is on). Persisted in the workspace's
+ * `.baf/quality/test-flow.json` (git-managed quality config territory).
+ */
+export interface BafQualityTestFlowStageConfig {
+  /** Whether the stage participates (disabled nodes grey out + refuse to run). */
+  readonly enabled: boolean
+  /** Whether a FAILED stage aborts the remaining chain (「全部运行」semantics). */
+  readonly haltOnError: boolean
+}
+
+/** The 8-stage map (one entry per canonical step id; defaults all-on). */
+export type BafQualityTestFlowStageMap = Readonly<Record<string, BafQualityTestFlowStageConfig>>
+
+/** `qualityTestFlowConfig()` outcome — the normalized stage map (defaults when
+ * the workspace file is absent/unreadable, so the canvas always has 8 nodes). */
+export interface BafQualityTestFlowConfigResult {
+  readonly status: 'ready' | 'no-workspace'
+  readonly cwd?: string
+  readonly stages?: BafQualityTestFlowStageMap
+}
+
+/**
+ * 【变更】2026-10-22 (批次十三 4): `saveQualityTestFlowToggle()` outcome — one
+ * switch flip, applied server-side against the persisted map with the
+ * dependency cascade (关上游 → 下游级联关；开下游 → 上游自动开), then written
+ * back. The normalized result is authoritative — the client replaces its copy.
+ */
+export interface BafQualityTestFlowToggleResult {
+  readonly status: 'ready' | 'no-workspace' | 'error'
+  /** Customer-readable problem line (error only). */
+  readonly message?: string
+  /** The normalized map after the toggle (ready only). */
+  readonly stages?: BafQualityTestFlowStageMap
+}
+
+/**
  * 【变更】2026-10-20 (批次六 5): `enterpriseDoc()` outcome — one REAL enterprise
  * standard document read from the package assets (bafplugin-migrated; a
  * product constant, never workspace- or baseline-dependent). The client

@@ -24,6 +24,7 @@ import type {
   BafQualityAssetReadResult, BafQualityAssetsResult,
   BafQualityConfigurationResult, BafQualityEnvironmentResult,
   BafQualityInstallResult, BafQualityInstallStep, BafQualityReportResult,
+  BafQualityTestFlowConfigResult, BafQualityTestFlowStageConfig, BafQualityTestFlowStageMap,
 } from '../types.ts'
 
 /** What the row renders; `summary` carries the status it loaded with. */
@@ -98,6 +99,16 @@ export interface StandardsOverviewState {
   qualityAssetSeq: number
   /** The open 资产 preview modal's payload; undefined while closed or fetching. */
   qualityAsset: BafQualityAssetReadResult | undefined
+  /**
+   * 【变更】2026-10-22 (批次十三 4): the 测试流 canvas's stage switches — the
+   * persisted `.baf/quality/test-flow.json` map (undefined until the first
+   * load lands; all-on defaults are server-side).
+   */
+  qualityFlow: BafQualityTestFlowConfigResult | undefined
+  /** A toggle's save round is in flight (one at a time — switches debounce). */
+  qualityFlowSaving: boolean
+  /** Last toggle failure line (cleared on the next toggle). */
+  qualityFlowNotice: string | undefined
 }
 
 /** The registration-side face the row's slot entry injects. */
@@ -168,6 +179,23 @@ export interface StandardsOverviewFace {
   openQualityAsset(rel: string): Promise<void>
   /** Close the 资产 preview modal. */
   closeQualityAsset(): void
+  /**
+   * 【变更】2026-10-22 (批次十三 4): load the 测试流 canvas's stage switches
+   * (the mount round; failures settle into the notice line).
+   */
+  loadQualityFlowConfig(): Promise<void>
+  /**
+   * 【变更】2026-10-22 (批次十三 4): flip ONE stage switch — optimistic local
+   * cascade, then the Remote's authoritative map replaces it (the server's
+   * cascade is the single source of truth).
+   */
+  toggleQualityFlowStage(stage: string, field: 'enabled' | 'haltOnError', value: boolean): Promise<void>
+  /**
+   * 【变更】2026-10-22 (批次十三 3): 「AI 协助安装」 — open a baf-preset session
+   * in this workspace with a prefilled install-help prompt (draft
+   * initialization; the customer presses Enter to send — never auto-sent).
+   */
+  aiHelpQualityInstall(): void
 }
 
 /** Initial state: loading, viewer closed. */
@@ -197,6 +225,9 @@ const INITIAL: StandardsOverviewState = {
   qualityAssets: undefined,
   qualityAssetSeq: 0,
   qualityAsset: undefined,
+  qualityFlow: undefined,
+  qualityFlowSaving: false,
+  qualityFlowNotice: undefined,
 }
 
 /** The slice of the Session Remote the path gestures call (structural — the
@@ -215,6 +246,11 @@ type PreloadPicker = { pick(): Promise<string | null> }
 /** The workspace navigation service's picking slice (ctx.get peek, no inject). */
 interface WorkspacePickSlice {
   pickDirectory(): Promise<string | null>
+}
+
+/** The workspace navigation service's session-start slice (ctx.get peek). */
+interface WorkspaceStartSlice {
+  startSession(workspaceId?: unknown, options?: { prompt?: string; agentPreset?: string }): void
 }
 
 /**
@@ -270,6 +306,9 @@ export class StandardsController {
       loadQualityAssets: () => this.loadQualityAssets(),
       openQualityAsset: (rel: string) => this.openQualityAsset(rel),
       closeQualityAsset: () => this.closeQualityAsset(),
+      loadQualityFlowConfig: () => this.loadQualityFlowConfig(),
+      toggleQualityFlowStage: (stage, field, value) => this.toggleQualityFlowStage(stage, field, value),
+      aiHelpQualityInstall: () => this.aiHelpQualityInstall(),
     }
   }
 
@@ -763,5 +802,130 @@ export class StandardsController {
       state.qualityAssetSeq += 1
       state.qualityAsset = undefined
     })
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-22 (批次十三 4): one stage-switch map round. Failures
+   * settle into the notice line; a `no-workspace` answer also lands as the
+   * map (the canvas renders its guidance state from it).
+   */
+  async loadQualityFlowConfig(): Promise<void> {
+    let notice: string | undefined
+    let result: BafQualityTestFlowConfigResult | undefined
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.qualityTestFlowConfig()
+      if (response.ok) {
+        result = response.value
+      } else {
+        notice = response.error.message
+      }
+    } catch (error) {
+      notice = error instanceof Error ? error.message : String(error)
+    }
+    this.store.update((state) => {
+      state.qualityFlowNotice = notice
+      if (result !== undefined) state.qualityFlow = result
+    })
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-22 (批次十三 4): ONE switch flip. The optimistic local
+   * update sets ONLY the flipped field (the cascade stays server-side — one
+   * implementation, no drift); the Remote's authoritative normalized map
+   * replaces the whole thing when it lands, flipping the dependents with it.
+   * A second toggle while one is in flight is queued behind the save gate
+   * rather than interleaved.
+   */
+  async toggleQualityFlowStage(stage: string, field: 'enabled' | 'haltOnError', value: boolean): Promise<void> {
+    const snapshot = this.store.getSnapshot()
+    const current = snapshot.qualityFlow
+    if (snapshot.qualityFlowSaving) return
+    if (current?.stages !== undefined && current.stages[stage] !== undefined) {
+      this.store.update((state) => {
+        // exactOptionalPropertyTypes: narrow the flow first, then rebuild the
+        // result explicitly — spreading the `| undefined` state value widens
+        // `status` to optional and fails the required-prop assignment.
+        const flow = state.qualityFlow
+        const stages = flow?.stages
+        const prev = stages?.[stage]
+        if (flow === undefined || stages === undefined || prev === undefined) return
+        const flipped: BafQualityTestFlowStageConfig = {
+          enabled: field === 'enabled' ? value : prev.enabled,
+          haltOnError: field === 'haltOnError' ? value : prev.haltOnError,
+        }
+        state.qualityFlow = {
+          status: flow.status,
+          ...(flow.cwd === undefined ? {} : { cwd: flow.cwd }),
+          stages: { ...stages, [stage]: flipped },
+        }
+        state.qualityFlowNotice = undefined
+      })
+    }
+    this.store.update((state) => { state.qualityFlowSaving = true })
+    let notice: string | undefined
+    let stages: BafQualityTestFlowStageMap | undefined
+    try {
+      const response = await this.ctx.remote.bafStandardConfig.saveQualityTestFlowToggle({ stage, field, value })
+      if (response.ok) {
+        if (response.value.status === 'ready') stages = response.value.stages
+        else notice = response.value.message ?? response.value.status
+      } else {
+        notice = response.error.message
+      }
+    } catch (error) {
+      notice = error instanceof Error ? error.message : String(error)
+    }
+    this.store.update((state) => {
+      state.qualityFlowSaving = false
+      state.qualityFlowNotice = notice
+      if (stages !== undefined && state.qualityFlow !== undefined) {
+        state.qualityFlow = { ...state.qualityFlow, stages }
+      }
+    })
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-22 (批次十三 3, 可行性落地): the 「AI 协助安装」 trigger —
+   * `uiWorkspace.startSession` with the baf agent preset and a DRAFT-INITIALIZED
+   * prompt carrying the real install report + the still-missing members + the
+   * workspace root. Draft initialization PREFILLS the composer (never
+   * auto-sends — the customer reads it and presses Enter, per the
+   * customer-decision principle). The workspace slice is read structurally
+   * (ctx.get peek, no inject), matching {@link pickDirectory}'s pattern.
+   */
+  aiHelpQualityInstall(): void {
+    const { qualityEnv, qualityInstallSteps } = this.store.getSnapshot()
+    const missing = (qualityEnv?.tools ?? [])
+      .filter(tool => tool.required && tool.state !== 'ok')
+      .map(tool => tool.key)
+    const cwd = qualityEnv?.cwd
+    const reportLines = (qualityInstallSteps ?? [])
+      .map(step => `- ${step.ok ? '✓' : '✗'} ${step.id}：${step.detail}`)
+      .join('\n')
+    const prompt = [
+      '请帮我安装并验证 C 单元测试质量工具链，直到每个必装工具都能应答 --version。',
+      cwd !== undefined ? `工作区：${cwd}` : '（请先确认当前工作区）',
+      missing.length > 0 ? `仍缺失的必装工具：${missing.join('、')}。` : '一键安装复检仍未通过，请逐个排查。',
+      '',
+      '最近一次一键安装报告：',
+      reportLines === '' ? '（尚未运行过一键安装）' : reportLines,
+      '',
+      '要求：1) gem 装 ceedling 1.0.1，pip 装 gcovr 与 cpplint（gcovr 没有可用的 gem，勿用 gem 装）；',
+      '2) 系统级工具（GCC/MinGW、Ruby、Cppcheck、LLVM/clang-format）先给出下载与 PATH 配置步骤再执行；',
+      '3) 每装完一个立即运行 <工具> --version 验证；4) 全部就绪后复检并汇报结论。',
+    ].join('\n')
+    const workspace = this.ctx.get('uiWorkspace') as unknown as WorkspaceStartSlice | undefined
+    if (workspace === undefined || typeof workspace.startSession !== 'function') return
+    try {
+      // No workspaceId → the current/recent workspace (this page's cwd tracks
+      // the current session; the prompt also carries the absolute root).
+      workspace.startSession(undefined, { agentPreset: 'baf', prompt })
+    } catch {
+      // Navigation refused (superseded) — nothing to settle; the customer can
+      // retry the button.
+    }
   }
 }

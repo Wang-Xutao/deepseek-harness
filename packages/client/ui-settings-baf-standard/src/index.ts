@@ -19,7 +19,7 @@
  */
 
 import { exec } from 'node:child_process'
-import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { load as loadYaml } from 'js-yaml'
@@ -48,6 +48,7 @@ import type {
   BafQualityAssetReadResult, BafQualityAssetRow, BafQualityAssetsResult,
   BafQualityConfigurationResult, BafQualityEnvironmentResult,
   BafQualityInstallResult, BafQualityInstallStep, BafQualityReportResult,
+  BafQualityTestFlowConfigResult, BafQualityTestFlowStageMap, BafQualityTestFlowToggleResult,
   BafQualityToolRow,
 } from './types.ts'
 
@@ -293,6 +294,146 @@ export const QUALITY_ASSET_FILES: ReadonlyArray<{ rel: string; roleKey: BafQuali
 
 /** Preview payload cap for readQualityAsset (批次十二 3). */
 const QUALITY_ASSET_PREVIEW_CAP = 256 * 1024
+
+// ── 测试流 stage 开关 (批次十三 4): .baf/quality/test-flow.json ──
+
+/**
+ * 【变更】2026-10-22 (批次十三 4): the canonical 测试流 stage ids + the
+ * dependency edges the switches cascade along — a stage's dependents are every
+ * stage whose transitive prerequisite closure includes it (关上游 → 下游级联关；
+ * 开下游 → 上游自动开). lint/analyze/format carry no edges: cpplint 与 cppcheck
+ * 相互独立、format 是冻结前的独立纪律步.
+ */
+export const TEST_FLOW_STAGE_IDS = ['build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze', 'format'] as const
+
+/** Prerequisite edges: stage → the stages it directly needs. */
+export const TEST_FLOW_DEPENDS_ON: Readonly<Record<string, readonly string[]>> = {
+  build: [],
+  test: ['build'],
+  instrument: ['test'],
+  report: ['instrument'],
+  gate: ['report'],
+  lint: [],
+  analyze: [],
+  format: [],
+}
+
+/** Default switches: everything participates, failures halt the chain. */
+const testFlowDefaultStages = (): BafQualityTestFlowStageMap => Object.fromEntries(
+  TEST_FLOW_STAGE_IDS.map(id => [id, { enabled: true, haltOnError: true }]),
+)
+
+/**
+ * Normalize a raw (possibly partial/corrupt) stage map into the full 8-entry
+ * shape — unknown ids dropped, missing ids defaulted, both switches coerced.
+ * Context-free and pure (spec-locked).
+ */
+export function normalizeQualityTestFlowStages(raw: unknown): BafQualityTestFlowStageMap {
+  const source = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {}
+  return Object.fromEntries(TEST_FLOW_STAGE_IDS.map((id) => {
+    const entry = typeof source[id] === 'object' && source[id] !== null ? source[id] as Record<string, unknown> : {}
+    return [id, {
+      enabled: entry.enabled !== false,
+      haltOnError: entry.haltOnError !== false,
+    }]
+  }))
+}
+
+/**
+ * Apply ONE switch flip with the dependency cascade (批次十三 4). Pure and
+ * exported for the spec: `enabled=false` closes the stage's whole dependent
+ * cone; `enabled=true` re-opens its prerequisite cone; `haltOnError` flips
+ * alone (halting is per-stage, never cascaded).
+ */
+export function applyQualityTestFlowToggle(
+  stages: BafQualityTestFlowStageMap,
+  stage: string,
+  field: 'enabled' | 'haltOnError',
+  value: boolean,
+): BafQualityTestFlowStageMap {
+  if (!TEST_FLOW_STAGE_IDS.includes(stage as (typeof TEST_FLOW_STAGE_IDS)[number])) return stages
+  // exactOptionalPropertyTypes: spreads over Record lookups widen the props to
+  // optional — rebuild each entry explicitly instead.
+  const entry = (id: string, enabled: boolean): { enabled: boolean; haltOnError: boolean } => ({
+    enabled,
+    haltOnError: stages[id]?.haltOnError !== false,
+  })
+  if (field === 'haltOnError') {
+    return { ...stages, [stage]: { enabled: stages[stage]?.enabled !== false, haltOnError: value } }
+  }
+  const next: Record<string, { enabled: boolean; haltOnError: boolean }> =
+    Object.fromEntries(TEST_FLOW_STAGE_IDS.map(id => [id, entry(id, stages[id]?.enabled !== false)]))
+  next[stage] = entry(stage, value)
+  // The transitive closures walk the prerequisite edges both directions.
+  const prereqClosure = (id: string): ReadonlySet<string> => {
+    const seen = new Set<string>()
+    const walk = (current: string): void => {
+      for (const dep of TEST_FLOW_DEPENDS_ON[current] ?? []) {
+        if (seen.has(dep)) continue
+        seen.add(dep)
+        walk(dep)
+      }
+    }
+    walk(id)
+    return seen
+  }
+  const dependentClosure = (id: string): ReadonlySet<string> => {
+    const seen = new Set<string>()
+    const walk = (current: string): void => {
+      for (const other of TEST_FLOW_STAGE_IDS) {
+        if (seen.has(other) || other === current) continue
+        if ((TEST_FLOW_DEPENDS_ON[other] ?? []).includes(current)) {
+          seen.add(other)
+          walk(other)
+        }
+      }
+    }
+    walk(id)
+    return seen
+  }
+  if (value) {
+    for (const id of prereqClosure(stage)) next[id] = entry(id, true)
+  } else {
+    for (const id of dependentClosure(stage)) next[id] = entry(id, false)
+  }
+  return next
+}
+
+/**
+ * Read the workspace's persisted stage switches (`.baf/quality/test-flow.json`).
+ * Missing/corrupt file → the all-on defaults; the session 测试流图 guards its
+ * run buttons with the SAME file, so both surfaces always agree. Context-free.
+ */
+export async function readQualityTestFlowStages(
+  workspaceRoot: string,
+): Promise<BafQualityTestFlowStageMap> {
+  try {
+    // The file wraps the map in a `{version, stages}` envelope — unwrap it
+    // before normalizing (normalizing the envelope itself would see no stage
+    // keys at the top level and silently fall back to the all-on defaults).
+    const parsed: unknown = JSON.parse(
+      await readFile(join(workspaceRoot, '.baf', 'quality', 'test-flow.json'), 'utf8'),
+    )
+    const stages = typeof parsed === 'object' && parsed !== null && 'stages' in parsed
+      ? (parsed as { stages: unknown }).stages
+      : parsed
+    return normalizeQualityTestFlowStages(stages)
+  } catch {
+    return testFlowDefaultStages()
+  }
+}
+
+/** Write the stage switches back (atomic tmp+rename, same dir). */
+async function writeQualityTestFlowStages(
+  workspaceRoot: string,
+  stages: BafQualityTestFlowStageMap,
+): Promise<void> {
+  const path = join(workspaceRoot, '.baf', 'quality', 'test-flow.json')
+  const tmp = `${path}.tmp`
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(tmp, `${JSON.stringify({ version: 1, stages }, null, 2)}\n`, 'utf8')
+  await rename(tmp, path)
+}
 
 export async function readQualityConfiguration(
   workspaceRoot: string,
@@ -791,14 +932,14 @@ export class BafStandardConfigRemote extends TypertRemoteService {
       })
     }
 
-    // 2+3. The gem tools (ceedling pinned to project.yml's 1.0.1; gcovr any).
+    // 2. The gem tool (ceedling pinned to project.yml's 1.0.1).
+    // 【变更】2026-10-22 (批次十三 3, 根因修复): gcovr 移出 gem — rubygems 上早已
+    // 没有 gcovr（客户日志「Possible alternatives: gcovrext」即证据），现代 gcovr
+    // 只经 PyPI 分发，随 cpplint 一起走 pip（下方第 3 步）。
     const probes = await probeQualityTools()
     const rowOf = (key: string): BafQualityToolRow | undefined => probes.find(row => row.key === key)
     const rubyOk = rowOf('ruby')?.state === 'ok'
-    for (const step of [
-      { id: 'ceedling', cmd: 'gem install ceedling -v 1.0.1 --no-document' },
-      { id: 'gcovr', cmd: 'gem install gcovr --no-document' },
-    ]) {
+    for (const step of [{ id: 'ceedling', cmd: 'gem install ceedling -v 1.0.1 --no-document' }]) {
       if (!rubyOk) {
         steps.push({ id: step.id, ok: false, detail: '未执行：先安装 Ruby（gem 依赖 Ruby 运行时）' })
         continue
@@ -825,36 +966,53 @@ export class BafStandardConfigRemote extends TypertRemoteService {
       }
     }
 
-    // 4. cpplint via pip (python not probed as a row — failure detail carries
-    // the python -m pip fallback so the customer can retry by hand).
-    try {
-      const { stdout, stderr } = await execShell('pip install cpplint', {
-        timeout: QUALITY_INSTALL_TIMEOUT_MS,
-        windowsHide: true,
-      })
-      steps.push({
-        id: 'cpplint',
-        ok: true,
-        detail: tailOf(`${stdout} ${stderr}`) === '' ? '安装完成' : tailOf(`${stdout} ${stderr}`),
-      })
-    } catch (error) {
-      if (qualTimedOut(error)) {
-        steps.push({ id: 'cpplint', ok: false, detail: `超时（>${QUALITY_INSTALL_TIMEOUT_MS / 1000}s），可重试` })
-      } else {
-        const out = error as { stdout?: unknown; stderr?: unknown; message?: unknown }
-        const text = tailOf(`${String(out.stdout ?? '')} ${String(out.stderr ?? '')}`) ||
-          (typeof out.message === 'string' ? tailOf(out.message) : '安装失败')
-        steps.push({ id: 'cpplint', ok: false, detail: `${text}（可改用 python -m pip install cpplint）` })
+    // 3. The pip tools (cpplint + gcovr; python not probed as a row — failure
+    // detail carries the python -m pip fallback so the customer can retry by
+    // hand).
+    for (const step of [{ id: 'cpplint', cmd: 'pip install cpplint' }, { id: 'gcovr', cmd: 'pip install gcovr' }]) {
+      try {
+        const { stdout, stderr } = await execShell(step.cmd, {
+          timeout: QUALITY_INSTALL_TIMEOUT_MS,
+          windowsHide: true,
+        })
+        steps.push({
+          id: step.id,
+          ok: true,
+          detail: tailOf(`${stdout} ${stderr}`) === '' ? '安装完成' : tailOf(`${stdout} ${stderr}`),
+        })
+      } catch (error) {
+        if (qualTimedOut(error)) {
+          steps.push({ id: step.id, ok: false, detail: `超时（>${QUALITY_INSTALL_TIMEOUT_MS / 1000}s），可重试` })
+        } else {
+          const out = error as { stdout?: unknown; stderr?: unknown; message?: unknown }
+          const text = tailOf(`${String(out.stdout ?? '')} ${String(out.stderr ?? '')}`) ||
+            (typeof out.message === 'string' ? tailOf(out.message) : '安装失败')
+          steps.push({ id: step.id, ok: false, detail: `${text}（可改用 python -m pip install ${step.id}）` })
+        }
       }
     }
 
-    // 5. Manual hints for the prerequisites no command can install here.
+    // 4. Manual hints for the prerequisites no command can install here.
     for (const key of ['gcc', 'ruby', 'cppcheck', 'clang-format'] as const) {
       if (rowOf(key)?.state !== 'ok') {
         const hint = QUALITY_MANUAL_HINTS[key]
         steps.push({ id: `manual-${key}`, ok: false, detail: hint ?? `需手动安装 ${key}` })
       }
     }
+
+    // 5. 【变更】2026-10-22 (批次十三 3, 客户决策「保证一键安装后环境 OK」): the
+    // verification round — re-probe EVERYTHING and state the final verdict in
+    // the report itself, so「安装报告说 ✓ 但环境仍不完整」can no longer happen:
+    // still-missing members are named, a supported env reads 全部就绪.
+    const after = await probeQualityTools()
+    const stillMissing = after.filter(row => row.required && row.state !== 'ok').map(row => row.key)
+    steps.push({
+      id: 'verify',
+      ok: stillMissing.length === 0,
+      detail: stillMissing.length === 0
+        ? '复检通过：全部工具就绪'
+        : `复检仍缺：${stillMissing.join(' · ')}（可用下方「AI 协助安装」）`,
+    })
 
     return { status: 'ready', steps }
   }
@@ -945,6 +1103,52 @@ export class BafStandardConfigRemote extends TypertRemoteService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       return /ENOENT/i.test(reason) ? { status: 'missing', path } : { status: 'unreadable', reason }
+    }
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十三 4): the 测试流 canvas's stage switches — the
+   * workspace's persisted `.baf/quality/test-flow.json` (normalized 8-entry
+   * map; defaults all-on when the file is absent). The session 测试流图 greys
+   * out disabled stages off the SAME file, so the two surfaces can never
+   * disagree. Zero-arg (typert arity is exact).
+   * @returns the normalized stage map.
+   */
+  @Remote
+  async qualityTestFlowConfig(): Promise<BafQualityTestFlowConfigResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    return { status: 'ready', cwd, stages: await readQualityTestFlowStages(cwd) }
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十三 4): ONE switch flip, applied against the
+   * persisted map with the dependency cascade (关上游 → 下游级联关；开下游 →
+   * 上游自动开), then written back atomically. A garbage stage/field is
+   * refused (`error`) without touching the file. The returned map is
+   * authoritative — the client replaces its copy with it. All params required
+   * (typert arity).
+   * @param request - stage id + which switch + the new value.
+   * @returns the normalized post-toggle map.
+   */
+  @Remote
+  async saveQualityTestFlowToggle(
+    request: { stage: string; field: 'enabled' | 'haltOnError'; value: boolean },
+  ): Promise<BafQualityTestFlowToggleResult> {
+    const cwd = this.resolveCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    // A garbage request is refused (no write), not silently no-op'd.
+    if (!(TEST_FLOW_STAGE_IDS as readonly string[]).includes(request.stage)
+      || (request.field !== 'enabled' && request.field !== 'haltOnError')) {
+      return { status: 'error', message: `未知的测试流步骤或开关：${request.stage}.${request.field}` }
+    }
+    try {
+      const current = await readQualityTestFlowStages(cwd)
+      const next = applyQualityTestFlowToggle(current, request.stage, request.field, request.value)
+      await writeQualityTestFlowStages(cwd, next)
+      return { status: 'ready', stages: next }
+    } catch (error) {
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
     }
   }
 }

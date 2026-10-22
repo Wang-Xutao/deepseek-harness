@@ -1,7 +1,7 @@
 /**
  * 【变更】2026-10-20 (批次七 2.3/2.5): the SHARED enterprise-document viewer
  * pane — extracted from EnterpriseDocsCard so the 企业规范 flow chart and the
- * 质量监控 toolchain card render the SAME panel (like opening a file).
+ * 测试流 toolchain card render the SAME panel (like opening a file).
  * 【变更】2026-10-21 (批次八 3.2): the right-hand drawer becomes a FULL-SCREEN
  * modal — clearer for long documents. There is NO close button (customer
  * decision): clicking the blank scrim outside the document or pressing Escape

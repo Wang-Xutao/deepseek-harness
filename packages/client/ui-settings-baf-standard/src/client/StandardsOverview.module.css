@@ -1324,3 +1324,164 @@
   line-height: 19px;
   color: var(--dsw-alias-label-secondary);
 }
+
+/* 【变更】2026-10-22 (批次十三 4): the 测试流 canvas — the 8 numbered flow nodes
+ * (the session 测试流图's anatomy, this page's column width): head row with
+ * idx bubble + name/en/tool/command, the 启用/失败中止 switch pair, then the
+ * 配置/资产/规范 chip rows at the step's flow position. */
+.qflowPrereq {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 12px;
+  padding: 8px 10px;
+  border: 0.5px dashed var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.qflowPrereqHint {
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.qflowList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qflowNode {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 55%, transparent);
+}
+
+.qflowNodeOff {
+  opacity: 0.62;
+  border-style: dashed;
+}
+
+.qflowNodeHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.qflowIdx {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.qflowNodeMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.qflowName {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.qflowEn {
+  margin-left: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.qflowTool {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.qflowCmd {
+  font-family: var(--dsw-alias-font-mono, monospace);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  word-break: break-all;
+}
+
+.qflowSwitches {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.qflowSwitchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qflowSwitchLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.qflowDim {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.qflowDisabledNote {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.qflowChipsRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.qflowChipsLabel {
+  flex: none;
+  width: 30px;
+  padding-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.qflowMonoChip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.qflowChipMissing {
+  opacity: 0.55;
+  border-style: dashed;
+}

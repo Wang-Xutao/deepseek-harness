@@ -1,6 +1,6 @@
 /**
  * Browser half of the BAF 工程规范 settings package: read-only panels inside
- * the 工作流 settings section tabs (项目工程 / 企业规范 / 质量监控).
+ * the 工作流 settings section tabs (项目工程 / 企业规范 / 测试流).
  * @module @deepseek-ai/dsh-client-ui-settings-baf-standard/client
  */
 

@@ -188,7 +188,7 @@ export const BAF_GLOBAL_COMMANDS: readonly BafCommandEntry[] = [
     stars: 2,
     desc: '迁入企业规范资产（clang-format/commitlint/UT…）',
     effect: '把企业规范资产（.clang-format、commitlint 配置、UT 模板与 CPPLINT.cfg 等）写入工作区；覆盖已有文件前自动备份。',
-    result: '工作区出现规范配置文件（旧文件备份在同目录），质量监控页的“质量资产”转为已应用。',
+    result: '工作区出现规范配置文件（旧文件备份在同目录），测试流页的“质量资产”转为已应用。',
     nodes: [],
   },
   {

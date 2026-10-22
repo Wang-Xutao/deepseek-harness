@@ -187,6 +187,86 @@
 .nodeRun:disabled { opacity: 0.5; cursor: default; }
 .nodeRun.running { color: var(--wf-accent); }
 
+/* 批次十三 2 — the run glyph's spinner ring (SVG in RunGlyph). */
+.spin {
+  animation: tfSpin 0.9s linear infinite;
+}
+
+@keyframes tfSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation-duration: 2.4s; }
+}
+
+/* 批次十三 4 — a stage switched OFF in the 测试流 canvas: the node greys
+   out (已关闭 badge replaces the state text) and its 运行 refuses to run. */
+.nodeOff .nodeBtn { opacity: 0.55; }
+.nodeOff .dot { background: var(--wf-line) !important; }
+
+.nodeRunOff {
+  color: var(--wf-muted);
+  background: var(--wf-card);
+  border-color: var(--wf-line);
+  cursor: not-allowed;
+}
+
+/* 批次十三 1 — the strip's 全部运行: the primary action of the tab (filled
+   accent, ink text — the gold accent fails 4.5:1 under white), visually
+   ahead of the ghost 配置/刷新 pair beside it. */
+.runAllBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.3rem 0.8rem;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  background: var(--wf-accent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 78%, #000 22%);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.runAllBtn:hover { filter: brightness(1.06); }
+.runAllBtn:focus-visible { outline: 2px solid var(--wf-accent); outline-offset: 1px; }
+.runAllBtn:disabled { opacity: 0.55; cursor: default; filter: none; }
+.runAllBtn.running { filter: brightness(0.94); }
+
+/* 批次十三 1 — the sweep's summary line under the strip: all-pass tone or
+   halt/failure tone; role=alert on the error variant. */
+.chainNote {
+  margin: 0 1.1rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.72rem;
+  border-radius: 7px;
+  border: 1px solid var(--wf-line);
+}
+
+.chainNoteOk {
+  color: var(--wf-ok);
+  border-color: color-mix(in srgb, var(--wf-ok) 45%, var(--wf-line));
+  background: color-mix(in srgb, var(--wf-ok) 8%, var(--wf-card));
+}
+
+.chainNoteBad {
+  color: var(--wf-danger);
+  border-color: color-mix(in srgb, var(--wf-danger) 45%, var(--wf-line));
+  background: color-mix(in srgb, var(--wf-danger) 8%, var(--wf-card));
+}
+
+/* 批次十三 4 — the detail pane's off-stage note under the head. */
+.offNote {
+  margin-top: 0.45rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.72rem;
+  color: var(--wf-muted);
+  border: 1px dashed var(--wf-line);
+  border-radius: 7px;
+}
+
 /* The vertical connector: every node after the first reaches up to its
    predecessor — a dotted line keeps the chain readable without SVG. */
 .node + .node::before {

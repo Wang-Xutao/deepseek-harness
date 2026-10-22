@@ -17,10 +17,15 @@
  * 一键安装) / 配置 (workspace config values + 测试报告 modal) / 规范
  * (categorized UT docs); the new 指令集 tab mirrors baf-workflow's HELP_TABLES
  * on the same flow-chart anatomy (desc/stars parity-guarded).
+ * 【变更】2026-10-22 (批次十三 3/4): the 配置/质量资产/规范 cards RETIRE into
+ * ONE 测试流 canvas — 8 numbered nodes carrying their 配置 values / 资产
+ * files / 规范 docs as chips at the flow position, plus per-stage 启用 +
+ * 失败中止 switches (server-side dependency cascade); the 环境 card gains
+ * the 「AI 协助安装」 escape hatch.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 
 afterEach(cleanup)
 import { useSyncExternalStore } from 'react'
@@ -144,6 +149,10 @@ function harness(initial: StandardsOverviewState, faceOverrides: Partial<Standar
     loadQualityAssets: vi.fn(),
     openQualityAsset: vi.fn(),
     closeQualityAsset: vi.fn(),
+    // 【变更】2026-10-22 (批次十三 3/4): the 测试流 canvas's faces.
+    loadQualityFlowConfig: vi.fn(),
+    toggleQualityFlowStage: vi.fn(),
+    aiHelpQualityInstall: vi.fn(),
     ...faceOverrides,
   }
   const { hooks: _hooks, ...actions } = face
@@ -192,6 +201,9 @@ function readyState(overrides: Partial<StandardsOverviewState> = {}): StandardsO
     qualityAssets: undefined,
     qualityAssetSeq: 0,
     qualityAsset: undefined,
+    qualityFlow: undefined,
+    qualityFlowSaving: false,
+    qualityFlowNotice: undefined,
     ...overrides,
   }
 }
@@ -224,6 +236,9 @@ function notReadyState(status: StandardsOverviewState['status'], summary: BafSta
     qualityAssets: undefined,
     qualityAssetSeq: 0,
     qualityAsset: undefined,
+    qualityFlow: undefined,
+    qualityFlowSaving: false,
+    qualityFlowNotice: undefined,
   }
 }
 
@@ -525,9 +540,18 @@ describe('StandardsController · enterpriseDoc viewer (批次六 5)', () => {
   })
 })
 
-describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监控重构)', () => {
+describe('StandardsQualityOverview · 测试流画布重构 (2026-10-22 批次十三)', () => {
+  /** The 8 canonical stage ids, in flow order. */
+  const STAGE_IDS = ['build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze', 'format'] as const
+
+  /** The all-on stage map (the server-side default). */
+  function allOnStages() {
+    return Object.fromEntries(STAGE_IDS.map(id => [id, { enabled: true, haltOnError: true }]))
+  }
+
   /** A ready state whose 环境 probe answered fully supported (all 4 required
-   * tools ok) and whose 配置 readout quotes the workspace file. */
+   * tools ok), whose 配置 readout quotes the workspace file, whose 资产 list
+   * carries real existence, and whose 测试流 map is the all-on default. */
   function qualityReadyState(overrides: Partial<StandardsOverviewState> = {}): StandardsOverviewState {
     return readyState({
       qualityEnv: {
@@ -555,17 +579,37 @@ describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监�
         reportHtmlRel: 'build/coverage/coverage_report.html',
         reportHtmlExists: true,
       },
+      qualityAssets: {
+        status: 'ready',
+        cwd: '/ws',
+        assets: [
+          { rel: 'project.yml', roleKey: 'assetProject', exists: true },
+          { rel: '.baf/quality/ceedling-config.json', roleKey: 'assetGateConfig', exists: true },
+          { rel: '.baf/quality/ceedling-README.md', roleKey: 'assetUtReadme', exists: true },
+          { rel: 'CPPLINT.cfg', roleKey: 'assetCpplint', exists: false },
+          { rel: '.baf/quality/static-analysis-README.md', roleKey: 'assetStaticReadme', exists: true },
+          { rel: 'cppcheck-suppressions.xml', roleKey: 'assetSuppressions', exists: false },
+          { rel: '.clang-format', roleKey: 'assetClangFormat', exists: false },
+        ],
+      },
+      qualityFlow: { status: 'ready', cwd: '/ws', stages: allOnStages() },
       ...overrides,
     })
   }
 
-  it('probes the environment and loads the config on every tab mount (1.3/1.4)', () => {
+  it('fires the full quality mount round — env probe + config + assets + flow map (批次十三 4)', () => {
     const probeQualityEnvironment = vi.fn()
     const loadQualityConfiguration = vi.fn()
-    const { props } = harness(readyState(), { probeQualityEnvironment, loadQualityConfiguration })
+    const loadQualityAssets = vi.fn()
+    const loadQualityFlowConfig = vi.fn()
+    const { props } = harness(readyState(), {
+      probeQualityEnvironment, loadQualityConfiguration, loadQualityAssets, loadQualityFlowConfig,
+    })
     render(<StandardsQualityOverview {...props} />)
     expect(probeQualityEnvironment).toHaveBeenCalledTimes(1)
     expect(loadQualityConfiguration).toHaveBeenCalledTimes(1)
+    expect(loadQualityAssets).toHaveBeenCalledTimes(1)
+    expect(loadQualityFlowConfig).toHaveBeenCalledTimes(1)
   })
 
   it('renders the 环境 card — verdict banner, REAL per-tool versions, assets on; the old cards are gone (1.1/1.3/1.6)', () => {
@@ -617,13 +661,15 @@ describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监�
     expect(screen.getByTestId('baf-quality-env-tool-gcc').textContent).toContain('—')
     fireEvent.click(screen.getByTestId('baf-quality-env-install'))
     expect(installQualityToolchain).toHaveBeenCalledTimes(1)
-    // The per-step install report renders with ✓/✗ marks once a run settles.
+    // The per-step install report renders with ✓/✗ marks once a run settles
+    // — the new 复检 verify step included (批次十三 3).
     cleanup()
     const reported = harness(qualityReadyState({
       qualityEnv: env === undefined ? undefined : { ...env, supported: false, assetsInstalled: false },
       qualityInstallSteps: [
         { id: 'assets', ok: true, detail: '已写入 4 个资产文件（备份 0）' },
         { id: 'gem:ceedling', ok: false, detail: '未执行：先安装 Ruby' },
+        { id: 'verify', ok: false, detail: '复检仍缺：ceedling（可用下方「AI 协助安装」）' },
       ],
     }))
     render(<StandardsQualityOverview {...reported.props} />)
@@ -634,28 +680,95 @@ describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监�
     expect(steps.textContent).toContain('✗')
   })
 
-  it('renders the 配置 card — the five workspace config rows + the source foot (1.4)', () => {
-    const { props } = harness(qualityReadyState())
+  it('offers 「AI 协助安装」 once the environment is still broken and routes the click (批次十三 3)', () => {
+    const aiHelpQualityInstall = vi.fn()
+    const env = qualityReadyState().qualityEnv
+    const { props } = harness(qualityReadyState({
+      qualityEnv: env === undefined ? undefined : { ...env, supported: false, assetsInstalled: false },
+      qualityInstallSteps: [
+        { id: 'assets', ok: true, detail: '已写入 4 个资产文件（备份 0）' },
+        { id: 'pip:gcovr', ok: false, detail: 'exit 1' },
+      ],
+    }), { aiHelpQualityInstall })
     render(<StandardsQualityOverview {...props} />)
-    const card = screen.getByTestId('baf-quality-config-card')
-    expect(card.textContent).toContain('qolCfgTitle')
-    expect(screen.getByTestId('baf-quality-config-test-dir').textContent).toContain('test/**')
-    expect(screen.getByTestId('baf-quality-config-report-dir').textContent).toContain('build/coverage')
-    expect(screen.getByTestId('baf-quality-config-build-dir').textContent).toContain('build')
-    expect(screen.getByTestId('baf-quality-config-threshold').textContent).toContain('≥ 80%')
-    expect(screen.getByTestId('baf-quality-config-threshold').textContent).toContain('shadow')
-    expect(screen.getByTestId('baf-quality-config-report').textContent)
-      .toContain('build/coverage/coverage_report.html')
-    expect(screen.getByTestId('baf-quality-config-source').textContent).toContain('qolCfgSourceWorkspace')
-    // The report exists → the 预览 button rides the row.
-    expect(screen.getByTestId('baf-quality-config-report-preview')).toBeDefined()
+    fireEvent.click(screen.getByTestId('baf-quality-env-ai-help'))
+    expect(aiHelpQualityInstall).toHaveBeenCalledTimes(1)
+    // All green → the hatch hides (with the install button).
+    cleanup()
+    const ok = harness(qualityReadyState())
+    render(<StandardsQualityOverview {...ok.props} />)
+    expect(screen.queryByTestId('baf-quality-env-ai-help')).toBeNull()
   })
 
-  it('previews the 测试报告 in the sandboxed modal and closes on the scrim (1.4)', () => {
+  it('renders the 8-node 测试流 canvas — the 配置/资产/规范 cards are gone (批次十三 4)', () => {
+    const { props } = harness(qualityReadyState())
+    render(<StandardsQualityOverview {...props} />)
+    expect(screen.queryByTestId('baf-quality-config-card')).toBeNull()
+    expect(screen.queryByTestId('baf-quality-assets-card')).toBeNull()
+    expect(screen.queryByTestId('baf-quality-docs-card')).toBeNull()
+    const card = screen.getByTestId('baf-quality-flow-card')
+    expect(card.textContent).toContain('qflowTitle')
+    expect(card.textContent).toContain('qflowIntro')
+    const nodes = [...document.querySelectorAll('[data-testid^="baf-quality-flow-node-"]')]
+    expect(nodes.map(node => node.getAttribute('data-testid'))).toEqual(
+      STAGE_IDS.map(id => `baf-quality-flow-node-${id}`),
+    )
+    const build = screen.getByTestId('baf-quality-flow-node-build')
+    expect(build.textContent).toContain('01')
+    expect(build.textContent).toContain('qflowNodeBuild')
+    expect(build.textContent).toContain('gcc')
+    expect(build.textContent).toContain('baf-quality test')
+    expect(build.getAttribute('data-enabled')).toBe('true')
+  })
+
+  it('places the 配置 values at their flow positions — build/test/report/gate chips (批次十三 4)', () => {
+    const { props } = harness(qualityReadyState())
+    render(<StandardsQualityOverview {...props} />)
+    expect(screen.getByTestId('baf-quality-flow-node-build').textContent).toContain('qflowBuildDir build')
+    expect(screen.getByTestId('baf-quality-flow-node-test').textContent).toContain('qflowTestDir test/**')
+    expect(screen.getByTestId('baf-quality-flow-node-report').textContent).toContain('qflowReportDir build/coverage')
+    const gate = screen.getByTestId('baf-quality-flow-node-gate').textContent
+    expect(gate).toContain('qflowThreshold ≥ 80%')
+    expect(gate).toContain('qflowGateMode shadow')
+  })
+
+  it('rides 资产 chips with real existence — missing files say so; a click opens the preview modal (批次十三 4)', () => {
+    const openQualityAsset = vi.fn()
+    const { props } = harness(qualityReadyState(), { openQualityAsset })
+    render(<StandardsQualityOverview {...props} />)
+    // project.yml rides three nodes (build/test/instrument) — the testid is
+    // node-scoped, so each occurrence stays addressable.
+    const present = screen.getByTestId('baf-quality-flow-build-asset-project-yml')
+    expect(present.textContent).toBe('project.yml')
+    expect(screen.getAllByTitle('project.yml').length).toBeGreaterThanOrEqual(3)
+    // CPPLINT.cfg is not on disk → the chip dimms and appends 未安装.
+    const missing = screen.getByTestId('baf-quality-flow-lint-asset-CPPLINT-cfg')
+    expect(missing.textContent).toContain('qolAssetMissing')
+    fireEvent.click(present)
+    expect(openQualityAsset).toHaveBeenCalledWith('project.yml')
+    // In flight → the loading line; ready → the pre carries the file verbatim.
+    expect(screen.getByTestId('baf-quality-asset-modal').textContent).toContain('qolAssetLoading')
+    cleanup()
+
+    const openPath = vi.fn()
+    const closeQualityAsset = vi.fn()
+    const ready = harness(qualityReadyState({
+      qualityAsset: { status: 'ready', path: '/ws/project.yml', content: ':project: demo' },
+    }), { openPath, closeQualityAsset })
+    render(<StandardsQualityOverview {...ready.props} />)
+    fireEvent.click(screen.getByTestId('baf-quality-flow-build-asset-project-yml'))
+    expect(screen.getByTestId('baf-quality-asset-content').textContent).toContain(':project: demo')
+    fireEvent.click(screen.getByTestId('baf-quality-asset-open-file'))
+    expect(openPath).toHaveBeenCalledWith('/ws/project.yml')
+    fireEvent.click(screen.getByTestId('baf-quality-asset-scrim'))
+    expect(closeQualityAsset).toHaveBeenCalledTimes(1)
+  })
+
+  it('previews the 测试报告 from the report node — loading → sandboxed iframe → scrim close (批次十三 4)', () => {
     const openQualityReport = vi.fn()
     const { props } = harness(qualityReadyState(), { openQualityReport })
     render(<StandardsQualityOverview {...props} />)
-    fireEvent.click(screen.getByTestId('baf-quality-config-report-preview'))
+    fireEvent.click(screen.getByTestId('baf-quality-flow-report'))
     expect(openQualityReport).toHaveBeenCalledTimes(1)
     // In flight (report undefined) → the loading line; no iframe yet.
     expect(screen.getByTestId('baf-quality-report-modal').textContent).toContain('qolReportLoading')
@@ -663,7 +776,7 @@ describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监�
     cleanup()
 
     // Ready → the sandboxed iframe carries the report markup verbatim. The
-    // modal is LOCAL open state — the 预览 click opens it with the answer
+    // modal is LOCAL open state — the chip click opens it with the answer
     // already in the store.
     const openPath = vi.fn()
     const closeQualityReport = vi.fn()
@@ -675,7 +788,7 @@ describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监�
       },
     }), { openPath, closeQualityReport })
     render(<StandardsQualityOverview {...ready.props} />)
-    fireEvent.click(screen.getByTestId('baf-quality-config-report-preview'))
+    fireEvent.click(screen.getByTestId('baf-quality-flow-report'))
     const frame = screen.getByTestId('baf-quality-report-frame') as HTMLIFrameElement
     expect(frame.getAttribute('srcDoc')).toContain('Line Coverage')
     expect(frame.getAttribute('sandbox')).toBe('')
@@ -685,52 +798,88 @@ describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监�
     expect(closeQualityReport).toHaveBeenCalledTimes(1)
     cleanup()
 
-    // Missing report → its own line, no 打开文件 button.
-    const missing = harness(qualityReadyState({
-      qualityReport: { status: 'missing', path: '/ws/build/coverage/coverage_report.html' },
-    }))
-    render(<StandardsQualityOverview {...missing.props} />)
-    fireEvent.click(screen.getByTestId('baf-quality-config-report-preview'))
-    expect(screen.getByTestId('baf-quality-report-missing').textContent).toContain('qolReportMissing')
-    expect(screen.queryByTestId('baf-quality-report-open-file')).toBeNull()
-  })
-
-  it('quotes 未生成 (no 预览 button) when the workspace has no report yet (1.4)', () => {
+    // Missing report file → the chip disables itself and quotes 未生成.
     const config = qualityReadyState().qualityConfig
-    const { props } = harness(qualityReadyState({
+    const gone = harness(qualityReadyState({
       qualityConfig: config === undefined ? undefined : { ...config, reportHtmlExists: false },
     }))
-    render(<StandardsQualityOverview {...props} />)
-    const report = screen.getByTestId('baf-quality-config-report')
-    expect(report.textContent).toContain('qolCfgReportMissing')
-    expect(screen.queryByTestId('baf-quality-config-report-preview')).toBeNull()
+    render(<StandardsQualityOverview {...gone.props} />)
+    const chip = screen.getByTestId('baf-quality-flow-report') as HTMLButtonElement
+    expect(chip.disabled).toBe(true)
+    expect(chip.textContent).toContain('qolCfgReportMissing')
   })
 
-  it('renders the 规范 card — four categorized UT doc groups; clicks open the shared viewer (1.5)', () => {
+  it('routes 规范 chips through the shared viewer — per-node docs and the 前置 environment band (批次十三 4)', () => {
     const openEnterpriseDoc = vi.fn()
-    const { props } = harness(readyState(), { openEnterpriseDoc })
+    const { props } = harness(qualityReadyState(), { openEnterpriseDoc })
     render(<StandardsQualityOverview {...props} />)
-    const card = screen.getByTestId('baf-quality-docs-card')
-    expect(card.textContent).toContain('qolDocTitle')
-    const groups = [...document.querySelectorAll('[data-testid^="baf-quality-group-"]')]
-    expect(groups.map(group => group.getAttribute('data-testid'))).toEqual([
-      'baf-quality-group-ut',
-      'baf-quality-group-static',
-      'baf-quality-group-env',
-      'baf-quality-group-config',
-    ])
-    // 测试纪律 carries the enterprise UT SKILLs with the applies-at meta.
-    expect(screen.getByTestId('baf-quality-doc-ut').textContent).toContain('enterpriseDocApplies')
-    expect(screen.getByTestId('baf-quality-doc-utlist')).toBeDefined()
-    // 静态分析 / 环境搭建 / 配置模板 carry their catalog rows.
-    expect(screen.getByTestId('baf-quality-doc-static')).toBeDefined()
-    expect(screen.getByTestId('baf-quality-doc-env-ut').textContent).toContain('Ceedling')
-    expect(screen.getByTestId('baf-quality-doc-cfg-project').textContent).toContain('project.yml')
-    expect(screen.getByTestId('baf-quality-doc-cfg-cpplint')).toBeDefined()
-    expect(screen.getByTestId('baf-quality-doc-uttpl')).toBeDefined()
-    // A click routes through the shared full-screen viewer face.
-    fireEvent.click(screen.getByTestId('baf-quality-doc-uttpl'))
+    // The 前置 band carries the two environment-setup docs + the hint.
+    const prereq = screen.getByTestId('baf-quality-flow-prereq')
+    expect(prereq.textContent).toContain('qflowPrereqLabel')
+    expect(prereq.textContent).toContain('qflowPrereqHint')
+    fireEvent.click(screen.getByTestId('baf-quality-flow-doc-env-ut'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('env-ut')
+    // Per-node: build → cfg-project, test → ut/utlist/cfg-config/uttpl,
+    // lint → static/cfg-cpplint, analyze → cfg-cppcheck, format → code.
+    const test = screen.getByTestId('baf-quality-flow-node-test')
+    expect(test.textContent).toContain('qflowChipStd')
+    fireEvent.click(screen.getByTestId('baf-quality-flow-doc-cfg-project'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('cfg-project')
+    fireEvent.click(screen.getByTestId('baf-quality-flow-doc-ut'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('ut')
+    fireEvent.click(screen.getByTestId('baf-quality-flow-doc-uttpl'))
     expect(openEnterpriseDoc).toHaveBeenCalledWith('uttpl')
+    fireEvent.click(screen.getByTestId('baf-quality-flow-doc-code'))
+    expect(openEnterpriseDoc).toHaveBeenCalledWith('code')
+    // The canvas has no separate doc groups anymore.
+    expect(document.querySelectorAll('[data-testid^="baf-quality-group-"]').length).toBe(0)
+  })
+
+  it('fires the two per-stage switches through the store face — 启用 / 失败中止 (批次十三 4)', () => {
+    const toggleQualityFlowStage = vi.fn()
+    const { props } = harness(qualityReadyState(), { toggleQualityFlowStage })
+    render(<StandardsQualityOverview {...props} />)
+    fireEvent.click(screen.getByRole('switch', { name: 'qflowSwitchEnabled qflowNodeLint' }))
+    expect(toggleQualityFlowStage).toHaveBeenCalledWith('lint', 'enabled', false)
+    fireEvent.click(screen.getByRole('switch', { name: 'qflowSwitchHalt qflowNodeBuild' }))
+    expect(toggleQualityFlowStage).toHaveBeenCalledWith('build', 'haltOnError', false)
+  })
+
+  it('greys out a disabled stage — data-enabled=false, its 失败中止 switch locks, the note renders (批次十三 4)', () => {
+    const { props } = harness(qualityReadyState({
+      qualityFlow: {
+        status: 'ready',
+        cwd: '/ws',
+        stages: { ...allOnStages(), test: { enabled: false, haltOnError: true } },
+      },
+    }))
+    render(<StandardsQualityOverview {...props} />)
+    const node = screen.getByTestId('baf-quality-flow-node-test')
+    expect(node.getAttribute('data-enabled')).toBe('false')
+    expect(node.textContent).toContain('qflowDisabled')
+    const halt = screen.getByRole('switch', { name: 'qflowSwitchHalt qflowNodeTest' }) as HTMLButtonElement
+    expect(halt.disabled).toBe(true)
+    // An enabled stage's 失败中止 switch stays interactive.
+    const active = screen.getByRole('switch', { name: 'qflowSwitchHalt qflowNodeLint' }) as HTMLButtonElement
+    expect(active.disabled).toBe(false)
+  })
+
+  it('renders the canvas guidance states — loading, no-workspace, and the toggle failure notice (批次十三 4)', () => {
+    const { props } = harness(qualityReadyState({ qualityFlow: undefined }))
+    render(<StandardsQualityOverview {...props} />)
+    expect(screen.getByTestId('baf-quality-flow-card').textContent).toContain('qflowLoading')
+    expect(document.querySelectorAll('[data-testid^="baf-quality-flow-node-"]').length).toBe(0)
+    cleanup()
+
+    const noWs = harness(qualityReadyState({ qualityFlow: { status: 'no-workspace' } }))
+    render(<StandardsQualityOverview {...noWs.props} />)
+    expect(screen.getByTestId('baf-quality-flow-card').textContent).toContain('qflowNoWorkspace')
+    cleanup()
+
+    const failed = harness(qualityReadyState({ qualityFlowNotice: 'rpc down' }))
+    render(<StandardsQualityOverview {...failed.props} />)
+    expect(screen.getByTestId('baf-quality-flow-notice').textContent).toContain('qflowSaveFailed')
+    expect(screen.getByTestId('baf-quality-flow-notice').textContent).toContain('rpc down')
   })
 
   it('renders the guidance states when no workspace is bound', () => {
@@ -739,7 +888,99 @@ describe('StandardsQualityOverview · 质量 3 卡重构 (2026-10-21 质量监�
     expect(screen.getByTestId('baf-standard-empty').textContent).toContain('statusNoWorkspace')
     // The cards still render — each answers its own no-workspace copy.
     expect(screen.getByTestId('baf-quality-env-verdict').textContent).toContain('qolEnvProbing')
-    expect(screen.getByTestId('baf-quality-config-card').textContent).toContain('qolCfgLoading')
+    expect(screen.getByTestId('baf-quality-flow-card').textContent).toContain('qflowLoading')
+  })
+})
+
+describe('StandardsController · 测试流开关 rounds (2026-10-22 批次十三 4)', () => {
+  const tick = () => new Promise(r => setTimeout(r, 0))
+
+  /** A controller whose flow remotes answer the two given payloads. Passing a
+   * function makes the answer lazy (a rejected promise is created at call
+   * time, never left floating unhandled). */
+  function flowController(flowAnswer: unknown, toggleAnswer: unknown) {
+    const settle = (answer: unknown): Promise<unknown> => Promise.resolve(
+      typeof answer === 'function' ? (answer as () => unknown)() : answer,
+    )
+    const remote = {
+      bafStandardConfig: {
+        summary: vi.fn(() => Promise.resolve({ ok: true, value: { status: 'no-baseline', cwd: '/ws' } })),
+        qualityTestFlowConfig: vi.fn(() => settle(flowAnswer)),
+        saveQualityTestFlowToggle: vi.fn(() => settle(toggleAnswer)),
+      },
+    }
+    const c = new StandardsController({ remote } as never)
+    return { c, remote }
+  }
+
+  const ALL_ON = Object.fromEntries(
+    ['build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze', 'format']
+      .map(id => [id, { enabled: true, haltOnError: true }]),
+  )
+
+  it('loads the stage map; no-workspace lands as the map; rejection settles as the notice', async () => {
+    const { c, remote } = flowController(
+      { ok: true, value: { status: 'ready', cwd: '/ws', stages: ALL_ON } },
+      { ok: true, value: { status: 'ready', stages: ALL_ON } },
+    )
+    await tick()
+    await c.loadQualityFlowConfig()
+    expect(remote.bafStandardConfig.qualityTestFlowConfig).toHaveBeenCalledTimes(1)
+    expect(c.face().hooks.standards.getSnapshot().qualityFlow)
+      .toMatchObject({ status: 'ready', stages: { lint: { enabled: true, haltOnError: true } } })
+    // no-workspace lands as the map too — the canvas renders guidance from it.
+    const noWs = flowController({ ok: true, value: { status: 'no-workspace' } }, undefined)
+    await tick()
+    await noWs.c.loadQualityFlowConfig()
+    expect(noWs.c.face().hooks.standards.getSnapshot().qualityFlow).toMatchObject({ status: 'no-workspace' })
+    // A rejected transport settles into the notice, never a hang.
+    const dead = flowController(() => Promise.reject(new Error('rpc down')), undefined)
+    await tick()
+    await dead.c.loadQualityFlowConfig()
+    expect(dead.c.face().hooks.standards.getSnapshot().qualityFlowNotice).toBe('rpc down')
+  })
+
+  it('flips ONE switch optimistically, then replaces the whole map with the server cascade answer', async () => {
+    // The server cascade for test=false: instrument/report/gate auto-disable.
+    const cascaded = {
+      ...ALL_ON,
+      test: { enabled: false, haltOnError: true },
+      instrument: { enabled: false, haltOnError: true },
+      report: { enabled: false, haltOnError: true },
+      gate: { enabled: false, haltOnError: true },
+    }
+    const { c, remote } = flowController(
+      { ok: true, value: { status: 'ready', cwd: '/ws', stages: ALL_ON } },
+      { ok: true, value: { status: 'ready', stages: cascaded } },
+    )
+    await tick()
+    await c.loadQualityFlowConfig()
+    const round = c.toggleQualityFlowStage('test', 'enabled', false)
+    // Optimistic mid-flight: ONLY the flipped field moves — the cascade stays
+    // server-side, so instrument is still on until the answer lands.
+    const mid = c.face().hooks.standards.getSnapshot()
+    expect(mid.qualityFlowSaving).toBe(true)
+    expect(mid.qualityFlow?.stages?.test).toEqual({ enabled: false, haltOnError: true })
+    expect(mid.qualityFlow?.stages?.instrument).toEqual({ enabled: true, haltOnError: true })
+    expect(remote.bafStandardConfig.saveQualityTestFlowToggle)
+      .toHaveBeenCalledWith({ stage: 'test', field: 'enabled', value: false })
+    await round
+    const after = c.face().hooks.standards.getSnapshot()
+    expect(after.qualityFlowSaving).toBe(false)
+    expect(after.qualityFlow?.stages).toEqual(cascaded)
+  })
+
+  it('settles a failed toggle into the notice line and never leaves saving stuck', async () => {
+    const { c } = flowController(
+      { ok: true, value: { status: 'ready', cwd: '/ws', stages: ALL_ON } },
+      { ok: false, error: { message: 'write failed' } },
+    )
+    await tick()
+    await c.loadQualityFlowConfig()
+    await c.toggleQualityFlowStage('lint', 'haltOnError', false)
+    const state = c.face().hooks.standards.getSnapshot()
+    expect(state.qualityFlowSaving).toBe(false)
+    expect(state.qualityFlowNotice).toBe('write failed')
   })
 })
 
@@ -1657,66 +1898,5 @@ describe('quality-assets catalog parity (批次十二 3)', () => {
       '.baf/quality/static-analysis-README.md',
     ])
     expect(new Set(QUALITY_ASSET_FILES.map(row => row.roleKey)).size).toBe(QUALITY_ASSET_FILES.length)
-  })
-})
-
-describe('QualityAssetsCard · 质量资产 (批次十二 3)', () => {
-  const assetsState = () => readyState({
-    qualityAssets: {
-      status: 'ready',
-      cwd: 'D:/demo/ws',
-      assets: [
-        { rel: 'project.yml', roleKey: 'assetProject', exists: true },
-        { rel: 'CPPLINT.cfg', roleKey: 'assetCpplint', exists: false },
-      ],
-    },
-  })
-
-  it('mounts via the tab and fires the list load once', () => {
-    const loadQualityAssets = vi.fn()
-    const { props } = harness(readyState(), { loadQualityAssets })
-    render(<StandardsQualityOverview {...props} />)
-    expect(loadQualityAssets).toHaveBeenCalledTimes(1)
-    // The list is undefined → the loading line stands.
-    expect(screen.getByTestId('baf-quality-assets-card').textContent).toContain('qolAssetLoading')
-  })
-
-  it('renders per-row role, 预览/打开 for existing files, and the missing chip otherwise', () => {
-    const { props } = harness(assetsState())
-    render(<StandardsQualityOverview {...props} />)
-    const projectRow = screen.getByTestId('baf-quality-asset-project-yml')
-    expect(projectRow.textContent).toContain('qolAssetRoleProject')
-    expect(screen.getByTestId('baf-quality-asset-project-yml-preview')).toBeTruthy()
-    expect(screen.getByTestId('baf-quality-asset-project-yml-open')).toBeTruthy()
-    // Missing file: no gestures, just the chip (slug keeps the file's case).
-    expect(screen.getByTestId('baf-quality-asset-CPPLINT-cfg').textContent).toContain('qolAssetMissing')
-    expect(screen.queryByTestId('baf-quality-asset-CPPLINT-cfg-preview')).toBeNull()
-  })
-
-  it('routes 预览 through openQualityAsset and renders the modal payload when it lands', async () => {
-    const { store, props } = harness(assetsState(), {
-      openQualityAsset: vi.fn().mockImplementation(async () => {
-        store.update((state) => {
-          state.qualityAsset = { status: 'ready', path: 'D:/demo/ws/project.yml', content: 'project: demo' }
-        })
-      }),
-    })
-    render(<StandardsQualityOverview {...props} />)
-    fireEvent.click(screen.getByTestId('baf-quality-asset-project-yml-preview'))
-    await waitFor(() => {
-      expect(props.openQualityAsset).toHaveBeenCalledWith('project.yml')
-      expect(screen.getByTestId('baf-quality-asset-modal')).toBeTruthy()
-    })
-    expect(screen.getByTestId('baf-quality-asset-content').textContent).toContain('project: demo')
-    // Escape closes (drops the in-flight fetch with it).
-    fireEvent.click(screen.getByTestId('baf-quality-asset-scrim'))
-    expect(screen.queryByTestId('baf-quality-asset-modal')).toBeNull()
-  })
-
-  it('routes the row 打开 gesture through openPath with the cwd-joined absolute path', () => {
-    const { props } = harness(assetsState())
-    render(<StandardsQualityOverview {...props} />)
-    fireEvent.click(screen.getByTestId('baf-quality-asset-project-yml-open'))
-    expect(props.openPath).toHaveBeenCalledWith('D:/demo/ws/project.yml')
   })
 })

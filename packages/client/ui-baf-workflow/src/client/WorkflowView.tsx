@@ -18,6 +18,7 @@ import type { SessionStatsProjection } from '@deepseek-ai/dsh-session-stats/clie
 import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 import type {
   TerminalStateId,
+  TestFlowStepId,
   WorkflowDashboardRow,
   WorkflowDashboardView,
   WorkflowNodeId,
@@ -42,6 +43,35 @@ const INTAKE_MODE_LABEL: Record<string, WorkflowTabKey> = {
   'full-go-path': 'mode.fullGoPath',
   'bug-fix-path': 'mode.bugFixPath',
   'clarify-required': 'mode.clarify',
+}
+
+/**
+ * 【变更】2026-10-22 (批次十三 1): where the 工作流图 reaches into the 测试流图 —
+ * the implement/verify/archive cards each carry a jump chip that addresses
+ * the session's 测试流图 tab through the view-request channel (`stage:<id>`
+ * focus lands on that card). The three hand-off points where the customer's
+ * next natural action lives in the quality pipeline: implement → format
+ * (写完先排版), verify → test (单测链), archive → gate (归档前过门禁). NOT
+ * forced into the model's dispatch loop — the chips are customer-armed
+ * shortcuts, so the workflow's performance stays untouched (the 方案's
+ * 「软结合」 answer to 融合).
+ */
+const TEST_FLOW_JUMPS: Partial<Record<WorkflowNodeId, TestFlowStepId>> = {
+  implement: 'format',
+  verify: 'test',
+  archive: 'gate',
+}
+
+/** The jump chip's 测试流图 stage label key (reuses the 测试流图's node catalog). */
+const TEST_FLOW_JUMP_LABEL: Record<TestFlowStepId, WorkflowTabKey> = {
+  build: 'tflow.node.build',
+  test: 'tflow.node.test',
+  instrument: 'tflow.node.instrument',
+  report: 'tflow.node.report',
+  gate: 'tflow.node.gate',
+  lint: 'tflow.node.lint',
+  analyze: 'tflow.node.analyze',
+  format: 'tflow.node.format',
 }
 
 /** Session-bound workflow Remote callbacks. */
@@ -545,6 +575,9 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     t, refresh, startIntake, advance, transition, resume,
     gateResolve, gateRevise, openArtifact, routePreview, useProjection, subscribe, dashboard,
     openWorkflowConfig,
+    // 批次十三 1 — the 测试流图 jump chips' channel: select that tab and
+    // address a `stage:<id>` focus to it (ConvViewOwnerProps contract).
+    openView,
     sessionId, useSessionStatus,
   } = props
   const preset = useProjection('agentPreset')
@@ -1163,7 +1196,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         </button>
         {/* 【变更】2026-10-21 (配置按钮): open the main-stage 工作流 config page —
             the settings the graph's gates/hooks/standards render in (确认门 /
-            指令集 / 企业规范 / 质量监控 tabs). */}
+            指令集 / 企业规范 / 测试流 tabs). */}
         <button
           type="button"
           className={clsx(css.btn, css.btnGhost)}
@@ -1656,7 +1689,14 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               component (pan/zoom/canvas math live inside) so the history
               modal re-renders the SAME graph for any change without touching
               the main view's state. */}
-          <FlowCanvas view={view} selected={selected} onActivate={onCardActivate} onOpenArtifact={openArtifact} t={t} />
+          <FlowCanvas
+            view={view}
+            selected={selected}
+            onActivate={onCardActivate}
+            onOpenArtifact={openArtifact}
+            onOpenTestFlow={(stage) => { openView('baf-test-flow', `stage:${stage}`) }}
+            t={t}
+          />
 
           {view.empty && (
             <div className={css.toolbar}>
@@ -2118,6 +2158,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           onClose={() => setHistoryPick(null)}
           onReload={openHistory}
           onOpenArtifact={openArtifact}
+          onOpenTestFlow={(stage) => { openView('baf-test-flow', `stage:${stage}`) }}
           stats={sessionStats}
           usage={tokenUsage}
           t={t}
@@ -2256,9 +2297,14 @@ function FlowCanvas(props: {
   onActivate: (id: string) => void
   /** 【变更】2026-10-07 (九点批 问题 4): opens one node artifact in the sidebar. */
   onOpenArtifact: (path: string) => void
+  /**
+   * 【变更】2026-10-22 (批次十三 1): the 测试流图 jump chips' channel — select
+   * the session's 测试流图 tab and address a `stage:<id>` focus to it.
+   */
+  onOpenTestFlow: (stage: TestFlowStepId) => void
   t: (key: WorkflowTabKey) => string
 }): React.ReactElement {
-  const { view, selected, onActivate, onOpenArtifact, t } = props
+  const { view, selected, onActivate, onOpenArtifact, onOpenTestFlow, t } = props
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const panDrag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
@@ -2557,6 +2603,33 @@ function FlowCanvas(props: {
                     ))}
                   </div>
                 )}
+                {/* 【变更】2026-10-22 (批次十三 1): the 测试流图 jump chip — the
+                    implement/verify/archive cards' shortcut into the quality
+                    pipeline. stopPropagation (the node selects on click, the
+                    chip switches Tab instead); the stage lands selected via
+                    the view-request channel. */}
+                {(() => {
+                  // placement.id is the wire graph's plain string — same
+                  // `as WorkflowNodeId` cast the node label lookup above uses.
+                  const jumpStage = TEST_FLOW_JUMPS[placement.id as WorkflowNodeId]
+                  if (jumpStage === undefined) return null
+                  return (
+                    <div className={css.flowNodeJumps}>
+                      <button
+                        type="button"
+                        className={css.flowNodeTestFlowChip}
+                        data-testid={`flow-node-testflow-${placement.id}`}
+                        title={t('flow.testFlowJumpDesc')}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onOpenTestFlow(jumpStage)
+                        }}
+                      >
+                        {`${t('flow.testFlowJump')} · ${t(TEST_FLOW_JUMP_LABEL[jumpStage])}`}
+                      </button>
+                    </div>
+                  )
+                })()}
               </div>
             )
           })}
@@ -2584,12 +2657,18 @@ function HistoryFlowModal(props: {
   onClose: () => void
   onReload: (changeId: string, endedAt?: string) => void
   onOpenArtifact: (path: string) => void
+  /**
+   * 【变更】2026-10-22 (批次十三 1): the 测试流图 jump chips — the modal is
+   * read-only for WORKFLOW transitions, but a Tab jump is navigation, not a
+   * transition; the handler closes the modal first so the landing tab shows.
+   */
+  onOpenTestFlow: (stage: TestFlowStepId) => void
   /** 【变更】2026-09-25 (用户需求 工作流 6): the driving session's statistics. */
   stats?: SessionStatsProjection | undefined
   usage?: TokenUsageProjection | undefined
   t: (key: WorkflowTabKey) => string
 }): React.ReactElement {
-  const { pick, onClose, onReload, onOpenArtifact, stats, usage, t } = props
+  const { pick, onClose, onReload, onOpenArtifact, onOpenTestFlow, stats, usage, t } = props
   const [selected, setSelected] = useState<WorkflowNodeId | null>(null)
   const history = pick.view
   return (
@@ -2651,6 +2730,10 @@ function HistoryFlowModal(props: {
                 selected={selected}
                 onActivate={(id) => { setSelected(id as WorkflowNodeId) }}
                 onOpenArtifact={onOpenArtifact}
+                onOpenTestFlow={(stage) => {
+                  onClose()
+                  onOpenTestFlow(stage)
+                }}
                 t={t}
               />
             </div>

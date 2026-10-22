@@ -12,7 +12,9 @@ import { loadBaselineFile } from '@deepseek-ai/dsh-baf-core'
 import { ENTERPRISE_DOCS, QUALITY_DOCS } from '@deepseek-ai/dsh-baf-standard/src/enterprise-docs.ts'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  BafStandardConfigRemote, projectStandardCards, resolveWorkspaceCwd, type CwdSessionStore,
+  BafStandardConfigRemote, projectStandardCards, resolveWorkspaceCwd,
+  applyQualityTestFlowToggle, normalizeQualityTestFlowStages, readQualityTestFlowStages,
+  type CwdSessionStore,
 } from '../src/index.ts'
 
 /** A semantically valid baseline with the product-default rules ref. */
@@ -151,6 +153,85 @@ describe('projectStandardCards (pure projection)', () => {
       value: '<enterprise-tbd>', state: 'tbd',
     })
     expect(fields.get('standard.availability')).toMatchObject({ value: 'policy_missing', state: 'ok' })
+  })
+})
+
+describe('测试流 stage 开关 pure logic (批次十三 4)', () => {
+  /** All-on default map keyed by id (spec-local mirror of the shape). */
+  const allOn = () => normalizeQualityTestFlowStages(undefined)
+
+  /**
+   * noUncheckedIndexedAccess: bind + throw — a missing stage would fail the
+   * surrounding assert anyway; this keeps the indexed reads non-optional.
+   */
+  const at = (map: ReturnType<typeof normalizeQualityTestFlowStages>, id: string) => {
+    const entry = map[id]
+    if (entry === undefined) throw new Error(`stage ${id} missing from toggle map`)
+    return entry
+  }
+
+  it('normalizes partial/corrupt input into the full 8-entry all-on-true map', () => {
+    expect(allOn()).toEqual({
+      build: { enabled: true, haltOnError: true },
+      test: { enabled: true, haltOnError: true },
+      instrument: { enabled: true, haltOnError: true },
+      report: { enabled: true, haltOnError: true },
+      gate: { enabled: true, haltOnError: true },
+      lint: { enabled: true, haltOnError: true },
+      analyze: { enabled: true, haltOnError: true },
+      format: { enabled: true, haltOnError: true },
+    })
+    // Partial entries coerce; unknown ids drop; non-objects pass through clean.
+    expect(normalizeQualityTestFlowStages({ lint: { enabled: false }, ghost: { enabled: false } }).lint)
+      .toEqual({ enabled: false, haltOnError: true })
+    expect('ghost' in normalizeQualityTestFlowStages({ ghost: {} })).toBe(false)
+    expect(normalizeQualityTestFlowStages('garbage')).toEqual(allOn())
+  })
+
+  it('cascades 关上游 → 下游级联关 along the dependency cone (test off ⇒ instrument/report/gate off)', () => {
+    const next = applyQualityTestFlowToggle(allOn(), 'test', 'enabled', false)
+    expect(at(next, 'test').enabled).toBe(false)
+    expect(at(next, 'instrument').enabled).toBe(false)
+    expect(at(next, 'report').enabled).toBe(false)
+    expect(at(next, 'gate').enabled).toBe(false)
+    // The prerequisites and the independent branches stay untouched, and the
+    // disable cascade never drags haltOnError along.
+    expect(at(next, 'build').enabled).toBe(true)
+    expect(at(next, 'lint').enabled).toBe(true)
+    expect(at(next, 'analyze').enabled).toBe(true)
+    expect(at(next, 'format').enabled).toBe(true)
+    expect(at(next, 'instrument').haltOnError).toBe(true)
+    // build off closes the whole quality cone.
+    const fromBuild = applyQualityTestFlowToggle(allOn(), 'build', 'enabled', false)
+    for (const id of ['test', 'instrument', 'report', 'gate'] as const) {
+      expect(at(fromBuild, id).enabled).toBe(false)
+    }
+    // lint is independent — nothing else moves.
+    const fromLint = applyQualityTestFlowToggle(allOn(), 'lint', 'enabled', false)
+    expect(at(fromLint, 'lint').enabled).toBe(false)
+    const afterAnalyze = applyQualityTestFlowToggle(fromLint, 'analyze', 'enabled', false)
+    expect(at(afterAnalyze, 'gate').enabled).toBe(true)
+  })
+
+  it('cascades 开下游 → 上游自动开 (gate on ⇒ build/test/instrument/report reopen)', () => {
+    const allOff = Object.fromEntries(
+      Object.entries(allOn()).map(([id, cfg]) => [id, { ...cfg, enabled: false }]),
+    )
+    const next = applyQualityTestFlowToggle(allOff, 'gate', 'enabled', true)
+    for (const id of ['build', 'test', 'instrument', 'report', 'gate'] as const) {
+      expect(at(next, id).enabled).toBe(true)
+    }
+    // The independent branches stay as they were.
+    expect(at(next, 'lint').enabled).toBe(false)
+    expect(at(next, 'format').enabled).toBe(false)
+  })
+
+  it('flips haltOnError alone and ignores unknown stage ids', () => {
+    const halted = applyQualityTestFlowToggle(allOn(), 'report', 'haltOnError', false)
+    expect(at(halted, 'report')).toEqual({ enabled: true, haltOnError: false })
+    expect(at(halted, 'test')).toEqual({ enabled: true, haltOnError: true })
+    // An unknown stage id is a no-op (the input map comes back untouched).
+    expect(applyQualityTestFlowToggle(allOn(), 'ghost', 'enabled', false)).toEqual(allOn())
   })
 })
 
@@ -582,5 +663,54 @@ describe('BafStandardConfigRemote (mounted)', () => {
       apply: (scope) => { bareRemote = new BafStandardConfigRemote(scope) },
     })
     expect(await bareRemote!.generateBaseline()).toEqual({ status: 'no-workspace' })
+  })
+
+  // 【变更】2026-10-22 (批次十三 4): the 测试流 stage switches — the persisted
+  // `.baf/quality/test-flow.json` the settings canvas and the session 测试流图
+  // BOTH read (the two surfaces can never disagree).
+  it('answers qualityTestFlowConfig with the all-on defaults (no file / corrupt file / no-workspace)', async () => {
+    const { cwd, remote } = await workspace(false, false)
+    const config = await remote.qualityTestFlowConfig()
+    expect(config).toMatchObject({ status: 'ready', cwd })
+    expect(config.stages?.lint).toEqual({ enabled: true, haltOnError: true })
+    // A corrupt file also falls back to defaults, never a throw.
+    await mkdir(join(cwd, '.baf', 'quality'), { recursive: true })
+    await writeFile(join(cwd, '.baf', 'quality', 'test-flow.json'), '{not json', 'utf8')
+    expect((await readQualityTestFlowStages(cwd)).gate).toEqual({ enabled: true, haltOnError: true })
+    const bare = new Context()
+    cleanups.push(() => bare.fiber.dispose())
+    bare.provide('sandboxPolicy', { workspaceRoot: '' } as never)
+    bare.provide('sessions', sessionStore([]) as never)
+    let bareRemote: BafStandardConfigRemote | undefined
+    await bare.plugin({
+      inject: ['sessions', 'sandboxPolicy'],
+      apply: (scope) => { bareRemote = new BafStandardConfigRemote(scope) },
+    })
+    expect(await bareRemote!.qualityTestFlowConfig()).toEqual({ status: 'no-workspace' })
+  })
+
+  it('saves one toggle with the cascade, persists test-flow.json, and re-reads it back', async () => {
+    const { cwd, remote } = await workspace(false, false)
+    // 关 test ⇒ instrument/report/gate cascade off in the SAME answer.
+    const toggled = await remote.saveQualityTestFlowToggle({ stage: 'test', field: 'enabled', value: false })
+    expect(toggled.status).toBe('ready')
+    expect(toggled.stages?.test).toEqual({ enabled: false, haltOnError: true })
+    expect(toggled.stages?.gate?.enabled).toBe(false)
+    expect(toggled.stages?.lint?.enabled).toBe(true)
+    // The write is the versioned pretty JSON the customer can hand-edit.
+    const raw = JSON.parse(await readFile(join(cwd, '.baf', 'quality', 'test-flow.json'), 'utf8'))
+    expect(raw.version).toBe(1)
+    expect(raw.stages.test.enabled).toBe(false)
+    // A fresh config round reads the persisted map, not the defaults.
+    expect((await remote.qualityTestFlowConfig()).stages?.instrument?.enabled).toBe(false)
+    // 开 gate back on ⇒ build/test/instrument/report reopen (prereq cascade).
+    const reopened = await remote.saveQualityTestFlowToggle({ stage: 'gate', field: 'enabled', value: true })
+    expect(reopened.stages?.test?.enabled).toBe(true)
+    expect(reopened.stages?.build?.enabled).toBe(true)
+    // An unknown stage is refused with a message, file untouched.
+    const before = await readFile(join(cwd, '.baf', 'quality', 'test-flow.json'), 'utf8')
+    const refused = await remote.saveQualityTestFlowToggle({ stage: 'ghost', field: 'enabled', value: false })
+    expect(refused.status).toBe('error')
+    expect(await readFile(join(cwd, '.baf', 'quality', 'test-flow.json'), 'utf8')).toBe(before)
   })
 })

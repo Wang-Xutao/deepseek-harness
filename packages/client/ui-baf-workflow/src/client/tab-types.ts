@@ -382,6 +382,18 @@ export interface WorkflowTabTestFlowStatus {
   readonly gateMode?: string
   readonly reportHtmlRel?: string
   readonly reportHtmlExists?: boolean
+  /**
+   * 【变更】2026-10-22 (批次十三 4): the workspace's 测试流 stage switches
+   * (工作流 · 测试流 canvas) — a stage whose `enabled` reads false renders
+   * greyed-out with a disabled 运行 button. Absent = all-on defaults.
+   */
+  readonly stages?: Readonly<Record<string, WorkflowTabTestFlowStageToggle>>
+}
+
+/** One stage's switch pair inside `WorkflowTabTestFlowStatus.stages`. */
+export interface WorkflowTabTestFlowStageToggle {
+  readonly enabled: boolean
+  readonly haltOnError: boolean
 }
 
 /** Step ids in the normative execution order (check 链 → lint → 最终 format). */
@@ -481,8 +493,11 @@ export const TEST_FLOW_STEPS: readonly WorkflowTabTestFlowStep[] = [
  * verdict).
  */
 export interface WorkflowTabStageRunResult {
-  /** ready = the command ran (exit 0 or not); missing = no workspace; absent = the wrapper/tool was not found. */
-  readonly status: 'ready' | 'no-cwd' | 'tool-missing'
+  /**
+   * ready = the command ran (exit 0 or not); missing = no workspace;
+   * absent = the wrapper/tool was not found; disabled = the stage is off.
+   */
+  readonly status: 'ready' | 'no-cwd' | 'tool-missing' | 'disabled'
   /** The command the host actually spawned (echo for the result card). */
   readonly command?: string
   readonly exitCode?: number
@@ -490,6 +505,34 @@ export interface WorkflowTabStageRunResult {
   readonly output?: string
   /** Wall-clock duration in ms. */
   readonly durationMs?: number
+}
+
+/**
+ * 【变更】2026-10-22 (批次十三 1): the 全部运行 sweep's per-stage outcome —
+ * `runTestFlowChain` walked the enabled stages in canonical order and this is
+ * each one's verdict (skipped = OFF in the test-flow config, never spawned).
+ */
+export interface WorkflowTabChainStageOutcome {
+  readonly stage: TestFlowStepId
+  /** True = zero exit (or skipped-as-off). */
+  readonly ok: boolean
+  /** True when the stage was OFF and skipped. */
+  readonly skipped?: boolean
+  /** True when the failure was classified as a missing tool. */
+  readonly toolMissing?: boolean
+  readonly exitCode?: number
+  readonly command?: string
+  /** Truncated combined output tail. */
+  readonly output?: string
+  readonly durationMs?: number
+}
+
+/** The `runTestFlowChain` result mirror. */
+export interface WorkflowTabChainRunResult {
+  readonly status: 'ready' | 'no-cwd'
+  readonly stages: readonly WorkflowTabChainStageOutcome[]
+  /** Whole-sweep wall clock in ms. */
+  readonly durationMs: number
 }
 
 /** 【变更】2026-10-22 (批次十二 2.6): one config file's preview payload. */

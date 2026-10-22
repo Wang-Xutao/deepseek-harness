@@ -47,15 +47,21 @@ function ToolStateChip({ tool, t }: { tool: BafQualityToolRow; t: StandardsPanel
 }
 
 /**
- * The 环境 card — verdict banner + tool table + assets line + 一键安装.
+ * The 环境 card — verdict banner + tool table + assets line + 一键安装 +
+ * 【变更】2026-10-22 (批次十三 3): the 「AI 协助安装」 escape hatch — shown once
+ * the install report carries a real failure or the env still probes
+ * unsupported, so a machine-level gap (GCC/Ruby/Cppcheck/LLVM) always has a
+ * next step beyond the manual hint.
  */
-export function QualityEnvironmentCard({ state, t, onRecheck, onInstall }: {
+export function QualityEnvironmentCard({ state, t, onRecheck, onInstall, onAiHelp }: {
   state: StandardsOverviewState
   t: StandardsPanelProps['t']
   /** 重新检测 — re-runs the Host probe round. */
   onRecheck: () => void
   /** 一键安装 — assets + gem/pip installs, then auto re-probe (the store). */
   onInstall: () => void
+  /** AI 协助安装 — opens a baf session with a prefilled install-help draft. */
+  onAiHelp: () => void
 }) {
   const env = state.qualityEnv
   const loading = state.qualityEnvLoading
@@ -80,6 +86,10 @@ export function QualityEnvironmentCard({ state, t, onRecheck, onInstall }: {
         : `${t('qolEnvUnsupported')}：${missingRequired.join(' · ')}`
 
   const showInstall = env?.status === 'ready' && (!env.supported || !env.assetsInstalled)
+  // 批次十三 3 — the AI escape hatch: any real install failure in the report,
+  // or a still-unsupported verdict, keeps the button available.
+  const installFailed = (state.qualityInstallSteps ?? []).some(step => !step.ok)
+  const showAiHelp = env?.status === 'ready' && (!env.supported || installFailed)
 
   return (
     <div className={css.card} data-testid="baf-quality-env-card">
@@ -150,6 +160,29 @@ export function QualityEnvironmentCard({ state, t, onRecheck, onInstall }: {
             onClick={onInstall}
           >
             {state.qualityInstallRunning ? t('qolEnvInstalling') : t('qolEnvInstall')}
+          </button>
+          {showAiHelp ? (
+            <button
+              type="button"
+              className={css.miniButton}
+              data-testid="baf-quality-env-ai-help"
+              title={t('qolEnvAiHelpTitle')}
+              onClick={onAiHelp}
+            >
+              {t('qolEnvAiHelp')}
+            </button>
+          ) : null}
+        </div>
+      ) : showAiHelp ? (
+        <div className={css.envActions}>
+          <button
+            type="button"
+            className={css.miniButton}
+            data-testid="baf-quality-env-ai-help"
+            title={t('qolEnvAiHelpTitle')}
+            onClick={onAiHelp}
+          >
+            {t('qolEnvAiHelp')}
           </button>
         </div>
       ) : null}

@@ -382,6 +382,41 @@
   text-underline-offset: 2px;
 }
 
+/* 【变更】2026-10-22 (批次十三 1): the 测试流图 jump chip on the
+   implement/verify/archive cards — an accent-tinted pill (a Tab SWITCH, not
+   a file open, so it reads more prominent than the artifact text above). */
+.flowNodeJumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.42rem;
+}
+
+.flowNodeTestFlowChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.16rem 0.5rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--wf-accent);
+  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 45%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.16s ease-out, border-color 0.16s ease-out;
+}
+
+.flowNodeTestFlowChip:hover {
+  background: color-mix(in srgb, var(--wf-accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--wf-accent) 70%, transparent);
+}
+
+.flowNodeTestFlowChip:focus-visible {
+  outline: 2px solid var(--wf-accent);
+  outline-offset: 1px;
+}
+
 /* 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview line inside the
    decision cards — quiet mono, directly above the option buttons. */
 .routeDispatchLine {

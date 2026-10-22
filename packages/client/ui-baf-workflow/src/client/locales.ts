@@ -68,6 +68,19 @@ export type WorkflowTabKey =
   | 'tflow.runFailed'
   | 'tflow.runToolMissing'
   | 'tflow.runNoCwd'
+  // 【变更】2026-10-22 (批次十三 1/2/4): the 全部运行 sweep + its summary note,
+  // the disabled-stage surfaces, and the 工作流图 jump chips' target labels.
+  | 'tflow.runAll'
+  | 'tflow.chainRunning'
+  | 'tflow.chainSkipped'
+  | 'tflow.chainSummary'
+  | 'tflow.chainAllPassed'
+  | 'tflow.chainHaltedNote'
+  | 'tflow.runDisabled'
+  | 'tflow.stageOff'
+  | 'tflow.stageOffNote'
+  | 'flow.testFlowJump'
+  | 'flow.testFlowJumpDesc'
   | 'tflow.cfgFiles'
   | 'tflow.cfgPreview'
   | 'tflow.cfgOpen'
@@ -454,13 +467,26 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.run': 'Run',
   'tflow.runDone': 'Run finished (exit 0)',
   'tflow.runFailed': 'Run failed (exit {code})',
-  'tflow.runToolMissing': 'baf-quality not found — install the quality toolchain first (工作流 · 质量监控 · 环境).',
+  'tflow.runToolMissing': 'baf-quality not found — install the quality toolchain first (工作流 · 测试流 · 环境).',
   'tflow.runNoCwd': 'This session has no workspace folder.',
+  // 【变更】2026-10-22 (批次十三 1/2/4): the 全部运行 sweep, the disabled-stage
+  // surfaces, and the 工作流图 jump chips.
+  'tflow.runAll': 'Run all',
+  'tflow.chainRunning': 'Running…',
+  'tflow.chainSkipped': 'Skipped — this stage is switched off in the test-flow canvas (工作流 · 测试流).',
+  'tflow.chainSummary': 'Sweep finished — {n} stages in {secs}s, some failed; open the failed card for details.',
+  'tflow.chainAllPassed': 'Sweep finished — all {n} enabled stages passed in {secs}s.',
+  'tflow.chainHaltedNote': 'Halted at「{stage}」— its 错误即中止 switch is on; later stages did not run.',
+  'tflow.runDisabled': 'Not run — this stage is switched off.',
+  'tflow.stageOff': 'Off',
+  'tflow.stageOffNote': 'This stage is switched off in the 测试流 canvas (工作流 · 测试流); turn it on there to run it.',
+  'flow.testFlowJump': '测试流图',
+  'flow.testFlowJumpDesc': 'Open the test-flow chart at this stage',
   'tflow.cfgFiles': 'Config files',
   'tflow.cfgPreview': 'Config file preview',
   'tflow.cfgOpen': 'Open file',
   'tflow.cfgClose': 'Close',
-  'tflow.cfgMissing': 'File not found — install the quality assets first (工作流 · 质量监控 · 环境 · 一键安装).',
+  'tflow.cfgMissing': 'File not found — install the quality assets first (工作流 · 测试流 · 环境 · 一键安装).',
   'tflow.cfgLoading': 'Reading…',
   'tflow.fmtPathLabel': 'Format path',
   'strip.current': 'Current',
@@ -808,13 +834,25 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.run': '运行',
   'tflow.runDone': '运行完成（退出码 0）',
   'tflow.runFailed': '运行失败（退出码 {code}）',
-  'tflow.runToolMissing': '未找到 baf-quality 命令——请先安装质量工具链（工作流 · 质量监控 · 环境）。',
+  'tflow.runToolMissing': '未找到 baf-quality 命令——请先安装质量工具链（工作流 · 测试流 · 环境）。',
   'tflow.runNoCwd': '本会话未绑定工作区目录。',
+  // 【变更】2026-10-22 (批次十三 1/2/4): 全部运行链、关闭步骤的展示、工作流图跳转键。
+  'tflow.runAll': '全部运行',
+  'tflow.chainRunning': '运行中…',
+  'tflow.chainSkipped': '已跳过——该步骤已在测试流画布（工作流 · 测试流）中关闭。',
+  'tflow.chainSummary': '链跑完——共 {n} 步 · {secs}s，存在失败；点击失败卡片查看详情。',
+  'tflow.chainAllPassed': '链跑完——启用的 {n} 步全部通过 · {secs}s。',
+  'tflow.chainHaltedNote': '「{stage}」失败后中止——该步骤的「错误即中止」开关已开启，后续步骤未运行。',
+  'tflow.runDisabled': '未运行——该步骤已关闭。',
+  'tflow.stageOff': '已关闭',
+  'tflow.stageOffNote': '该步骤已在测试流画布（工作流 · 测试流）中关闭；可前往打开后运行。',
+  'flow.testFlowJump': '测试流图',
+  'flow.testFlowJumpDesc': '跳转到测试流图的这一步',
   'tflow.cfgFiles': '配置文件',
   'tflow.cfgPreview': '配置文件预览',
   'tflow.cfgOpen': '打开文件',
   'tflow.cfgClose': '关闭',
-  'tflow.cfgMissing': '文件不存在——请先安装质量资产（工作流 · 质量监控 · 环境 · 一键安装）。',
+  'tflow.cfgMissing': '文件不存在——请先安装质量资产（工作流 · 测试流 · 环境 · 一键安装）。',
   'tflow.cfgLoading': '读取中…',
   'tflow.fmtPathLabel': '格式化路径',
   'strip.current': '当前',

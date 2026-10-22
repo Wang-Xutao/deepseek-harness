@@ -305,6 +305,13 @@ export function apply(ctx: ClientContext): void {
           stage,
           arg,
         })) as import('./tab-types.ts').WorkflowTabStageRunResult,
+        // 【变更】2026-10-22 (批次十三 1): the strip's 全部运行 — one host sweep
+        // over the enabled stages in canonical order (skipped stages reported
+        // as such; 错误即中止 halts the sweep at a failure).
+        runChain: async arg => unwrap(await remote.runTestFlowChain({
+          sessionId,
+          arg,
+        })) as import('./tab-types.ts').WorkflowTabChainRunResult,
         // 【变更】2026-10-22 (批次十二 2.6): one config file's preview payload.
         readFile: async path => unwrap(await remote.readWorkspaceFile({ sessionId, path })) as import('./tab-types.ts').WorkflowTabFileReadResult,
         // 【变更】2026-10-22 (批次十二 2.3): open the 工作流 config page — the

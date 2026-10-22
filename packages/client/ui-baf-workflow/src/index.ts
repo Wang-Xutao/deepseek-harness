@@ -82,6 +82,9 @@ import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
+  BafWorkflowChainRunRequest,
+  BafWorkflowChainRunResult,
+  BafWorkflowChainStageOutcome,
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
   BafWorkflowFileReadRequest,
@@ -96,6 +99,7 @@ import type {
   BafWorkflowStageRunRequest,
   BafWorkflowStageRunResult,
   BafWorkflowStartIntakeRequest,
+  BafWorkflowTestFlowStageToggle,
   BafWorkflowTestFlowStatus,
   BafWorkflowTransitionRequest,
 } from './types.ts'
@@ -120,6 +124,9 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 
 /** Request carrying the session whose cwd owns the projection. */
 export type {
+  BafWorkflowChainRunRequest,
+  BafWorkflowChainRunResult,
+  BafWorkflowChainStageOutcome,
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
   BafWorkflowFileReadRequest,
@@ -139,6 +146,7 @@ export type {
   BafWorkflowStageRunResult,
   BafWorkflowStartIntakeRequest,
   BafWorkflowTestFlowCoverage,
+  BafWorkflowTestFlowStageToggle,
   BafWorkflowTestFlowStatic,
   BafWorkflowTestFlowStatus,
   BafWorkflowTransitionRequest,
@@ -367,6 +375,135 @@ function tailOfStage(text: string, max = 1200): string {
 }
 
 /**
+ * 【变更】2026-10-22 (批次十三 1): the canonical order a 全部运行 sweep walks —
+ * the check chain first (编译→测试→插桩→报告→门禁), then lint/analyze, then the
+ * format discipline's final step. Mirrors the canvas node order.
+ */
+export const TEST_FLOW_CHAIN_ORDER = ['build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze', 'format'] as const
+
+/** The shell command one stage runs as (format keeps its raw clang-format). */
+function testFlowCommandFor(stage: BafWorkflowStageRunRequest['stage'], arg: string): string {
+  const formatPath = arg.trim() === '' ? 'source' : arg.trim()
+  return stage === 'format' ? `clang-format -i ${formatPath}` : testFlowStageCommand(stage)
+}
+
+/**
+ * 【变更】2026-10-22 (批次十三 1): the single-stage executor `runTestFlowStage`
+ * and the 全部运行 chain sweep share — spawn, wait, classify. Tool-missing is
+ * a CLASSIFICATION (the shell can't resolve the wrapper), not an exception;
+ * whether it halts a chain is the stage's `haltOnError` switch's call.
+ * @param cwd - absolute workspace root.
+ * @param stage - the step id (format included).
+ * @param arg - the format node's configurable path ('' → `source`).
+ * @returns the run outcome plus the tool-missing classification.
+ */
+/**
+ * 【变更】2026-10-22 (批次十三 3): pure form of the "was this a missing tool?"
+ * classifier, extracted so the Windows 11 gotcha stays pinned by a spec:
+ * cmd returns exit **1** (not 9009) for a missing command AND the localized
+ * 不是内部或外部命令 message arrives GBK-mangled through Node's utf8 decode,
+ * so the localized regex never matches. The `'NAME'` quoting prefix is
+ * ASCII-stable across locales — with a tiny output it identifies the shell's
+ * own not-found line (a real stage failure echoes findings, not a lone quoted
+ * command name).
+ */
+export function classifyStageToolMissing(code: unknown, combined: string, command: string): boolean {
+  const toolName = (command.split(' ')[0] ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const shellNotFound = typeof code === 'number' && code === 1
+    && new RegExp(`^'${toolName}'`, 'm').test(combined)
+    && combined.trim().length <= 200
+  return code === 'ENOENT'
+    || code === 9009
+    || /not recognized|不是内部或外部命令|无法将|command not found/i.test(combined)
+    || shellNotFound
+}
+
+async function execTestFlowStage(
+  cwd: string,
+  stage: BafWorkflowStageRunRequest['stage'],
+  arg: string,
+): Promise<{ ok: boolean; toolMissing: boolean; command: string; exitCode: number; output: string; durationMs: number }> {
+  const command = testFlowCommandFor(stage, arg)
+  const started = Date.now()
+  try {
+    const { stdout, stderr } = await execShell(command, {
+      cwd,
+      timeout: TEST_FLOW_STAGE_TIMEOUT_MS,
+      maxBuffer: 4 * 1024 * 1024,
+      windowsHide: true,
+    })
+    return {
+      ok: true,
+      toolMissing: false,
+      command,
+      exitCode: 0,
+      output: tailOfStage(`${stdout}\n${stderr}`),
+      durationMs: Date.now() - started,
+    }
+  } catch (error) {
+    const out = error as { stdout?: unknown; stderr?: unknown; code?: unknown; killed?: unknown; message?: unknown }
+    const combined = `${String(out.stdout ?? '')}\n${String(out.stderr ?? '')}`
+    // Windows shell "not recognized" (exit 9009 / localized message) or a
+    // unix ENOENT means the wrapper is absent — distinct from a failed run.
+    const toolMissing = classifyStageToolMissing(out.code, combined, command)
+    if (out.killed === true) {
+      return {
+        ok: false,
+        toolMissing: false,
+        command,
+        exitCode: 124,
+        output: `${tailOfStage(combined)}\n[超时 >${TEST_FLOW_STAGE_TIMEOUT_MS / 1000}s，已终止 — 可重试或改在会话内运行]`,
+        durationMs: Date.now() - started,
+      }
+    }
+    return {
+      ok: false,
+      toolMissing,
+      command,
+      exitCode: typeof out.code === 'number' ? out.code : 1,
+      output: tailOfStage(combined) || (typeof out.message === 'string' ? tailOfStage(out.message) : ''),
+      durationMs: Date.now() - started,
+    }
+  }
+}
+
+/**
+ * 【变更】2026-10-22 (批次十三 4): the workspace's 测试流 stage switches, from
+ * `.baf/quality/test-flow.json` (a `{version, stages}` envelope the settings
+ * canvas — 工作流 · 测试流 — owns). The envelope MUST be unwrapped before
+ * normalizing: reading stage keys off the envelope itself sees none and
+ * silently falls back to all-on defaults (the exact bug the settings
+ * package's readQualityTestFlowStages fixed). Inlined (~20 lines) rather
+ * than imported across packages: the settings package is a preset data
+ * carrier, not a dependency this host face may reach into. Context-free
+ * (testable against a temp dir).
+ * @param cwd - absolute workspace root.
+ * @returns stage id → switch pair ({} when the file is absent/unreadable).
+ */
+export async function readTestFlowStageToggles(cwd: string): Promise<Record<string, BafWorkflowTestFlowStageToggle>> {
+  let flowRaw: Record<string, unknown> | undefined
+  try {
+    const parsed: unknown = JSON.parse(await readFile(join(cwd, '.baf', 'quality', 'test-flow.json'), 'utf8'))
+    if (typeof parsed === 'object' && parsed !== null) flowRaw = parsed as Record<string, unknown>
+  } catch {
+    flowRaw = undefined
+  }
+  // Bind then narrow: exactOptionalPropertyTypes codebase pattern — the
+  // narrowed const can't re-widen through the ternary below.
+  const envelopeStages: unknown = flowRaw?.stages
+  const stagesSource = typeof envelopeStages === 'object' && envelopeStages !== null
+    ? envelopeStages as Record<string, unknown>
+    : {}
+  const stages: Record<string, BafWorkflowTestFlowStageToggle> = {}
+  for (const [id, raw] of Object.entries(stagesSource)) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const entry = raw as Record<string, unknown>
+    stages[id] = { enabled: entry.enabled !== false, haltOnError: entry.haltOnError !== false }
+  }
+  return stages
+}
+
+/**
  * 【变更】2026-10-21 (批次十 测试流图): read what the session Tab's 测试流图
  * paints, from the artifacts the quality pipeline actually leaves on disk —
  * `.baf/reports/ut-coverage.json` (check 链：编译→测试→插桩→报告→覆盖率门禁)
@@ -396,6 +533,9 @@ export async function readTestFlowStatus(cwd: string): Promise<BafWorkflowTestFl
   const coverageRaw = await readJson(join(cwd, '.baf', 'reports', 'ut-coverage.json'))
   const staticRaw = await readJson(join(cwd, '.baf', 'reports', 'static-analysis.json'))
   const config = await readJson(join(cwd, '.baf', 'quality', 'ceedling-config.json'))
+  // 批次十三 4: the stage switches ride along on the same status read (see
+  // readTestFlowStageToggles above for the envelope contract).
+  const stages = await readTestFlowStageToggles(cwd)
   const reportHtmlRel = asString(config?.report_html) ?? 'build/coverage/coverage_report.html'
   let reportHtmlExists = false
   try {
@@ -442,6 +582,7 @@ export async function readTestFlowStatus(cwd: string): Promise<BafWorkflowTestFl
     ...(gateMode === undefined ? {} : { gateMode }),
     reportHtmlRel,
     reportHtmlExists,
+    ...(Object.keys(stages).length === 0 ? {} : { stages }),
   }
 }
 
@@ -1232,50 +1373,83 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       }
       throw error
     }
-    const formatPath = request.arg.trim() === '' ? 'source' : request.arg.trim()
-    const command = request.stage === 'format'
-      ? `clang-format -i ${formatPath}`
-      : testFlowStageCommand(request.stage)
-    const started = Date.now()
-    try {
-      const { stdout, stderr } = await execShell(command, {
-        cwd,
-        timeout: TEST_FLOW_STAGE_TIMEOUT_MS,
-        maxBuffer: 4 * 1024 * 1024,
-        windowsHide: true,
-      })
+    // 【变更】2026-10-22 (批次十三 4): a stage switched OFF in the 测试流
+    // canvas refuses to run — the client greys its button out, and this guard
+    // covers stale status and direct remote calls. Echoes the command (so the
+    // result card still shows WHAT was refused) with the closed notice.
+    const toggles = await readTestFlowStageToggles(cwd)
+    if (toggles[request.stage]?.enabled === false) {
       return {
-        status: 'ready',
-        command,
-        exitCode: 0,
-        output: tailOfStage(`${stdout}\n${stderr}`),
-        durationMs: Date.now() - started,
-      }
-    } catch (error) {
-      const out = error as { stdout?: unknown; stderr?: unknown; code?: unknown; killed?: unknown; message?: unknown }
-      const combined = `${String(out.stdout ?? '')}\n${String(out.stderr ?? '')}`
-      // Windows shell "not recognized" (exit 9009 / localized message) or a
-      // unix ENOENT means the wrapper is absent — distinct from a failed run.
-      const toolMissing = out.code === 'ENOENT'
-        || out.code === 9009
-        || /not recognized|不是内部或外部命令|无法将|command not found/i.test(combined)
-      if (out.killed === true) {
-        return {
-          status: 'ready',
-          command,
-          exitCode: 124,
-          output: `${tailOfStage(combined)}\n[超时 >${TEST_FLOW_STAGE_TIMEOUT_MS / 1000}s，已终止 — 可重试或改在会话内运行]`,
-          durationMs: Date.now() - started,
-        }
-      }
-      return {
-        status: toolMissing ? 'tool-missing' : 'ready',
-        command,
-        ...(toolMissing ? {} : { exitCode: typeof out.code === 'number' ? out.code : 1 }),
-        output: tailOfStage(combined) || (typeof out.message === 'string' ? tailOfStage(out.message) : ''),
-        durationMs: Date.now() - started,
+        status: 'disabled',
+        command: testFlowCommandFor(request.stage, request.arg),
+        output: '该步骤已在测试流配置中关闭（工作流 · 测试流），可前往打开后重试',
       }
     }
+    const outcome = await execTestFlowStage(cwd, request.stage, request.arg)
+    if (outcome.toolMissing) {
+      return {
+        status: 'tool-missing',
+        command: outcome.command,
+        output: outcome.output,
+        durationMs: outcome.durationMs,
+      }
+    }
+    return {
+      status: 'ready',
+      command: outcome.command,
+      exitCode: outcome.exitCode,
+      output: outcome.output,
+      durationMs: outcome.durationMs,
+    }
+  }
+
+  /**
+   * 【变更】2026-10-22 (批次十三 1/4): the 测试流图's 全部运行 — one sweep over
+   * the enabled stages in canonical order (build→test→instrument→report→gate→
+   * lint→analyze→format, {@link TEST_FLOW_CHAIN_ORDER}). A stage OFF in the
+   * test-flow config is reported as `skipped` (ok, never spawned); a FAILED
+   * stage whose `haltOnError` switch is on (the default) stops the sweep — the
+   * remaining stages are simply absent from the answer, and the client paints
+   * the halt note. A missing tool (`toolMissing: true` on the outcome) is a
+   * failure like any other for halting — it honors that stage's own switch.
+   * @param request - session + the format node's configured path.
+   * @returns per-stage outcomes plus the sweep's wall-clock duration.
+   */
+  @Remote('runTestFlowChain')
+  async runTestFlowChain(request: BafWorkflowChainRunRequest): Promise<BafWorkflowChainRunResult> {
+    let cwd: string
+    try {
+      cwd = await this.requireCwd(request.sessionId)
+    } catch (error) {
+      if (error instanceof RemoteError && error.code === 'baf-workflow/no-cwd') {
+        return { status: 'no-cwd', stages: [], durationMs: 0 }
+      }
+      throw error
+    }
+    const started = Date.now()
+    const toggles = await readTestFlowStageToggles(cwd)
+    const outcomes: BafWorkflowChainStageOutcome[] = []
+    for (const stage of TEST_FLOW_CHAIN_ORDER) {
+      const toggle = toggles[stage]
+      if (toggle?.enabled === false) {
+        outcomes.push({ stage, ok: true, skipped: true })
+        continue
+      }
+      const outcome = await execTestFlowStage(cwd, stage, request.arg)
+      outcomes.push({
+        stage,
+        ok: outcome.ok,
+        ...(outcome.toolMissing ? { toolMissing: true } : {}),
+        exitCode: outcome.exitCode,
+        command: outcome.command,
+        output: outcome.output,
+        durationMs: outcome.durationMs,
+      })
+      // haltOnError defaults ON: only an explicit `false` lets the sweep
+      // march past a failure (the settings canvas's own normalization rule).
+      if (!outcome.ok && toggle?.haltOnError !== false) break
+    }
+    return { status: 'ready', stages: outcomes, durationMs: Date.now() - started }
   }
 
   /**

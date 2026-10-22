@@ -1,12 +1,12 @@
 /**
  * BAF 工程规范 settings panels (2026-10-12 工作流设置 7): split across 项目工程 /
- * 企业规范 / 质量监控 tabs — read-only baseline projections without workspace
+ * 企业规范 / 测试流 tabs — read-only baseline projections without workspace
  * meta dumps.
  *
  * 【变更】2026-10-20 (批次六 5, 客户决策): 企业规范 renders the REAL bafplugin
  * standards on a 确认门-parity workflow flow chart (which standard applies at
  * which state; click to read the document) — the placeholder-driven rules
- * digest and rules-doc viewer are retired. 质量监控 keeps its always-on
+ * digest and rules-doc viewer are retired. 测试流 keeps its always-on
  * gate-mechanism card; its stack card stays baseline-gated (the
  * commands/thresholds ARE the project's git-managed baseline config).
  *
@@ -25,9 +25,7 @@ import { NodeHooksCard } from './NodeHooksCard.tsx'
 import { EnterpriseDocsCard } from './EnterpriseDocsCard.tsx'
 import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
 import { QualityEnvironmentCard } from './QualityEnvironmentCard.tsx'
-import { QualityConfigCard } from './QualityConfigCard.tsx'
-import { QualityAssetsCard } from './QualityAssetsCard.tsx'
-import { QualityStandardsCard } from './QualityStandardsCard.tsx'
+import { QualityFlowCard } from './QualityFlowCard.tsx'
 import { CommandsCard } from './CommandsCard.tsx'
 import { type BafStandardKey } from './locales.ts'
 import css from './StandardsOverview.module.css'
@@ -505,23 +503,28 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
 }
 
 /**
- * 质量监控 tab — 【变更】2026-10-21 (质量监控重构 1.1–1.6, 客户决策): the tab
+ * 测试流 tab — 【变更】2026-10-21 (质量监控重构 1.1–1.6, 客户决策): the tab
  * head, the old 单元测试 card, the toolchain-docs card and the baseline stack
- * (baf-quality · 质量门禁) card are all DELETED; the tab is now THREE cards —
- * 环境 (real probed toolchain versions + workspace support verdict + 一键安装),
- * 配置 (workspace unit-test config values + the HTML 测试报告 preview modal),
- * and 规范 (every UT-related standards document, categorized).
+ * (baf-quality · 质量门禁) card are all DELETED.
+ * 【变更】2026-10-22 (批次十三 4, 客户决策「配置/资产/规范进流程图」): the 配置 /
+ * 质量资产 / 规范 cards DISSOLVE into ONE 测试流 canvas — the 8 numbered flow
+ * nodes in the session 测试流图's anatomy, each carrying its 配置 values / 资产
+ * files / 规范 documents as chips at the step's flow position, plus the
+ * per-stage 启用 + 失败中止 switches (dependency cascade server-side). The
+ * 环境 card stays on top (the flow's real prerequisite) and now carries the
+ * 「AI 协助安装」 escape hatch (批次十三 3).
  */
 export function StandardsQualityOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
   const {
     openEnterpriseDoc, closeEnterpriseDoc, openPath, t,
-    probeQualityEnvironment, installQualityToolchain,
+    probeQualityEnvironment, installQualityToolchain, aiHelpQualityInstall,
     loadQualityConfiguration, openQualityReport, closeQualityReport,
     loadQualityAssets, openQualityAsset, closeQualityAsset,
+    loadQualityFlowConfig, toggleQualityFlowStage,
   } = props
   // 【变更】2026-10-21 (批次八 3.2/3.4): ONE full-screen doc modal per tab —
-  // the 规范 card opens documents through the shared store field, so the tab
+  // the 规范 chips open documents through the shared store field, so the tab
   // (not the card) renders the single viewer.
   const viewer = viewerOf(state.enterpriseDocId, state.enterpriseDoc)
   // 【变更】2026-10-21 (质量监控重构 1.3/1.4): the probe + config readout are
@@ -529,11 +532,16 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
   // tab mount so the verdict tracks the machine, not the activation-time
   // snapshot. Both self-gate double-runs in the controller.
   // 【变更】2026-10-22 (批次十二 3): the 资产 list joins the mount round.
+  // 【变更】2026-10-22 (批次十三 4): the stage-switch map joins too (the
+  // canvas's switches + the session tab's grey-out read the same file).
   useEffect(() => {
     void probeQualityEnvironment()
     void loadQualityConfiguration()
     void loadQualityAssets()
-  }, [probeQualityEnvironment, loadQualityConfiguration, loadQualityAssets])
+    void loadQualityFlowConfig()
+  }, [
+    probeQualityEnvironment, loadQualityConfiguration, loadQualityAssets, loadQualityFlowConfig,
+  ])
 
   return (
     <section className={css.blockQuality} data-testid="baf-standard-quality">
@@ -544,29 +552,18 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
           t={t}
           onRecheck={() => { void probeQualityEnvironment() }}
           onInstall={() => { void installQualityToolchain() }}
+          onAiHelp={aiHelpQualityInstall}
         />
-        <QualityConfigCard
+        <QualityFlowCard
           state={state}
           t={t}
-          onPreview={() => { void openQualityReport() }}
-          onClosePreview={() => { closeQualityReport() }}
-          onOpenPath={(path) => { void openPath(path) }}
-        />
-        {/* 【变更】2026-10-22 (批次十二 3, 客户决策): the 资产 card rides right
-            after 配置 — the explicit quality-pack file list (project.yml et al)
-            with 预览 + 打开 per row, replacing the old 执行流程 chart (that
-            story lives in the session tab's 测试流图 now). */}
-        <QualityAssetsCard
-          state={state}
-          t={t}
-          onPreview={(rel) => { void openQualityAsset(rel) }}
-          onClosePreview={() => { closeQualityAsset() }}
-          onOpenPath={(path) => { void openPath(path) }}
-        />
-        <QualityStandardsCard
-          state={state}
-          t={t}
+          toggleQualityFlowStage={toggleQualityFlowStage}
           openEnterpriseDoc={openEnterpriseDoc}
+          openQualityReport={() => { void openQualityReport() }}
+          closeQualityReport={closeQualityReport}
+          openQualityAsset={(rel) => { void openQualityAsset(rel) }}
+          closeQualityAsset={closeQualityAsset}
+          onOpenPath={(path) => { void openPath(path) }}
         />
       </div>
       {viewer !== undefined ? (

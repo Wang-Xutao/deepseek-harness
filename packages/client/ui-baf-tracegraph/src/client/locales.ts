@@ -245,7 +245,7 @@ export const zhWorkflow: Record<WorkflowKey, string> = {
   'tabs.gates': '确认门',
   'tabs.commands': '指令集',
   'tabs.standard': '企业规范',
-  'tabs.quality': '质量监控',
+  'tabs.quality': '测试流',
   'traceGraph.title': '轨迹图',
   'traceGraph.description': '关闭后，对话 Tab 不再显示「轨迹图」。',
 }
@@ -260,7 +260,7 @@ export const enWorkflow: Record<WorkflowKey, string> = {
   'tabs.gates': 'Confirmation gates',
   'tabs.commands': 'Commands',
   'tabs.standard': 'Enterprise standards',
-  'tabs.quality': 'Quality monitoring',
+  'tabs.quality': 'Test flow',
   'traceGraph.title': 'Trace Graph',
   'traceGraph.description': 'Hide the Trace Graph tab on the conversation view.',
 }

@@ -63,6 +63,14 @@ describe('测试流图 catalog parity (批次十)', () => {
     expect(testFlowStageCommand('lint')).toBe('baf-quality lint')
     expect(testFlowStageCommand('analyze')).toBe('baf-quality lint')
   })
+
+  // 【变更】2026-10-22 (批次十三 1): the 全部运行 sweep walks the host's
+  // canonical order — it must equal the rail's step order so the folded
+  // per-stage results land on the cards in the order the customer watched.
+  it('the chain order equals the rail order (批次十三)', async () => {
+    const { TEST_FLOW_CHAIN_ORDER } = await import('../src/index.ts')
+    expect([...TEST_FLOW_CHAIN_ORDER]).toEqual(TEST_FLOW_STEPS.map(step => step.id))
+  })
 })
 
 describe('projectTestFlowSteps outcome mapping', () => {

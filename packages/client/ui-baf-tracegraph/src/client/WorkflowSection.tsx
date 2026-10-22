@@ -1,7 +1,7 @@
 /**
  * 工作流 tabbed host for feature-owned workflow rows.
  * 【变更】2026-10-12 (工作流设置 7): General / 项目工程 / 工作流确认门 /
- * 企业规范 / 质量监控 tabs; each tab renders selected `settings.workflow.item`
+ * 企业规范 / 测试流 tabs; each tab renders selected `settings.workflow.item`
  * contributions via `{ only: id }`.
  * 【变更】2026-10-19 (主页面三改 3): the title/intro moved up to the
  * WorkflowPage shell when the section left Settings for the main stage; this
