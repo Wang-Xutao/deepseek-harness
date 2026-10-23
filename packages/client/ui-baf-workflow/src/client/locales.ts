@@ -370,6 +370,18 @@ export type WorkflowTabKey =
   | 'gates.sectionStage'
   | 'gates.sectionEdge'
   | 'gates.sectionConfirm'
+  // 【变更】2026-10-23 (批次十六 2.1): the intake branch block copy — entry
+  // tag / scaffold precondition chip / 三选一 caption / the three
+  // mutually-exclusive case conditions.
+  | 'gates.entryTag'
+  | 'gates.entryCondScaffold'
+  | 'gates.entryPickCaption'
+  | 'gates.entryCondNone'
+  | 'gates.entryCondOne'
+  | 'gates.entryCondMany'
+  // 【变更】2026-10-23 (批次十六 2.5): the node group's 确认门 pointer line —
+  // the gate cards moved to the pill click.
+  | 'gates.gateHintClick'
   | 'gates.node.intake'
   | 'gates.node.open'
   | 'gates.node.clarify'
@@ -768,6 +780,14 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.sectionStage': 'Stage gate',
   'gates.sectionEdge': 'Condition to advance',
   'gates.sectionConfirm': 'Confirm gates',
+  // 【变更】2026-10-23 (批次十六 2.1/2.5): intake branch block + pill hint.
+  'gates.entryTag': 'Request entry',
+  'gates.entryCondScaffold': 'workspace uninitialized · runs first',
+  'gates.entryPickCaption': 'pick one by active changes (exclusive)',
+  'gates.entryCondNone': 'no active change',
+  'gates.entryCondOne': 'one active change',
+  'gates.entryCondMany': 'multiple unfinished changes',
+  'gates.gateHintClick': 'click a gate pill to open it',
   'gates.node.intake': 'Intake',
   'gates.node.open': 'Open',
   'gates.node.clarify': 'Clarify',
@@ -1167,6 +1187,14 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.sectionStage': '阶段门禁',
   'gates.sectionEdge': '进入下一步的条件',
   'gates.sectionConfirm': '确认门',
+  // 【变更】2026-10-23 (批次十六 2.1/2.5): 接单前分支判定块 + 确认门节点提示。
+  'gates.entryTag': '需求进入',
+  'gates.entryCondScaffold': '工作区未初始化 · 先行',
+  'gates.entryPickCaption': '按进行中的变更三选一（互斥）',
+  'gates.entryCondNone': '无进行中的变更',
+  'gates.entryCondOne': '已有一条进行中的变更',
+  'gates.entryCondMany': '多条未完成的变更',
+  'gates.gateHintClick': '点击确认门节点查看',
   'gates.node.intake': '接单',
   'gates.node.open': '建立变更',
   'gates.node.clarify': '澄清',

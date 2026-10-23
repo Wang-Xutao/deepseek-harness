@@ -53,13 +53,18 @@ html, body {
  * opacity 0, overflow hidden so the button is unreachable), it expands with
  * one transition; .main is flex:1 so the logo group re-centers smoothly and
  * nothing ever overflows the 300px window.
+ * 【变更】2026-10-23 (批次十六 1.2): the band anchors BOTTOM-LEFT as one row
+ * — the hint leads at the left edge, the 后台启动 button trails it inline
+ * (width:100% + row direction; was a centered column).
  */
 .slowBlock {
   flex: none;
+  width: 100%;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 7px;
+  justify-content: flex-start;
+  gap: 10px;
   max-height: 0;
   opacity: 0;
   overflow: hidden;
@@ -67,7 +72,7 @@ html, body {
 }
 
 .slowBlock.on {
-  max-height: 76px;
+  max-height: 44px;
   opacity: 1;
 }
 
@@ -75,7 +80,8 @@ html, body {
   margin: 0;
   font-size: 11px;
   line-height: 1.5;
-  text-align: center;
+  text-align: left;
+  white-space: nowrap;
   color: var(--muted);
 }
 
@@ -234,11 +240,21 @@ html, body {
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  /* 【变更】2026-10-23 (批次十六 1.1): the version left the footer for the
+     top-left corner, so the single remaining credit parks right. */
+  justify-content: flex-end;
   gap: 12px;
 }
 
+/*
+ * 【变更】2026-10-23 (批次十六 1.1): the version pins the panel's TOP-LEFT
+ * corner — absolutely positioned so the centered logo group never shifts,
+ * tucked just inside the panel padding.
+ */
 .version {
+  position: absolute;
+  top: 10px;
+  left: 16px;
   margin: 0;
   font-size: 11px;
   font-weight: 500;

@@ -148,15 +148,46 @@
    section label so the 明细 reads in labelled layers (阶段门禁 / 进入下一步的
    条件 / 确认门).
    【变更】2026-10-20 (批次六 4): a 2px brand accent bar leads the label so the
-   layers scan vertically without extra chrome. */
+   layers scan vertically without extra chrome.
+   【变更】2026-10-23 (批次十六 2.4): the label graduates from the hairline bar
+   to a real section CHIP — brand-tinted fill, a leading brand dot, 600 weight
+   and primary ink — so 阶段门禁 / 进入下一步的条件 / 确认门 read as the
+   column's headings, not quiet captions. */
 .sectionLabel {
-  margin: 10px 0 4px;
-  padding-left: 7px;
-  border-left: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 55%, transparent);
-  color: var(--dsw-alias-label-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  box-sizing: border-box;
+  margin: 10px 0 5px;
+  padding: 2px 9px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 10%, transparent);
+  color: var(--dsw-alias-label-primary);
   font-size: 11px;
   line-height: 16px;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.sectionLabel::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--dsw-alias-brand-primary, #4a78d2);
+}
+
+/* 【变更】2026-10-23 (批次十六 2.4/2.5): the 确认门 layer's chip wears the
+   warning tint (the gate-pill hue) so the gate family reads as one color
+   story across canvas and column. */
+.sectionLabelGate {
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 12%, transparent);
+}
+
+.sectionLabelGate::before {
+  background: var(--dsw-alias-text-warning, #7c5cff);
 }
 
 .sectionLabel:first-child {
@@ -213,6 +244,61 @@
   line-height: 18px;
 }
 
+/*
+ * 【变更】2026-10-23 (批次十六 2.2): the gate card's question body renders the
+ * 【…】-section wire protocol as real sections (title + text + list rows) —
+ * the same anatomy the session dialog and the Tab's live-gate card already
+ * use — instead of one run-on paragraph. Fallback: no 【…】 heading found →
+ * the flat .gateQuestion above still prints.
+ */
+.gateQuestionSections {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 3px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qSection {
+  padding: 0 0 0 8px;
+  border-left: 2px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 30%, transparent);
+}
+
+.qSectionTitle {
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.qText {
+  word-break: break-word;
+}
+
+.qList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qList li {
+  position: relative;
+  padding-left: 14px;
+}
+
+.qList li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 60%, transparent);
+}
+
 .gateOptions {
   display: flex;
   flex-direction: column;
@@ -254,11 +340,42 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * 【变更】2026-10-23 (批次十六 2.3): the stage-gate condition list drops the
+ * raw browser bullets for a quiet checklist — rows on a soft fill panel, an
+ * empty square marker per row (a gate condition is something to SATISFY),
+ * secondary ink at 11.5px so the copy stops shouting over the artifact chip.
+ */
 .conditions {
-  margin: 0;
-  padding-left: 16px;
-  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding: 5px 8px;
+  list-style: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 35%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  line-height: 17px;
   word-break: break-word;
+}
+
+.conditions li {
+  position: relative;
+  padding-left: 20px;
+}
+
+.conditions li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 3px;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 65%, transparent);
+  border-radius: 3px;
 }
 
 .note {
@@ -457,7 +574,10 @@
 }
 
 /* A gate pill centered ON the edge it guards — the dashed checkpoint chip;
-   its background covers the edge line so the pill reads as sitting on it. */
+   its background covers the edge line so the pill reads as sitting on it.
+   【变更】2026-10-23 (批次十六 2.5): the pill is a BUTTON (click = open THIS
+   gate in the 门禁明细), so it gains the press affordances — cursor, hover
+   fill, focus ring, and the selection ring while its detail is open. */
 .gatePill {
   position: absolute;
   z-index: 1;
@@ -470,6 +590,114 @@
   border: 1px dashed color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 55%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
   border-radius: 999px;
   background: var(--dsw-alias-bg-elevated, #fff);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.gatePill:hover {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 75%, transparent);
+}
+
+.gatePill:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline-offset: 1px;
+}
+
+.gatePillSelected {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 80%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 22%, transparent);
+}
+
+/* 【变更】2026-10-23 (批次十六 2.5): the node group's 确认门 pointer line —
+   the gate cards live on the PILL click now; the node only counts them. */
+.gatePillHint {
+  margin: 3px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11.5px;
+  line-height: 17px;
+}
+
+/*
+ * 【变更】2026-10-23 (批次十六 2.1): the intake branch block — the decision
+ * geometry that picks the bootstrap gate. The entry tag anchors the spine;
+ * condition chips lead each row (the scaffold pre-chip runs BEFORE the fork,
+ * the three case chips hang off the dashed rail); the caption names the fork.
+ */
+.entryTag {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 12%, var(--dsw-alias-bg-elevated, transparent));
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 45%, transparent);
+  color: var(--dsw-alias-label-primary);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+}
+
+.pickCaption {
+  position: absolute;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* The dashed case rail the three mutually-exclusive rows hang off. */
+.caseRail {
+  position: absolute;
+  border-left: 1.5px dashed color-mix(in srgb, var(--dsw-alias-label-tertiary, #8b949e) 60%, transparent);
+}
+
+/* One row's condition chip — the state that picks this branch. Case rows
+   carry a dashed stub ::before tying them to the rail; the scaffold pre-chip
+   (solid border, brand tint) reads as the sequential precondition instead. */
+.condChip {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-radius: 5px;
+  border: 1px dashed color-mix(in srgb, var(--dsw-alias-label-tertiary, #8b949e) 55%, transparent);
+  /* Opaque over the canvas (the spine crosses the scaffold row) — the pill
+     trick: sit ON the line, cover it. */
+  background: var(--dsw-alias-bg-elevated, #fff);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.condChip::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  width: 12px;
+  border-top: 1.5px dashed color-mix(in srgb, var(--dsw-alias-label-tertiary, #8b949e) 60%, transparent);
+}
+
+.condChipPre {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 45%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 8%, var(--dsw-alias-bg-elevated, #fff));
+  color: var(--dsw-alias-label-primary);
+}
+
+.condChipPre::before {
+  content: none;
 }
 
 .pillTitle {

@@ -166,6 +166,25 @@ const ART_TOKEN = /^\s*\{\{art:([^}]+)\}\}\s*(.*)$/
 const SECTION_HEADING = /^【([^】]+)】\s*(.*)$/
 
 /**
+ * 【变更】2026-10-23 (批次十六 2.2): peel the optional `{{change:<id>}}` marker
+ * off a body's first NON-EMPTY paragraph — shared by `gateAskViewOf` (dialog
+ * detail) and the 门禁明细 GateCard (registry question), so both surfaces
+ * parse the body without the raw token ever printing.
+ */
+export function peelChangeMarker(text: string): { body: string; changeId?: string } {
+  const paragraphs = text.split('\n\n')
+  const firstNonEmpty = paragraphs.findIndex(p => p.trim() !== '')
+  if (paragraphs[firstNonEmpty] === undefined) return { body: text }
+  const change = CHANGE_LINE.exec(paragraphs[firstNonEmpty].trim())
+  if (change === null) return { body: text }
+  return {
+    body: [...paragraphs.slice(0, firstNonEmpty), ...paragraphs.slice(firstNonEmpty + 1)].join('\n\n'),
+    // exactOptionalPropertyTypes: the key exists only when the wire sent it.
+    ...(change[1] === undefined ? {} : { changeId: change[1] }),
+  }
+}
+
+/**
  * Whether a pending interaction is a BAF workflow dialog: one question,
  * `header: 'BAF 工作流'`, and an `answer` verb. Everything else (business
  * 选择卡, generic questions, other plugins' carriers) returns false so the
@@ -223,7 +242,46 @@ export function gateAskViewOf(pending: GateAskCarrier): GateAskView {
   const rawOptions = Array.isArray(question?.options) ? question.options as readonly RawOption[] : []
   const detail = typeof question?.detail === 'string' ? question.detail : ''
 
-  let changeId: string | undefined
+  // The `{{change:…}}` marker peels only when it is the FIRST non-empty
+  // paragraph — leading blank paragraphs never block the peel (peelChangeMarker).
+  const { body, changeId } = peelChangeMarker(detail)
+  const sections = parseGateSections(body)
+
+  const artifacts = sections.flatMap(section =>
+    section.blocks.flatMap(block => block.kind === 'list' ? block.items : []).filter(item => item.artifact !== undefined))
+    .map(item => item.artifact as GateAskArtifact)
+
+  return {
+    id: typeof question?.id === 'string' ? question.id : 'baf-gate',
+    title: typeof question?.question === 'string' ? question.question : BAF_GATE_HEADER,
+    // exactOptionalPropertyTypes: changeId exists only when the wire sent it.
+    ...(changeId === undefined ? {} : { changeId }),
+    sections,
+    artifacts,
+    allowsRevise: artifacts.length > 0,
+    options: rawOptions
+      .map((opt): GateAskOptionView => {
+        const label = typeof opt.label === 'string' ? opt.label : ''
+        const hint = optionHint(opt.description)
+        // exactOptionalPropertyTypes: the hint key exists only with a value.
+        return hint === undefined ? { label } : { label, hint }
+      })
+      .filter(opt => opt.label !== ''),
+  }
+}
+
+/**
+ * 【变更】2026-10-23 (批次十六 2.2): the standalone 【…】-section parser —
+ * the same wire protocol `gateAskViewOf` speaks (paragraphs joined by blank
+ * lines; 【…】 lines open sections, `- ` lines fold into list blocks), lifted
+ * out so EVERY surface that holds a raw gate `question` string (the Tab's
+ * pendingGate card, the workflow-top gate banner, the 门禁明细 GateCard) can
+ * render the segmented body instead of one run-on paragraph.
+ *
+ * @param text - the body copy (a registry `question` or a dialog `detail`).
+ * @returns the untitled lead-in plus one section per 【…】 heading.
+ */
+export function parseGateSections(text: string): readonly GateAskSection[] {
   const sections: GateAskSection[] = []
   // Parse state: consecutive `- ` lines fold into one list block; a 【…】 line
   // opens a new section; everything else is a text block.
@@ -240,14 +298,9 @@ export function gateAskViewOf(pending: GateAskCarrier): GateAskView {
     currentBlocks.push({ kind: 'list', items })
   }
 
-  for (const paragraph of detail.split('\n\n')) {
+  for (const paragraph of text.split('\n\n')) {
     const trimmed = paragraph.trim()
     if (trimmed === '') continue
-    const change = CHANGE_LINE.exec(trimmed)
-    if (change !== null && sections.length === 0 && currentBlocks.length === 0) {
-      changeId = change[1]
-      continue
-    }
     const lines = trimmed.split('\n').map(line => line.trim()).filter(line => line !== '')
     let items: GateAskItem[] = []
     for (const line of lines) {
@@ -272,28 +325,7 @@ export function gateAskViewOf(pending: GateAskCarrier): GateAskView {
     pushItems(items)
   }
   flushSection()
-
-  const artifacts = sections.flatMap(section =>
-    section.blocks.flatMap(block => block.kind === 'list' ? block.items : []).filter(item => item.artifact !== undefined))
-    .map(item => item.artifact as GateAskArtifact)
-
-  return {
-    id: typeof question?.id === 'string' ? question.id : 'baf-gate',
-    title: typeof question?.question === 'string' ? question.question : BAF_GATE_HEADER,
-    // exactOptionalPropertyTypes: changeId exists only when the wire sent it.
-    ...(changeId === undefined ? {} : { changeId }),
-    sections,
-    artifacts,
-    allowsRevise: artifacts.length > 0,
-    options: rawOptions
-      .map((opt): GateAskOptionView => {
-        const label = typeof opt.label === 'string' ? opt.label : ''
-        const hint = optionHint(opt.description)
-        // exactOptionalPropertyTypes: the hint key exists only with a value.
-        return hint === undefined ? { label } : { label, hint }
-      })
-      .filter(opt => opt.label !== ''),
-  }
+  return sections
 }
 
 /**

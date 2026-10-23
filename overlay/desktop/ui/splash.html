@@ -9,6 +9,10 @@
 <body>
   <div class="shell">
     <div class="panel">
+      <!-- 【变更】2026-10-23 (批次十六 1.1): the version moved from the
+           footer's bottom-left slot to the panel's TOP-LEFT corner (the
+           footer keeps only the credit). -->
+      <p id="version" class="version" aria-label="应用版本"></p>
       <div class="main">
         <div class="logos" aria-hidden="true">
           <!--
@@ -53,13 +57,15 @@
         splash and lets the boot finish in the tray; the main window appears
         by itself once the backend is ready (splash.js wires the button to
         the splash:bg-start IPC through preload-splash).
+        【变更】2026-10-23 (批次十六 1.2): the band re-anchors to the BOTTOM-LEFT
+        as ONE row — the hint leads, the button trails it inline (was a
+        centered column), and the copy is the customer's wording.
       -->
       <div id="slowBlock" class="slowBlock">
-        <p class="slowHint" role="status">BAF服务首次启动时间稍久，请耐心等待</p>
+        <p class="slowHint" role="status">首次启动耗时较久，请耐心等待</p>
         <button id="bgStart" class="bgStart" type="button">后台启动</button>
       </div>
       <div class="footer">
-        <p id="version" class="version" aria-label="应用版本"></p>
         <p class="credit">by sora</p>
       </div>
     </div>

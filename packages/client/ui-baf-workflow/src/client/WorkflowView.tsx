@@ -33,7 +33,7 @@ import { buildClientTemplateTabView, withRenderableGraph, CONDITION_ZH, conditio
 import { NodeIcon } from './icons.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
 import { RouteStatusRow, routeBadgeText } from './RouteStatusRow.tsx'
-import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel } from './gate-ask.ts'
+import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel, parseGateSections } from './gate-ask.ts'
 import { setWorkflowTabActive } from './tab-activity.ts'
 import { buildDashboardHtml, type DashboardHtmlLabels } from './dashboard-html.ts'
 import css from './WorkflowView.module.css'
@@ -294,6 +294,37 @@ function dispatchNodeForConfirm(view: WorkflowTabView): WorkflowNodeId | null {
   const to = edge?.to
   if (to === undefined || to === 'completed' || to === 'abandoned') return null
   return to as WorkflowNodeId
+}
+
+/**
+ * 【变更】2026-10-23 (批次十六 2.2): a raw gate question string rendered as
+ * its 【…】 sections — the same wire protocol the live dialog speaks
+ * (`parseGateSections`); a question with no sections (plain prose gates like
+ * the classify card) stays one hint paragraph. Shared by the pendingGate
+ * card and the workflow-top gate banner so every gate surface reads in
+ * segments, not one run-on line.
+ */
+function GateBodySections({ text }: { readonly text: string }) {
+  const sections = parseGateSections(text)
+  if (sections.length === 0) return <p className={css.hint}>{text}</p>
+  return (
+    <>
+      {sections.map((section, si) => (
+        <div key={`gsec-${si}`} className={css.gateSection}>
+          {section.title !== undefined && <div className={css.gateSectionTitle}>{section.title}</div>}
+          {section.blocks.map((block, bi) => block.kind === 'text'
+            ? <p key={`gt-${si}-${bi}`} className={css.hint}>{block.text}</p>
+            : (
+              <ul key={`gl-${si}-${bi}`} className={css.gateList}>
+                {block.items.map((item, ii) => (
+                  <li key={`gli-${si}-${bi}-${ii}`}>{item.text}</li>
+                ))}
+              </ul>
+            ))}
+        </div>
+      ))}
+    </>
+  )
 }
 
 /**
@@ -1414,7 +1445,9 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               ? t('pendingGate.classifyTitle')
               : t('pendingGate.title')}
           </div>
-          <p className={css.hint}>{view.pendingGate.question}</p>
+          {/* 【变更】2026-10-23 (批次十六 2.2): segmented 【…】 body — the same
+              section rendering the live dialog uses, not one run-on line. */}
+          <GateBodySections text={view.pendingGate.question} />
           {(view.pendingGate.detail ?? []).map(line => (
             <p key={line} className={css.hint}>{line}</p>
           ))}
@@ -1475,7 +1508,9 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         && liveGateView === null && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('gate.bannerTitle')}>
           <div className={css.cardTitle}>{t('gate.bannerTitle')}</div>
-          <p className={css.hint}>{view.gate.question}</p>
+          {/* 【变更】2026-10-23 (批次十六 2.2): segmented 【…】 body — parity with
+              the pendingGate card and the live dialog. */}
+          <GateBodySections text={view.gate.question} />
           <div className={css.actions}>
             {(view.gate.options ?? []).map(opt => (
               <button
