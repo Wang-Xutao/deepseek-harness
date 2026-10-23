@@ -29,6 +29,12 @@
  * are real buttons whose click opens THE GATE's 明细 group (确认门 fires
  * between states — the node group only counts them), and a 【…】-section
  * question renders segmented.
+ * 【变更】2026-10-23 (批次十七 2.1/2.3): the branch block, take two — the
+ * chips/caption/rail anatomy is REPLACED by a real flowchart: the prominent
+ * 需求输入 entry box → scaffold pill → ONE horizontal row of three option
+ * cards (each IS its 确认门 node: option text + the condition line ride the
+ * card). The state node's 明细 no longer counts 确认门 either — the state
+ * prints stage + entry conditions only.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -167,16 +173,21 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
     expect(screen.getByTestId('baf-gates-gate-node-verify-archive').textContent).toContain('verify-archive 标题')
     expect(screen.getByTestId('baf-gates-gate-node-resume').textContent).toContain('resume 标题')
     expect(screen.getByTestId('baf-gates-gate-node-abandon').textContent).toContain('abandon 标题')
-    // 【变更】2026-10-23 (批次十六 2.1): the intake branch block — the entry
-    // tag, the scaffold precondition chip, and the three exclusive condition
-    // chips (their pills already locked above) all render before the chain.
-    expect(screen.getByTestId('baf-gates-entry').textContent).toContain('gates.entryTag')
-    expect(screen.getByTestId('baf-gates-cond-scaffold').textContent).toContain('gates.entryCondScaffold')
-    expect(screen.getByTestId('baf-gates-pick-caption').textContent).toContain('gates.entryPickCaption')
-    expect(screen.getByTestId('baf-gates-cond-new-workflow').textContent).toContain('gates.entryCondNone')
-    expect(screen.getByTestId('baf-gates-cond-active-conflict').textContent).toContain('gates.entryCondOne')
-    expect(screen.getByTestId('baf-gates-cond-bind-workflow').textContent).toContain('gates.entryCondMany')
-    expect(screen.getByTestId('baf-gates-case-rail')).toBeDefined()
+    // 【变更】2026-10-23 (批次十七 2.1): the intake branch block, take two — a
+    // REAL flowchart: the prominent 需求输入 entry box, then ONE horizontal
+    // row of three option cards (each IS its 确认门 node — the customer-facing
+    // option text leads, the active-change condition rides under it). The
+    // 批次十六 chip / caption / rail anatomy is gone.
+    expect(screen.getByTestId('baf-gates-entry').textContent).toContain('gates.entryInput')
+    expect(screen.queryByTestId('baf-gates-cond-scaffold')).toBeNull()
+    expect(screen.queryByTestId('baf-gates-pick-caption')).toBeNull()
+    expect(screen.queryByTestId('baf-gates-case-rail')).toBeNull()
+    expect(screen.getByTestId('baf-gates-gate-node-new-workflow').textContent).toContain('gates.entryOptNone')
+    expect(screen.getByTestId('baf-gates-gate-node-new-workflow').textContent).toContain('gates.entryCondNone')
+    expect(screen.getByTestId('baf-gates-gate-node-active-conflict').textContent).toContain('gates.entryOptOne')
+    expect(screen.getByTestId('baf-gates-gate-node-active-conflict').textContent).toContain('gates.entryCondOne')
+    expect(screen.getByTestId('baf-gates-gate-node-bind-workflow').textContent).toContain('gates.entryOptMany')
+    expect(screen.getByTestId('baf-gates-gate-node-bind-workflow').textContent).toContain('gates.entryCondMany')
     // 【变更】2026-10-20 (批次三 4.5) + 批次十六 2.5: the 门禁明细 column prints
     // exactly ONE group — the default selection is the first node with
     // anything to print (接单, via its T2 leaving-edge condition). The node
@@ -186,15 +197,16 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
     expect(screen.queryByTestId('baf-gates-detail-node-open')).toBeNull()
     expect(screen.queryByTestId('baf-gate-confirm-scaffold')).toBeNull()
     expect(screen.queryByTestId('baf-gate-confirm-intake-classify')).toBeNull()
-    // Clicking a canvas card selects it — 【变更】2026-10-23 (批次十六 2.5):
-    // the node group shows the 确认门 COUNT + the pill-click hint instead of
-    // the cards; clicking the PILL opens the gate's own group.
+    // Clicking a canvas card selects it — 【变更】2026-10-23 (批次十七 2.3):
+    // the node group no longer counts 确认门 at all (a gate fires BETWEEN
+    // states, so the state prints stage + entry conditions only); clicking
+    // the PILL opens the gate's own group.
     fireEvent.click(screen.getByTestId('baf-gate-node-open'))
     expect(screen.getByTestId('baf-gates-detail-node-open')).toBeDefined()
     expect(screen.queryByTestId('baf-gates-detail-node-intake')).toBeNull()
     expect(screen.getByTestId('baf-gate-node-open').getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByTestId('baf-gates-detail-gates-open').textContent).toContain('gates.gateHintClick')
-    expect(screen.getByTestId('baf-gates-detail-gates-open').textContent).toContain('gates.confirmCount')
+    expect(screen.queryByTestId('baf-gates-detail-gates-open')).toBeNull()
+    expect(screen.getByTestId('baf-gates-detail').textContent).not.toContain('gates.sectionConfirm')
     expect(screen.queryByTestId('baf-gate-confirm-open-advance')).toBeNull()
     fireEvent.click(screen.getByTestId('baf-gates-gate-node-open-advance'))
     expect(screen.getByTestId('baf-gates-detail-gate-open-advance')).toBeDefined()
@@ -318,9 +330,9 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
     mount(load)
     fireEvent.click(screen.getByTestId('baf-gates-toggle'))
     await screen.findByTestId('baf-gates-flow')
-    // Selecting 实现 prints its stage conditions + the 确认门 count hint in
-    // the right column, and only that group renders. 【变更】2026-10-23 (批次
-    // 十六 2.5): the verify-advance CARD opens on its pill, not on the node.
+    // Selecting 实现 prints its stage + entry conditions in the right column,
+    // and only that group renders. 【变更】2026-10-23 (批次十七 2.3): the node
+    // aria-label dropped the gate titles too — the pill carries its own.
     fireEvent.click(screen.getByTestId('baf-gate-node-implement'))
     expect(screen.getByTestId('baf-gates-detail-node-implement')).toBeDefined()
     expect(screen.queryByTestId('baf-gates-detail-node-intake')).toBeNull()
@@ -328,10 +340,10 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
     fireEvent.click(screen.getByTestId('baf-gates-gate-node-verify-advance'))
     expect(screen.getByTestId('baf-gate-confirm-verify-advance').textContent).toContain('/baf-workflow-advance')
     // The canvas card's meta stays a COUNT — full conditions only in the
-    // column — while the aria-label still carries the whole detail.
+    // column — while the aria-label still carries the state detail.
     expect(screen.getByTestId('baf-gate-stage-implement').textContent).toContain('gates.conditionsCount')
     expect(screen.getByTestId('baf-gate-stage-implement').textContent).not.toContain('implement 条件一')
-    expect(screen.getByTestId('baf-gate-node-implement').getAttribute('aria-label')).toContain('verify-advance 标题')
+    expect(screen.getByTestId('baf-gate-node-implement').getAttribute('aria-label')).not.toContain('verify-advance 标题')
     expect(screen.getByTestId('baf-gate-node-implement').getAttribute('aria-label')).toContain('implement 条件一')
     // The branch nodes select too — 漂移回归's recovery-edge conditions print;
     // its stacked resume card opens on the resume pill.

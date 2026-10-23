@@ -191,6 +191,15 @@ export interface StandardsOverviewFace {
    */
   toggleQualityFlowStage(stage: string, field: 'enabled' | 'haltOnError', value: boolean): Promise<void>
   /**
+   * 【变更】2026-10-23 (批次十七 3.3): the 测试流 MASTER switch — flip every
+   * stage's enabled flag in one gesture. Implemented as ONE Remote flip per
+   * independent root (开=gate carries the coverage chain's whole prerequisite
+   * closure; 关=build carries its dependent cone; lint/analyze/format are
+   * independent), so the server-side cascade stays the single source of truth
+   * and the wire contract is untouched.
+   */
+  toggleQualityFlowAll(value: boolean): Promise<void>
+  /**
    * 【变更】2026-10-22 (批次十三 3): 「AI 协助安装」 — open a baf-preset session
    * in this workspace with a prefilled install-help prompt (draft
    * initialization; the customer presses Enter to send — never auto-sent).
@@ -308,6 +317,7 @@ export class StandardsController {
       closeQualityAsset: () => this.closeQualityAsset(),
       loadQualityFlowConfig: () => this.loadQualityFlowConfig(),
       toggleQualityFlowStage: (stage, field, value) => this.toggleQualityFlowStage(stage, field, value),
+      toggleQualityFlowAll: value => this.toggleQualityFlowAll(value),
       aiHelpQualityInstall: () => this.aiHelpQualityInstall(),
     }
   }
@@ -882,6 +892,70 @@ export class StandardsController {
       state.qualityFlowNotice = notice
       if (stages !== undefined && state.qualityFlow !== undefined) {
         state.qualityFlow = { ...state.qualityFlow, stages }
+      }
+    })
+  }
+
+  /**
+   * @inheritdoc
+   * 【变更】2026-10-23 (批次十七 3.3): the master switch — ONE optimistic
+   * all-stages flip, then one Remote round per independent root (开 = gate +
+   * lint/analyze/format; 关 = build + lint/analyze/format — each root's server
+   * cascade covers its cone, so four flips land the whole map). The LAST ready
+   * map wins; a failed round stops the sweep and surfaces its notice (the map
+   * stays at the last good state, never a half-cascade guess).
+   */
+  async toggleQualityFlowAll(value: boolean): Promise<void> {
+    const snapshot = this.store.getSnapshot()
+    if (snapshot.qualityFlowSaving) return
+    const flow = snapshot.qualityFlow
+    if (flow?.stages !== undefined) {
+      this.store.update((state) => {
+        // exactOptionalPropertyTypes: spreading the `| undefined` state value
+        // widens `status` to optional — rebuild the result explicitly (the
+        // single-flip toggle above does the same).
+        const current = state.qualityFlow
+        const stages = current?.stages
+        if (current === undefined || stages === undefined) return
+        const nextStages: Record<string, BafQualityTestFlowStageConfig> = {}
+        for (const [id, entry] of Object.entries(stages)) {
+          nextStages[id] = { enabled: value, haltOnError: entry.haltOnError }
+        }
+        state.qualityFlow = {
+          status: current.status,
+          ...(current.cwd === undefined ? {} : { cwd: current.cwd }),
+          stages: nextStages,
+        }
+        state.qualityFlowNotice = undefined
+      })
+    }
+    this.store.update((state) => { state.qualityFlowSaving = true })
+    const roots = value ? ['gate', 'lint', 'analyze', 'format'] : ['build', 'lint', 'analyze', 'format']
+    let notice: string | undefined
+    let lastStages: BafQualityTestFlowStageMap | undefined
+    for (const stage of roots) {
+      try {
+        const response = await this.ctx.remote.bafStandardConfig.saveQualityTestFlowToggle({ stage, field: 'enabled', value })
+        if (response.ok) {
+          if (response.value.status === 'ready') lastStages = response.value.stages
+          else {
+            notice = response.value.message ?? response.value.status
+            break
+          }
+        } else {
+          notice = response.error.message
+          break
+        }
+      } catch (error) {
+        notice = error instanceof Error ? error.message : String(error)
+        break
+      }
+    }
+    this.store.update((state) => {
+      state.qualityFlowSaving = false
+      state.qualityFlowNotice = notice
+      if (lastStages !== undefined && state.qualityFlow !== undefined) {
+        state.qualityFlow = { ...state.qualityFlow, stages: lastStages }
       }
     })
   }

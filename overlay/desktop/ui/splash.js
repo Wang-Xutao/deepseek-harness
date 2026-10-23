@@ -11,14 +11,13 @@
   }
 })()
 
-// 【变更】2026-10-22 (批次十五 1): after 5s still on the splash, reveal the
-// slow-launch band — the copy explains the wait and 后台启动 hides the splash
-// so the boot finishes in the tray (the main window shows itself when the
-// backend is ready). The band is overflow-collapsed until .on, so the button
-// is unreachable before the reveal.
+// 【变更】2026-10-23 (批次十七 1): after 5s still on the splash, the slow-start
+// hint JOINS the rotating status line (the 正在检查更新… list — one splice, so
+// it takes its turn like every other step and the layout never shifts), and
+// the 后台启动 button reveals alone at the panel's bottom-left corner.
 window.setTimeout(() => {
-  const block = document.getElementById('slowBlock')
-  if (block) block.classList.add('on')
+  statuses.splice(i + 1, 0, '首次启动耗时较久，请耐心等待')
+  document.getElementById('bgStart')?.classList.add('on')
 }, 5000)
 
 document.getElementById('bgStart')?.addEventListener('click', () => {

@@ -561,7 +561,7 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
     probeQualityEnvironment, installQualityToolchain, aiHelpQualityInstall,
     loadQualityConfiguration, openQualityReport, closeQualityReport,
     loadQualityAssets, openQualityAsset, closeQualityAsset,
-    loadQualityFlowConfig, toggleQualityFlowStage,
+    loadQualityFlowConfig, toggleQualityFlowStage, toggleQualityFlowAll,
   } = props
   // 【变更】2026-10-21 (批次八 3.2/3.4): ONE full-screen doc modal per tab —
   // the 规范 chips open documents through the shared store field, so the tab
@@ -604,6 +604,7 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
           state={state}
           t={t}
           toggleQualityFlowStage={toggleQualityFlowStage}
+          toggleQualityFlowAll={toggleQualityFlowAll}
           openEnterpriseDoc={openEnterpriseDoc}
           openQualityReport={() => { void openQualityReport() }}
           closeQualityReport={closeQualityReport}

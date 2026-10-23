@@ -152,6 +152,7 @@ function harness(initial: StandardsOverviewState, faceOverrides: Partial<Standar
     // 【变更】2026-10-22 (批次十三 3/4): the 测试流 canvas's faces.
     loadQualityFlowConfig: vi.fn(),
     toggleQualityFlowStage: vi.fn(),
+    toggleQualityFlowAll: vi.fn(),
     aiHelpQualityInstall: vi.fn(),
     ...faceOverrides,
   }
@@ -904,6 +905,27 @@ describe('StandardsQualityOverview · 测试流画布重构 (2026-10-22 批次�
     expect(active.disabled).toBe(false)
   })
 
+  it('renders the 00 前置 MASTER switch and routes its flip through the face (批次十七 3.3)', () => {
+    const { props } = harness(qualityReadyState())
+    render(<StandardsQualityOverview {...props} />)
+    // All-on default → the master reads checked; its pill sits on the 00 card.
+    const master = screen.getByRole('switch', { name: 'qflowSwitchAll · qflowTitle' }) as HTMLButtonElement
+    expect(master.closest('[data-testid="baf-quality-flow-prereq"]')).not.toBeNull()
+    expect(master.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(master)
+    expect(props.toggleQualityFlowAll).toHaveBeenCalledWith(false)
+    cleanup()
+    // Any stage off → the master reads unchecked; flipping it back on routes true.
+    const stages = allOnStages()
+    stages.lint = { enabled: false, haltOnError: true }
+    const partial = harness(qualityReadyState({ qualityFlow: { status: 'ready', cwd: '/ws', stages } }))
+    render(<StandardsQualityOverview {...partial.props} />)
+    const masterOff = screen.getByRole('switch', { name: 'qflowSwitchAll · qflowTitle' }) as HTMLButtonElement
+    expect(masterOff.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(masterOff)
+    expect(partial.props.toggleQualityFlowAll).toHaveBeenCalledWith(true)
+  })
+
   it('renders the canvas guidance states — loading, no-workspace, and the toggle failure notice (批次十三 4)', () => {
     const { props } = harness(qualityReadyState({ qualityFlow: undefined }))
     render(<StandardsQualityOverview {...props} />)
@@ -946,7 +968,7 @@ describe('StandardsController · 测试流开关 rounds (2026-10-22 批次十三
       bafStandardConfig: {
         summary: vi.fn(() => Promise.resolve({ ok: true, value: { status: 'no-baseline', cwd: '/ws' } })),
         qualityTestFlowConfig: vi.fn(() => settle(flowAnswer)),
-        saveQualityTestFlowToggle: vi.fn(() => settle(toggleAnswer)),
+        saveQualityTestFlowToggle: vi.fn((_req: unknown) => settle(toggleAnswer)),
       },
     }
     const c = new StandardsController({ remote } as never)
@@ -1008,6 +1030,47 @@ describe('StandardsController · 测试流开关 rounds (2026-10-22 批次十三
     const after = c.face().hooks.standards.getSnapshot()
     expect(after.qualityFlowSaving).toBe(false)
     expect(after.qualityFlow?.stages).toEqual(cascaded)
+  })
+
+  it('flips the MASTER switch — one round per independent root, the last ready map wins (批次十七 3.3)', async () => {
+    const ALL_OFF = Object.fromEntries(
+      ['build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze', 'format']
+        .map(id => [id, { enabled: false, haltOnError: true }]),
+    )
+    const { c, remote } = flowController(
+      { ok: true, value: { status: 'ready', cwd: '/ws', stages: ALL_ON } },
+      { ok: true, value: { status: 'ready', stages: ALL_OFF } },
+    )
+    await tick()
+    await c.loadQualityFlowConfig()
+    const round = c.toggleQualityFlowAll(false)
+    // Optimistic mid-flight: EVERY stage's enabled flips in one pass while the
+    // haltOnError flags ride untouched.
+    const mid = c.face().hooks.standards.getSnapshot()
+    expect(mid.qualityFlowSaving).toBe(true)
+    expect(mid.qualityFlow?.stages?.gate).toEqual({ enabled: false, haltOnError: true })
+    await round
+    // OFF sweeps the four independent roots — build's cascade closes the whole
+    // coverage chain, lint/analyze/format are standalone.
+    expect(remote.bafStandardConfig.saveQualityTestFlowToggle.mock.calls.map(call => call[0])).toEqual([
+      { stage: 'build', field: 'enabled', value: false },
+      { stage: 'lint', field: 'enabled', value: false },
+      { stage: 'analyze', field: 'enabled', value: false },
+      { stage: 'format', field: 'enabled', value: false },
+    ])
+    const after = c.face().hooks.standards.getSnapshot()
+    expect(after.qualityFlowSaving).toBe(false)
+    expect(after.qualityFlow?.stages).toEqual(ALL_OFF)
+    // ON sweeps gate (its cascade reopens the coverage chain) + the three
+    // standalone steps.
+    remote.bafStandardConfig.saveQualityTestFlowToggle.mockClear()
+    await c.toggleQualityFlowAll(true)
+    expect(remote.bafStandardConfig.saveQualityTestFlowToggle.mock.calls.map(call => call[0])).toEqual([
+      { stage: 'gate', field: 'enabled', value: true },
+      { stage: 'lint', field: 'enabled', value: true },
+      { stage: 'analyze', field: 'enabled', value: true },
+      { stage: 'format', field: 'enabled', value: true },
+    ])
   })
 
   it('settles a failed toggle into the notice line and never leaves saving stuck', async () => {

@@ -47,50 +47,17 @@ html, body {
 }
 
 /*
- * 【变更】2026-10-22 (批次十四 1 → 批次十五 1): the retired top-right
- * firstHint chip is replaced by the slow-launch band below — a collapsible
- * strip between .main and .footer. Collapsed by default (max-height 0 +
- * opacity 0, overflow hidden so the button is unreachable), it expands with
- * one transition; .main is flex:1 so the logo group re-centers smoothly and
- * nothing ever overflows the 300px window.
- * 【变更】2026-10-23 (批次十六 1.2): the band anchors BOTTOM-LEFT as one row
- * — the hint leads at the left edge, the 后台启动 button trails it inline
- * (width:100% + row direction; was a centered column).
- */
-.slowBlock {
-  flex: none;
-  width: 100%;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: max-height 0.24s cubic-bezier(0.2, 0.7, 0.3, 1), opacity 0.24s ease;
-}
-
-.slowBlock.on {
-  max-height: 44px;
-  opacity: 1;
-}
-
-.slowHint {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: left;
-  white-space: nowrap;
-  color: var(--muted);
-}
-
-/*
- * 后台启动 — a secondary escape hatch, never the primary CTA: outlined pill
- * in the accent hue, quiet hover fill, 150ms state transitions, pressed
- * scale for tactile feedback.
+ * 【变更】2026-10-23 (批次十七 1): the slow-launch BAND is retired — the hint
+ * now rides the rotating #status line (splash.js), so the only slow-launch
+ * chrome left is the 后台启动 button, absolutely pinned to the panel's
+ * BOTTOM-LEFT corner (mirroring the top-left version). Hidden until .on
+ * (opacity + pointer-events), so it can never shift the centered logo group
+ * and never collides with the bottom-right credit.
  */
 .bgStart {
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
   appearance: none;
   border: 1px solid rgba(94, 115, 255, 0.45);
   border-radius: 999px;
@@ -102,7 +69,14 @@ html, body {
   color: var(--accent);
   background: rgba(94, 115, 255, 0.08);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.bgStart.on {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .bgStart:hover {
@@ -120,7 +94,6 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .slowBlock,
   .bgStart {
     transition: none;
   }

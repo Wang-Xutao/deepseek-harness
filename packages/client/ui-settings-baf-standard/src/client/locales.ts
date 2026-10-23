@@ -90,6 +90,10 @@ const zh = {
   qflowPrereqHint: '先在上方环境卡装好工具链。',
   qflowSwitchEnabled: '启用',
   qflowSwitchHalt: '失败中止',
+  // 【变更】2026-10-23 (批次十七 3.3): the 00 前置 node's master switch — one
+  // gesture flips every stage (on = all enabled; off = the whole flow parked).
+  qflowSwitchAll: '测试流开关',
+  qflowSwitchAllTitle: '一键启停整个测试流（八个步骤全部启用/停用）。',
   qflowDisabled: '已停用——不参与测试流（依赖它的下游也已停用）。',
   qflowChipCfg: '配置',
   qflowChipAsset: '资产',
@@ -303,6 +307,8 @@ const en = {
   qflowPrereqHint: 'Install the toolchain in the environment card above first.',
   qflowSwitchEnabled: 'Enabled',
   qflowSwitchHalt: 'Halt on error',
+  qflowSwitchAll: 'Test flow',
+  qflowSwitchAllTitle: 'Toggle the whole test flow in one gesture (all eight stages on/off).',
   qflowDisabled: 'Disabled — out of the test flow (its dependents are disabled too).',
   qflowChipCfg: 'Config',
   qflowChipAsset: 'Assets',

@@ -25,6 +25,23 @@
   opacity: 0.5;
 }
 
+/* 【批次十七】the compact track for dense card-metadata rows (the 测试流 canvas's
+   per-stage pills): same anatomy at 28×16 with a 12px thumb — the md capsule
+   read as a heavyweight control stacked inside every flow node. */
+.switchSm {
+  width: 28px;
+  height: 16px;
+}
+
+.switchSm .thumb {
+  width: 12px;
+  height: 12px;
+}
+
+.switchSm[aria-checked='true'] .thumb {
+  transform: translateX(12px);
+}
+
 .switch:focus-visible {
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;

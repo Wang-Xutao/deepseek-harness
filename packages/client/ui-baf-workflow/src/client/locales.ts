@@ -360,7 +360,6 @@ export type WorkflowTabKey =
   | 'gates.noGate'
   // 【变更】2026-10-18 (工作流确认门 2.3): the flow copy (canvas since gone).
   | 'gates.canvasAria'
-  | 'gates.confirmCount'
   | 'gates.stageGate'
   // 【变更】2026-10-22 (批次十四 2): 'gates.legendState' retired with the
   // legend bar (客户决策：删除图例). The 详-mode detail section heading stays.
@@ -370,18 +369,18 @@ export type WorkflowTabKey =
   | 'gates.sectionStage'
   | 'gates.sectionEdge'
   | 'gates.sectionConfirm'
-  // 【变更】2026-10-23 (批次十六 2.1): the intake branch block copy — entry
-  // tag / scaffold precondition chip / 三选一 caption / the three
-  // mutually-exclusive case conditions.
-  | 'gates.entryTag'
-  | 'gates.entryCondScaffold'
-  | 'gates.entryPickCaption'
+  // 【变更】2026-10-23 (批次十七 2.1): the intake branch block copy, take two —
+  // the 需求输入 entry box, the three horizontal option cards (the customer's
+  // option text), and their quiet condition lines (the runtime state that
+  // picks each branch). The scaffold chip / caption / pointer keys left with
+  // their DOM (批次十七 2.3 dropped the state's 确认门 pointer entirely).
+  | 'gates.entryInput'
+  | 'gates.entryOptNone'
+  | 'gates.entryOptOne'
+  | 'gates.entryOptMany'
   | 'gates.entryCondNone'
   | 'gates.entryCondOne'
   | 'gates.entryCondMany'
-  // 【变更】2026-10-23 (批次十六 2.5): the node group's 确认门 pointer line —
-  // the gate cards moved to the pill click.
-  | 'gates.gateHintClick'
   | 'gates.node.intake'
   | 'gates.node.open'
   | 'gates.node.clarify'
@@ -774,20 +773,20 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.noGate': 'no gate on this node',
   // 【变更】2026-10-18 (工作流确认门 2.3): flow-canvas copy.
   'gates.canvasAria': 'Workflow confirmation-gate flow chart',
-  'gates.confirmCount': 'confirm gates',
   'gates.stageGate': 'stage gate:',
   'gates.detailTitle': 'Gate details',
   'gates.sectionStage': 'Stage gate',
   'gates.sectionEdge': 'Condition to advance',
   'gates.sectionConfirm': 'Confirm gates',
-  // 【变更】2026-10-23 (批次十六 2.1/2.5): intake branch block + pill hint.
-  'gates.entryTag': 'Request entry',
-  'gates.entryCondScaffold': 'workspace uninitialized · runs first',
-  'gates.entryPickCaption': 'pick one by active changes (exclusive)',
+  // 【变更】2026-10-23 (批次十七 2.1): intake branch block, take two — entry
+  // box + the three horizontal option cards and their condition lines.
+  'gates.entryInput': 'Request input',
+  'gates.entryOptNone': 'no active workflow found',
+  'gates.entryOptOne': 'one change in progress',
+  'gates.entryOptMany': 'multiple unfinished changes — pick one to take over',
   'gates.entryCondNone': 'no active change',
   'gates.entryCondOne': 'one active change',
   'gates.entryCondMany': 'multiple unfinished changes',
-  'gates.gateHintClick': 'click a gate pill to open it',
   'gates.node.intake': 'Intake',
   'gates.node.open': 'Open',
   'gates.node.clarify': 'Clarify',
@@ -1181,20 +1180,20 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.noGate': '本节点无门禁',
   // 【变更】2026-10-18 (工作流确认门 2.3): 流程图画布文案。
   'gates.canvasAria': '工作流确认门流程图',
-  'gates.confirmCount': '确认门',
   'gates.stageGate': '阶段门：',
   'gates.detailTitle': '门禁明细',
   'gates.sectionStage': '阶段门禁',
   'gates.sectionEdge': '进入下一步的条件',
   'gates.sectionConfirm': '确认门',
-  // 【变更】2026-10-23 (批次十六 2.1/2.5): 接单前分支判定块 + 确认门节点提示。
-  'gates.entryTag': '需求进入',
-  'gates.entryCondScaffold': '工作区未初始化 · 先行',
-  'gates.entryPickCaption': '按进行中的变更三选一（互斥）',
+  // 【变更】2026-10-23 (批次十七 2.1): 接单前分支判定块二改 —— 需求输入
+  // 醒目框 + 三张横向选项卡（选项文案 + 条件行都上节点）。
+  'gates.entryInput': '需求输入',
+  'gates.entryOptNone': '未发现进行中的工作流',
+  'gates.entryOptOne': '已有进行中的变更',
+  'gates.entryOptMany': '多条未完成的变更，请选择接手对象',
   'gates.entryCondNone': '无进行中的变更',
   'gates.entryCondOne': '已有一条进行中的变更',
   'gates.entryCondMany': '多条未完成的变更',
-  'gates.gateHintClick': '点击确认门节点查看',
   'gates.node.intake': '接单',
   'gates.node.open': '建立变更',
   'gates.node.clarify': '澄清',

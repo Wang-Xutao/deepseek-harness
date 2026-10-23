@@ -1,4 +1,13 @@
 /**
+ * 【变更】2026-10-23 (批次十七 2.1/2.3): the intake decision is now a REAL
+ * flowchart — a prominent 需求输入 entry box, the scaffold pill on the spine,
+ * then ONE horizontal row of three option cards (未发现进行中的工作流 / 已有
+ * 进行中的变更 / 多条未完成的变更，请选择接手对象) whose quiet line carries the
+ * active-change condition (条件上节点); new-workflow converges solid into
+ * 分类确认, the other two re-enter the spine dashed. The state cards and the
+ * state 门禁明细 drop the 确认门 count/section entirely (a gate fires BETWEEN
+ * states — the pills carry the details); the 明细 column is sticky and
+ * restyled (批次十七 2.2/2.4).
  * 【变更】2026-10-23 (批次十六 2.1/2.5): the intake bootstrap gates are no
  * longer a blind vertical pill stack under 接单 — the canvas now opens with
  * the DECISION LOGIC that picks between them: a 需求进入 entry tag, the
@@ -257,8 +266,11 @@ function gateDetailText(gate: BafWorkflowGateConfirmRow, t: GatesOverviewRowProp
  * focus and screen readers read the same text the selected node's 门禁明细
  * group prints inline. 【变更】2026-10-20 (批次五 2.3): internal ids drop out
  * here too (no gateFn / advance-gate id / bug-fix tag — the reader-side
- * de-dup already keeps twins out of `gates`). */
-function nodeDetailText(label: string, stage: BafWorkflowGateStageRow | undefined, gates: readonly BafWorkflowGateConfirmRow[], t: GatesOverviewRowProps['t']): string {
+ * de-dup already keeps twins out of `gates`).
+ * 【变更】2026-10-23 (批次十七 2.3): the confirm-gate lines left too — a gate
+ * fires BETWEEN states, so the state's own text is stage + entry conditions
+ * only (each pill button carries its own aria-label). */
+function nodeDetailText(label: string, stage: BafWorkflowGateStageRow | undefined, t: GatesOverviewRowProps['t']): string {
   const lines: string[] = [label]
   if (stage !== undefined) {
     lines.push(`${t('gates.stageGate')} ${stage.artifact}`)
@@ -266,15 +278,6 @@ function nodeDetailText(label: string, stage: BafWorkflowGateStageRow | undefine
     if (stage.note !== undefined) lines.push(stage.note)
   } else {
     lines.push(t('gates.noGate'))
-  }
-  for (const gate of gates) {
-    lines.push(`【${gate.title}】${gate.question}`)
-    for (const option of gate.options) {
-      lines.push(`· ${option.label}（${optionCommandText(option, t)}）`)
-    }
-    if (gate.dynamicOptions !== undefined && gate.options.length === 0) {
-      lines.push(`· ${t('gates.dynamicOptions')}`)
-    }
   }
   return lines.join('\n')
 }
@@ -320,29 +323,27 @@ const CANVAS_W = 416
 const CANVAS_TOP = 16
 
 /*
- * 【变更】2026-10-23 (批次十六 2.1): the intake branch block — the decision
- * geometry that replaces the blind pill stack under 接单. A condition chip
- * (COND_X..+COND_W) leads each row; the gate pill fans right of it
- * (BRANCH_PILL_X), the three case rows hang off a dashed case rail, and the
- * whole block converges back into the spine at the classify pill.
+ * 【变更】2026-10-23 (批次十七 2.1): the intake branch block, take two — the
+ * chip+caption+rail anatomy reads cluttered, so the whole decision is now a
+ * REAL flowchart: a prominent 需求输入 entry box on the spine, the scaffold
+ * pill right under it, then ONE horizontal row of three option cards (each
+ * IS its 确认门 node — option text as the title, the active-change condition
+ * as the card's quiet line). new-workflow converges solid into 分类确认;
+ * the other two re-enter the spine dashed (take over an EXISTING change —
+ * no classification).
  */
-/** Entry tag height (the 需求进入 pill at the very top). */
-const ENTRY_TAG_H = 22
-/** One branch row: chip + pill inline; pitch leaves breathing room. */
-const BRANCH_ROW_H = 28
-const BRANCH_ROW_PITCH = 34
-/** The scaffold pre-row sits this far under the entry tag. */
-const PRE_GAP = 10
-/** Condition chip column (left of the spine) + the case rail's x. */
-const COND_X = 26
-const COND_W = 142
-const CASE_RAIL_X = 12
-/** Branch pills sit right of the chips, narrowed so the canvas keeps its
- * 416px width with room for the dashed re-entry curves. */
-const BRANCH_PILL_X = 174
-const BRANCH_PILL_W = 158
-/** The caption line above the case rows. */
-const CAPTION_H = 17
+/** Entry box height (the prominent 需求输入 card at the very top). */
+const ENTRY_H = 32
+/** The scaffold pill sits this far under the entry box (on the spine). */
+const ENTRY_GAP = 8
+/** Fork point → the option row's tops (the fan-out curves' air). */
+const FORK_GAP = 22
+/** One horizontal branch option card (三选一, mutually exclusive). */
+const OPTION_W = 124
+const OPTION_H = 58
+const OPTION_GAP = 12
+/** Option bottoms → the 分类确认 pill. */
+const OPTION_FLOW_GAP = 26
 
 /** The gap below a node whose leaving edge carries `count` pills (0 → the
  * route row pitch; more pills push the next node further down). */
@@ -422,7 +423,7 @@ function CanvasNode({ node, pos, stage, gates, selected, onSelect, t }: {
   t: GatesOverviewRowProps['t']
 }) {
   const label = nodeLabelOf(node, t)
-  const detailText = nodeDetailText(label, stage, gates, t)
+  const detailText = nodeDetailText(label, stage, t)
   return (
     <button
       type="button"
@@ -438,9 +439,13 @@ function CanvasNode({ node, pos, stage, gates, selected, onSelect, t }: {
         {label}
         {NODE_EN[node] !== undefined ? <span className={css.nodeNameEn}>{NODE_EN[node]}</span> : null}
       </span>
-      <span className={join(css.nodeAccent, gates.length === 0 ? css.nodeAccentIdle : undefined)}>
-        {gates.length > 0 ? `${t('gates.confirmCount')} ×${String(gates.length)}` : t('gates.noGate')}
-      </span>
+      {/* 【变更】2026-10-23 (批次十七 2.3): the confirm-gate COUNT left the
+          state card — a gate fires BETWEEN states, so the card no longer
+          tallies what it does not contain; pill-less nodes still say 无门禁,
+          pill-carrying nodes let their hanging pills speak for themselves. */}
+      {gates.length === 0 ? (
+        <span className={join(css.nodeAccent, css.nodeAccentIdle)}>{t('gates.noGate')}</span>
+      ) : null}
       {stage !== undefined ? (
         <span className={css.nodeMeta} data-testid={`baf-gate-stage-${node}`}>
           {stage.artifact} · {t('gates.conditionsCount')}{String(stage.conditions.length)}
@@ -512,70 +517,62 @@ function GatesFlow({ data, t }: {
     gatesByNode.get(node) ?? []
 
   /*
-   * 【变更】2026-10-23 (批次十六 2.1): the intake branch block — the DECISION
-   * structure that picks which bootstrap gate pops, replacing the blind pill
-   * stack under 接单. Top-down: the 需求进入 tag; the scaffold PRE-ROW
-   * (工作区未初始化 — sequential, it gates everything below it); the 三选一
-   * caption; the three MUTUALLY-EXCLUSIVE case rows (无进行中的变更 / 已有一条
-   * 进行中的变更 / 多条未完成的变更 — condition chip + gate pill each, hanging
-   * off a dashed case rail); then the converge: new-workflow's 确认新建 flows
-   * into the 分类确认 pill on the edge into 接单 (solid), while
-   * active-conflict / bind-workflow re-enter the main flow directly (dashed —
-   * they advance or take over an EXISTING change, no new classification).
+   * 【变更】2026-10-23 (批次十七 2.1): the intake branch block, take two — a
+   * clean flowchart: 需求输入 entry box → scaffold pill (sequential, on the
+   * spine) → fork into the HORIZONTAL three-option row (each option card IS
+   * its 确认门 node: option title + the active-change condition) → converge.
+   * new-workflow flows solid into 分类确认 on the edge into 接单;
+   * active-conflict / bind-workflow re-enter the spine directly (dashed —
+   * they take over an EXISTING change, no new classification).
    */
   const entryGateOf = (id: string): BafWorkflowGateConfirmRow | undefined =>
     entryGates.find(gate => gate.id === id)
   const scaffoldGate = entryGateOf('scaffold')
-  const newWorkflowGate = entryGateOf('new-workflow')
-  const conflictGate = entryGateOf('active-conflict')
-  const bindGate = entryGateOf('bind-workflow')
+  const optionGates = [entryGateOf('new-workflow'), entryGateOf('active-conflict'), entryGateOf('bind-workflow')]
+    .filter((gate): gate is BafWorkflowGateConfirmRow => gate !== undefined)
   const spineX = COL_X[0] + NODE_W / 2
 
-  const entryTagPos: Pos = { x: COL_X[0], y: CANVAS_TOP }
-  const scaffoldRowY = entryTagPos.y + ENTRY_TAG_H + PRE_GAP
-  const captionY = scaffoldRowY + (scaffoldGate !== undefined ? BRANCH_ROW_PITCH : 0)
-  let caseY = captionY + CAPTION_H + 9
-  const caseRows = [newWorkflowGate, conflictGate, bindGate]
-    .filter((gate): gate is BafWorkflowGateConfirmRow => gate !== undefined)
-    .map((gate) => {
-      const row = { gate, y: caseY }
-      caseY += BRANCH_ROW_PITCH
-      return row
-    })
-  // The case rail spans caption bottom → last row's center line.
-  const caseRailTop = captionY + CAPTION_H + 4
-  const lastCaseRow = caseRows[caseRows.length - 1]
-  const caseRailBottom = lastCaseRow !== undefined ? lastCaseRow.y + BRANCH_ROW_H / 2 : caseRailTop
-  const classifyY = caseRailBottom + 14
+  const entryY = CANVAS_TOP
+  const scaffoldPillY = entryY + ENTRY_H + ENTRY_GAP
+  const forkY = scaffoldPillY + (scaffoldGate !== undefined ? PILL_H : 0) + 6
+  const optionY = forkY + FORK_GAP
+  /** The option row, centered in the canvas: [10, 146, 282] on a 416px row. */
+  const optionRowW = optionGates.length * OPTION_W + (optionGates.length - 1) * OPTION_GAP
+  const optionX = (index: number): number => (CANVAS_W - optionRowW) / 2 + index * (OPTION_W + OPTION_GAP)
+  const optionCx = (index: number): number => optionX(index) + OPTION_W / 2
+  const optionBottom = optionY + OPTION_H
+  const classifyY = optionBottom + OPTION_FLOW_GAP
   const hasClassify = classifyGate !== undefined
-  const intakeY = classifyY + (hasClassify ? PILL_H + 10 : 4)
-  /** The mid-y of one branch row (chip + pill share the row's center). */
-  const rowMidY = (y: number): number => y + BRANCH_ROW_H / 2
-  const branchPillX = BRANCH_PILL_X + BRANCH_PILL_W / 2
+  const reentryY = classifyY + PILL_H + 10
+  const intakeY = hasClassify ? reentryY + 16 : optionBottom + 18
 
   const edgeList: Array<{ d: string; dashed?: boolean }> = []
-  // Spine: entry tag → (through the scaffold pre-row) → caption. The rows'
-  // chips/pills cover the line where they sit — the same sits-on-the-edge
-  // reading the chain pills use.
-  edgeList.push({ d: `M ${spineX} ${entryTagPos.y + ENTRY_TAG_H} L ${spineX} ${captionY - 3}` })
-  // The case rail (alternatives hang off it) — dashed, like a switch/case
-  // bracket — renders as a CSS div (an SVG path here would wear the
-  // arrowhead marker); each row's stub rides in as a marker on its chip.
-  // Converges. new-workflow → 分类确认 (solid, arrowhead); the other two
-  // re-enter the main flow below the classify pill (dashed, arrowhead).
-  const firstCaseRow = caseRows[0]
-  if (newWorkflowGate !== undefined && hasClassify && firstCaseRow !== undefined) {
+  // Spine: entry box → fork point; the scaffold pill sits ON it.
+  edgeList.push({ d: `M ${spineX} ${entryY + ENTRY_H} L ${spineX} ${forkY}` })
+  // Fork: fan out to each option card's top.
+  optionGates.forEach((_, index) => {
+    const cx = optionCx(index)
+    edgeList.push({ d: `M ${spineX} ${forkY} C ${spineX} ${forkY + 10}, ${cx} ${optionY - 10}, ${cx} ${optionY}` })
+  })
+  // Converge: new-workflow → 分类确认 (solid); the other two re-enter the
+  // spine below the classify pill (dashed, offset joins so the arrowheads
+  // never stack).
+  optionGates.forEach((gate, index) => {
+    const cx = optionCx(index)
+    if (gate.id === 'new-workflow') {
+      if (hasClassify) {
+        edgeList.push({ d: `M ${cx} ${optionBottom} C ${cx} ${optionBottom + 10}, ${spineX} ${classifyY - 12}, ${spineX} ${classifyY}` })
+      } else {
+        edgeList.push({ d: `M ${cx} ${optionBottom} C ${cx} ${optionBottom + 10}, ${spineX} ${intakeY - 12}, ${spineX} ${intakeY}` })
+      }
+      return
+    }
+    const joinY = reentryY + (gate.id === 'active-conflict' ? 0 : 8)
     edgeList.push({
-      d: `M ${branchPillX} ${rowMidY(firstCaseRow.y)} C ${branchPillX} ${rowMidY(firstCaseRow.y) + 22}, ${spineX} ${classifyY - 20}, ${spineX} ${classifyY}`,
-    })
-  }
-  const reentryY = hasClassify ? classifyY + PILL_H + 5 : intakeY - 5
-  for (const row of caseRows.slice(1)) {
-    edgeList.push({
-      d: `M ${branchPillX} ${rowMidY(row.y)} C ${branchPillX} ${rowMidY(row.y) + 20}, ${spineX + 30} ${reentryY - 16}, ${spineX} ${reentryY}`,
+      d: `M ${cx} ${optionBottom} C ${cx} ${optionBottom + 16}, ${spineX + 30} ${joinY - 14}, ${spineX} ${joinY}`,
       dashed: true,
     })
-  }
+  })
   // 分类确认 → 接单 (the guarded edge into the chain).
   if (hasClassify) {
     edgeList.push({ d: `M ${spineX} ${classifyY + PILL_H} L ${spineX} ${intakeY}` })
@@ -718,6 +715,10 @@ function GatesFlow({ data, t }: {
         </div>
       ) : selectedSpec === undefined ? null : (
         <div className={css.detailGroup} data-testid={`baf-gates-detail-node-${selectedSpec.node}`}>
+          {/* 【变更】2026-10-23 (批次十七 2.3): the 确认门 badge AND the 确认门
+              section left the state's 明细 — gates fire BETWEEN states, so the
+              state prints stage + entry conditions only; the pills on the
+              canvas carry the gate details (click one). */}
           <div className={css.nodeHead}>
             <span className={css.nodeIcon}><NodeIcon id={selectedSpec.node as WorkflowNodeId | TerminalStateId} /></span>
             <span className={css.nodeName}>
@@ -725,11 +726,6 @@ function GatesFlow({ data, t }: {
               {NODE_EN[selectedSpec.node] !== undefined
                 ? <span className={css.nodeNameEn}>{NODE_EN[selectedSpec.node]}</span>
                 : null}
-            </span>
-            <span className={join(css.badge, selectedSpec.gates.length > 0 ? css.badgeGate : css.badgeIdle)}>
-              {selectedSpec.gates.length > 0
-                ? `${t('gates.confirmCount')} ×${String(selectedSpec.gates.length)}`
-                : t('gates.noGate')}
             </span>
           </div>
           {selectedSpec.stage !== undefined ? (
@@ -750,14 +746,6 @@ function GatesFlow({ data, t }: {
             <div className={css.edgeConditions}>
               <div className={css.sectionLabel}>{t('gates.sectionEdge')}</div>
               {selectedSpec.conditions.map(line => <span key={line} className={css.connectorCondition}>{line}</span>)}
-            </div>
-          ) : null}
-          {selectedSpec.gates.length > 0 ? (
-            <div className={css.gates}>
-              <div className={join(css.sectionLabel, css.sectionLabelGate)}>{t('gates.sectionConfirm')}</div>
-              <p className={css.gatePillHint} data-testid={`baf-gates-detail-gates-${selectedSpec.node}`}>
-                {`${t('gates.confirmCount')} ×${String(selectedSpec.gates.length)} · ${t('gates.gateHintClick')}`}
-              </p>
             </div>
           ) : null}
         </div>
@@ -799,76 +787,58 @@ function GatesFlow({ data, t }: {
               ))}
             </svg>
             {/*
-              【变更】2026-10-23 (批次十六 2.1): the intake branch block — the
-              decision structure that picks which bootstrap gate pops. 需求进入
-              → the sequential scaffold PRE-ROW (工作区未初始化 gates everything)
-              → the 三选一 caption → three MUTUALLY-EXCLUSIVE case rows (chip =
-              the active-change count condition, pill = the gate it pops) →
-              the converge: 确认新建 flows on into 分类确认 (solid); the other
-              two re-enter the main flow directly (dashed, no classification).
+              【变更】2026-10-23 (批次十七 2.1): the intake branch block, take two —
+              a clean flowchart. The prominent 需求输入 entry box anchors the
+              spine; the scaffold pill rides right under it; the spine forks
+              into ONE horizontal row of three option cards (each IS its
+              确认门 node — the customer-facing option text leads, the
+              active-change condition rides quiet under it). new-workflow
+              converges solid into 分类确认; the other two re-enter the spine
+              dashed (take over an EXISTING change — no classification).
             */}
             <div
-              className={css.entryTag}
+              className={css.entryBox}
               data-testid="baf-gates-entry"
-              style={{ left: COL_X[0], top: entryTagPos.y, width: NODE_W, height: ENTRY_TAG_H }}
+              style={{ left: spineX - NODE_W / 2, top: entryY, width: NODE_W, height: ENTRY_H }}
             >
-              {t('gates.entryTag')}
+              {t('gates.entryInput')}
             </div>
             {scaffoldGate !== undefined ? (
-              <>
-                <span
-                  className={join(css.condChip, css.condChipPre)}
-                  data-testid="baf-gates-cond-scaffold"
-                  style={{ left: COND_X, top: scaffoldRowY + 3, width: COND_W }}
-                >
-                  {t('gates.entryCondScaffold')}
-                </span>
-                <GatePill
-                  gate={scaffoldGate}
-                  pos={{ x: BRANCH_PILL_X, y: scaffoldRowY }}
-                  width={BRANCH_PILL_W}
-                  selected={selected === `gate:${scaffoldGate.id}`}
-                  onSelect={() => { setPicked(`gate:${scaffoldGate.id}`) }}
-                  ariaLabel={gateDetailText(scaffoldGate, t)}
-                />
-              </>
-            ) : null}
-            <div
-              className={css.pickCaption}
-              data-testid="baf-gates-pick-caption"
-              style={{ left: COL_X[0], top: captionY, width: NODE_W, height: CAPTION_H }}
-            >
-              {t('gates.entryPickCaption')}
-            </div>
-            {caseRows.length > 1 ? (
-              <div
-                className={css.caseRail}
-                data-testid="baf-gates-case-rail"
-                style={{ left: CASE_RAIL_X, top: caseRailTop, height: caseRailBottom - caseRailTop }}
+              <GatePill
+                gate={scaffoldGate}
+                pos={{ x: spineX - PILL_W / 2, y: scaffoldPillY }}
+                selected={selected === `gate:${scaffoldGate.id}`}
+                onSelect={() => { setPicked(`gate:${scaffoldGate.id}`) }}
+                ariaLabel={gateDetailText(scaffoldGate, t)}
               />
             ) : null}
-            {caseRows.map(({ gate, y }) => (
-              <Fragment key={gate.id}>
-                <span
-                  className={css.condChip}
-                  data-testid={`baf-gates-cond-${gate.id}`}
-                  style={{ left: COND_X, top: y + 3, width: COND_W }}
-                >
+            {optionGates.map((gate, index) => (
+              <button
+                key={gate.id}
+                type="button"
+                className={join(css.optionCard, selected === `gate:${gate.id}` ? css.optionCardSelected : undefined)}
+                data-testid={`baf-gates-gate-node-${gate.id}`}
+                style={{ left: optionX(index), top: optionY, width: OPTION_W, height: OPTION_H }}
+                aria-pressed={selected === `gate:${gate.id}`}
+                aria-label={gateDetailText(gate, t)}
+                title={gate.question}
+                onClick={() => { setPicked(`gate:${gate.id}`) }}
+              >
+                <span className={css.optionTitle}>
+                  {gate.id === 'new-workflow'
+                    ? t('gates.entryOptNone')
+                    : gate.id === 'active-conflict'
+                      ? t('gates.entryOptOne')
+                      : t('gates.entryOptMany')}
+                </span>
+                <span className={css.optionCond}>
                   {gate.id === 'new-workflow'
                     ? t('gates.entryCondNone')
                     : gate.id === 'active-conflict'
                       ? t('gates.entryCondOne')
                       : t('gates.entryCondMany')}
                 </span>
-                <GatePill
-                  gate={gate}
-                  pos={{ x: BRANCH_PILL_X, y }}
-                  width={BRANCH_PILL_W}
-                  selected={selected === `gate:${gate.id}`}
-                  onSelect={() => { setPicked(`gate:${gate.id}`) }}
-                  ariaLabel={gateDetailText(gate, t)}
-                />
-              </Fragment>
+              </button>
             ))}
             {classifyGate !== undefined ? (
               <GatePill

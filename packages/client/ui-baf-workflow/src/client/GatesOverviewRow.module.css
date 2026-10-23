@@ -217,17 +217,22 @@
    【变更】2026-10-20 (批次六 4): hover quietly brightens the hairline and the
    fill so scanning tracks the card under the cursor — no motion, the card is
    not clickable, so it must not promise a press. */
+/* 【变更】2026-10-23 (批次十七 2.2): the gate card drops the gray fill for a
+   bright elevated surface with a warning left bar — the gate family's color
+   story leads the card instead of a dull wash. */
 .gateCard {
   padding: 9px 12px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
+  border-left: 2.5px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 50%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 45%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 3%, var(--dsw-alias-bg-elevated, #fff));
   transition: border-color 150ms var(--ds-ease-in-out, ease), background-color 150ms var(--ds-ease-in-out, ease);
 }
 
 .gateCard:hover {
   border-color: var(--dsw-alias-border-l3);
-  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 70%, transparent);
+  border-left-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 70%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 6%, var(--dsw-alias-bg-elevated, #fff));
 }
 
 .gateTitle {
@@ -611,93 +616,95 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 22%, transparent);
 }
 
-/* 【变更】2026-10-23 (批次十六 2.5): the node group's 确认门 pointer line —
-   the gate cards live on the PILL click now; the node only counts them. */
-.gatePillHint {
-  margin: 3px 0 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11.5px;
-  line-height: 17px;
-}
+/* 【变更】2026-10-23 (批次十七 2.3): .gatePillHint deleted — the state 明细
+   no longer prints a 确认门 pointer at all (gates fire between states; the
+   canvas pills and option cards carry the details). */
 
 /*
- * 【变更】2026-10-23 (批次十六 2.1): the intake branch block — the decision
- * geometry that picks the bootstrap gate. The entry tag anchors the spine;
- * condition chips lead each row (the scaffold pre-chip runs BEFORE the fork,
- * the three case chips hang off the dashed rail); the caption names the fork.
+ * 【变更】2026-10-23 (批次十七 2.1): the intake branch block, take two — the
+ * 需求输入 ENTRY BOX anchors the spine (prominent: brand-tinted gradient,
+ * solid brand border, 650 weight — never gray), and the three mutually-
+ * exclusive options are ONE horizontal row of OPTION CARDS. Each option card
+ * IS its 确认门 node (click = open the gate in the 门禁明细): the customer's
+ * option text leads, the active-change condition rides quiet beneath it
+ * (条件上节点). The dashed border keeps the gate-pill family language.
  */
-.entryTag {
+.entryBox {
   position: absolute;
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 12%, var(--dsw-alias-bg-elevated, transparent));
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 45%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 16%, var(--dsw-alias-bg-elevated, transparent)),
+    color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 6%, var(--dsw-alias-bg-elevated, transparent))
+  );
+  border: 1.5px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 65%, transparent);
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 18%, transparent);
   color: var(--dsw-alias-label-primary);
-  font-size: 10.5px;
-  font-weight: 600;
-  line-height: 14px;
-  letter-spacing: 0.04em;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 17px;
+  letter-spacing: 0.06em;
 }
 
-.pickCaption {
-  position: absolute;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 600;
-  text-align: center;
-}
-
-/* The dashed case rail the three mutually-exclusive rows hang off. */
-.caseRail {
-  position: absolute;
-  border-left: 1.5px dashed color-mix(in srgb, var(--dsw-alias-label-tertiary, #8b949e) 60%, transparent);
-}
-
-/* One row's condition chip — the state that picks this branch. Case rows
-   carry a dashed stub ::before tying them to the rail; the scaffold pre-chip
-   (solid border, brand tint) reads as the sequential precondition instead. */
-.condChip {
+.optionCard {
   position: absolute;
   z-index: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
   box-sizing: border-box;
-  height: 22px;
-  padding: 0 8px;
-  overflow: hidden;
-  border-radius: 5px;
-  border: 1px dashed color-mix(in srgb, var(--dsw-alias-label-tertiary, #8b949e) 55%, transparent);
-  /* Opaque over the canvas (the spine crosses the scaffold row) — the pill
-     trick: sit ON the line, cover it. */
-  background: var(--dsw-alias-bg-elevated, #fff);
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 55%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 6%, var(--dsw-alias-bg-elevated, #fff));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.optionCard:hover {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 75%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 10%, var(--dsw-alias-bg-elevated, #fff));
+}
+
+.optionCard:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline-offset: 1px;
+}
+
+.optionCardSelected {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 80%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 22%, transparent);
+}
+
+.optionTitle {
+  max-width: 100%;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
+  word-break: break-word;
+}
+
+/* The card's quiet line — the runtime condition that picks this branch
+   (无进行中的变更 / 已有一条 / 多条). */
+.optionCond {
+  max-width: 100%;
   color: var(--dsw-alias-label-secondary);
   font-size: 10px;
   line-height: 14px;
-  white-space: nowrap;
-}
-
-.condChip::before {
-  content: '';
-  position: absolute;
-  left: -14px;
-  width: 12px;
-  border-top: 1.5px dashed color-mix(in srgb, var(--dsw-alias-label-tertiary, #8b949e) 60%, transparent);
-}
-
-.condChipPre {
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 45%, transparent);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 8%, var(--dsw-alias-bg-elevated, #fff));
-  color: var(--dsw-alias-label-primary);
-}
-
-.condChipPre::before {
-  content: none;
+  word-break: break-word;
 }
 
 .pillTitle {
@@ -734,27 +741,42 @@
   padding: 10px 12px 12px;
 }
 
-/* The right-hand 门禁明细 column — the 状态脚本 hooksEditor treatment. */
+/*
+ * The right-hand 门禁明细 column.
+ * 【变更】2026-10-23 (批次十七 2.2/2.4): the flat gray gutter became a proper
+ * elevated CARD (hairline border, radius, quiet shadow, breathing padding) —
+ * and it is STICKY: `position: sticky; top: 8px` keeps the panel pinned at
+ * the right while the tall canvas scrolls past, with a viewport-bounded
+ * max-height + own scroll so a long gate body never runs off-screen.
+ * align-self: flex-start is what lets a flex child stick (stretch would
+ * pin its height to the canvas column instead).
+ */
 .detail {
+  position: sticky;
+  top: 8px;
+  align-self: flex-start;
   flex: 1 1 280px;
+  box-sizing: border-box;
   min-width: 0;
-  padding: 10px 2px 2px 14px;
-  border-left: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.2));
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-elevated, #fff);
+  box-shadow: 0 1px 8px color-mix(in srgb, var(--dsw-alias-label-primary, #1f2329) 6%, transparent);
 }
 
 .detailHead {
   margin-bottom: 8px;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 19px;
   font-weight: 600;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
 }
 
 .detailGroup {
-  padding: 8px 10px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 30%, transparent);
+  padding: 2px 0 6px;
 }
 
 .edgeConditions {

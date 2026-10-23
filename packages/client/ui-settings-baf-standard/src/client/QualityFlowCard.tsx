@@ -10,6 +10,12 @@
  * (关上游 → 下游自动停用；开下游 → 上游自动补开). A leading "00" 前置 node holds
  * the environment-setup docs (the toolchain card above is the real
  * prerequisite).
+ * 【变更】2026-10-23 (批次十七 3): 3.1 the 测试流 title and the 00 card regain
+ * breathing room (`.qflowList` margin); 3.2 the directory value chips lose the
+ * UA button border and BOTH per-stage switches render at the compact 28×16
+ * size; 3.3 the 00 前置 node carries the MASTER switch — one gesture flips
+ * every stage (one Remote round per independent root, the server cascade
+ * stays authoritative).
  */
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -466,11 +472,14 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
             two groups share a single row aligned with the head text — the
             stacked right column (twice the text height) read as a foreign
             block; the pills read as node metadata. The 失败中止 group dims
-            while the stage is off. */}
+            while the stage is off. 【变更】2026-10-23 (批次十七 3.2): both
+            switches render at the compact 28×16 size — the md capsule read
+            oversized against the 11px pill labels. */}
         <span className={css.qflowSwitches}>
           <span className={css.qflowSwitchGroup}>
             <span className={css.qflowSwitchLabel}>{t('qflowSwitchEnabled')}</span>
             <Switch
+              size="sm"
               checked={enabled}
               label={`${t('qflowSwitchEnabled')} ${t(stage.nameKey)}`}
               disabled={saving}
@@ -480,6 +489,7 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
           <span className={join(css.qflowSwitchGroup, enabled ? undefined : css.qflowDim)}>
             <span className={css.qflowSwitchLabel}>{t('qflowSwitchHalt')}</span>
             <Switch
+              size="sm"
               checked={haltOnError}
               label={`${t('qflowSwitchHalt')} ${t(stage.nameKey)}`}
               disabled={saving || !enabled}
@@ -584,12 +594,14 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
  * The 测试流 canvas — the 8-node flow diagram with switches + chips.
  */
 export function QualityFlowCard({
-  state, t, toggleQualityFlowStage, openEnterpriseDoc, openQualityReport, closeQualityReport,
+  state, t, toggleQualityFlowStage, toggleQualityFlowAll, openEnterpriseDoc, openQualityReport, closeQualityReport,
   openQualityAsset, closeQualityAsset, onOpenPath, onRevealPath,
 }: {
   state: StandardsOverviewState
   t: StandardsPanelProps['t']
   toggleQualityFlowStage: StandardsOverviewFace['toggleQualityFlowStage']
+  /** 【变更】2026-10-23 (批次十七 3.3): the 00 前置 node's master switch back. */
+  toggleQualityFlowAll: StandardsOverviewFace['toggleQualityFlowAll']
   openEnterpriseDoc: StandardsOverviewFace['openEnterpriseDoc']
   /** Fetch + open the 测试报告 modal (the report node's chip). */
   openQualityReport: () => void
@@ -646,6 +658,24 @@ export function QualityFlowCard({
               <span className={css.qflowNodeMain}>
                 <span className={css.qflowName}>{t('qflowPrereqLabel')}</span>
                 <span className={css.qflowTool}>{t('qflowPrereqHint')}</span>
+              </span>
+              {/* 【变更】2026-10-23 (批次十七 3.3): the MASTER switch — the 00
+                  node is the flow's head, so the one-gesture whole-flow toggle
+                  lives here: on = every stage enabled, off = the whole flow
+                  parked. Same quiet pill anatomy as the per-stage switches
+                  (compact size), and the same save gate disables it mid-write. */}
+              <span className={css.qflowSwitches}>
+                <span className={css.qflowSwitchGroup}>
+                  <span className={css.qflowSwitchLabel}>{t('qflowSwitchAll')}</span>
+                  <Switch
+                    size="sm"
+                    checked={STAGES.every(stage => stages[stage.id]?.enabled !== false)}
+                    label={`${t('qflowSwitchAll')} · ${t('qflowTitle')}`}
+                    title={t('qflowSwitchAllTitle')}
+                    disabled={state.qualityFlowSaving}
+                    onChange={(next) => { void toggleQualityFlowAll(next) }}
+                  />
+                </span>
               </span>
             </div>
             <div className={css.qflowChipsRow}>

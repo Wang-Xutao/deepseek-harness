@@ -1385,6 +1385,10 @@
   --qf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
   display: flex;
   flex-direction: column;
+  /* 【变更】2026-10-23 (批次十七 3.1): the 测试流 title sat flush on the 00 前置
+     card (zero gap) — one quiet 10px breath, matching the .card → body rhythm
+     the environment card above already speaks. */
+  margin-top: 10px;
 }
 
 .qflowLink {
@@ -1609,6 +1613,11 @@
   align-items: center;
   height: 20px;
   padding: 0 10px;
+  /* 【变更】2026-10-23 (批次十七 3.2): directory value chips render as BUTTONS
+     (the reveal gesture) — reset the UA button chrome so the chip reads as the
+     quiet pill the span variant always was, not a bordered form control. */
+  appearance: none;
+  border: none;
   border-radius: 10px;
   background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
   color: var(--dsw-alias-label-secondary);

@@ -52,19 +52,17 @@
         <div class="bar" aria-hidden="true"><i></i></div>
       </div>
       <!--
-        【变更】2026-10-22 (批次十五 1): the slow-launch band. After 5s on the
-        splash the copy explains the wait and offers 后台启动 — click hides the
-        splash and lets the boot finish in the tray; the main window appears
-        by itself once the backend is ready (splash.js wires the button to
-        the splash:bg-start IPC through preload-splash).
-        【变更】2026-10-23 (批次十六 1.2): the band re-anchors to the BOTTOM-LEFT
-        as ONE row — the hint leads, the button trails it inline (was a
-        centered column), and the copy is the customer's wording.
+        【变更】2026-10-22 (批次十五 1): the slow-launch escape hatch. After 5s
+        on the splash the copy explains the wait and 后台启动 hides the splash
+        so the boot finishes in the tray (the main window shows itself when
+        the backend is ready; splash.js wires the button to the splash:bg-start
+        IPC through preload-splash).
+        【变更】2026-10-23 (批次十七 1): the separate band is GONE — the hint
+        joins the rotating status line (splash.js inserts it into the statuses
+        array so it reads like 正在检查更新…, no layout shift ever), and the
+        button stands ALONE pinned to the panel's bottom-left corner.
       -->
-      <div id="slowBlock" class="slowBlock">
-        <p class="slowHint" role="status">首次启动耗时较久，请耐心等待</p>
-        <button id="bgStart" class="bgStart" type="button">后台启动</button>
-      </div>
+      <button id="bgStart" class="bgStart" type="button">后台启动</button>
       <div class="footer">
         <p class="credit">by sora</p>
       </div>
