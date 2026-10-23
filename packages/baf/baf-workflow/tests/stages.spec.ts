@@ -29,6 +29,9 @@ async function setup(
     readonly withGit?: boolean
     readonly stack?: import('@deepseek-ai/dsh-baf-core').StackAdapter
     readonly guard?: import('@deepseek-ai/dsh-baf-core').GuardPolicy
+    /** 批次十五 6: replace the fixture's placeholder stack.test with a real
+     * command, so the verify test-flow gate is LIVE for this workspace. */
+    readonly realTest?: boolean
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), 'baf-stage-'))
@@ -37,8 +40,14 @@ async function setup(
   // real scaffolded workspace always carries one, so the harness writes the
   // fixture next to the projection instead of holding it in memory only.
   await mkdir(join(root, '.baf'), { recursive: true })
-  await writeFile(join(root, '.baf', 'baseline.yml'), await readFile(FIXTURE_BASELINE, 'utf8'), 'utf8')
-  const baseline = await loadBaselineFile(FIXTURE_BASELINE)
+  const baselinePath = join(root, '.baf', 'baseline.yml')
+  const baselineBody = await readFile(FIXTURE_BASELINE, 'utf8')
+  await writeFile(
+    baselinePath,
+    options.realTest === true ? baselineBody.replace('test: <enterprise-tbd>', 'test: ceedling test') : baselineBody,
+    'utf8',
+  )
+  const baseline = await loadBaselineFile(baselinePath)
   const gitRevision = options.withGit === false ? undefined : (options.gitRevision ?? 'rev-1')
   const pipeline = new StagePipeline({
     store,
@@ -307,10 +316,12 @@ describe('verify Phase 7 wiring', () => {
   async function setupAtVerify(
     stack: import('@deepseek-ai/dsh-baf-core').StackAdapter | undefined,
     guard: import('@deepseek-ai/dsh-baf-core').GuardPolicy | undefined,
+    setupOptions: { readonly realTest?: boolean } = {},
   ) {
     const harness = await setup({
       ...(stack === undefined ? {} : { stack }),
       ...(guard === undefined ? {} : { guard }),
+      ...(setupOptions.realTest === undefined ? {} : { realTest: setupOptions.realTest }),
     })
     await harness.pipeline.driveOpenStage(harness.changeId, 'Add report export API', 'slash')
     await harness.pipeline.driveClarifyStage({
@@ -420,6 +431,66 @@ describe('verify Phase 7 wiring', () => {
       expect(qualityRow?.diagnostics?.[0]).toContain('skipped: quality gates not configured')
       expect(qualityRow?.diagnostics).toContain('build:policy_missing')
       expect(verify.result.report.passed).toBe(true)
+      // 【变更】2026-10-22 (批次十五 6): the placeholder baseline ALSO takes the
+      // test-flow gate off — the fixture's stack.test is <enterprise-tbd>, so
+      // the row annotates skipped instead of gating (no fresh-workspace
+      // deadlock).
+      const flowRow = verify.result.report.checks.find(row => row.name === 'test-flow')
+      expect(flowRow).toMatchObject({ required: false, ok: true })
+      expect(flowRow?.diagnostics?.[0]).toContain('skipped: test flow not configured')
+    } finally {
+      await rm(harness.root, { recursive: true, force: true })
+    }
+  })
+
+  // 【变更】2026-10-22 (批次十五 6, 客户决策「测试流全部完成成功，验证阶段才算
+  // 完成」): with a REAL test command in the baseline, verify requires the
+  // 测试流's durable evidence — missing reports fail T11 with an explicit
+  // rerun instruction; green reports pass. The model never iterates inside
+  // verify: T11 returns it to implement with the failing rows in the work order.
+  it('the test-flow check gates verify once the baseline configures the unit-test flow', async () => {
+    const stack: import('@deepseek-ai/dsh-baf-core').StackAdapter = {
+      detect: async () => ({ available: true, compiler: 'gcc' }),
+      runQuality: async input => ({
+        schema: 1,
+        baselineId: input.baseline.baselineId,
+        workspace: input.workspace.root,
+        toolVersions: { gcc: 'gcc 13' },
+        checks: [{ id: 'build', passed: true }],
+        artifacts: [],
+        passed: true,
+        diagnostics: [],
+      }),
+    }
+    const harness = await setupAtVerify(stack, undefined, { realTest: true })
+    try {
+      // No .baf/reports yet → the test-flow row is required and FAILS.
+      const failed = await harness.pipeline.driveVerifyStage(harness.changeId)
+      if (failed.node !== 'verify') throw new Error('expected a verify drive')
+      expect(failed.result.backToImplement).toBe(true)
+      const flowRow = failed.result.report.checks.find(row => row.name === 'test-flow')
+      expect(flowRow).toMatchObject({ required: true, ok: false })
+      expect(flowRow?.diagnostics?.join('\n')).toContain('ut_coverage.missing')
+      expect(flowRow?.diagnostics?.join('\n')).toContain('static_analysis.missing')
+
+      // Green 测试流 evidence → the same check passes and verify proceeds.
+      await mkdir(join(harness.root, '.baf', 'reports'), { recursive: true })
+      await writeFile(
+        join(harness.root, '.baf', 'reports', 'ut-coverage.json'),
+        JSON.stringify({ passed: true, line: 92, minimum: 80 }),
+        'utf8',
+      )
+      await writeFile(
+        join(harness.root, '.baf', 'reports', 'static-analysis.json'),
+        JSON.stringify({ passed: true, errors: 0 }),
+        'utf8',
+      )
+      const passed = await harness.pipeline.driveVerifyStage(harness.changeId)
+      if (passed.node !== 'verify') throw new Error('expected a verify drive')
+      expect(passed.result.backToImplement).toBe(false)
+      const greenRow = passed.result.report.checks.find(row => row.name === 'test-flow')
+      expect(greenRow).toMatchObject({ required: true, ok: true })
+      expect(greenRow?.diagnostics?.[0]).toContain('test flow complete')
     } finally {
       await rm(harness.root, { recursive: true, force: true })
     }

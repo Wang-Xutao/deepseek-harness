@@ -79,6 +79,7 @@ function ToolStateChip({ tool, t }: { tool: BafQualityToolRow; t: StandardsPanel
  */
 export function QualityEnvironmentCard({
   state, t, onRecheck, onInstall, onAiHelp, openQualityAsset, closeQualityAsset, onOpenPath,
+  onRevealPath,
 }: {
   state: StandardsOverviewState
   t: StandardsPanelProps['t']
@@ -94,6 +95,8 @@ export function QualityEnvironmentCard({
   closeQualityAsset: () => void
   /** The modal's 打开 gesture (absolute path → default app). */
   onOpenPath: (path: string) => void
+  /** 【变更】2026-10-22 (批次十五 2): the modal's 打开文件夹 gesture. */
+  onRevealPath: (path: string) => void
 }) {
   const env = state.qualityEnv
   const loading = state.qualityEnvLoading
@@ -196,7 +199,7 @@ export function QualityEnvironmentCard({
                           <button
                             key={rel}
                             type="button"
-                            className={join(css.envCfgChip, onDisk === false ? css.envCfgChipMissing : undefined)}
+                            className={join(css.envCfgChip, css.pathChip, onDisk === false ? css.envCfgChipMissing : undefined)}
                             data-testid={`baf-quality-env-cfg-${tool.key}-${rel.replace(/[^a-z0-9]+/gi, '-')}`}
                             title={rel}
                             onClick={() => { openCfg(rel) }}
@@ -281,13 +284,14 @@ export function QualityEnvironmentCard({
       ) : null}
 
       {/* 批次十四 3 — the 配置文件 chip's preview modal: the SAME component the
-          测试流 canvas's 资产 chips open (打开 top-right when the file reads). */}
+          测试流 canvas's 资产 chips open. 批次十五 2 — 打开 + 打开文件夹 top-right. */}
       {cfgRel !== undefined ? (
         <AssetModal
           rel={cfgRel}
           asset={state.qualityAsset}
           t={t}
           onOpenFile={onOpenPath}
+          onRevealFile={onRevealPath}
           onClose={closeCfg}
         />
       ) : null}

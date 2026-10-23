@@ -10,7 +10,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
 import { changeDir } from '@deepseek-ai/dsh-baf-openspec'
-import { collectStatusBlockers } from '@deepseek-ai/dsh-baf-quality'
+import { collectStatusBlockers, testFlowCompletion, testFlowGated } from '@deepseek-ai/dsh-baf-quality'
 import type { StageContext } from './context.ts'
 import { CheckRunner, type CheckReportRow, type VerifyReport } from './check-runner.ts'
 import { verifyGate } from './gates.ts'
@@ -133,6 +133,41 @@ export function buildVerifyRunner(
             ])
           : real.map(check => `${entry(check).id ?? 'check'}:${entry(check).reasonCode ?? 'failed'}`),
       }
+    },
+  })
+
+  // 【变更】2026-10-22 (批次十五 6, 客户决策「测试流全部完成成功，验证阶段才算
+  // 完成」): the test-flow gate. Guarded by the same qualityWired predicate as
+  // the quality check PLUS testFlowGated — a baseline whose stack.test is the
+  // <enterprise-tbd> placeholder never configured a unit-test flow, so verify
+  // asks for no evidence (the 2026-09-22 placeholder-deadlock semantics; a
+  // fresh scaffold must not fail verify with no in-band fix). When gated,
+  // verify requires the 测试流's durable evidence to be all green: every
+  // ENABLED step's report (ut-coverage.json for the coverage chain,
+  // static-analysis.json for lint/analyze; step switches at
+  // .baf/quality/test-flow.json decide what "enabled" means, format keeps no
+  // artifact). A missing report counts as not-run, so a failure here returns
+  // backToImplement (T11) with an explicit rerun instruction — the model fixes
+  // in implement, reruns the 测试流, then verify again; it never iterates
+  // inside verify.
+  const testFlowRequired = qualityWired && ctx.baseline !== undefined && testFlowGated(ctx.baseline)
+  runner.register({
+    name: 'test-flow',
+    required: testFlowRequired,
+    run: async (signal) => {
+      if (ctx.stack === undefined || ctx.baseline === undefined) {
+        return { ok: false, diagnostics: ['tool_unavailable: quality environment not wired'] }
+      }
+      if (!testFlowRequired) {
+        return { ok: true, diagnostics: ['skipped: test flow not configured (baseline stack.test is a placeholder)'] }
+      }
+      if (signal.aborted) {
+        return { ok: false, diagnostics: ['cancelled'] }
+      }
+      const completion = testFlowCompletion(ctx.workspace.root)
+      return completion.ok
+        ? { ok: true, diagnostics: ['test flow complete: coverage + static-analysis reports green'] }
+        : { ok: false, diagnostics: [...completion.problems] }
     },
   })
 

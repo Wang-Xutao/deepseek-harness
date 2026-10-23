@@ -191,7 +191,7 @@ function HookEntryRow({ entry, cwd, editingValue, onEditChange, onCommitEdit, on
  * add / edit / delete. Keyed by node in the parent, so switching the canvas
  * selection resets the in-flight input and message.
  */
-function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, cwd, statWorkspacePath, openPath, t }: {
+function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, cwd, statWorkspacePath, onPreviewFile, t }: {
   node: (typeof NODES)[number]
   lists: BafStandardNodeHookLists
   editing: EditTarget | null
@@ -199,8 +199,9 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
   draft: BafStandardNodeHooks
   updateDraft: (hooks: BafStandardNodeHooks) => void
   cwd: string
+  /** 【变更】2026-10-22 (批次十五 2): entries preview (rel) — no direct open. */
+  onPreviewFile: (rel: string) => void
   statWorkspacePath: StandardsOverviewFace['statWorkspacePath']
-  openPath: StandardsOverviewFace['openPath']
   t: StandardsPanelProps['t']
 }) {
   // 【变更】2026-10-20 (批次五 1.3): SEPARATE add inputs per kind — a picked
@@ -336,7 +337,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                     onCommitEdit={commitEdit}
                     onCancelEdit={() => { setEditing(null) }}
                     onBeginEdit={() => { setEditing({ node, kind, index, value: entry }) }}
-                    onOpen={() => { void openPath(joinEntry(cwd, entry)) }}
+                    onOpen={() => { onPreviewFile(entry) }}
                     onRemove={() => {
                       setEditing(null)
                       const nextList = entries.filter((_, index2) => index2 !== index)
@@ -421,12 +422,16 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
   )
 }
 
-/** The 状态脚本 card itself — rendered inside the 项目工程 ready branch. */
-export function NodeHooksCard({ state, summary, t, openPath, statWorkspacePath, updateHooksDraft, saveNodeHooks }: {
+/** The 状态脚本 card itself — rendered inside the 项目工程 ready branch.
+ * 【变更】2026-10-22 (批次十五 2): entry clicks PREVIEW the script file (the
+ * tab's hoisted AssetModal with 打开 + 打开文件夹) instead of launching the
+ * default app directly. */
+export function NodeHooksCard({ state, summary, t, onPreviewFile, statWorkspacePath, updateHooksDraft, saveNodeHooks }: {
   state: StandardsOverviewState
   summary: BafStandardSummaryResult
   t: StandardsPanelProps['t']
-  openPath: StandardsOverviewFace['openPath']
+  /** Open the workspace-relative script in the tab's preview modal. */
+  onPreviewFile: (rel: string) => void
   statWorkspacePath: StandardsOverviewFace['statWorkspacePath']
   updateHooksDraft: StandardsOverviewFace['updateHooksDraft']
   saveNodeHooks: StandardsOverviewFace['saveNodeHooks']
@@ -596,7 +601,7 @@ export function NodeHooksCard({ state, summary, t, openPath, statWorkspacePath, 
               updateDraft={updateHooksDraft}
               cwd={cwd}
               statWorkspacePath={statWorkspacePath}
-              openPath={openPath}
+              onPreviewFile={onPreviewFile}
               t={t}
             />
           </div>

@@ -386,22 +386,20 @@ function openSplash(): void {
     title: APP_NAME,
     icon: iconPath(),
     webPreferences: {
+      preload: libFile('preload-splash.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      // 【变更】2026-10-23 (批次十五 1): sandbox:false — the package emits ESM
+      // preloads (type:module), and a sandboxed preload only ever loads as
+      // CommonJS, so the bridge died silently and 后台启动 never reached the
+      // main process. Same trusted-local-content posture as the dialog window.
+      sandbox: false,
     },
   })
   const splashVersion = app.getVersion()
     || readJsonVersion(join(desktopRoot(), 'package.json'))
     || seedVersions().bafDsh
-  // 【变更】2026-10-22 (批次十四 1): first launch — no Node binary has been
-  // discovered/cached yet (the cache is only written inside startDshProcess,
-  // which runs AFTER the splash), so this walk is the slow one: surface the
-  // 首次启动 hint so the long wait is explained, not silent.
-  const firstLaunch = prefs.nodeBinary === undefined
-  void splashWindow.loadFile(uiPath('splash.html'), {
-    query: firstLaunch ? { version: splashVersion, first: '1' } : { version: splashVersion },
-  })
+  void splashWindow.loadFile(uiPath('splash.html'), { query: { version: splashVersion } })
 }
 
 const CLOSE_SCRIM_ID = 'baf-close-scrim'
@@ -534,6 +532,9 @@ async function createWindow(url: string): Promise<void> {
     markLaunch('main-shown')
     window.show()
   }
+  // 【变更】2026-10-22 (批次十五 1): a 后台启动 launch just became ready —
+  // the tray tooltip drops its starting note.
+  tray?.setToolTip(APP_NAME)
   markLaunch('main-load-url')
   await window.loadURL(url)
 }
@@ -784,6 +785,21 @@ async function promptUpdateAfterReady(
     app.quit()
   }
 }
+
+/**
+ * 【变更】2026-10-22 (批次十五 1): the splash's 后台启动 — hide the splash and
+ * let the boot finish headlessly; the tray appears so the wait stays visible
+ * (tooltip says it is still starting), and createWindow shows the main window
+ * the moment the backend is ready. Idempotent: a second click lands on a
+ * hidden/destroyed window and no-ops.
+ */
+ipcMain.on('splash:bg-start', () => {
+  if (splashWindow === undefined || splashWindow.isDestroyed()) return
+  markLaunch('splash-bg-start')
+  splashWindow.hide()
+  ensureTray()
+  tray?.setToolTip('BAF DSH — 正在后台启动…')
+})
 
 ipcMain.handle('prefs:get', () => prefs)
 

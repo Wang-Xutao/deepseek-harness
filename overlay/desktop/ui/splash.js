@@ -9,16 +9,21 @@
     const el = document.getElementById('version')
     if (el) el.textContent = `v${version}`
   }
-  // 【变更】2026-10-22 (批次十四 1): first launch (main passed first=1 — no
-  // Node binary cached yet) — reveal the top-right 首次启动 hint after a 3s
-  // grace so a launch that finishes quickly never flashes it.
-  if (params.get('first') === '1') {
-    window.setTimeout(() => {
-      const hint = document.getElementById('firstHint')
-      if (hint) hint.hidden = false
-    }, 3000)
-  }
 })()
+
+// 【变更】2026-10-22 (批次十五 1): after 5s still on the splash, reveal the
+// slow-launch band — the copy explains the wait and 后台启动 hides the splash
+// so the boot finishes in the tray (the main window shows itself when the
+// backend is ready). The band is overflow-collapsed until .on, so the button
+// is unreachable before the reveal.
+window.setTimeout(() => {
+  const block = document.getElementById('slowBlock')
+  if (block) block.classList.add('on')
+}, 5000)
+
+document.getElementById('bgStart')?.addEventListener('click', () => {
+  window.bafSplash?.backgroundStart()
+})
 
 const statuses = [
   '正在启动服务…',

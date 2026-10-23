@@ -25,7 +25,7 @@ import { NodeHooksCard } from './NodeHooksCard.tsx'
 import { EnterpriseDocsCard } from './EnterpriseDocsCard.tsx'
 import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
 import { QualityEnvironmentCard } from './QualityEnvironmentCard.tsx'
-import { QualityFlowCard } from './QualityFlowCard.tsx'
+import { AssetModal, QualityFlowCard } from './QualityFlowCard.tsx'
 import { CommandsCard } from './CommandsCard.tsx'
 import { type BafStandardKey } from './locales.ts'
 import css from './StandardsOverview.module.css'
@@ -116,16 +116,27 @@ function StatusSurface({ state, summary, t, suppressNoBaseline }: {
  * 【变更】2026-10-20 (批次三 4.1): the project path + config file rows adopt
  * the 通用 tab's 轨迹图/工作流图 row anatomy EXACTLY — one full-width
  * label-left / control-right line with 16px 0 padding and the bottom hairline.
- * The control side is the read-only mono value itself (folder reveal /
- * default-app open, hover title keeps the absolute path; the config row shows
- * only the file NAME).
+ * The control side is the read-only mono value itself (hover title keeps the
+ * absolute path; the config row shows only the file NAME).
+ * 【变更】2026-10-22 (批次十五 2): the file-vs-dir click contract — 项目路径
+ * (a directory) reveals the folder; 配置文件 (a FILE) opens the PREVIEW MODAL
+ * (打开 + 打开文件夹 top-right), no longer the OS default app directly.
  */
-function ProjectPathRows({ summary, t, onReveal, onOpen }: {
+function ProjectPathRows({ summary, t, onReveal, onPreviewFile, onOpen }: {
   summary: StandardsOverviewState['summary']
   t: StandardsPanelProps['t']
   onReveal: (path: string) => void
+  /** Open the file-preview modal for a workspace-relative file (批次十五 2). */
+  onPreviewFile: (rel: string) => void
+  /** Fallback for an underivable rel path (outside root) — direct open. */
   onOpen: (path: string) => void
 }) {
+  // The baseline's workspace-relative form for the preview modal; toRelativeEntry
+  // answers undefined for a path outside the root (then the row falls back to
+  // the OS default-app open on the absolute path).
+  const baselineRel = summary?.cwd !== undefined && summary?.baselinePath !== undefined
+    ? toRelativeEntry(summary.cwd, summary.baselinePath)
+    : undefined
   return (<>
     {summary?.cwd !== undefined ? (
       <ConfigPathRow
@@ -142,7 +153,10 @@ function ProjectPathRows({ summary, t, onReveal, onOpen }: {
         label={t('configFileLabel')}
         text={summary.baselinePath.replace(/^.*[\\/]/, '')}
         title={summary.baselinePath}
-        onClick={() => { onOpen(summary.baselinePath ?? '') }}
+        onClick={() => {
+          if (baselineRel !== undefined) onPreviewFile(baselineRel)
+          else onOpen(summary.baselinePath ?? '')
+        }}
       />
     ) : null}
   </>)
@@ -420,14 +434,27 @@ function usePanelState(props: StandardsPanelProps) {
   return { state, summary: state.summary }
 }
 
-/** 项目工程 tab — the three config items, one full-width row each. */
+/** 项目工程 tab — the three config items, one full-width row each.
+ * 【变更】2026-10-22 (批次十五 2): ONE hoisted file-preview modal serves the
+ * 配置文件 row AND the 状态脚本 entries — every FILE display previews (打开 +
+ * 打开文件夹 top-right); 目录 displays reveal the folder directly. */
 export function StandardsProjectOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
   const { t } = props
   const {
     openPath, revealPath, updateProtectedDraft, saveProtectedPaths, pickDirectory,
-    generateBaseline, statWorkspacePath,
+    generateBaseline, statWorkspacePath, openQualityAsset, closeQualityAsset,
   } = props
+  // The open preview's workspace-relative path (undefined = closed).
+  const [previewRel, setPreviewRel] = useState<string | undefined>(undefined)
+  const openPreview = (rel: string): void => {
+    setPreviewRel(rel)
+    void openQualityAsset(rel)
+  }
+  const closePreview = (): void => {
+    setPreviewRel(undefined)
+    closeQualityAsset()
+  }
 
   return (
     <section className={css.block} data-testid="baf-standard-project">
@@ -447,6 +474,7 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
               summary={summary}
               t={t}
               onReveal={(path) => { void revealPath(path) }}
+              onPreviewFile={openPreview}
               onOpen={(path) => { void openPath(path) }}
             />
           </div>
@@ -491,12 +519,24 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
             state={state}
             summary={summary}
             t={t}
-            openPath={openPath}
+            onPreviewFile={openPreview}
             statWorkspacePath={statWorkspacePath}
             updateHooksDraft={props.updateHooksDraft}
             saveNodeHooks={props.saveNodeHooks}
           />
         </div>
+      ) : null}
+      {/* 批次十五 2 — the tab's ONE file-preview modal (配置文件 row + hook
+          entries both route here). */}
+      {previewRel !== undefined ? (
+        <AssetModal
+          rel={previewRel}
+          asset={state.qualityAsset}
+          t={t}
+          onOpenFile={(path) => { void openPath(path) }}
+          onRevealFile={(path) => { void revealPath(path) }}
+          onClose={closePreview}
+        />
       ) : null}
     </section>
   )
@@ -517,7 +557,7 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
 export function StandardsQualityOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
   const {
-    openEnterpriseDoc, closeEnterpriseDoc, openPath, t,
+    openEnterpriseDoc, closeEnterpriseDoc, openPath, revealPath, t,
     probeQualityEnvironment, installQualityToolchain, aiHelpQualityInstall,
     loadQualityConfiguration, openQualityReport, closeQualityReport,
     loadQualityAssets, openQualityAsset, closeQualityAsset,
@@ -553,10 +593,12 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
           onRecheck={() => { void probeQualityEnvironment() }}
           onInstall={() => { void installQualityToolchain() }}
           onAiHelp={aiHelpQualityInstall}
-          /* 【变更】2026-10-22 (批次十四 3): the 配置文件 column's preview modal. */
+          /* 【变更】2026-10-22 (批次十四 3): the 配置文件 column's preview modal.
+           * 【变更】2026-10-22 (批次十五 2): + the modal's 打开文件夹 gesture. */
           openQualityAsset={(rel) => { void openQualityAsset(rel) }}
           closeQualityAsset={closeQualityAsset}
           onOpenPath={(path) => { void openPath(path) }}
+          onRevealPath={(path) => { void revealPath(path) }}
         />
         <QualityFlowCard
           state={state}
@@ -568,13 +610,13 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
           openQualityAsset={(rel) => { void openQualityAsset(rel) }}
           closeQualityAsset={closeQualityAsset}
           onOpenPath={(path) => { void openPath(path) }}
+          onRevealPath={(path) => { void revealPath(path) }}
         />
       </div>
       {viewer !== undefined ? (
         <EnterpriseDocViewer
           viewer={viewer}
           t={t}
-          onOpenFile={(path) => { void openPath(path) }}
           onClose={() => { closeEnterpriseDoc() }}
         />
       ) : null}
@@ -603,7 +645,7 @@ export function StandardsCommandsOverview(props: StandardsPanelProps) {
 /** 企业规范 tab — REAL bafplugin standards on a workflow flow chart. */
 export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
-  const { openEnterpriseDoc, closeEnterpriseDoc, openPath, t } = props
+  const { openEnterpriseDoc, closeEnterpriseDoc, t } = props
 
   return (
     <section className={css.block} data-testid="baf-standard-overview">
@@ -626,7 +668,6 @@ export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
         t={t}
         openEnterpriseDoc={openEnterpriseDoc}
         closeEnterpriseDoc={closeEnterpriseDoc}
-        openPath={openPath}
       />
     </section>
   )

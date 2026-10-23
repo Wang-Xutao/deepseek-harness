@@ -31,7 +31,10 @@
  * enterprise standards flow chart taking the tab. */
 
 .blockQuality {
-  padding: 8px 0 16px;
+  /* 【变更】2026-10-22 (批次十五 5): top padding matches .block's 16px so the
+   * 测试流 tab's first card sits exactly as far from the tab strip as every
+   * other tab's first element. */
+  padding: 16px 0 16px;
 }
 
 .qualityGrid {
@@ -1335,6 +1338,22 @@
   border-color: var(--dsw-alias-state-primary-primary, #4a67d8);
 }
 
+/* 【变更】2026-10-22 (批次十五 2): the shared path-chip affordance — a chip
+ * whose text IS a workspace path/file name (测试流 资产/报告 chips, 环境
+ * 配置文件 chips, directory value chips) underlines on hover/focus, the same
+ * plain underline .configValue / .hooksEntryButton speak. 规范 doc chips are
+ * titles, not paths — they keep the border-only hover. */
+.pathChip {
+  cursor: pointer;
+  text-decoration: underline transparent;
+  text-underline-offset: 3px;
+}
+
+.pathChip:hover,
+.pathChip:focus-visible {
+  text-decoration-color: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+}
+
 .qflowArtifact {
   font-family: var(--dsw-alias-font-mono, monospace);
   color: var(--dsw-alias-label-secondary);
@@ -1352,23 +1371,10 @@
 /* 【变更】2026-10-22 (批次十三 4): the 测试流 canvas — the 8 numbered flow nodes
  * (the session 测试流图's anatomy, this page's column width): head row with
  * idx bubble + name/en/tool/command, the 启用/失败中止 switch pair, then the
- * 配置/资产/规范 chip rows at the step's flow position. */
-.qflowPrereq {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 10px 0 12px;
-  padding: 8px 10px;
-  border: 0.5px dashed var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  flex-wrap: wrap;
-}
-
-.qflowPrereqHint {
-  font-size: 11px;
-  line-height: 17px;
-  color: var(--dsw-alias-label-tertiary);
-}
+ * 配置/资产/规范 chip rows at the step's flow position.
+ * 【变更】2026-10-22 (批次十五 3): the old dashed 前置 band retires — 前置 is
+ * now the "00" qflowNode on the rail (identical anatomy, first position), so
+ * the .qflowPrereq rules are gone. */
 
 /* 【变更】2026-10-22 (批次十四 4): the canvas reads as ONE vertical flow — the
  * nodes sit on a brand-gradient rail (FlowLink connectors between cards), the
@@ -1547,18 +1553,23 @@
   word-break: break-all;
 }
 
+/* 【变更】2026-10-22 (批次十五 3): the two switches share ONE quiet row — each
+ * label+switch sits inside a low-fill pill (node metadata, not a stacked
+ * control column). The 失败中止 pill carries .qflowDim while its stage is off. */
 .qflowSwitches {
   flex: none;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
-  align-items: flex-end;
 }
 
-.qflowSwitchRow {
-  display: flex;
+.qflowSwitchGroup {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
+  padding: 2px 8px 2px 11px;
+  border-radius: 999px;
+  background: var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08));
 }
 
 .qflowSwitchLabel {

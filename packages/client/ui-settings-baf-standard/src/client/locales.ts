@@ -56,9 +56,10 @@ const zh = {
   // 【变更】2026-10-22 (批次十一 3): the legend keys retire (图例删除) and the
   // tab splits into two cards — 状态指令 + 全局指令 — each with its own
   // title/intro; every command row carries three captioned lines.
+  // 【变更】2026-10-22 (批次十五 4): cmdStateTitle/cmdStateIntro retire — the
+  // 状态指令 card starts directly at its flow canvas (the 全局指令 card keeps
+  // its own title/intro).
   cmdFlowAria: 'BAF 指令集状态流程图',
-  cmdStateTitle: '状态指令 · 按阶段查看',
-  cmdStateIntro: '工作流的每个阶段绑定了各自的专属指令。点击左侧状态节点，右侧列出该阶段可用的指令——作用、实现的功能、运行的结果，一目了然。',
   cmdAccentUnit: '条指令',
   cmdNodeNone: '该状态没有专属指令（全局指令仍然可用）',
   cmdPick: '点击状态节点查看该状态支持的指令。',
@@ -70,6 +71,9 @@ const zh = {
   // 【变更】2026-10-22 (批次十二 3 → 批次十三 4): the 资产 card dissolved into
   // the 测试流 canvas — these are the 资产 modal's own keys (chips + preview).
   qolAssetOpen: '打开',
+  // 【变更】2026-10-22 (批次十五 2): every file-preview modal's top-right pair —
+  // 打开 (default app) + 打开文件夹 (reveal in file manager).
+  qolAssetReveal: '打开文件夹',
   qolAssetMissing: '未安装',
   qolAssetLoading: '正在读取…',
   qolAssetReadFailed: '读取失败：',
@@ -80,7 +84,8 @@ const zh = {
   qolEnvAiHelp: 'AI 协助安装',
   qolEnvAiHelpTitle: '打开一个 baf 会话并预填求助指令（含缺失清单与安装报告），确认后按回车发送。',
   qflowTitle: '测试流',
-  qflowIntro: '八步按依赖串成一条链：gcc 编译 → ceedling 单元测试 → gcov 插桩 → gcovr 报告 → 覆盖率门禁是覆盖率主链，风格/静态检查与最终排版独立。每步可启用/停用、可设失败是否中止整链；关闭上游会自动停用依赖它的下游，启用下游会自动补开上游。开关持久化在 .baf/quality/test-flow.json，会话测试流图同步生效。',
+  // 【变更】2026-10-22 (批次十五 3): qflowIntro 删除（客户指定）——画布本身已是
+  // 说明，卡片标题下不再赘述八步链。
   qflowPrereqLabel: '前置',
   qflowPrereqHint: '先在上方环境卡装好工具链。',
   qflowSwitchEnabled: '启用',
@@ -294,7 +299,6 @@ const en = {
   qolEnvAiHelp: 'AI-assisted install',
   qolEnvAiHelpTitle: 'Open a baf session with a prefilled help request (missing tools + install report); press Enter to send.',
   qflowTitle: 'Test flow',
-  qflowIntro: 'Eight steps chained by dependency: gcc build → ceedling unit tests → gcov instrumentation → gcovr report → coverage gate is the coverage chain; style lint, static analysis, and the final layout are independent. Each step can be toggled and can halt the chain on failure; disabling an upstream step auto-disables its dependents, enabling a downstream step auto-enables its prerequisites. Switches persist to .baf/quality/test-flow.json and the session test-flow chart honors them too.',
   qflowPrereqLabel: 'Prerequisite',
   qflowPrereqHint: 'Install the toolchain in the environment card above first.',
   qflowSwitchEnabled: 'Enabled',
@@ -336,9 +340,9 @@ const en = {
   // (指令集 tab) the per-state command flow chart's copy.
   // (批次十一 3) legend keys retire; two cards with their own title/intro;
   // every row carries three captioned lines.
+  // (批次十五 4) cmdStateTitle/cmdStateIntro retire — the state card opens at
+  // its flow canvas directly.
   cmdFlowAria: 'BAF commands flow chart',
-  cmdStateTitle: 'State commands · by stage',
-  cmdStateIntro: 'Each workflow stage binds its own commands. Click a state node on the left; the column on the right lists that stage\'s commands — purpose, mechanism, and the result you will see.',
   cmdAccentUnit: 'commands',
   cmdNodeNone: 'No state-bound commands here (global ones still apply)',
   cmdPick: 'Click a state node to list its commands.',
@@ -350,6 +354,8 @@ const en = {
   // (批次十二 3 → 批次十三 4) the 资产 card dissolved into the 测试流 canvas —
   // these are the 资产 modal's own keys (chips + preview).
   qolAssetOpen: 'Open',
+  // (批次十五 2) every file-preview modal's top-right pair.
+  qolAssetReveal: 'Reveal in folder',
   qolAssetMissing: 'not installed',
   qolAssetLoading: 'Reading…',
   qolAssetReadFailed: 'Read failed: ',

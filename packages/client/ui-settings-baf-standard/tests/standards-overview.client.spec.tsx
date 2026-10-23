@@ -285,12 +285,18 @@ describe('StandardsProjectOverview · ready branch layout (批次三 4.2)', () =
 
   // 【变更】2026-10-19 (六问题批 4.1): the path rows are READONLY config items
   // in the 轨迹图 row style — the VALUE itself is the only button (no copy /
-  // open mini-buttons). Project path click reveals the folder; config-file
-  // click opens the file with its default application.
-  it('shows the readonly project path (reveal) and config file name (default app) — value is the button', () => {
+  // open mini-buttons). 【变更】2026-10-22 (批次十五 2): the file-vs-dir click
+  // contract — project path (dir) reveals; config file (FILE) opens the
+  // PREVIEW MODAL (its 打开 button fires the default-app open).
+  it('shows the readonly project path (reveal) and config file name (preview modal) — value is the button', () => {
     const revealPath = vi.fn()
     const openPath = vi.fn()
-    const { props } = harness(readyState(), { revealPath, openPath })
+    const openQualityAsset = vi.fn()
+    // The preset ready payload lets the modal render its 打开/打开文件夹 pair
+    // (openQualityAsset is a stub — it never writes the store).
+    const { props } = harness(readyState({
+      qualityAsset: { status: 'ready', path: '/ws/.baf/baseline.yml', content: 'guard: {}' },
+    }), { revealPath, openPath, openQualityAsset })
     render(<StandardsProjectOverview {...props} />)
     const projectRow = screen.getByTestId('baf-standard-project-path')
     expect(projectRow.textContent).toContain('/ws')
@@ -307,8 +313,17 @@ describe('StandardsProjectOverview · ready branch layout (批次三 4.2)', () =
     expect(fileRow.querySelectorAll('button')).toHaveLength(1)
     const fileButton = fileRow.querySelector('button')
     expect(fileButton?.getAttribute('title')).toBe('/ws/.baf/baseline.yml')
+    // 批次十五 2 — the click PREVIEWS (rel form), the default-app open moved
+    // into the modal's 打开 button.
     fireEvent.click(fileButton as HTMLElement)
+    expect(openQualityAsset).toHaveBeenCalledWith('.baf/baseline.yml')
+    expect(openPath).not.toHaveBeenCalled()
+    expect(screen.getByTestId('baf-quality-asset-modal')).toBeDefined()
+    // The modal's pair answers both gestures on the absolute path.
+    fireEvent.click(screen.getByTestId('baf-quality-asset-open-file'))
     expect(openPath).toHaveBeenCalledWith('/ws/.baf/baseline.yml')
+    fireEvent.click(screen.getByTestId('baf-quality-asset-reveal-file'))
+    expect(revealPath).toHaveBeenCalledWith('/ws/.baf/baseline.yml')
   })
 
   it('omits the path readouts when the summary carries no paths', () => {
@@ -391,15 +406,15 @@ describe('StandardsEnterpriseOverview · real-standards flow chart (批次六 5)
     expect(screen.getByTestId('baf-enterprise-doc-viewer').textContent).toContain('enterpriseDocLoading')
     cleanup()
 
-    // Ready → the document body + the open row highlighted + 打开文件 gesture.
-    const openPath = vi.fn()
+    // Ready → the document body + the open row highlighted. 【变更】2026-10-22
+    // (批次十五 2): the viewer is PREVIEW-ONLY — no 打开文件 button exists.
     const ready = harness(readyState({
       enterpriseDocId: 'code',
       enterpriseDoc: {
         status: 'ready', id: 'code', titleZh: 'SORA C 语言编码规范', titleEn: 'C coding standards',
         path: 'D:/assets/skills/sora-c-code-standards/SKILL.md', content: '# SORA C 语言编码规范\n\n- 规则行。',
       },
-    }), { openPath })
+    }))
     render(<StandardsEnterpriseOverview {...ready.props} />)
     expect(screen.getByTestId('baf-enterprise-doc-body').textContent).toContain('规则行')
     // 【变更】2026-10-22 (批次十一 4): the body RENDERS markdown — a heading
@@ -410,8 +425,8 @@ describe('StandardsEnterpriseOverview · real-standards flow chart (批次六 5)
     // code applies at design — select that node so its row is listed.
     fireEvent.click(screen.getByTestId('baf-enterprise-node-design'))
     expect(screen.getByTestId('baf-enterprise-doc-code').getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByTestId('baf-enterprise-doc-open-file'))
-    expect(openPath).toHaveBeenCalledWith('D:/assets/skills/sora-c-code-standards/SKILL.md')
+    // 批次十五 2 — read-only 企业规范: NO open/reveal gesture anywhere.
+    expect(screen.queryByTestId('baf-enterprise-doc-open-file')).toBeNull()
     cleanup()
 
     // Unknown id and unreadable doc → their own error lines.
@@ -720,7 +735,12 @@ describe('StandardsQualityOverview · 测试流画布重构 (2026-10-22 批次�
     expect(screen.queryByTestId('baf-quality-docs-card')).toBeNull()
     const card = screen.getByTestId('baf-quality-flow-card')
     expect(card.textContent).toContain('qflowTitle')
-    expect(card.textContent).toContain('qflowIntro')
+    // 【变更】2026-10-22 (批次十五 3): the 八步链条 intro description retires —
+    // the canvas starts at the 00 前置 node directly.
+    expect(card.textContent).not.toContain('qflowIntro')
+    // The 前置 "00" node sits FIRST on the rail (批次十五 3) — the node testids
+    // only enumerate the 8 numbered stages, the prereq has its own id.
+    expect(card.textContent).toContain('qflowPrereqLabel')
     const nodes = [...document.querySelectorAll('[data-testid^="baf-quality-flow-node-"]')]
     expect(nodes.map(node => node.getAttribute('data-testid'))).toEqual(
       STAGE_IDS.map(id => `baf-quality-flow-node-${id}`),
@@ -763,15 +783,19 @@ describe('StandardsQualityOverview · 测试流画布重构 (2026-10-22 批次�
     cleanup()
 
     const openPath = vi.fn()
+    const revealPath = vi.fn()
     const closeQualityAsset = vi.fn()
     const ready = harness(qualityReadyState({
       qualityAsset: { status: 'ready', path: '/ws/project.yml', content: ':project: demo' },
-    }), { openPath, closeQualityAsset })
+    }), { openPath, revealPath, closeQualityAsset })
     render(<StandardsQualityOverview {...ready.props} />)
     fireEvent.click(screen.getByTestId('baf-quality-flow-build-asset-project-yml'))
     expect(screen.getByTestId('baf-quality-asset-content').textContent).toContain(':project: demo')
+    // 批次十五 2 — the top-right pair: 打开 + 打开文件夹.
     fireEvent.click(screen.getByTestId('baf-quality-asset-open-file'))
     expect(openPath).toHaveBeenCalledWith('/ws/project.yml')
+    fireEvent.click(screen.getByTestId('baf-quality-asset-reveal-file'))
+    expect(revealPath).toHaveBeenCalledWith('/ws/project.yml')
     fireEvent.click(screen.getByTestId('baf-quality-asset-scrim'))
     expect(closeQualityAsset).toHaveBeenCalledTimes(1)
   })
@@ -791,6 +815,7 @@ describe('StandardsQualityOverview · 测试流画布重构 (2026-10-22 批次�
     // modal is LOCAL open state — the chip click opens it with the answer
     // already in the store.
     const openPath = vi.fn()
+    const revealPath = vi.fn()
     const closeQualityReport = vi.fn()
     const ready = harness(qualityReadyState({
       qualityReport: {
@@ -798,14 +823,17 @@ describe('StandardsQualityOverview · 测试流画布重构 (2026-10-22 批次�
         path: '/ws/build/coverage/coverage_report.html',
         content: '<html><body><h1>Line Coverage</h1>84%</body></html>',
       },
-    }), { openPath, closeQualityReport })
+    }), { openPath, revealPath, closeQualityReport })
     render(<StandardsQualityOverview {...ready.props} />)
     fireEvent.click(screen.getByTestId('baf-quality-flow-report'))
     const frame = screen.getByTestId('baf-quality-report-frame') as HTMLIFrameElement
     expect(frame.getAttribute('srcDoc')).toContain('Line Coverage')
     expect(frame.getAttribute('sandbox')).toBe('')
+    // 批次十五 2 — the top-right pair: 打开 + 打开文件夹.
     fireEvent.click(screen.getByTestId('baf-quality-report-open-file'))
     expect(openPath).toHaveBeenCalledWith('/ws/build/coverage/coverage_report.html')
+    fireEvent.click(screen.getByTestId('baf-quality-report-reveal-file'))
+    expect(revealPath).toHaveBeenCalledWith('/ws/build/coverage/coverage_report.html')
     fireEvent.click(screen.getByTestId('baf-quality-report-scrim'))
     expect(closeQualityReport).toHaveBeenCalledTimes(1)
     cleanup()
@@ -1097,8 +1125,10 @@ describe('StandardsCommandsOverview · 指令集 flow chart (2026-10-21 指令�
     const { props } = harness(readyState())
     render(<StandardsCommandsOverview {...props} />)
     const stateCard = screen.getByTestId('baf-commands-card')
-    expect(stateCard.textContent).toContain('cmdStateTitle')
-    expect(stateCard.textContent).toContain('cmdStateIntro')
+    // 【变更】2026-10-22 (批次十五 4): the 状态指令 title + intro retire — the
+    // card starts directly at the flow canvas (the keys are gone from locales).
+    expect(stateCard.textContent).not.toContain('cmdStateTitle')
+    expect(stateCard.textContent).not.toContain('cmdStateIntro')
     // A state row answers all three captions.
     const open = screen.getByTestId('baf-command-baf_workflow_open')
     expect(open.textContent).toContain('cmdUseLabel')
@@ -1691,21 +1721,24 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     }
   })
 
-  it('opens an existing entry with the default app and cancels a dirty draft (批次三 4.4)', async () => {
-    const openPath = vi.fn()
+  it('previews an existing entry (批次十五 2) and cancels a dirty draft (批次三 4.4)', async () => {
+    const openQualityAsset = vi.fn()
     const summary = readySummary({ nodeHooks: { implement: { exit: ['scripts/build.sh'] } } })
     const { props, store } = harness(
       readyState({ summary, hooksDraft: { implement: { exit: ['scripts/build.sh'] } } }),
-      { openPath },
+      { openQualityAsset },
     )
     render(<StandardsProjectOverview {...props} />)
     // The populated draft selects 实现 into the editor; the entry itself is
-    // the click target with the absolute path as its hover title.
+    // the click target with the absolute path as its hover title. 【变更】
+    // 2026-10-22 (批次十五 2): the click PREVIEWS the script (rel form) in the
+    // tab's hoisted modal — no direct default-app open.
     const entry = [...screen.getByTestId('baf-standard-hooks-editor').querySelectorAll('button')]
       .find(button => button.textContent === 'scripts/build.sh') as HTMLElement
     expect(entry.getAttribute('title')).toBe('/ws/scripts/build.sh')
     fireEvent.click(entry)
-    expect(openPath).toHaveBeenCalledWith('/ws/scripts/build.sh')
+    expect(openQualityAsset).toHaveBeenCalledWith('scripts/build.sh')
+    expect(screen.getByTestId('baf-quality-asset-modal')).toBeDefined()
     // Dirty the draft, then 取消 drops it back to the persisted map.
     fireEvent.click(withinRow('baf-standard-hooks-editor', 'deleteLabel'))
     expect(store.getSnapshot().hooksDraft).toEqual({})

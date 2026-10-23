@@ -102,10 +102,10 @@ export function CommandsCard({ t }: {
 
   return (
     <div className={css.stack} data-testid="baf-commands-cards">
-      {/* 状态指令 — the per-state flow chart card. */}
+      {/* 状态指令 — the per-state flow chart card. 【变更】2026-10-22 (批次十五
+          4): the 状态指令 · 按阶段查看 title + intro description retire — the
+          flow chart explains itself, the card starts directly at the canvas. */}
       <div className={css.cardFlow} data-testid="baf-commands-card">
-        <div className={css.cardTitle}>{t('cmdStateTitle')}</div>
-        <div className={css.cardDesc}>{t('cmdStateIntro')}</div>
         <div className={css.hooksFlowWrap}>
           <div className={css.hooksSplit}>
             <div

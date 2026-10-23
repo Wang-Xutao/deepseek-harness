@@ -7,8 +7,9 @@
  * documents that govern it (chips → the shared full-screen viewer), and the
  * 批次十三 switches — 启用 + 失败中止 — persisted through
  * `saveQualityTestFlowToggle` with the server-side dependency cascade
- * (关上游 → 下游自动停用；开下游 → 上游自动补开). A leading 前置 band holds the
- * environment-setup docs (the toolchain card above is the real prerequisite).
+ * (关上游 → 下游自动停用；开下游 → 上游自动补开). A leading "00" 前置 node holds
+ * the environment-setup docs (the toolchain card above is the real
+ * prerequisite).
  */
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -16,11 +17,15 @@ import type { StandardsOverviewFace, StandardsOverviewState } from './standards-
 import type { StandardsPanelProps } from './StandardsOverview.tsx'
 import type { BafStandardKey } from './locales.ts'
 import { ENTERPRISE_DOC_ROWS, QUALITY_DOC_ROWS } from './enterprise-docs-catalog.ts'
+import { joinEntry } from './StandardsOverview.tsx'
 import css from './StandardsOverview.module.css'
 
 /** Join CSS-module names without a clsx dependency (filters dropped keys). */
+// 【变更】2026-10-22 (批次十五 2): join('') → join(' ') — concatenated hashed
+// names fused into one nonexistent class (qflowPhase×qflowPhaseSide, and the
+// new pathChip pairs, silently lost every rule). Matches the other cards' join.
 const join = (...names: ReadonlyArray<string | undefined>): string =>
-  names.filter((name): name is string => name !== undefined && name !== '').join('')
+  names.filter((name): name is string => name !== undefined && name !== '').join(' ')
 
 /** The 8 steps, mirroring the session 测试流图's order/labels/commands.
  * 【变更】2026-10-22 (批次十四 4): each step also carries its 环境 probe key
@@ -165,11 +170,14 @@ const envToolState = (
 }
 
 /** The 测试报告 preview modal — same scrim/Escape contract (migrated from the
- * retired 配置 card; HTML renders in a sandboxed iframe, scripts stay off). */
-function ReportModal({ report, t, onOpenFile, onClose }: {
+ * retired 配置 card; HTML renders in a sandboxed iframe, scripts stay off).
+ * 【变更】2026-10-22 (批次十五 2): the top-right pair is 打开 + 打开文件夹 —
+ * every file preview on the 工作流 page answers both gestures. */
+function ReportModal({ report, t, onOpenFile, onRevealFile, onClose }: {
   report: StandardsOverviewState['qualityReport']
   t: StandardsPanelProps['t']
   onOpenFile: (path: string) => void
+  onRevealFile: (path: string) => void
   onClose: () => void
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -203,15 +211,26 @@ function ReportModal({ report, t, onOpenFile, onClose }: {
           <span className={css.docViewerTitle}>{path ?? t('qolReportTitle')}</span>
           <span className={css.titleActions}>
             {report?.status === 'ready' ? (
-              <button
-                type="button"
-                className={css.miniButton}
-                data-testid="baf-quality-report-open-file"
-                title={report.path}
-                onClick={() => { onOpenFile(report.path) }}
-              >
-                {t('enterpriseDocOpenFile')}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className={css.miniButton}
+                  data-testid="baf-quality-report-open-file"
+                  title={report.path}
+                  onClick={() => { onOpenFile(report.path) }}
+                >
+                  {t('qolAssetOpen')}
+                </button>
+                <button
+                  type="button"
+                  className={css.miniButton}
+                  data-testid="baf-quality-report-reveal-file"
+                  title={report.path}
+                  onClick={() => { onRevealFile(report.path) }}
+                >
+                  {t('qolAssetReveal')}
+                </button>
+              </>
             ) : null}
           </span>
         </div>
@@ -241,12 +260,16 @@ function ReportModal({ report, t, onOpenFile, onClose }: {
 
 /** The 资产 preview modal — migrated verbatim from the retired 资产 card.
  * 【变更】2026-10-22 (批次十四 3): exported — the 环境 card's new 配置文件
- * column previews the SAME modal (打开 button top-right included). */
-export function AssetModal({ rel, asset, t, onOpenFile, onClose }: {
+ * column previews the SAME modal (打开 button top-right included).
+ * 【变更】2026-10-22 (批次十五 2): 打开文件夹 joins 打开 top-right (every file
+ * preview answers both gestures); the SAME modal now also serves the 项目工程
+ * tab's 配置文件 row + 状态脚本 entries. */
+export function AssetModal({ rel, asset, t, onOpenFile, onRevealFile, onClose }: {
   rel: string
   asset: StandardsOverviewState['qualityAsset']
   t: StandardsPanelProps['t']
   onOpenFile: (path: string) => void
+  onRevealFile: (path: string) => void
   onClose: () => void
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -276,15 +299,26 @@ export function AssetModal({ rel, asset, t, onOpenFile, onClose }: {
           <span className={css.docViewerTitle}>{rel}</span>
           <span className={css.titleActions}>
             {asset?.status === 'ready' ? (
-              <button
-                type="button"
-                className={css.miniButton}
-                data-testid="baf-quality-asset-open-file"
-                title={asset.path}
-                onClick={() => { onOpenFile(asset.path) }}
-              >
-                {t('qolAssetOpen')}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className={css.miniButton}
+                  data-testid="baf-quality-asset-open-file"
+                  title={asset.path}
+                  onClick={() => { onOpenFile(asset.path) }}
+                >
+                  {t('qolAssetOpen')}
+                </button>
+                <button
+                  type="button"
+                  className={css.miniButton}
+                  data-testid="baf-quality-asset-reveal-file"
+                  title={asset.path}
+                  onClick={() => { onRevealFile(asset.path) }}
+                >
+                  {t('qolAssetReveal')}
+                </button>
+              </>
             ) : null}
           </span>
         </div>
@@ -306,9 +340,29 @@ export function AssetModal({ rel, asset, t, onOpenFile, onClose }: {
   )
 }
 
-/** One non-clickable mono value chip (a 配置 value at its flow position). */
-function ValueChip({ text, title }: { text: string; title?: string | undefined }) {
-  return <span className={css.qflowMonoChip} title={title}>{text}</span>
+/** One mono value chip (a 配置 value at its flow position).
+ * 【变更】2026-10-22 (批次十五 2): a DIRECTORY value (build/test/report dir)
+ * renders as a button — hover underline, click reveals the folder (the same
+ * path-gesture contract every path display on the page speaks). */
+function ValueChip({ text, title, onReveal }: {
+  text: string
+  title?: string | undefined
+  /** Present ⇒ this value is a directory: click reveals it. */
+  onReveal?: (() => void) | undefined
+}) {
+  if (onReveal === undefined) {
+    return <span className={css.qflowMonoChip} title={title}>{text}</span>
+  }
+  return (
+    <button
+      type="button"
+      className={join(css.qflowMonoChip, css.pathChip)}
+      title={title}
+      onClick={onReveal}
+    >
+      {text}
+    </button>
+  )
 }
 
 /** 【变更】2026-10-22 (批次十四 4): the connector between two flow nodes — a
@@ -333,8 +387,8 @@ function FlowLink() {
  * chip (环境 probe) and the 主链/独立 phase tag — the canvas reads complete at
  * a glance without leaving the page.
  */
-function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exists, saving, t,
-  onToggle, onPreviewAsset, onOpenDoc, onPreviewReport }: {
+function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exists, saving, t, cwd,
+  onToggle, onPreviewAsset, onOpenDoc, onPreviewReport, onRevealDir }: {
   stage: (typeof STAGES)[number]
   index: number
   /** The 配置 readout (undefined while loading / no-workspace). */
@@ -347,20 +401,27 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
   exists: (rel: string) => boolean | undefined
   saving: boolean
   t: StandardsPanelProps['t']
+  /** Workspace root — directory values reveal against it (批次十五 2). */
+  cwd: string | undefined
   onToggle: StandardsOverviewFace['toggleQualityFlowStage']
   onPreviewAsset: (rel: string) => void
   onOpenDoc: (id: string) => void
   onPreviewReport: () => void
+  /** Reveal one workspace-relative directory (批次十五 2). */
+  onRevealDir: (rel: string) => void
 }) {
   // The stage's 配置 chips — the real workspace values at their flow position.
-  const valueChips: Array<{ text: string; title?: string }> = []
+  // 【变更】2026-10-22 (批次十五 2): directory values are clickable (hover
+  // underline → reveal the folder), scalar values stay plain chips.
+  const valueChips: Array<{ text: string; title?: string; reveal?: string }> = []
   if (config?.status === 'ready') {
-    if (stage.id === 'build') valueChips.push({ text: `${t('qflowBuildDir')} ${config.buildDir}` })
-    if (stage.id === 'test') valueChips.push({ text: `${t('qflowTestDir')} ${config.testDir}` })
+    if (stage.id === 'build') valueChips.push({ text: `${t('qflowBuildDir')} ${config.buildDir}`, reveal: config.buildDir })
+    // `testDir` may carry a /** glob suffix — joinEntry strips it for the gesture.
+    if (stage.id === 'test') valueChips.push({ text: `${t('qflowTestDir')} ${config.testDir}`, reveal: config.testDir })
     // 批次十四 4 — the instrument step quotes the build tree it gcov-walks
     // (it shares the build node's directory; previously it showed no value).
-    if (stage.id === 'instrument') valueChips.push({ text: `${t('qflowBuildDir')} ${config.buildDir}` })
-    if (stage.id === 'report') valueChips.push({ text: `${t('qflowReportDir')} ${config.reportDir}` })
+    if (stage.id === 'instrument') valueChips.push({ text: `${t('qflowBuildDir')} ${config.buildDir}`, reveal: config.buildDir })
+    if (stage.id === 'report') valueChips.push({ text: `${t('qflowReportDir')} ${config.reportDir}`, reveal: config.reportDir })
     if (stage.id === 'gate') {
       valueChips.push({
         text: `${t('qflowThreshold')} ≥ ${String(Math.round(config.thresholdLine * 100))}%`,
@@ -400,10 +461,14 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
           </span>
           <span className={css.qflowCmd} title={stage.command}>{stage.command}</span>
         </span>
-        {/* 批次十三 4 — the two per-stage switches. The 失败中止 switch only
-            matters while the stage participates, so a disabled stage dims it. */}
+        {/* 批次十三 4 — the two per-stage switches. 【变更】2026-10-22 (批次十五
+            3): each label+switch now sits inside ONE quiet pill group and the
+            two groups share a single row aligned with the head text — the
+            stacked right column (twice the text height) read as a foreign
+            block; the pills read as node metadata. The 失败中止 group dims
+            while the stage is off. */}
         <span className={css.qflowSwitches}>
-          <span className={css.qflowSwitchRow}>
+          <span className={css.qflowSwitchGroup}>
             <span className={css.qflowSwitchLabel}>{t('qflowSwitchEnabled')}</span>
             <Switch
               checked={enabled}
@@ -412,10 +477,8 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
               onChange={(next) => { void onToggle(stage.id, 'enabled', next) }}
             />
           </span>
-          <span className={css.qflowSwitchRow}>
-            <span className={join(css.qflowSwitchLabel, enabled ? undefined : css.qflowDim)}>
-              {t('qflowSwitchHalt')}
-            </span>
+          <span className={join(css.qflowSwitchGroup, enabled ? undefined : css.qflowDim)}>
+            <span className={css.qflowSwitchLabel}>{t('qflowSwitchHalt')}</span>
             <Switch
               checked={haltOnError}
               label={`${t('qflowSwitchHalt')} ${t(stage.nameKey)}`}
@@ -431,7 +494,16 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
         <div className={css.qflowChipsRow}>
           <span className={css.qflowChipsLabel}>{t('qflowChipCfg')}</span>
           <span className={css.qflowChips}>
-            {valueChips.map(chip => <ValueChip key={chip.text} text={chip.text} title={chip.title} />)}
+            {valueChips.map(chip => (
+              <ValueChip
+                key={chip.text}
+                text={chip.text}
+                title={chip.title}
+                {...(cwd !== undefined && chip.reveal !== undefined
+                  ? { onReveal: () => { onRevealDir(joinEntry(cwd, chip.reveal ?? '')) } }
+                  : {})}
+              />
+            ))}
           </span>
         </div>
       )}
@@ -442,7 +514,7 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
           <span className={css.qflowChips}>
             <button
               type="button"
-              className={css.qflowDocChip}
+              className={join(css.qflowDocChip, css.pathChip)}
               data-testid="baf-quality-flow-report"
               title={config.reportHtmlRel}
               disabled={!config.reportHtmlExists}
@@ -455,7 +527,9 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
           </span>
         </div>
       )}
-      {/* 资产 chips — click opens the text preview modal; missing files dim. */}
+      {/* 资产 chips — click opens the text preview modal; missing files dim.
+          【变更】2026-10-22 (批次十五 2): path chips underline on hover (the
+          规范 doc chips are titles, not paths — they keep the border hover). */}
       {stage.assets.length > 0 && (
         <div className={css.qflowChipsRow}>
           <span className={css.qflowChipsLabel}>{t('qflowChipAsset')}</span>
@@ -466,7 +540,7 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
                 <button
                   key={rel}
                   type="button"
-                  className={join(css.qflowDocChip, onDisk === false ? css.qflowChipMissing : undefined)}
+                  className={join(css.qflowDocChip, css.pathChip, onDisk === false ? css.qflowChipMissing : undefined)}
                   data-testid={`baf-quality-flow-${stage.id}-asset-${rel.replace(/[^a-z0-9]+/gi, '-')}`}
                   title={rel}
                   onClick={() => { onPreviewAsset(rel) }}
@@ -511,7 +585,7 @@ function FlowNode({ stage, index, config, enabled, haltOnError, toolState, exist
  */
 export function QualityFlowCard({
   state, t, toggleQualityFlowStage, openEnterpriseDoc, openQualityReport, closeQualityReport,
-  openQualityAsset, closeQualityAsset, onOpenPath,
+  openQualityAsset, closeQualityAsset, onOpenPath, onRevealPath,
 }: {
   state: StandardsOverviewState
   t: StandardsPanelProps['t']
@@ -523,8 +597,10 @@ export function QualityFlowCard({
   /** Fetch + open one 资产 chip's preview modal. */
   openQualityAsset: (rel: string) => void
   closeQualityAsset: () => void
-  /** The modals' 打开文件 gesture (absolute path → default app). */
+  /** The modals' 打开 gesture (absolute path → default app). */
   onOpenPath: (path: string) => void
+  /** The modals' 打开文件夹 gesture + the dir-value chips' reveal (批次十五 2). */
+  onRevealPath: (path: string) => void
 }) {
   const flow = state.qualityFlow
   const stages = flow?.stages
@@ -551,32 +627,6 @@ export function QualityFlowCard({
   return (
     <div className={css.card} data-testid="baf-quality-flow-card">
       <div className={css.cardTitle}>{t('qflowTitle')}</div>
-      <div className={css.cardDesc}>{t('qflowIntro')}</div>
-
-      {/* The 前置 band — environment-setup docs; the real toolchain
-          prerequisite is the 环境 card above. */}
-      <div className={css.qflowPrereq} data-testid="baf-quality-flow-prereq">
-        <span className={css.qflowChipsLabel}>{t('qflowPrereqLabel')}</span>
-        <span className={css.qflowChips}>
-          {PREREQ_DOC_IDS.map((id) => {
-            const doc = docCatalog(id)
-            if (doc === undefined) return null
-            return (
-              <button
-                key={id}
-                type="button"
-                className={css.qflowDocChip}
-                data-testid={`baf-quality-flow-doc-${id}`}
-                title={doc.title}
-                onClick={() => { openEnterpriseDoc(id) }}
-              >
-                {doc.label}
-              </button>
-            )
-          })}
-          <span className={css.qflowPrereqHint}>{t('qflowPrereqHint')}</span>
-        </span>
-      </div>
 
       {flow === undefined ? (
         <div className={css.status}>{t('qflowLoading')}</div>
@@ -586,6 +636,41 @@ export function QualityFlowCard({
         <div className={css.status}>{t('qflowLoading')}</div>
       ) : (
         <div className={css.qflowList}>
+          {/* 【变更】2026-10-22 (批次十五 3): 前置 becomes the "00" node — the
+              same numbered-node anatomy as 01 gcc 编译 (idx bubble + name +
+              secondary line + chips), first on the rail with a connector to
+              the first stage. The dashed band retires. */}
+          <div className={css.qflowNode} data-testid="baf-quality-flow-prereq">
+            <div className={css.qflowNodeHead}>
+              <span className={css.qflowIdx} aria-hidden="true">00</span>
+              <span className={css.qflowNodeMain}>
+                <span className={css.qflowName}>{t('qflowPrereqLabel')}</span>
+                <span className={css.qflowTool}>{t('qflowPrereqHint')}</span>
+              </span>
+            </div>
+            <div className={css.qflowChipsRow}>
+              <span className={css.qflowChipsLabel}>{t('qflowChipStd')}</span>
+              <span className={css.qflowChips}>
+                {PREREQ_DOC_IDS.map((id) => {
+                  const doc = docCatalog(id)
+                  if (doc === undefined) return null
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className={css.qflowDocChip}
+                      data-testid={`baf-quality-flow-doc-${id}`}
+                      title={doc.title}
+                      onClick={() => { openEnterpriseDoc(id) }}
+                    >
+                      {doc.label}
+                    </button>
+                  )
+                })}
+              </span>
+            </div>
+          </div>
+          <FlowLink />
           {STAGES.map((stage, index) => (
             <Fragment key={stage.id}>
               {/* 批次十四 4 — the rail connector ties the numbered bubbles into
@@ -601,10 +686,12 @@ export function QualityFlowCard({
                 exists={rel => assetExists(state, rel)}
                 saving={state.qualityFlowSaving}
                 t={t}
+                cwd={state.summary?.cwd}
                 onToggle={toggleQualityFlowStage}
                 onPreviewAsset={openAsset}
                 onOpenDoc={openEnterpriseDoc}
                 onPreviewReport={openReport}
+                onRevealDir={onRevealPath}
               />
             </Fragment>
           ))}
@@ -622,6 +709,7 @@ export function QualityFlowCard({
           report={state.qualityReport}
           t={t}
           onOpenFile={onOpenPath}
+          onRevealFile={onRevealPath}
           onClose={closeReport}
         />
       ) : null}
@@ -631,6 +719,7 @@ export function QualityFlowCard({
           asset={state.qualityAsset}
           t={t}
           onOpenFile={onOpenPath}
+          onRevealFile={onRevealPath}
           onClose={closeAsset}
         />
       ) : null}

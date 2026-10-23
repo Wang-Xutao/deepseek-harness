@@ -5,7 +5,10 @@
  * 【变更】2026-10-21 (批次八 3.2): the right-hand drawer becomes a FULL-SCREEN
  * modal — clearer for long documents. There is NO close button (customer
  * decision): clicking the blank scrim outside the document or pressing Escape
- * closes; the header keeps only the bilingual title + 打开文件.
+ * closes.
+ * 【变更】2026-10-22 (批次十五 2): the header's 打开文件 button is GONE — the
+ * 企业规范 documents are read-only references, preview is their ONLY gesture
+ * (no 打开 / 打开文件夹, unlike the workspace file previews).
  * 【变更】2026-10-22 (批次十一 4): the ready body renders the document as
  * MARKDOWN (the shared MarkdownText primitive the chat uses — headings,
  * lists, tables, code fences) instead of a verbatim `<pre>` dump. Plain-text
@@ -34,12 +37,12 @@ export function viewerOf(openId: string | undefined, doc: BafEnterpriseDocResult
   return { kind: 'unreadable', reason: doc.reason }
 }
 
-/** The full-screen document modal — the clicked document rendered as markdown. */
-export function EnterpriseDocViewer({ viewer, t, onOpenFile, onClose }: {
+/** The full-screen document modal — the clicked document rendered as markdown.
+ * 【变更】2026-10-22 (批次十五 2): preview-only (the 打开文件 prop+button are
+ * gone) — the 企业规范 read-only files support NO open/reveal gestures. */
+export function EnterpriseDocViewer({ viewer, t, onClose }: {
   viewer: DocViewer
   t: StandardsPanelProps['t']
-  /** Fire-and-forget open — the caller wraps the face's openPath itself. */
-  onOpenFile: (path: string) => void
   onClose: () => void
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -92,19 +95,8 @@ export function EnterpriseDocViewer({ viewer, t, onOpenFile, onClose }: {
       >
         <div className={css.docViewerHead}>
           <span className={css.docViewerTitle}>{title}</span>
-          <span className={css.titleActions}>
-            {viewer.kind === 'ready' ? (
-              <button
-                type="button"
-                className={css.miniButton}
-                data-testid="baf-enterprise-doc-open-file"
-                title={viewer.result.path}
-                onClick={() => { onOpenFile(viewer.result.path) }}
-              >
-                {t('enterpriseDocOpenFile')}
-              </button>
-            ) : null}
-          </span>
+          {/* 批次十五 2 — preview-only: no 打开文件 button (read-only 企业规范). */}
+          <span className={css.titleActions} />
         </div>
         {viewer.kind === 'loading' ? (
           <div className={css.status}>{t('enterpriseDocLoading')}</div>

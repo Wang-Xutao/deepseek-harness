@@ -100,13 +100,14 @@ function DocRow({ doc, selected, t, onOpen }: {
   )
 }
 
-/** The 企业规范 flow-chart card — canvas + per-node detail + doc viewer. */
-export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpriseDoc, openPath }: {
+/** The 企业规范 flow-chart card — canvas + per-node detail + doc viewer.
+ * 【变更】2026-10-22 (批次十五 2): openPath retires with the viewer's 打开文件
+ * button — the read-only 企业规范 docs preview only. */
+export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpriseDoc }: {
   state: StandardsOverviewState
   t: StandardsPanelProps['t']
   openEnterpriseDoc: StandardsOverviewFace['openEnterpriseDoc']
   closeEnterpriseDoc: StandardsOverviewFace['closeEnterpriseDoc']
-  openPath: StandardsOverviewFace['openPath']
 }) {
   // null = nothing picked yet: the effective selection follows the first node
   // that HAS standards (intake — the overview doc) until the user clicks.
@@ -244,7 +245,6 @@ export function EnterpriseDocsCard({ state, t, openEnterpriseDoc, closeEnterpris
         <EnterpriseDocViewer
           viewer={viewer}
           t={t}
-          onOpenFile={(path) => { void openPath(path) }}
           onClose={() => { closeEnterpriseDoc() }}
         />
       ) : null}

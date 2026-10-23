@@ -19,6 +19,9 @@ export type LaunchPhase =
   | 'main-load-url'
   | 'main-shown'
   | 'splash-closed'
+  // 【变更】2026-10-22 (批次十五 1): the 后台启动 click — the splash hid while
+  // the boot keeps running in the tray.
+  | 'splash-bg-start'
 
 /** Origin timestamp captured at module load (= electron main entry). */
 const T0_MS = Date.now()

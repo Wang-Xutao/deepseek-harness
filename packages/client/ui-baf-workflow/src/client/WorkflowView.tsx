@@ -46,20 +46,18 @@ const INTAKE_MODE_LABEL: Record<string, WorkflowTabKey> = {
 }
 
 /**
- * 【变更】2026-10-22 (批次十三 1): where the 工作流图 reaches into the 测试流图 —
- * the implement/verify/archive cards each carry a jump chip that addresses
- * the session's 测试流图 tab through the view-request channel (`stage:<id>`
- * focus lands on that card). The three hand-off points where the customer's
- * next natural action lives in the quality pipeline: implement → format
- * (写完先排版), verify → test (单测链), archive → gate (归档前过门禁). NOT
- * forced into the model's dispatch loop — the chips are customer-armed
- * shortcuts, so the workflow's performance stays untouched (the 方案's
- * 「软结合」 answer to 融合).
+ * 【变更】2026-10-22 (批次十三 1 → 批次十五 6, 客户决策「只在验证状态节点添加
+ * 测试流图的链接」): where the 工作流图 reaches into the 测试流图 — ONLY the
+ * verify card carries a jump chip now (the implement/archive chips retire).
+ * The chip addresses the session's 测试流图 tab through the view-request
+ * channel (`stage:test` focus lands on that card); verify's completion itself
+ * is gated host-side by the new required `test-flow` check (all enabled steps'
+ * reports green), so the link sits exactly where the 测试流 becomes the
+ * gatekeeper. NOT forced into the model's dispatch loop — the chip is a
+ * customer-armed shortcut, the workflow's performance stays untouched.
  */
 const TEST_FLOW_JUMPS: Partial<Record<WorkflowNodeId, TestFlowStepId>> = {
-  implement: 'format',
   verify: 'test',
-  archive: 'gate',
 }
 
 /** The jump chip's 测试流图 stage label key (reuses the 测试流图's node catalog). */
