@@ -10,6 +10,8 @@ No runtime invariant companion is published because this package is presentation
 
 The control sits in the composer's right cluster, before the model selector and the send action. It arranges the current draft into Markdown structure with a local deterministic formatter — paragraphs, bullet lists, fenced code — and never rewrites, reorders, or drops a word of the author's text. The same draft always yields the same result: no model call, no network, no clock. While a formatted draft can be restored, the control shows the revert action; pressing it restores the author's original wording.
 
+The two states read as one object with two annotations: the same document, with a pen while it is being arranged (`list-pen-outline`) and a solid left-pointing arrow while it can be restored (`undo-doc-outline`, a glyph this batch added to the platform icon set) — same weight, same fill language, same document contour. The tidy-up state hovers as "格式化输入" / "Format the input"; the revert state states the consequence ("还原美化前的原文", and "会丢弃美化之后的修改" once the author edits again after the tidy-up).
+
 ## Model Experience
 
 None. This package contributes browser UI only and never reaches a model request.

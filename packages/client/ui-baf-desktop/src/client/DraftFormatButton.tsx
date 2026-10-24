@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import {
-  IconCheckOutlineMedium, IconListPenOutlineMedium, IconRefreshOutlineMedium, Tooltip,
+  IconCheckOutlineMedium, IconListPenOutlineMedium, IconUndoDocOutlineMedium, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the ui-conversation SlotMap merge (the input.right seat) and the
@@ -110,7 +110,7 @@ export function DraftFormatButton({ useInput, inputActions, t }: DraftFormatButt
         {unchanged
           ? <IconCheckOutlineMedium size={14} />
           : revert
-            ? <IconRefreshOutlineMedium size={14} />
+            ? <IconUndoDocOutlineMedium size={14} />
             : <IconListPenOutlineMedium size={14} />}
       </button>
     </Tooltip>

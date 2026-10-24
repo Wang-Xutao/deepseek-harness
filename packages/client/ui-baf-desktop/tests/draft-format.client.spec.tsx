@@ -190,6 +190,19 @@ describe('draft Markdown arrangement', () => {
 })
 
 describe('composer tidy-up control', () => {
+  it('wears the document+pen glyph and swaps to its document+undo twin', () => {
+    const { button } = renderControl({ draft: '第一步。\n第二步。' })
+    const glyph = () => button.querySelector('svg')?.getAttribute('data-icon')
+
+    // The two states must read as one object: the same document body, only the
+    // annotation changes (pen → undo arrow).
+    expect(glyph()).toBe('dsw-icon-list-pen-outline-medium')
+    fireEvent.click(button)
+    expect(glyph()).toBe('dsw-icon-undo-doc-outline-medium')
+    fireEvent.click(button)
+    expect(glyph()).toBe('dsw-icon-list-pen-outline-medium')
+  })
+
   it('arranges the draft and then reverts to the author\'s wording', () => {
     const { button, setDraft } = renderControl({ draft: '第一步。\n第二步。' })
 

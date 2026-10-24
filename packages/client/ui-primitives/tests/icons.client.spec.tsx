@@ -27,8 +27,8 @@ function artwork(glyph: IconGlyph, weight: IconWeight): Document {
 }
 
 describe('product icon set', () => {
-  it('exports regular and medium variants for all 96 public glyphs', () => {
-    expect(iconNames.length).toBe(192)
+  it('exports regular and medium variants for all 97 public glyphs', () => {
+    expect(iconNames.length).toBe(194)
     expect(iconNames.some(name => /\d+$/.test(name))).toBe(false)
     const regular = iconNames.filter(name => name.endsWith('Regular')).map(name => name.slice(0, -'Regular'.length))
     const medium = iconNames.filter(name => name.endsWith('Medium')).map(name => name.slice(0, -'Medium'.length))
@@ -37,7 +37,27 @@ describe('product icon set', () => {
       'IconMicrophoneOutlineRegular',
       'IconPlanOutlineRegular', 'IconCompactOutlineRegular', 'IconShieldOutlineRegular', 'IconDeliverDocRegular',
       'IconWarningTriangleOutlineRegular', 'IconCompareSplitOutlineRegular', 'IconCloseCircleFillRegular',
+      'IconUndoDocOutlineRegular',
     ]))
+  })
+
+  it('draws the undo document on the platform document body with a solid arrow', () => {
+    // The undo glyph reuses the platform's own plain document body (the one
+    // browse-outline draws) and replaces the pen with a solid left arrow, so a
+    // format/revert pair reads as two states of one object.
+    const undo = artwork('undo-doc-outline', 'medium')
+    const browse = artwork('browse-outline', 'medium')
+    const undoPaths = [...undo.querySelectorAll('path')]
+    const browsePaths = [...browse.querySelectorAll('path')]
+
+    expect(undoPaths[1]!.getAttribute('d')).toBe(browsePaths[2]!.getAttribute('d'))
+    expect(undoPaths[1]!.getAttribute('fill')).toBe('currentColor')
+    // The text line is stroked like the platform's other document lines; the
+    // arrow is solid like the pen it replaces.
+    expect(undoPaths[0]!.getAttribute('stroke')).toBe('currentColor')
+    expect(undoPaths[0]!.getAttribute('fill')).toBeNull()
+    expect(undoPaths[2]!.getAttribute('fill')).toBe('currentColor')
+    expect(undoPaths[3]!.getAttribute('fill')).toBe('currentColor')
   })
 
   it('draws the circled close as one currentColor knockout path in both weights', () => {
