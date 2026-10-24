@@ -11,6 +11,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { HeroTrailingMark } from './HeroTrailingMark.tsx'
 import { SidebarBrandMark } from './SidebarBrandMark.tsx'
 import { SidebarBrandName } from './SidebarBrandName.tsx'
+import { DraftFormatButton } from './DraftFormatButton.tsx'
 import { HelpFooterAction, type HelpFooterInjected } from './HelpFooterAction.tsx'
 import { en, zh, type BafDesktopKey } from './locales.ts'
 
@@ -49,6 +50,16 @@ export function apply(ctx: ClientContext): void {
   // directions while the mark is hovered.
   ctx.slots.inject('conversation.hero.brand.trailing', () =>
     ctx.slots.register({ name: 'conversation.hero.brand.trailing' }, HeroTrailingMark))
+
+  // 【变更】2026-10-25 (批次二十二): the composer tidy-up control. It sits in
+  // the composer's right cluster, before the model selector and the send
+  // action. The control arranges the current draft into Markdown structure
+  // with a local deterministic formatter — no model call — and turns into the
+  // revert action while a formatted draft can be restored.
+  ctx.slots.inject('conversation.input.right', () =>
+    ctx.slots.register({
+      name: 'conversation.input.right', id: 'draft-format', order: 0, locale: NS,
+    }, DraftFormatButton))
 
   // 【变更】2026-10-19 (主页面三改 2): Ctrl+Alt+H toggles the Help docs panel.
   // The open flag lives in a plugin-level snapshot store (not component state)

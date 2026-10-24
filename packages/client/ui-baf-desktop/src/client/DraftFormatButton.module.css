@@ -1,0 +1,67 @@
+/* Composer tidy-up control: a neutral ghost button that turns gold while the
+   formatted draft can be reverted. The gold is a local material token — the
+   platform's brand-primary is a neutral ink, not a hue — and the dark theme
+   takes the brighter half of the same gold so the glyph keeps its contrast on
+   the raised composer card.
+
+   【变更】2026-10-25 (批次二十二): new file. */
+
+.button {
+  --baf-accent: #8a6d12;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.button:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+/* Revert state: a gold hairline and a gold glyph announce that a formatted
+   draft is waiting to be restored. */
+.button[data-baf-draft-format='revert'] {
+  border-color: color-mix(in srgb, var(--baf-accent) 42%, transparent);
+  background: color-mix(in srgb, var(--baf-accent) 12%, transparent);
+  color: var(--baf-accent);
+}
+
+.button[data-baf-draft-format='revert']:hover {
+  background: color-mix(in srgb, var(--baf-accent) 22%, transparent);
+  color: var(--baf-accent);
+}
+
+/* Blocked state: the draft holds @ file references, so the control stays
+   visible but dimmed; the tooltip carries the reason. */
+.button[data-baf-draft-format-blocked='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.button[data-baf-draft-format-blocked='true']:hover {
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+:global(body[data-ds-dark-theme]) .button {
+  --baf-accent: #d9b64c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+}
