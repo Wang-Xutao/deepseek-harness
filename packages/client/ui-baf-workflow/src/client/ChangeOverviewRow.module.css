@@ -14,24 +14,31 @@
  */
 
 .block {
-  /* the BAF gold — the accent the session 工作流图 / 测试流图 carry. */
-  --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  /* the BAF gold — the accent the session 工作流图 / 测试流图 carry.
+     【变更】2026-10-25 (批次二十一 2): stated outright, in both themes — the
+     platform has no brand hue of its own, and the token this used to borrow
+     never existed, so the gold could not switch with the theme. */
+  --wf-accent: #c9a227;
   --wf-accent-soft: color-mix(in srgb, var(--wf-accent) 72%, #fff);
   --wf-accent-ink: #1a1406;
-  --wf-accent-text: color-mix(in srgb, var(--wf-accent) 60%, var(--dsw-alias-label-primary, #0f1115));
+  --wf-accent-text: color-mix(in srgb, var(--wf-accent) 60%, var(--dsw-alias-label-primary));
   --wf-accent-line: color-mix(in srgb, var(--wf-accent) 42%, transparent);
   --wf-accent-glow: color-mix(in srgb, var(--wf-accent) 26%, transparent);
-  --wf-surface: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base, #fff));
-  --wf-canvas: var(--dsw-alias-bg-base, #fff);
-  --wf-ink: var(--dsw-alias-label-primary, #0f1115);
-  --wf-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 58%, var(--dsw-alias-label-secondary, #61666b));
-  --wf-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 28%, var(--dsw-alias-label-tertiary, #81858c));
-  --wf-line: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
-  --wf-line-strong: var(--dsw-alias-border-l4, rgba(0, 0, 0, 0.16));
-  --wf-ok: var(--dsw-alias-state-success-primary, #16a34a);
-  --wf-warn: var(--dsw-alias-state-warn-primary, #b8860b);
-  --wf-danger: var(--dsw-alias-state-error-primary, #dc2626);
-  --wf-idle: var(--dsw-alias-state-idle-primary, #9aa1a9);
+  --wf-surface: var(--dsw-alias-bg-layer-2);
+  --wf-canvas: var(--dsw-alias-bg-base);
+  --wf-ink: var(--dsw-alias-label-primary);
+  --wf-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary) 58%, var(--dsw-alias-label-secondary));
+  --wf-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary) 28%, var(--dsw-alias-label-tertiary));
+  --wf-line: var(--dsw-alias-border-l2);
+  --wf-line-strong: var(--dsw-alias-border-l4);
+  /* 【变更】2026-10-25 (批次二十一 2): the three status tiers are the TEXT
+     grades, not the mark grades — the mark greens/ambers are 2.2:1 … 2.4:1 on
+     white and unreadable as copy. The text grades keep 4.7:1 … 5.9:1 and
+     switch with the theme. */
+  --wf-ok: var(--dsw-alias-text-success);
+  --wf-warn: var(--dsw-alias-text-warning);
+  --wf-danger: var(--dsw-alias-text-danger);
+  --wf-idle: var(--dsw-alias-state-idle-primary);
   padding: 16px 0;
   border-bottom: 0.5px solid var(--wf-line);
 }
@@ -533,14 +540,22 @@
   /* 【变更】2026-10-24 (批次二十 3): the SESSION graph's own token values —
      the shared `FlowCanvas` / `ArtifactRail` / `StageChecklist` /
      `BilingualDetail` read these, so the graph and the stage cards render
-     here exactly as they do in the conversation tab. */
-  --wf-card: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base, #fff));
-  --wf-ink: var(--dsw-alias-label-primary, #0f1115);
-  --wf-muted: var(--dsw-alias-label-secondary, #61666b);
-  --wf-line: var(--dsw-alias-border-subtle, #d7dee8);
-  --wf-danger: var(--dsw-alias-state-error-primary, #dc2626);
-  --wf-ok: var(--dsw-alias-state-success-primary, #16a34a);
-  --wf-gate: var(--dsw-alias-state-warn-primary, #7c5cff);
+     here exactly as they do in the conversation tab.
+     【变更】2026-10-25 (批次二十一 2): the workspace now names the SAME
+     aliases the session tab names — same surface, same copy tiers, same
+     hairlines, same three status colours. Before, the two surfaces gave one
+     meaning two tokens (layer-2 vs elevated, state-warn vs text-warning) and
+     the shared graph drifted apart between them; and the `--wf-line` chain
+     ended in a light literal, so the workspace's hairlines stayed pale on
+     the dark floor. */
+  --wf-accent: #c9a227;
+  --wf-card: var(--dsw-alias-bg-elevated);
+  --wf-ink: var(--dsw-alias-text-primary);
+  --wf-muted: var(--dsw-alias-text-secondary);
+  --wf-line: var(--dsw-alias-border-subtle);
+  --wf-danger: var(--dsw-alias-text-danger);
+  --wf-ok: var(--dsw-alias-text-success);
+  --wf-gate: var(--dsw-alias-text-warning);
   --wf-brand-fill: linear-gradient(135deg,
     color-mix(in srgb, var(--wf-accent) 55%, #241a08),
     color-mix(in srgb, var(--wf-accent) 62%, #241a08));
@@ -548,10 +563,16 @@
   /* the workspace chrome's own accents */
   --ws-line: color-mix(in srgb, var(--wf-accent) 34%, var(--wf-line));
   --ws-line-strong: color-mix(in srgb, var(--wf-accent) 62%, var(--wf-line));
-  --ws-ink: var(--dsw-alias-label-primary, #0f1115);
-  --ws-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 58%, var(--dsw-alias-label-secondary, #61666b));
-  --ws-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 28%, var(--dsw-alias-label-tertiary, #81858c));
-  --ws-card: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base, #fff));
+  --ws-ink: var(--dsw-alias-label-primary);
+  --ws-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary) 58%, var(--dsw-alias-label-secondary));
+  --ws-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary) 28%, var(--dsw-alias-label-tertiary));
+  --ws-card: var(--dsw-alias-bg-elevated);
+}
+
+/* 【变更】2026-10-25 (批次二十一 2): the dark half of the BAF accent. The
+   workspace states its own so it never depends on inheriting the ledger's. */
+:global(body[data-ds-dark-theme]) .ws {
+  --wf-accent: #d9b64c;
 }
 
 /* ── 顶部 · the identity strip ─────────────────────────────────────────── */

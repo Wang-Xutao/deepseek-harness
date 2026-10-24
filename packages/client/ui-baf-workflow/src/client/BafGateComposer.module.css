@@ -43,11 +43,15 @@
 }
 
 .frame {
-  --gate-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
-  --gate-ink: var(--dsw-alias-text-primary, #1f2937);
-  --gate-muted: var(--dsw-alias-text-secondary, #64748b);
-  --gate-line: var(--dsw-alias-border-subtle, #d7dee8);
-  --gate-card: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas, #fff));
+  /* 【变更】2026-10-25 (批次二十一 2): the composer's own token block reads the
+     platform's REAL aliases — the old chains ended in light literals (#1f2937
+     / #d7dee8 / #fff), so the ask-the-gate card stayed a white box with
+     near-black copy in the dark theme. */
+  --gate-accent: #c9a227;
+  --gate-ink: var(--dsw-alias-text-primary);
+  --gate-muted: var(--dsw-alias-text-secondary);
+  --gate-line: var(--dsw-alias-border-subtle);
+  --gate-card: var(--dsw-alias-bg-elevated);
 
   display: flex;
   flex-direction: column;
@@ -95,7 +99,12 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--dsw-alias-bg-elevated, #fff);
+  /* 【变更】2026-10-25 (批次二十一 2): the copy ON the gold is the BAF dark
+     ink, not the theme's elevated surface. White on the raw gold is 2.4:1 —
+     unreadable — and a surface-coloured chip would flip between white ink
+     (light theme) and dark ink (dark theme) for the same gold. One ink, both
+     themes, 9.9:1. */
+  color: #1a1406;
   background: var(--gate-accent);
   text-transform: uppercase;
   flex-shrink: 0;
@@ -222,7 +231,7 @@ button.artifactChip:hover {
 .primaryBtn {
   border: 1px solid color-mix(in srgb, var(--gate-accent) 80%, var(--gate-line));
   background: var(--gate-accent);
-  color: var(--dsw-alias-bg-elevated, #fff);
+  color: #1a1406;
 }
 
 .primaryBtn:hover:not(:disabled) {
@@ -264,7 +273,7 @@ button.artifactChip:hover {
 }
 
 .primaryBtn .optionHint {
-  color: color-mix(in srgb, var(--dsw-alias-bg-elevated, #fff) 82%, var(--gate-accent));
+  color: color-mix(in srgb, #1a1406 82%, var(--gate-accent));
 }
 
 /* 用户问题 1.7: the revision input under the options. */

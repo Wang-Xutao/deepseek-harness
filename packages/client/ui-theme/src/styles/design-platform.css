@@ -289,6 +289,40 @@ body {
   --dsw-specific-sidebar-nav-item-active: var(--dsw-static-neutral-bluish-100);
   --dsw-specific-tip: var(--dsw-static-neutral-bluish-60);
 
+  /* 【变更】2026-10-25 (批次二十一 1): the client-side alias vocabulary this
+     platform never defined. The BAF client CSS is written against these
+     names — `var(--dsw-alias-bg-canvas, #f6f8fb)`,
+     `var(--dsw-alias-text-primary, #1f2937)` — and because the platform had
+     no such token, EVERY one of those chains fell through to its LIGHT
+     literal: the dark theme kept white cards, near-black ink and pale
+     hairlines. Defining the vocabulary HERE is the root fix — the surfaces,
+     the copy tiers, the hairlines and the status colours switch with the
+     theme instead of with a hard-coded fallback.
+     The status colours are mixed toward their own dark end so body copy
+     keeps its contrast on white (success 4.7:1, warning 5.9:1, danger
+     5.3:1); the raw palette greens and ambers are MARK colours, not text. */
+  --dsw-alias-bg-canvas: var(--dsw-static-neutral-bluish-60);
+  --dsw-alias-bg-elevated: var(--dsw-static-neutral-bluish-00);
+  --dsw-alias-bg-primary: var(--dsw-static-neutral-bluish-00);
+  --dsw-alias-text-primary: var(--dsw-static-neutral-bluish-1000);
+  --dsw-alias-text-secondary: var(--dsw-static-neutral-bluish-700);
+  --dsw-alias-text-tertiary: var(--dsw-static-neutral-bluish-600);
+  --dsw-alias-text-success: color-mix(in srgb, var(--dsw-static-green-500) 55%, var(--dsw-static-green-900));
+  --dsw-alias-text-danger: color-mix(in srgb, var(--dsw-static-red-600) 85%, var(--dsw-static-red-900));
+  --dsw-alias-text-warning: color-mix(in srgb, var(--dsw-static-amber-600) 55%, var(--dsw-static-amber-900));
+  --dsw-alias-text-info: var(--dsw-static-blue-600);
+  --dsw-alias-border-subtle: color-mix(in srgb, var(--dsw-static-neutral-bluish-1000) 14%, transparent);
+  --dsw-alias-border-strong: color-mix(in srgb, var(--dsw-static-neutral-bluish-1000) 24%, transparent);
+  /* 【变更】2026-10-25 (批次二十一 1): two more labels the client asked for
+     by name. `state-danger-label` is the danger COPY grade (the platform had
+     the mark grade and the warn label, but no danger label — several call
+     sites used it with NO fallback, so their text fell back to the inherited
+     colour instead of a danger hue); `attention` is the warm "needs a look"
+     tier, which at 2.2:1 on white was a colour only a light theme could
+     afford. */
+  --dsw-alias-state-danger-label: color-mix(in srgb, var(--dsw-static-red-600) 85%, var(--dsw-static-red-900));
+  --dsw-alias-attention: color-mix(in srgb, var(--dsw-static-amber-600) 62%, var(--dsw-static-amber-900));
+
   background-color: var(--dsw-alias-bg-base);
 }
 
@@ -411,6 +445,36 @@ body[data-ds-dark-theme] {
   --dsw-specific-sidebar-nav-item-active-accent: var(--dsw-static-neutral-bluish-800);
   --dsw-specific-sidebar-nav-item-active: var(--dsw-static-neutral-bluish-750);
   --dsw-specific-tip: var(--dsw-static-neutral-bluish-800);
+
+  /* 【变更】2026-10-25 (批次二十一 1): the dark half of the vocabulary the
+     client CSS was written against. The dark surfaces stack the other way
+     round: the canvas is the FLOOR (bg-base, #151517) and the raised cards
+     sit on top of it (bg-elevated / bg-layer-2, #2c2c2e) — the same pair the
+     light theme uses (a white card on a #f5f6f7 canvas), so one surface
+     reads the same way in both themes.
+     The status colours take their BRIGHT palette end here: on the dark
+     floor green-400 / red-400 / amber-400 / blue-400 all clear 5.6:1 and
+     above, where their light-theme values would sink into the surface. */
+  --dsw-alias-bg-canvas: var(--dsw-static-neutral-bluish-950);
+  --dsw-alias-bg-elevated: var(--dsw-static-neutral-bluish-850);
+  --dsw-alias-bg-primary: var(--dsw-static-neutral-bluish-850);
+  --dsw-alias-text-primary: var(--dsw-static-neutral-bluish-50);
+  --dsw-alias-text-secondary: var(--dsw-static-neutral-bluish-300);
+  --dsw-alias-text-tertiary: var(--dsw-static-neutral-bluish-400);
+  --dsw-alias-text-success: var(--dsw-static-green-400);
+  /* The red mark grade (red-400) is 4.2:1 on the raised card surface — the
+     copy grade needs one step more light: lifted toward white it clears
+     4.8:1 on the card and 5.6:1 on the floor. */
+  --dsw-alias-text-danger: color-mix(in srgb, var(--dsw-static-red-400) 82%, var(--dsw-static-neutral-00));
+  --dsw-alias-text-warning: var(--dsw-static-amber-400);
+  --dsw-alias-text-info: var(--dsw-static-blue-400);
+  --dsw-alias-border-subtle: color-mix(in srgb, var(--dsw-static-neutral-00) 14%, transparent);
+  --dsw-alias-border-strong: color-mix(in srgb, var(--dsw-static-neutral-00) 24%, transparent);
+  /* 【变更】2026-10-25 (批次二十一 1): the dark half of the two extra labels
+     — the danger copy grade takes the bright red, the attention tier takes
+     the bright amber; both clear 5.5:1 on the dark floor. */
+  --dsw-alias-state-danger-label: var(--dsw-static-red-400);
+  --dsw-alias-attention: var(--dsw-static-amber-400);
 }
 
 /* Overlays without MenuSurface's opaque backing cannot blur page content over

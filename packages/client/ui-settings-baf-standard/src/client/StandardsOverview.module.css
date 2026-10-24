@@ -1382,13 +1382,23 @@
  * inset accent edge + hover lift. Accent derives from the same brand token
  * the 确认门/工作流图 canvases use, so the three flow surfaces agree. */
 .qflowList {
-  --qf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  /* 【变更】2026-10-25 (批次二十一 2): the gold is stated outright, in both
+     themes — the platform has no brand hue of its own, and the token this
+     borrowed from never existed, so the accent could not switch with the
+     theme. The dark half is a touch brighter, so the foil still reads as
+     metal on the dark floor. */
+  --qf-accent: #c9a227;
   display: flex;
   flex-direction: column;
   /* 【变更】2026-10-23 (批次十七 3.1): the 测试流 title sat flush on the 00 前置
      card (zero gap) — one quiet 10px breath, matching the .card → body rhythm
      the environment card above already speaks. */
   margin-top: 10px;
+}
+
+/* 【变更】2026-10-25 (批次二十一 2): the dark half of the BAF accent. */
+:global(body[data-ds-dark-theme]) .qflowList {
+  --qf-accent: #d9b64c;
 }
 
 .qflowLink {

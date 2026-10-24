@@ -22,6 +22,13 @@
  */
 
 .root {
+  /* 【变更】2026-10-25 (批次二十一 3): the trace graph keeps its OWN indigo
+     brand — it is a different surface from the BAF gold console — but it is
+     stated in BOTH themes now. The old chain read `--dsw-alias-text-brand`,
+     a token the platform never defined, so the indigo was a frozen fallback:
+     #8250df is 3.7:1 on the dark floor, too weak for small type. The dark
+     half lifts to #a78bfa (6.8:1). */
+  --tg-brand: #8250df;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -32,6 +39,13 @@
     var(--dsw-alias-bg-canvas);
   color: var(--dsw-alias-text-primary);
   overflow: hidden;
+}
+
+/* 【变更】2026-10-25 (批次二十一 3): the dark half of the trace
+   graph's brand — the lifted indigo, so the accents keep their read on the
+   dark floor. */
+:global(body[data-ds-dark-theme]) .root {
+  --tg-brand: #a78bfa;
 }
 
 @keyframes traceGraphFadeUp {
@@ -71,7 +85,7 @@
   padding: 14px 18px 14px 16px;
   border-radius: 14px;
   background:
-    linear-gradient(135deg, var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)), var(--dsw-alias-bg-module-platform));
+    linear-gradient(135deg, var(--dsw-alias-bg-elevated), var(--dsw-alias-bg-module-platform));
   border: 1px solid var(--dsw-alias-border-subtle);
   box-shadow: 0 1px 2px var(--dsw-alias-shadow-subtle, rgba(0, 0, 0, 0.06));
   transition:
@@ -83,7 +97,7 @@
 }
 
 .statCard:hover {
-  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  border-color: var(--tg-brand);
   box-shadow:
     0 8px 24px -12px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.4)),
     0 1px 2px var(--dsw-alias-shadow-subtle, rgba(0, 0, 0, 0.06));
@@ -98,7 +112,7 @@
 /* Color-coded icon tile per metric kind. The accent strip is dropped, the
  * icon tile alone is enough color hint at this size. */
 .statCard-turns     { color: var(--dsw-alias-text-info,    #0969da); }
-.statCard-steps     { color: var(--dsw-alias-text-brand,   #8250df); }
+.statCard-steps     { color: var(--tg-brand); }
 .statCard-toolCalls { color: var(--dsw-alias-text-warning, #9a6700); }
 .statCard-duration  { color: var(--dsw-alias-text-success, #1a7f37); }
 
@@ -198,15 +212,15 @@
 
 .splitter:hover,
 .splitter[data-dragging="true"] {
-  background: color-mix(in srgb, var(--dsw-alias-border-brand, var(--dsw-alias-border-strong)) 14%, transparent);
+  background: color-mix(in srgb, var(--tg-brand) 14%, transparent);
 }
 
 .splitter:hover::before,
 .splitter[data-dragging="true"]::before {
   width: 3px;
   left: 2.5px;
-  background: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-border-brand, var(--dsw-alias-border-strong)) 24%, transparent);
+  background: var(--tg-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tg-brand) 24%, transparent);
 }
 
 /* Right rail: fixed width, own scroll, never scrolls with the pipeline. */
@@ -219,7 +233,7 @@
   overflow-x: hidden;
   align-self: stretch;
   background:
-    linear-gradient(180deg, var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)), var(--dsw-alias-bg-module-platform));
+    linear-gradient(180deg, var(--dsw-alias-bg-elevated), var(--dsw-alias-bg-module-platform));
 }
 
 .detailSticky {
@@ -294,7 +308,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  background: var(--dsw-alias-bg-elevated);
   border: 2px solid var(--dsw-alias-text-tertiary);
   box-shadow: 0 0 0 3px var(--dsw-alias-bg-canvas);
 }
@@ -323,7 +337,7 @@
   text-align: left;
   border: 1px solid var(--dsw-alias-border-subtle);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  background: var(--dsw-alias-bg-elevated);
   color: inherit;
   padding: 10px 12px;
   cursor: pointer;
@@ -335,7 +349,7 @@
 }
 
 .turnButton:hover {
-  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  border-color: var(--tg-brand);
   box-shadow: 0 6px 18px -10px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.35));
   transform: translateY(-1px);
 }
@@ -345,12 +359,12 @@
 }
 
 .turnButtonSelected {
-  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  border-color: var(--tg-brand);
   background: linear-gradient(135deg,
     var(--dsw-alias-bg-module-platform),
-    var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)));
+    var(--dsw-alias-bg-elevated));
   box-shadow:
-    0 0 0 1px var(--dsw-alias-border-brand, var(--dsw-alias-border-strong)),
+    0 0 0 1px var(--tg-brand),
     0 8px 22px -12px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.5));
 }
 
@@ -362,7 +376,7 @@
   bottom: 0;
   width: 3px;
   border-radius: 12px 0 0 12px;
-  background: var(--dsw-alias-text-brand, var(--dsw-alias-text-primary));
+  background: var(--tg-brand);
 }
 
 .turnHeader {
@@ -420,7 +434,7 @@
   border: 1px solid var(--dsw-alias-border-subtle);
 }
 
-.turnChip[data-kind="model"] { color: var(--dsw-alias-text-brand, #8250df); }
+.turnChip[data-kind="model"] { color: var(--tg-brand); }
 .turnChip[data-kind="tool"] { color: var(--dsw-alias-text-warning, #9a6700); }
 .turnChip[data-kind="tokens"] { color: var(--dsw-alias-text-info, #0969da); }
 .turnChip[data-kind="duration"] { color: var(--dsw-alias-text-success, #1a7f37); }
@@ -437,7 +451,7 @@
 .turnButton:hover .turnChevron,
 .turnButtonSelected .turnChevron {
   transform: translateX(2px);
-  color: var(--dsw-alias-text-brand, var(--dsw-alias-text-primary));
+  color: var(--tg-brand);
 }
 
 /* --------------------------------------------------------------- orchestration */
@@ -505,15 +519,15 @@
 
 .memberButton:hover {
   border-color: var(--dsw-alias-border-subtle);
-  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  background: var(--dsw-alias-bg-elevated);
   transform: translateX(2px);
 }
 
 .memberButton:active { transform: translateX(1px); }
 
 .memberButtonSelected {
-  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
-  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
+  border-color: var(--tg-brand);
+  background: var(--dsw-alias-bg-elevated);
   font-weight: 600;
 }
 
@@ -542,7 +556,7 @@
 }
 
 .childBanner[data-state="loading"] { border-color: var(--dsw-alias-border-info, var(--dsw-alias-border-subtle)); }
-.childBanner[data-state="error"] { border-color: var(--dsw-alias-border-danger, #cf222e); }
+.childBanner[data-state="error"] { border-color: var(--dsw-alias-text-danger); }
 
 .childBanner[data-state="loading"] .childBannerText::before {
   content: "";
@@ -573,8 +587,8 @@
 }
 
 .backButton:hover {
-  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas));
-  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  background: var(--dsw-alias-bg-elevated);
+  border-color: var(--tg-brand);
 }
 
 /* ----------------------------------------------------------- pipeline cards */
@@ -585,7 +599,7 @@
   border-radius: 14px;
   padding: 14px 16px;
   background: linear-gradient(135deg,
-    var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas)),
+    var(--dsw-alias-bg-elevated),
     var(--dsw-alias-bg-module-platform));
   cursor: pointer;
   transition:
@@ -596,15 +610,15 @@
 }
 
 .stepCard:hover {
-  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  border-color: var(--tg-brand);
   box-shadow: 0 14px 32px -18px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.4));
   transform: translateY(-1px);
 }
 
 .stepCardSelected {
-  border-color: var(--dsw-alias-border-brand, var(--dsw-alias-border-strong));
+  border-color: var(--tg-brand);
   box-shadow:
-    0 0 0 1px var(--dsw-alias-border-brand, var(--dsw-alias-border-strong)),
+    0 0 0 1px var(--tg-brand),
     0 14px 32px -16px var(--dsw-alias-shadow-brand, rgba(99, 102, 241, 0.5));
 }
 
@@ -629,9 +643,9 @@
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--dsw-alias-text-brand, #8250df) 12%, var(--dsw-alias-bg-canvas));
-  color: var(--dsw-alias-text-brand, #8250df);
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-text-brand, #8250df) 30%, var(--dsw-alias-border-subtle));
+  background: color-mix(in srgb, var(--tg-brand) 12%, var(--dsw-alias-bg-canvas));
+  color: var(--tg-brand);
+  border: 1px solid color-mix(in srgb, var(--tg-brand) 30%, var(--dsw-alias-border-subtle));
 }
 
 .stepOrdinalSep {
@@ -661,7 +675,7 @@
 
 .stepUsageChip[data-kind="input"]   { color: var(--dsw-alias-text-info, #0969da); }
 .stepUsageChip[data-kind="cached"]  { color: var(--dsw-alias-text-secondary); }
-.stepUsageChip[data-kind="output"]  { color: var(--dsw-alias-text-brand, #8250df); }
+.stepUsageChip[data-kind="output"]  { color: var(--tg-brand); }
 
 /* Pipeline column: REQUEST / RESPONSE / TOOL stack vertically as cards.
    Each card carries its own badge, body, and risk chrome. Soft pipes
@@ -728,7 +742,7 @@
 }
 
 .cardRequest { color: var(--dsw-alias-text-info, #0969da); }
-.cardResponse { color: var(--dsw-alias-text-brand, #8250df); }
+.cardResponse { color: var(--tg-brand); }
 .cardTool { color: var(--dsw-alias-text-warning, #9a6700); }
 
 .cardRequest,
@@ -847,12 +861,12 @@
 .connectorRequest {
   background: linear-gradient(90deg,
     color-mix(in srgb, var(--dsw-alias-text-info,    #0969da) 22%, var(--dsw-alias-bg-canvas)),
-    color-mix(in srgb, var(--dsw-alias-text-brand,   #8250df) 22%, var(--dsw-alias-bg-canvas)));
+    color-mix(in srgb, var(--tg-brand) 22%, var(--dsw-alias-bg-canvas)));
 }
 
 .connectorResponse {
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--dsw-alias-text-brand,   #8250df) 22%, var(--dsw-alias-bg-canvas)),
+    color-mix(in srgb, var(--tg-brand) 22%, var(--dsw-alias-bg-canvas)),
     color-mix(in srgb, var(--dsw-alias-text-warning, #9a6700) 22%, var(--dsw-alias-bg-canvas)));
 }
 
@@ -886,7 +900,7 @@
 .detailStep {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--dsw-alias-text-brand, var(--dsw-alias-text-primary));
+  color: var(--tg-brand);
   font-weight: 600;
 }
 

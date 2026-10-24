@@ -25,16 +25,21 @@
  * - --wf-ink-3       quiet bits (counts, hints) — still the quietest tier
  */
 .block {
-  --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  /* 【变更】2026-10-25 (批次二十一 2): the gold is stated outright, in both
+     themes — the platform has no brand hue of its own, and the token this
+     borrowed from never existed, so the gold could not switch with the
+     theme. The dark half is a touch brighter, so the foil still reads as
+     metal on the dark floor. */
+  --wf-accent: #c9a227;
   --wf-accent-soft: color-mix(in srgb, var(--wf-accent) 72%, #fff);
   --wf-accent-ink: #1a1406;
-  --wf-accent-text: color-mix(in srgb, var(--wf-accent) 60%, var(--dsw-alias-label-primary, #0f1115));
-  --wf-surface: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base, #fff));
-  --wf-canvas: var(--dsw-alias-bg-base, #fff);
-  --wf-ink: var(--dsw-alias-label-primary, #0f1115);
-  --wf-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 55%, var(--dsw-alias-label-secondary, #61666b));
-  --wf-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 26%, var(--dsw-alias-label-tertiary, #81858c));
-  --wf-line: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
+  --wf-accent-text: color-mix(in srgb, var(--wf-accent) 60%, var(--dsw-alias-label-primary));
+  --wf-surface: var(--dsw-alias-bg-layer-2);
+  --wf-canvas: var(--dsw-alias-bg-base);
+  --wf-ink: var(--dsw-alias-label-primary);
+  --wf-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary) 55%, var(--dsw-alias-label-secondary));
+  --wf-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary) 26%, var(--dsw-alias-label-tertiary));
+  --wf-line: var(--dsw-alias-border-l2);
   /* 【变更】2026-10-24 (批次二十 2): the MATERIAL tokens — the gold hairline
      every raised surface wears, the top highlight that reads as a lit edge,
      and the two shadow depths the console's layers share. */
@@ -44,6 +49,13 @@
   --wf-shadow-md: 0 18px 40px -30px color-mix(in srgb, #000 46%, transparent);
   padding: 16px 0 18px;
   border-bottom: 0.5px solid var(--wf-line);
+}
+
+/* 【变更】2026-10-25 (批次二十一 2): the dark half of the BAF accent. On the
+   dark floor the foil needs a little more luminance to keep its metal read —
+   the hairlines, the focus glows and the brand chip all sit on #151517. */
+:global(body[data-ds-dark-theme]) .block {
+  --wf-accent: #d9b64c;
 }
 
 /* 【变更】2026-10-24 (批次二十 2): the page becomes one premium console
