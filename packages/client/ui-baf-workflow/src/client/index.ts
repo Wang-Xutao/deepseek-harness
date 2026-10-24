@@ -200,6 +200,19 @@ export function apply(ctx: ClientContext): void {
       // `as` the 测试流图 tab's `testFlowStatus` uses bridges them.
       loadChangeDetail: async (changeId: string) =>
         unwrap(await ctx.remote.bafWorkflowView.changeDetail({ changeId })) as BafWorkflowChangeDetailResult,
+      // 【变更】2026-10-24 (批次二十 3): open one of the change's artifacts in
+      // the right sidebar. The 变更总览 page is PROJECT-scoped — there is no
+      // conversation behind it to borrow a file address from — so the opener
+      // resolves a LIVE session of the SAME workspace and uses its id. With no
+      // such session the page has no sidebar to open into, so the opener
+      // reports the refusal instead of the page offering a dead button.
+      openArtifact: (cwd: string, path: string): boolean => {
+        const sessions = Object.values(ctx.sessions.list.getSnapshot().byId)
+        const owner = sessions.find(session => session.cwd === cwd)
+        if (owner === undefined) return false
+        ctx.sidebarRight.openResource(fileAddressFor(owner.id, cwd, path))
+        return true
+      },
     }),
   }, ChangeOverviewRow))
 

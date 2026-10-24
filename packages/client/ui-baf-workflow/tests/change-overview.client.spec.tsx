@@ -7,6 +7,10 @@
  * 【变更】2026-10-24 (批次十九 1.3): the ledger became the ONE home of the
  * change overview — clicking a change card opens the detail modal with the
  * stage flow and the change's full event history.
+ * 【变更】2026-10-24 (批次二十 1/3): the ledger's console redesign + the
+ * detail view's FOUR-ZONE workspace (顶部 strip / 左侧 rail / 中间工作流图 /
+ * 右侧 rail). The middle zone is the session tab's own flow canvas — the same
+ * component, so the change reads exactly as it reads in the conversation.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -62,7 +66,11 @@ function readyFixture(): BafWorkflowChangeOverviewResult {
   }
 }
 
-/** One change's detail — the stage flow + the event history. */
+/**
+ * 【变更】2026-10-24 (批次二十 3): one change's detail — the COMPLETE graph
+ * (two on-path stages and the edge between them), the intake, the artifacts
+ * and the event history.
+ */
 function detailFixture(changeId: string): BafWorkflowChangeDetailResult {
   return {
     status: 'ready',
@@ -73,12 +81,24 @@ function detailFixture(changeId: string): BafWorkflowChangeDetailResult {
       changeId,
       mode: 'full-go-path',
       current: 'implement',
+      intake: {
+        changeId,
+        kind: 'feature',
+        mode: 'full-go-path',
+        affectedScope: 'src/app.ts',
+        confidence: 0.82,
+        reasonCodes: ['scope-narrow'],
+        openspecRequired: true,
+        requiresUserConfirmation: false,
+        confirmation: '',
+        summary: 'touches the app entry',
+      },
       nodes: [
         {
           id: 'intake',
           status: 'completed',
           catalog: {
-            id: 'intake', titleKey: 'node.intake', purpose: 'p', prerequisites: [], actions: [],
+            id: 'intake', titleKey: 'node.intake', purpose: 'p', prerequisites: [], actions: ['classify'],
             artifacts: [], completion: [], failure: [], entries: [],
           },
           onPath: true,
@@ -89,7 +109,7 @@ function detailFixture(changeId: string): BafWorkflowChangeDetailResult {
           id: 'implement',
           status: 'in-progress',
           catalog: {
-            id: 'implement', titleKey: 'node.implement', purpose: 'p', prerequisites: [], actions: [],
+            id: 'implement', titleKey: 'node.implement', purpose: 'p', prerequisites: [], actions: ['code'],
             artifacts: [], completion: [], failure: [], entries: [],
           },
           onPath: true,
@@ -97,7 +117,16 @@ function detailFixture(changeId: string): BafWorkflowChangeDetailResult {
           transitionsOut: [],
         },
       ],
-      graph: { nodes: [], edges: [] },
+      graph: {
+        mode: 'full-go-path',
+        nodes: [
+          { id: 'intake', column: 0, row: 0, onPath: true },
+          { id: 'implement', column: 1, row: 0, onPath: true },
+        ],
+        edges: [
+          { id: 'edge-1', from: 'intake', to: 'implement', kind: 'forward', condition: 'ok' },
+        ],
+      },
       projectionVersion: 7,
       startedAt: '2026-10-23T08:00:00.000Z',
       metrics: { totalDurationMs: 60_000, totalInputTokens: 1200, totalOutputTokens: 800 },
@@ -118,12 +147,14 @@ function mount(
   loadChangeOverview: () => Promise<BafWorkflowChangeOverviewResult>,
   loadChangeDetail: (changeId: string) => Promise<BafWorkflowChangeDetailResult> =
     async changeId => detailFixture(changeId),
+  openArtifact?: (cwd: string, path: string) => boolean,
 ) {
   return render(
     <ChangeOverviewRow
       t={t as never}
       loadChangeOverview={loadChangeOverview}
       loadChangeDetail={loadChangeDetail}
+      {...(openArtifact === undefined ? {} : { openArtifact })}
     />,
   )
 }
@@ -190,9 +221,10 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
     expect(load).toHaveBeenCalledTimes(2)
   })
 
-  // 【变更】2026-10-24 (批次十九 1.3): clicking a change card opens the detail
-  // modal — the stage flow plus the change's full event history.
-  it('opens the change detail modal with the stage flow and the history', async () => {
+  // 【变更】2026-10-24 (批次二十 3): clicking a change card opens the FOUR-ZONE
+  // workspace — a top strip, a left rail, the complete workflow graph in the
+  // middle and a right rail.
+  it('opens the four-zone detail workspace with the complete workflow graph', async () => {
     const load = vi.fn().mockResolvedValue(readyFixture())
     const detail = vi.fn().mockImplementation(async (changeId: string) => detailFixture(changeId))
     mount(load, detail)
@@ -201,21 +233,84 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
     expect(await screen.findByTestId('change-detail-modal')).toBeDefined()
     expect(detail).toHaveBeenCalledWith('change-active')
 
-    // The stage flow lists the change's stages.
-    const flow = screen.getByTestId('change-detail-flow')
-    expect(flow.textContent).toContain('node.intake')
-    expect(flow.textContent).toContain('node.implement')
-    // The history lists every projection event.
+    // 顶部 · the identity strip carries the change id and the headline figures.
+    const top = screen.getByTestId('change-detail-top')
+    expect(top.textContent).toContain('change-active')
+    expect(top.textContent).toContain('strip.startedAt')
+    expect(top.textContent).toContain('card.duration')
+    expect(top.textContent).toContain('card.tokens')
+
+    // 左侧 · the classification card + the stage artifacts.
+    const left = screen.getByTestId('change-detail-left')
+    expect(left.textContent).toContain('ovw.detailIntake')
+    expect(left.textContent).toContain('src/app.ts')
+    expect(left.textContent).toContain('proposal.md')
+
+    // 中间 · the COMPLETE graph — both stages and the edge between them.
+    const graph = screen.getByTestId('change-detail-graph')
+    expect(graph.textContent).toContain('node.intake')
+    expect(graph.textContent).toContain('node.implement')
+    expect(graph.querySelectorAll('[role="button"]').length).toBeGreaterThanOrEqual(2)
+    expect(graph.querySelector('svg')).not.toBeNull()
+
+    // 右侧 · the stage head + the stage checklist + the full event history.
+    const right = screen.getByTestId('change-detail-right')
+    expect(right.textContent).toContain('node.implement')
     const history = screen.getByTestId('change-detail-history')
     expect(history.textContent).toContain('hist.intakeClassified')
     expect(history.textContent).toContain('hist.stageEntered')
     expect(history.textContent).toContain('hist.stageCompleted')
-    // The artifacts and the headline numbers ride the modal too.
-    expect(screen.getByTestId('change-detail-artifacts').textContent).toContain('proposal.md')
-    expect(screen.getByTestId('change-detail-metrics').textContent).toContain('strip.startedAt')
   })
 
-  it('closes the detail modal again', async () => {
+  // 【变更】2026-10-24 (批次二十 3): clicking a node in the graph switches the
+  // right rail to that stage.
+  it('switches the stage detail when another node in the graph is picked', async () => {
+    const load = vi.fn().mockResolvedValue(readyFixture())
+    mount(load)
+
+    fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
+    const graph = await screen.findByTestId('change-detail-graph')
+    await waitFor(() => {
+      expect(screen.getByTestId('change-detail-right').textContent).toContain('node.implement')
+    })
+
+    const intakeNode = graph.querySelector('[aria-label^="node.intake"]')
+    expect(intakeNode).not.toBeNull()
+    fireEvent.click(intakeNode as Element)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('change-detail-right').textContent).toContain('node.intake')
+    })
+  })
+
+  // 【变更】2026-10-24 (批次二十 3): the artifact open channel resolves a live
+  // session of the same workspace; a refusal is reported in place.
+  it('opens an artifact through the injected opener and reports a refusal', async () => {
+    const load = vi.fn().mockResolvedValue(readyFixture())
+    const openArtifact = vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false)
+    mount(load, undefined, openArtifact as never)
+
+    fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
+    await screen.findByTestId('change-detail-left')
+    const artifact = await screen.findByRole('button', { name: /proposal\.md/ })
+    fireEvent.click(artifact)
+    expect(openArtifact).toHaveBeenCalledWith('/work/demo-project', 'openspec/changes/x/proposal.md')
+
+    fireEvent.click(artifact)
+    await waitFor(() => { expect(screen.getByTestId('change-detail-open-failed')).toBeDefined() })
+    expect(screen.getByTestId('change-detail-open-failed').textContent).toBe('ovw.detailOpenFailed')
+  })
+
+  it('says the artifacts are read-only when the page cannot open them', async () => {
+    const load = vi.fn().mockResolvedValue(readyFixture())
+    mount(load)
+
+    fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
+    expect(await screen.findByTestId('change-detail-no-session')).toBeDefined()
+    expect(screen.getByTestId('change-detail-no-session').textContent).toBe('ovw.detailNoSession')
+  })
+
+  it('closes the detail workspace again', async () => {
     const load = vi.fn().mockResolvedValue(readyFixture())
     mount(load)
 

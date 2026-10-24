@@ -338,6 +338,25 @@ export type WorkflowTabKey =
   | 'ovw.detailEmpty'
   | 'ovw.detailClose'
   | 'ovw.detailUnknownChange'
+  // 【变更】2026-10-24 (批次二十 1/3): the 变更总览 ledger's console copy and
+  // the 变更详情 workspace's four zones (顶部 strip / 左侧 rail / 中间工作流图 /
+  // 右侧 rail). The workspace reuses the session graph's own components, so the
+  // copy here only names the zones the session tab does not have.
+  | 'ovw.ledgerLabel'
+  | 'ovw.detailGraph'
+  | 'ovw.detailGraphHint'
+  | 'ovw.detailStageHead'
+  | 'ovw.detailStageHint'
+  | 'ovw.detailSelectStage'
+  | 'ovw.detailKind'
+  | 'ovw.detailScope'
+  | 'ovw.detailConfidence'
+  | 'ovw.detailReason'
+  | 'ovw.detailConfirmation'
+  | 'ovw.detailTasks'
+  | 'ovw.detailOpenSpec'
+  | 'ovw.detailNoSession'
+  | 'ovw.detailOpenFailed'
   | 'hist.event'
   | 'hist.intakeClassified'
   | 'hist.intakeConfirmed'
@@ -814,6 +833,23 @@ export const en: Record<WorkflowTabKey, string> = {
   'ovw.detailEmpty': 'This change has no history yet.',
   'ovw.detailClose': 'Close',
   'ovw.detailUnknownChange': 'This change is no longer in the project ledger.',
+  // 【变更】2026-10-24 (批次二十 1/3): the ledger's console copy + the 变更详情
+  // workspace's four zones.
+  'ovw.ledgerLabel': 'Change ledger',
+  'ovw.detailGraph': 'Workflow graph',
+  'ovw.detailGraphHint': 'Scroll to pan · Ctrl + wheel to zoom · click a node for its stage',
+  'ovw.detailStageHead': 'Stage',
+  'ovw.detailStageHint': 'Pick a node in the graph to read its stage.',
+  'ovw.detailSelectStage': 'No stage selected.',
+  'ovw.detailKind': 'Kind',
+  'ovw.detailScope': 'Affected scope',
+  'ovw.detailConfidence': 'Confidence',
+  'ovw.detailReason': 'Reason',
+  'ovw.detailConfirmation': 'Needs confirmation',
+  'ovw.detailTasks': 'Tasks',
+  'ovw.detailOpenSpec': 'Openspec',
+  'ovw.detailNoSession': 'No live session in this workspace — the artifacts are read-only here.',
+  'ovw.detailOpenFailed': 'Could not open the artifact in the sidebar.',
   'hist.event': 'Event',
   'hist.intakeClassified': 'Change classified',
   'hist.intakeConfirmed': 'Classification confirmed',
@@ -1272,6 +1308,23 @@ export const zh: Record<WorkflowTabKey, string> = {
   'ovw.detailEmpty': '该变更还没有历史记录。',
   'ovw.detailClose': '关闭',
   'ovw.detailUnknownChange': '该变更已不在项目台账中。',
+  // 【变更】2026-10-24 (批次二十 1/3): the ledger's console copy + the 变更详情
+  // workspace's four zones.
+  'ovw.ledgerLabel': '变更台账',
+  'ovw.detailGraph': '工作流图',
+  'ovw.detailGraphHint': '滚轮平移 · Ctrl + 滚轮缩放 · 点击节点查看该阶段',
+  'ovw.detailStageHead': '阶段详情',
+  'ovw.detailStageHint': '在中间的流程图上点选一个节点，即可查看该阶段详情。',
+  'ovw.detailSelectStage': '尚未选择阶段。',
+  'ovw.detailKind': '变更类型',
+  'ovw.detailScope': '影响范围',
+  'ovw.detailConfidence': '置信度',
+  'ovw.detailReason': '判定依据',
+  'ovw.detailConfirmation': '需人工确认',
+  'ovw.detailTasks': '任务进度',
+  'ovw.detailOpenSpec': '需要 Openspec',
+  'ovw.detailNoSession': '该工作区没有可用会话 — 此处的阶段产物仅作只读展示。',
+  'ovw.detailOpenFailed': '无法在侧栏打开该产物。',
   'hist.event': '事件',
   'hist.intakeClassified': '变更分类',
   'hist.intakeConfirmed': '分类已确认',

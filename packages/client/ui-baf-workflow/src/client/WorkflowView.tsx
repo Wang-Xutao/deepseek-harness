@@ -3,8 +3,7 @@
  */
 import {
   useCallback, useEffect, useMemo, useRef, useState,
-  type KeyboardEvent, type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import clsx from 'clsx'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -21,22 +20,27 @@ import type {
   TestFlowStepId,
   WorkflowNodeId,
   WorkflowTabLanesView,
-  WorkflowTabNodeView,
   WorkflowTabRoutePreview,
   WorkflowTabView,
 } from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
 import { CATALOG_ZH } from './catalog-i18n.ts'
-import { buildClientTemplateTabView, withRenderableGraph, CONDITION_ZH, conditionTextOf } from './graph-template.ts'
-import { NodeIcon } from './icons.tsx'
+import { buildClientTemplateTabView, withRenderableGraph } from './graph-template.ts'
+// 【变更】2026-10-24 (批次二十 3): the graph canvas + the read-only rail
+// parts moved into shared modules, so the 变更总览's per-change detail page
+// renders the SAME graph and the SAME stage detail as this tab (the customer
+// asked for exactly that). The behaviour here is unchanged — only the import
+// moved.
+import { FlowCanvas } from './FlowCanvas.tsx'
+import { ArtifactRail, BilingualDetail, StageChecklist, artifactName, statusClass } from './flow-parts.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
-import { RouteStatusRow, routeBadgeText } from './RouteStatusRow.tsx'
+import { RouteStatusRow } from './RouteStatusRow.tsx'
 import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel, parseGateSections } from './gate-ask.ts'
 import { setWorkflowTabActive } from './tab-activity.ts'
 // 【变更】2026-10-24 (批次十八 2.3): the shared row display helpers — the
 // 工作流 page's 变更总览 ledger formats a change row the same way.
 // 【变更】2026-10-24 (批次十九 1.3): the timestamp helper — the strip's 开始时间.
-import { formatDuration, formatTokenCount, formatTimestamp, formatTokens, modeLabel } from './dashboard-format.ts'
+import { formatDuration, formatTokenCount, formatTimestamp, modeLabel } from './dashboard-format.ts'
 import css from './WorkflowView.module.css'
 
 /** intake.mode wire value → locale key (the rail's 变更分类 card). */
@@ -47,31 +51,10 @@ const INTAKE_MODE_LABEL: Record<string, WorkflowTabKey> = {
 }
 
 /**
- * 【变更】2026-10-22 (批次十三 1 → 批次十五 6, 客户决策「只在验证状态节点添加
- * 测试流图的链接」): where the 工作流图 reaches into the 测试流图 — ONLY the
- * verify card carries a jump chip now (the implement/archive chips retire).
- * The chip addresses the session's 测试流图 tab through the view-request
- * channel (`stage:test` focus lands on that card); verify's completion itself
- * is gated host-side by the new required `test-flow` check (all enabled steps'
- * reports green), so the link sits exactly where the 测试流 becomes the
- * gatekeeper. NOT forced into the model's dispatch loop — the chip is a
- * customer-armed shortcut, the workflow's performance stays untouched.
+ * 【变更】2026-10-24 (批次二十 3): the 测试流图 jump chips moved into
+ * `flow-parts.tsx` together with the canvas that renders them (the 变更总览's
+ * per-change detail page draws the same graph, chips included).
  */
-const TEST_FLOW_JUMPS: Partial<Record<WorkflowNodeId, TestFlowStepId>> = {
-  verify: 'test',
-}
-
-/** The jump chip's 测试流图 stage label key (reuses the 测试流图's node catalog). */
-const TEST_FLOW_JUMP_LABEL: Record<TestFlowStepId, WorkflowTabKey> = {
-  build: 'tflow.node.build',
-  test: 'tflow.node.test',
-  instrument: 'tflow.node.instrument',
-  report: 'tflow.node.report',
-  gate: 'tflow.node.gate',
-  lint: 'tflow.node.lint',
-  analyze: 'tflow.node.analyze',
-  format: 'tflow.node.format',
-}
 
 /** Session-bound workflow Remote callbacks. */
 export interface WorkflowViewInjected {
@@ -177,46 +160,9 @@ export type WorkflowViewProps =
   & PropsLocale<'baf.go-workflow'>
   & InjectFace<WorkflowViewInjected>
 
-const COL_W = 248
-const ROW_H = 128
-const NODE_W = 208
-const NODE_H = 96
 const RAIL_MIN = 280
 const RAIL_MAX = 560
 const RAIL_DEFAULT = 360
-const ZOOM_MIN = 0.55
-const ZOOM_MAX = 1.8
-
-/** Clamp a number into [min, max] — wheel-pan bounds. */
-const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v))
-
-/**
- * 【变更】2026-09-23 (demo5 issue #2): whether a node status means the flow
- * actually EXECUTED that stage — an executed stage shows its real figures and
- * 0 / 0s when nothing was attributed (a completed stage must never read —);
- * only stages the flow never reached (locked / skipped / template / idle)
- * keep the — blank.
- */
-function stageExecuted(status: WorkflowTabNodeView['status'] | undefined): boolean {
-  return status === 'completed' || status === 'in-progress' || status === 'failed'
-    || status === 'blocked' || status === 'drifted'
-}
-
-/** Stage-aware duration: executed → real value or 0s; never-executed → —. */
-function stageDuration(status: WorkflowTabNodeView['status'] | undefined, ms: number | undefined): string {
-  if (ms !== undefined) return formatDuration(ms)
-  return stageExecuted(status) ? '0s' : '—'
-}
-
-/** Stage-aware tokens: executed → real value or 0K; never-executed → —. */
-function stageTokens(
-  status: WorkflowTabNodeView['status'] | undefined,
-  input: number | undefined,
-  output: number | undefined,
-): string {
-  if (input !== undefined || output !== undefined) return formatTokens(input, output)
-  return stageExecuted(status) ? formatTokens(0, 0) : '—'
-}
 
 /**
  * Sum the three disjoint prompt-side billing buckets plus output — the same
@@ -226,25 +172,6 @@ function stageTokens(
  */
 function billedTotalTokens(usage: TokenUsageProjection): number {
   return usage.uncachedInputTokens + usage.cacheReadTokens + usage.cacheWriteTokens + usage.outputTokens
-}
-
-function statusClass(status: WorkflowTabNodeView['status']): string {
-  switch (status) {
-    case 'completed': return css.statusCompleted ?? ''
-    case 'in-progress': return css.statusInProgress ?? ''
-    case 'failed':
-    case 'blocked': return css.statusFailed ?? ''
-    case 'drifted': return css.statusDrifted ?? ''
-    // 【变更】2026-09-25 (用户需求 工作流 5): 已忽略 is gray EVERYWHERE —
-    // 'skipped' used to share the drifted amber here, so a drift-affected
-    // stage's 已忽略 badge read amber while 已放弃's 已忽略 read gray.
-    // Only 漂移 itself keeps the amber (its label is 漂移中, never 已忽略).
-    case 'skipped': return css.statusIdle ?? ''
-    // 【变更】2026-09-30 (demo31 问题 4): 已裁剪 (bug-fix 裁剪掉的 full-go 节点)
-    // is gray like 已忽略 — the node never runs, it just shows the clip.
-    case 'clipped': return css.statusIdle ?? ''
-    default: return css.statusIdle ?? ''
-  }
 }
 
 /**
@@ -348,24 +275,6 @@ export function RouteDispatchLine(props: {
  */
 function fillTemplate(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match)
-}
-
-/** Trim a recorded artifact path down to its file name for display. */
-function artifactName(path: string): string {
-  const parts = path.split(/[\\/]/)
-  return parts[parts.length - 1] || path
-}
-
-/**
- * Whether a catalog action is treated as done for checkbox display.
- * Phase 4 has stage-level status only; completed/skipped stages check all items.
- * 【变更】2026-09-30 (demo31 问题 4): 'clipped' joins — a 裁剪 node's whole
- * action list is moot (the flow skips it), so it renders all-done like 已忽略.
- * @param status - node status.
- * @returns true when the stage is finished.
- */
-function stageActionsDone(status: WorkflowTabNodeView['status'] | undefined): boolean {
-  return status === 'completed' || status === 'skipped' || status === 'clipped'
 }
 
 /** The §13 R3 bug-fix form's five fields (strings; `file` is one-per-line). */
@@ -2062,364 +1971,6 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
 }
 
 /**
- * 【变更】2026-09-23 (demo5 issue #5): the flow graph canvas as its own
- * component — pan/zoom/canvas math live inside, so the history modal renders
- * the SAME graph for any change without touching the main view's state.
- * Selection stays lifted (`selected` + `onActivate`) because the main view's
- * rail and detail panel read it.
- */
-function FlowCanvas(props: {
-  view: WorkflowTabView
-  selected: WorkflowNodeId | null
-  onActivate: (id: string) => void
-  /** 【变更】2026-10-07 (九点批 问题 4): opens one node artifact in the sidebar. */
-  onOpenArtifact: (path: string) => void
-  /**
-   * 【变更】2026-10-22 (批次十三 1): the 测试流图 jump chips' channel — select
-   * the session's 测试流图 tab and address a `stage:<id>` focus to it.
-   */
-  onOpenTestFlow: (stage: TestFlowStepId) => void
-  t: (key: WorkflowTabKey) => string
-}): React.ReactElement {
-  const { view, selected, onActivate, onOpenArtifact, onOpenTestFlow, t } = props
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
-  const panDrag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
-
-  const nodeById = useMemo(() => {
-    const map = new Map<string, WorkflowTabNodeView>()
-    for (const n of view.nodes) map.set(n.id, n)
-    return map
-  }, [view])
-
-  const placements = view.graph.nodes
-  const maxCol = Math.max(0, ...placements.map(p => p.column))
-  const maxRow = Math.max(0, ...placements.map(p => p.row))
-  const canvasW = (maxCol + 1) * COL_W + 56
-  const canvasH = (maxRow + 1) * ROW_H + 72
-
-  const pos = (id: string): { x: number; y: number } | undefined => {
-    const p = placements.find(n => n.id === id)
-    if (p === undefined) return undefined
-    return { x: 28 + p.column * COL_W, y: 28 + p.row * ROW_H }
-  }
-
-  const onNodeKey = (id: WorkflowNodeId) => (event: KeyboardEvent) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      onActivate(id)
-    }
-  }
-
-  const onCanvasPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 2) return
-    event.preventDefault()
-    panDrag.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-
-  const onCanvasPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (panDrag.current === null) return
-    const dx = event.clientX - panDrag.current.x
-    const dy = event.clientY - panDrag.current.y
-    setPan({
-      x: panDrag.current.panX + dx,
-      y: panDrag.current.panY + dy,
-    })
-  }
-
-  const onCanvasPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    panDrag.current = null
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }
-
-  const onCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (event.ctrlKey) {
-      event.preventDefault()
-      const delta = event.deltaY > 0 ? -0.08 : 0.08
-      setZoom(z => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number((z + delta).toFixed(2)))))
-      return
-    }
-    // 【变更】2026-09-28 (用户问题 5): the plain wheel pans the graph
-    // vertically (shift+wheel pans horizontally) — the flow outgrew the
-    // viewport and drag-pan needed a right-click, which nobody discovers.
-    // Clamped so the canvas can never pan fully out of sight.
-    event.preventDefault()
-    setPan(p => ({
-      x: event.shiftKey ? clamp(p.x - event.deltaY, -(canvasW + 80), 80) : p.x,
-      y: clamp(p.y - event.deltaY, -(canvasH * zoom + 80), 80),
-    }))
-  }
-
-  return (
-    <div
-      className={css.graphWrap}
-      onContextMenu={event => event.preventDefault()}
-      onPointerDown={onCanvasPointerDown}
-      onPointerMove={onCanvasPointerMove}
-      onPointerUp={onCanvasPointerUp}
-      onPointerCancel={onCanvasPointerUp}
-      onWheel={onCanvasWheel}
-    >
-      <div
-        className={css.flowWorld}
-        style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
-      >
-        <div
-          className={css.flowCanvas}
-          style={{ width: canvasW, height: canvasH }}
-          role="img"
-          aria-label={t('graph.aria')}
-        >
-          <div className={css.flowGlow} aria-hidden />
-          <svg
-            className={css.flowEdges}
-            viewBox={`0 0 ${canvasW} ${canvasH}`}
-            width={canvasW}
-            height={canvasH}
-            aria-hidden
-          >
-            <defs>
-              <marker
-                id="wf-arrow"
-                viewBox="0 0 10 10"
-                refX="8"
-                refY={5}
-                markerWidth={6}
-                markerHeight={6}
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" className={css.arrowHead} />
-              </marker>
-            </defs>
-            {(view.graph.edges).map((edge) => {
-              const fromId = edge.from ?? 'intake'
-              const a = pos(fromId)
-              const b = pos(String(edge.to))
-              if (a === undefined || b === undefined) return null
-              const x1 = a.x + NODE_W / 2
-              const y1 = edge.from === null ? a.y : a.y + NODE_H
-              const x2 = b.x + NODE_W / 2
-              const y2 = b.y
-              const mid = (y1 + y2) / 2
-              const active = view.current !== null && (
-                edge.from === view.current || edge.to === view.current
-              )
-              return (
-                <path
-                  key={edge.id}
-                  d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}
-                  className={clsx(
-                    css.edge,
-                    edge.kind === 'forward' && css.edgeForward,
-                    edge.kind === 'loop' && css.edgeLoop,
-                    edge.kind === 'cross' && css.edgeCross,
-                    edge.kind === 'entry' && css.edgeEntry,
-                    active && css.edgeActive,
-                  )}
-                  markerEnd="url(#wf-arrow)"
-                >
-                  {/* 【变更】2026-10-20 (批次五 2.3): plain-zh condition, no T-id prefix. */}
-                  <title>{conditionTextOf(edge)}</title>
-                </path>
-              )
-            })}
-          </svg>
-
-          {placements.map((placement, index) => {
-            const p = pos(placement.id)
-            if (p === undefined) return null
-            const node = nodeById.get(placement.id)
-            const isCurrent = view.current === placement.id
-            const isSelected = selected === placement.id
-            // §18.5: a parked gate is its own visual state — deliberately
-            // not the `blocked` styling, because nothing is wrong and the
-            // customer's one action is the way forward.
-            const isGate = view.gate?.node === placement.id
-            const label = t(`node.${placement.id}` as WorkflowTabKey)
-            // 【变更】2026-09-23 (demo1 十问题 9/10): terminal cards carry
-            // their outcome (已完成 / 已放弃); on a terminal change the
-            // opposite outcome card reads 已忽略 — never the template
-            // 空闲 (nothing is idle after the flow ended).
-            const terminalBadge = (): { label: string; cls: string } | null => {
-              if (placement.id !== 'completed' && placement.id !== 'abandoned') return null
-              if (view.current === placement.id) {
-                return placement.id === 'completed'
-                  ? { label: t('status.completed'), cls: css.statusCompleted ?? '' }
-                  : { label: t('status.abandoned'), cls: css.statusFailed ?? '' }
-              }
-              if (view.current === 'completed' || view.current === 'abandoned') {
-                return { label: t('status.skipped'), cls: css.statusIdle ?? '' }
-              }
-              return null
-            }
-            const badge = terminalBadge()
-            // 【变更】2026-09-28 (用户问题 3): bug-fix parity — the off-path
-            // clarify/design nodes are the stages this mode CLIPPED; they read
-            // 「已裁剪」 instead of 空闲, mirroring the full-go graph shape.
-            const isClipped = view.mode === 'bug-fix-path' && !placement.onPath
-              && placement.id !== 'completed' && placement.id !== 'abandoned'
-            const statusLabel = isGate
-              ? t('status.awaiting')
-              : badge !== null
-                ? badge.label
-                : isClipped
-                  ? t('status.clipped')
-                  : node === undefined
-                    ? t('status.template')
-                    : t(`status.${node.status}` as WorkflowTabKey)
-
-            return (
-              <div
-                key={placement.id}
-                className={clsx(
-                  css.flowNode,
-                  isCurrent && css.nodeCurrent,
-                  isSelected && css.nodeSelected,
-                  isGate && css.nodeGate,
-                  !placement.onPath && css.nodeOffPath,
-                )}
-                style={{
-                  left: p.x,
-                  top: p.y,
-                  width: NODE_W,
-                  minHeight: NODE_H,
-                  animationDelay: `${index * 35}ms`,
-                }}
-                tabIndex={0}
-                role="button"
-                aria-label={`${label}: ${statusLabel}${isCurrent ? ` · ${t('card.current')}` : ''}`}
-                aria-pressed={isSelected}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onActivate(placement.id)
-                }}
-                onKeyDown={onNodeKey(placement.id as WorkflowNodeId)}
-              >
-                <div className={css.flowNodeHead}>
-                  <span className={css.nodeIcon}><NodeIcon id={placement.id} /></span>
-                  <div className={css.flowNodeTitles}>
-                    <span className={css.nodeLabel}>{label}</span>
-                    <span
-                      className={clsx(
-                        css.nodeBadge,
-                        isGate ? css.statusGate
-                          : badge !== null ? badge.cls
-                            : node ? statusClass(node.status) : css.statusIdle,
-                      )}
-                    >
-                      {statusLabel}
-                    </span>
-                  </div>
-                  {isCurrent && <span className={css.currentPill}>{t('card.current')}</span>}
-                </div>
-                <div className={css.flowMetrics}>
-                  {/* 【变更】2026-09-24 (demo6 问题 5): the CURRENT terminal card
-                      (完成 / 已放弃) carries the change's TOTAL figures — the
-                      flow ran, so — would be a lie; no attributed usage reads
-                      0s / 0K. The non-current terminal stays 已忽略 with —. */}
-                  {((): React.ReactElement => {
-                    const isCurrentTerminal = (placement.id === 'completed' || placement.id === 'abandoned')
-                      && view.current === placement.id
-                    if (isCurrentTerminal) {
-                      return (
-                        <>
-                          <span>{t('card.duration')} {formatDuration(view.metrics?.totalDurationMs ?? 0)}</span>
-                          <span title={t('metrics.pending')}>
-                            {t('card.tokens')} {formatTokens(view.metrics?.totalInputTokens ?? 0, view.metrics?.totalOutputTokens ?? 0)}
-                          </span>
-                        </>
-                      )
-                    }
-                    return (
-                      <>
-                        <span>{t('card.duration')} {stageDuration(node?.status, node?.metrics?.durationMs)}</span>
-                        <span title={t('metrics.pending')}>
-                          {t('card.tokens')} {stageTokens(node?.status, node?.metrics?.inputTokens, node?.metrics?.outputTokens)}
-                        </span>
-                      </>
-                    )
-                  })()}
-                </div>
-                {/* 【变更】2026-10-07 (九点批 问题 2/4): per-node route badge +
-                    artifact chips. The badge reads the「当前路由」fold's audit
-                    for THIS phase (last-served tier·model); the chips are the
-                    stage's real artifact files (node.artifacts), click-to-open
-                    through the rail's openArtifact channel. Nodes without an
-                    audit or artifacts render neither. */}
-                {(() => {
-                  const routeActual = view.routeStatus?.state === 'routed'
-                    ? view.routeStatus.phases.find(row => row.phase === placement.id)?.actual
-                    : undefined
-                  if (routeActual === undefined) return null
-                  return (
-                    <div className={css.flowNodeRoute} data-testid={`flow-node-route-${placement.id}`}>
-                      {routeBadgeText(routeActual, t)}
-                    </div>
-                  )
-                })()}
-                {node?.artifacts !== undefined && node.artifacts.length > 0 && (
-                  <div className={css.flowNodeArtifacts}>
-                    {node.artifacts.map(artifact => (
-                      <button
-                        key={`${placement.id}:${artifact}`}
-                        type="button"
-                        className={css.flowNodeArtifactChip}
-                        title={artifact}
-                        onClick={(event) => {
-                          // The node itself selects on click — the chip must
-                          // not, it opens the file.
-                          event.stopPropagation()
-                          onOpenArtifact(artifact)
-                        }}
-                      >
-                        {artifactName(artifact)}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* 【变更】2026-10-22 (批次十三 1): the 测试流图 jump chip — the
-                    implement/verify/archive cards' shortcut into the quality
-                    pipeline. stopPropagation (the node selects on click, the
-                    chip switches Tab instead); the stage lands selected via
-                    the view-request channel.
-                    【变更】2026-10-24 (批次十八 2.1): the chip reads 「测试流图」
-                    alone — the stage name moved into the tooltip, so the label
-                    stays short and loud on the 验证 card. */}
-                {(() => {
-                  // placement.id is the wire graph's plain string — same
-                  // `as WorkflowNodeId` cast the node label lookup above uses.
-                  const jumpStage = TEST_FLOW_JUMPS[placement.id as WorkflowNodeId]
-                  if (jumpStage === undefined) return null
-                  return (
-                    <div className={css.flowNodeJumps}>
-                      <button
-                        type="button"
-                        className={css.flowNodeTestFlowChip}
-                        data-testid={`flow-node-testflow-${placement.id}`}
-                        title={`${t('flow.testFlowJumpDesc')} · ${t(TEST_FLOW_JUMP_LABEL[jumpStage])}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onOpenTestFlow(jumpStage)
-                        }}
-                      >
-                        {t('flow.testFlowJump')}
-                      </button>
-                    </div>
-                  )
-                })()}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
  * 【变更】2026-09-23 (demo5 issue #5): the history flow modal — a read-only
  * canvas of one (usually terminal) change over the still-open 变更总览
  * dashboard. Owns its selection; closing returns to the dashboard. The data
@@ -2709,133 +2260,6 @@ function SessionStatsCard(props: {
   )
 }
 
-function ArtifactRail(props: {
-  rows: readonly {
-    readonly file: string
-    readonly path: string
-    readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
-    readonly missing: readonly string[]
-  }[]
-  disabled: boolean
-  onOpen: (path: string) => void
-  t: (key: WorkflowTabKey) => string
-}): React.ReactElement {
-  const { rows, disabled, onOpen, t } = props
-  const stateLabel = (state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'): string =>
-    t(`artifact.state.${state}` as WorkflowTabKey)
-  const stateClass = (state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'): string =>
-    state === 'filled' ? css.artifactStateFilled ?? ''
-      : state === 'planned' ? css.artifactStatePlanned ?? css.artifactStateTemplate ?? ''
-        : state === 'template' || state === 'clipped' ? css.artifactStateTemplate ?? ''
-          : css.artifactStateMissing ?? ''
-  // 【变更】2026-09-23 (demo1 十问题 4): each row names the stage that
-  // produces it — 「设计 design.md」「验证 verify.md」— so the rail
-  // reads as the stage→document map it is.
-  const stageOf = (file: string): string => {
-    // 【变更】2026-09-30 (demo31 问题 4): bug-record.md is gone — bug-fix open
-    // authors the same proposal.md as full-go (the row just reads 已裁剪-less:
-    // it is the rail's FIRST row on both modes).
-    if (file === 'proposal.md') return t('node.open')
-    if (file === 'clarify.md') return t('node.clarify')
-    if (file === 'design.md') return t('node.design')
-    if (file === 'plan.md' || file === 'plan.json' || file === 'tasks.md') return t('node.plan')
-    if (file === 'verify.md' || file === 'verify-report.json' || file === 'checklist.md') return t('node.verify')
-    return ''
-  }
-  return (
-    <section className={clsx(css.card, css.cardAccent)} aria-label={t('artifact.title')}>
-      <h3 className={css.cardTitle}>{t('artifact.title')}</h3>
-      {rows.map((row) => {
-        // 【变更】2026-09-28 (用户问题 3): clipped rows (bug-fix 裁剪的
-        // full-go 产物) render dimmed with no open button — the file is never
-        // produced on this mode, so there is nothing to open.
-        const blocked = row.state === 'missing' || row.state === 'clipped'
-        const stage = stageOf(row.file)
-        return (
-          <div key={row.path}>
-            <div className={css.artifactRow}>
-              <button
-                type="button"
-                className={clsx(css.artifactNameBtn)}
-                disabled={disabled || blocked}
-                title={blocked ? t('artifact.missing') : row.path}
-                onClick={() => onOpen(row.path)}
-              >
-                {stage === '' ? row.file : `${stage} · ${row.file}`}
-              </button>
-              <span className={clsx(css.artifactState, stateClass(row.state))}>
-                {stateLabel(row.state)}
-              </span>
-            </div>
-            {(row.state === 'template' || row.state === 'planned') && row.missing.length > 0 && (
-              <div className={css.artifactGap} title={row.missing.join('\n')}>
-                {t('artifact.gapCount').replace('{n}', String(row.missing.length))}
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </section>
-  )
-}
-
-function StageChecklist(props: {
-  node: WorkflowTabNodeView
-  t: (key: WorkflowTabKey) => string
-}): React.ReactElement {
-  const { node, t } = props
-  const zh = CATALOG_ZH[node.id]
-  const actions = node.catalog.actions
-  const done = stageActionsDone(node.status)
-  const todo = done ? [] : [...actions]
-  const finished = done ? [...actions] : []
-
-  return (
-    <div className={css.checklist}>
-      <div className={css.checklistBlock}>
-        <div className={css.checklistHead}>{t('detail.todoTitle')}</div>
-        {todo.length === 0 ? (
-          <p className={css.hint}>{t('detail.todoEmpty')}</p>
-        ) : (
-          <ul className={css.flowOps}>
-            {todo.map((action, index) => {
-              const actionIndex = actions.indexOf(action)
-              return (
-                <li key={`todo-${index}`} className={css.flowOpItem}>
-                  <span className={css.flowCheck} aria-hidden />
-                  <span className={css.flowOpZh}>
-                    {zh?.actions[actionIndex] ?? action}
-                  </span>
-                  <span className={css.flowOpState}>{t('card.todo')}</span>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
-      {finished.length > 0 && (
-        <div className={css.checklistBlock}>
-          <div className={css.checklistHead}>{t('detail.doneTitle')}</div>
-          <ul className={css.flowOps}>
-            {finished.map((action, index) => {
-              const actionIndex = actions.indexOf(action)
-              return (
-                <li key={`done-${index}`} className={css.flowOpItem}>
-                  <span className={clsx(css.flowCheck, css.flowCheckDone)} aria-hidden>✓</span>
-                  <span className={clsx(css.flowOpZh, css.flowOpDone)}>
-                    {zh?.actions[actionIndex] ?? action}
-                  </span>
-                  <span className={css.flowOpState}>{t('card.done')}</span>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
-  )
-}
-
 /**
  * 【变更】2026-10-20 (批次五 2.3): CONDITION_ZH moved to graph-template.ts
  * (shared with the 确认门 GatesFlow 门禁明细) — import it from there.
@@ -2852,113 +2276,3 @@ function StageChecklist(props: {
  * state, driven by the live node evidence (detail + reasonCodes) plus the
  * catalog's failure copy.
  */
-function BilingualDetail(props: {
-  node: WorkflowTabNodeView
-  t: (key: WorkflowTabKey) => string
-  nextEdge: { id: string; to: string; condition: string } | null
-}): React.ReactElement {
-  const { node, t, nextEdge } = props
-  const zh = CATALOG_ZH[node.id]
-  // 【变更】2026-09-25 (用户需求 工作流 4): the anomaly block renders ONLY when
-  // this stage actually sits failed/blocked — reason from the live node
-  // evidence (detail + reasonCodes), fix from the catalog failure copy.
-  const failed = node.status === 'failed' || node.status === 'blocked'
-  // 【变更】2026-09-23 (demo5 issue #7): the detail panel renders Chinese only —
-  // the bilingual 英/中 pairs are gone. The zh dictionary entry is the display
-  // source; the English catalog text stays the fallback for a node the zh
-  // dictionary has not covered (defensive — the rewrite covers every node).
-  const sections: Array<{
-    title: WorkflowTabKey
-    items: readonly string[]
-    block?: string
-  }> = [
-    {
-      title: 'detail.purpose',
-      items: [],
-      block: zh?.purpose ?? node.catalog.purpose,
-    },
-    {
-      title: 'detail.prerequisites',
-      items: zh?.prerequisites ?? node.catalog.prerequisites,
-    },
-    {
-      title: 'detail.artifacts',
-      items: zh?.artifacts ?? node.catalog.artifacts,
-    },
-    {
-      title: 'detail.completion',
-      items: zh?.completion ?? node.catalog.completion,
-    },
-  ]
-
-  return (
-    <>
-      <div className={css.metaRow}>
-        <span className={css.metaKey}>{t('detail.status')}</span>
-        <span>{t(`status.${node.status}` as WorkflowTabKey)}</span>
-        <span className={css.metaKey}>{t('card.duration')}</span>
-        <span>{stageDuration(node.status, node.metrics?.durationMs)}</span>
-        <span className={css.metaKey}>{t('card.tokens')}</span>
-        <span title={t('metrics.pending')}>
-          {stageTokens(node.status, node.metrics?.inputTokens, node.metrics?.outputTokens)}
-        </span>
-        {nextEdge !== null && (
-          <>
-            <span className={css.metaKey}>{t('card.next')}</span>
-            {/* 【变更】2026-09-25 (demo8 问题 2.4): the raw edge id / target id /
-                English condition are internal vocabulary — show the stage's
-                display name and a plain-zh condition instead. */}
-            <span>{t(`node.${nextEdge.to}` as WorkflowTabKey)}</span>
-            <span className={css.metaKey}>{t('card.condition')}</span>
-            <span>{CONDITION_ZH[nextEdge.id] ?? nextEdge.condition}</span>
-          </>
-        )}
-      </div>
-      {sections.map((section) => {
-        if (section.block === undefined && section.items.length === 0) return null
-        return (
-          <div key={section.title} className={css.biSection}>
-            <div className={css.metaKey}>{t(section.title)}</div>
-            {section.block !== undefined && (
-              <p className={css.biZh}>{section.block}</p>
-            )}
-            {section.items.length > 0 && (
-              <ul className={css.list}>
-                {section.items.map(item => (
-                  <li key={item}>
-                    <div className={css.biZh}>{item}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )
-      })}
-      {/* 【变更】2026-09-25 (用户需求 工作流 4): the ONLY failure surface —
-          reason (the node's live detail + reasonCodes) then 解决方法 (the
-          catalog's customer-side fix copy), rendered exclusively while the
-          stage sits failed/blocked. A healthy or not-yet-reached stage shows
-          nothing here (the old always-on 常见失败与处理 table is deleted). */}
-      {failed && (
-        <div className={css.biSection}>
-          <div className={css.metaKey}>{t('detail.failure')}</div>
-          {node.detail !== undefined && node.detail !== '' && (
-            <p className={css.biZh}>{node.detail}</p>
-          )}
-          {node.reasonCodes !== undefined && node.reasonCodes.length > 0 && (
-            <p className={css.hint}>{node.reasonCodes.join(' · ')}</p>
-          )}
-          {(zh?.failure ?? node.catalog.failure).length > 0 && (
-            <ul className={css.list}>
-              {(zh?.failure ?? node.catalog.failure).map(item => (
-                <li key={item}>
-                  <div className={css.biZh}>{item}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </>
-  )
-}

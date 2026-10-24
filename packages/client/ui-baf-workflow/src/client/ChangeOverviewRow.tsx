@@ -8,18 +8,35 @@
  * card opens a detail modal with the change's stage flow and its full event
  * history. The ledger itself was redesigned for this batch: a hero header,
  * four accent tiles, and clickable change cards instead of a dense table.
+ *
+ * 【变更】2026-10-24 (批次二十 1/3): the ledger became a「金箔仪表台」console —
+ * the gold reads as MATERIAL (layered surfaces, 1px hairline edges, a lit top
+ * edge, staggered entrances) rather than as flat paint — and the per-change
+ * detail view became a FOUR-ZONE workspace:
+ *
+ *   顶部  a strip with the change's identity and its headline figures
+ *   左侧  a fixed rail: the change classification + the stage artifacts
+ *   中间  the COMPLETE workflow graph — the session tab's own `FlowCanvas`,
+ *         the same component, the same nodes, the same edges, the same status
+ *         colours (a change that looks different in the ledger than in the
+ *         conversation is a bug, not a variant)
+ *   右侧  a rail: the stage head, the stage checklist, the stage detail and
+ *         the change's full event history
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   InjectFace, PropsLocale, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   BafWorkflowChangeDetailResult, BafWorkflowChangeOverviewResult,
-  BafWorkflowChangeHistoryEntry, WorkflowDashboardRow, WorkflowTabView,
+  BafWorkflowChangeHistoryEntry, WorkflowDashboardRow, WorkflowNodeId,
+  WorkflowTabNodeView, WorkflowTabView,
 } from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
 import { formatDuration, formatTimestamp, formatTokens, modeLabel } from './dashboard-format.ts'
 import { buildDashboardHtml, type DashboardHtmlLabels } from './dashboard-html.ts'
+import { FlowCanvas } from './FlowCanvas.tsx'
+import { ArtifactRail, BilingualDetail, StageChecklist } from './flow-parts.tsx'
 import css from './ChangeOverviewRow.module.css'
 
 /** The inject face the slot registration hands the row. */
@@ -31,6 +48,17 @@ export interface ChangeOverviewRowInjected {
    * projection + its event history) for the drill-down modal.
    */
   loadChangeDetail: (changeId: string) => Promise<BafWorkflowChangeDetailResult>
+  /**
+   * 【变更】2026-10-24 (批次二十 3): open one of the change's artifacts in the
+   * right sidebar.
+   *
+   * The 变更总览 page is PROJECT-scoped and has no conversation behind it, so
+   * there is no session to borrow a file address from. The opener therefore
+   * resolves a LIVE session of the same workspace and returns `false` when the
+   * workspace has none — the page then says so instead of offering a button
+   * that cannot work.
+   */
+  openArtifact?: (cwd: string, path: string) => boolean
 }
 
 /** Full component props for the 变更总览 settings row. */
@@ -87,7 +115,7 @@ export function historyKeyOf(type: string): string {
  * @returns the row element tree.
  */
 export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactElement {
-  const { t, loadChangeOverview, loadChangeDetail } = props
+  const { t, loadChangeOverview, loadChangeDetail, openArtifact } = props
   const [result, setResult] = useState<BafWorkflowChangeOverviewResult | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
@@ -182,7 +210,7 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
     return t('dashboard.activeChanges')
   }
 
-  const card = (change: WorkflowDashboardRow) => {
+  const card = (change: WorkflowDashboardRow, index: number) => {
     const state = changeStateOf(change)
     const done = change.tasks?.done ?? 0
     const total = change.tasks?.total ?? 0
@@ -195,8 +223,10 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
         data-state={state}
         data-testid={`change-overview-row-${change.changeId}`}
         title={t('ovw.detailOpen')}
+        style={{ animationDelay: `${index * 45}ms` }}
         onClick={() => { void openDetail(change.changeId) }}
       >
+        <span className={css.cardEdge} aria-hidden />
         <span className={css.cardHead}>
           <span className={css.changeId}>{change.changeId}</span>
           <span className={css.state} data-state={state} data-testid={`change-overview-state-${change.changeId}`}>
@@ -224,16 +254,19 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
             {change.endedAt === undefined ? '—' : formatTimestamp(change.endedAt)}
           </span>
         </span>
+        <span className={css.cardCta} aria-hidden>{t('ovw.detailOpen')} ↗</span>
       </button>
     )
   }
 
   return (
     <section className={css.block} data-testid="baf-change-overview">
-      {/* 【变更】2026-10-24 (批次十九 1.3): the hero header — the ledger's
-          identity, its purpose, and the refresh action in one band. */}
+      {/* 【变更】2026-10-24 (批次二十 1): the console header — the BAF mark,
+          the ledger's identity, its purpose, and the two actions in one band. */}
       <header className={css.hero}>
+        <span className={css.heroBrand}>{t('view.brandBaf')}</span>
         <div className={css.heroText}>
+          <span className={css.heroLabel}>{t('ovw.ledgerLabel')}</span>
           <h2 className={css.title}>{t('ovw.title')}</h2>
           <p className={css.description}>{t('ovw.help')}</p>
         </div>
@@ -279,6 +312,8 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
             <span className={css.projectPath}>{result.cwd}</span>
           </div>
 
+          {/* 【变更】2026-10-24 (批次二十 1): the four figure plates — each one
+              a lit panel with a gold rule, so the numbers read as a dashboard. */}
           <div className={css.tiles}>
             <div className={css.tile} data-tone="active">
               <span className={css.tileValue} data-testid="change-overview-tile-active">{result.summary.active}</span>
@@ -310,10 +345,11 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
       )}
 
       {openChangeId !== undefined && (
-        <ChangeDetailModal
+        <ChangeDetailWorkspace
           changeId={openChangeId}
           detail={detail}
           loading={detailLoading}
+          openArtifact={openArtifact}
           onClose={() => { setOpenChangeId(undefined); setDetail(undefined) }}
           t={t}
         />
@@ -323,69 +359,283 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
 }
 
 /**
- * 【变更】2026-10-24 (批次十九 1.3): the per-change drill-down modal — the
- * stage flow, the artifacts, the metrics, and the full event history.
- * @param props - the modal props.
- * @returns the modal element tree.
+ * 【变更】2026-10-24 (批次二十 3): the per-change drill-down — the FOUR-ZONE
+ * workspace. The middle zone is the session tab's own flow canvas, so the
+ * change reads exactly as it reads in the conversation; the top strip, the
+ * left rail and the right rail carry everything the graph cannot.
+ * @param props - the workspace props.
+ * @returns the workspace element tree.
  */
-function ChangeDetailModal(props: {
+function ChangeDetailWorkspace(props: {
   changeId: string
   detail: BafWorkflowChangeDetailResult | undefined
   loading: boolean
   onClose: () => void
+  openArtifact: ((cwd: string, path: string) => boolean) | undefined
   t: ChangeOverviewRowProps['t']
 }): React.ReactElement {
-  const { changeId, detail, loading, onClose, t } = props
+  const { changeId, detail, loading, onClose, openArtifact, t } = props
   const view = detail?.status === 'ready' ? detail.view : undefined
+  const cwd = detail?.status === 'ready' ? detail.cwd : undefined
+  const shell = useRef<HTMLDivElement | null>(null)
+  // 【变更】2026-10-24 (批次二十 3): the close handler is held in a ref so the
+  // focus/escape effect does not re-run (and re-steal the focus) every time
+  // the parent re-renders with a new handler identity.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  // 【变更】2026-10-24 (批次二十 3): the workspace takes the focus when it
+  // opens, and Escape closes it — a full-screen surface the user can leave.
+  useEffect(() => {
+    shell.current?.focus()
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') closeRef.current()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey) }
+  }, [])
+
+  // The selected stage — the change's current stage until the user picks
+  // another node in the graph.
+  //
+  // 【变更】2026-10-24 (批次二十 3): a TERMINAL change (完成 / 已放弃) selects
+  // nothing — its right rail shows the terminal outcome (status, artifacts,
+  // completion), the same card the session rail shows for a terminal change.
+  // Falling back to the first stage would answer a different question than
+  // 「这个变更最后怎么了」.
+  const [selected, setSelected] = useState<WorkflowNodeId | undefined>(undefined)
+  useEffect(() => {
+    if (view === undefined) {
+      setSelected(undefined)
+      return
+    }
+    const current = view.current
+    if (current === 'completed' || current === 'abandoned') {
+      setSelected(undefined)
+      return
+    }
+    const onPath = current === null
+      ? undefined
+      : view.nodes.find(node => node.id === (current as WorkflowNodeId))
+    setSelected(onPath?.id ?? view.nodes[0]?.id)
+  }, [view])
+
+  const selectedNode = useMemo(
+    (): WorkflowTabNodeView | undefined =>
+      view === undefined ? undefined : view.nodes.find(node => node.id === selected),
+    [view, selected],
+  )
+
+  // The selected stage's outgoing edge — the same 「下一阶段 + 条件」 line the
+  // session rail shows.
+  const nextEdge = useMemo((): { id: string; to: string; condition: string } | null => {
+    if (view === undefined || selectedNode === undefined) return null
+    const edges = view.graph.edges
+    const edge = edges.find(e => e.from === selectedNode.id && e.kind === 'forward')
+      ?? edges.find(e => e.from === selectedNode.id)
+    if (edge === undefined) return null
+    return { id: edge.id, to: edge.to, condition: edge.condition }
+  }, [view, selectedNode])
+
+  // 【变更】2026-10-24 (批次二十 3): a failed artifact open is reported in
+  // place — the rail says why instead of leaving a button that did nothing.
+  const [openNotice, setOpenNotice] = useState<string | undefined>(undefined)
+  const openFile = useCallback((path: string): void => {
+    if (openArtifact === undefined || cwd === undefined) {
+      setOpenNotice(t('ovw.detailNoSession'))
+      return
+    }
+    setOpenNotice(openArtifact(cwd, path) ? undefined : t('ovw.detailOpenFailed'))
+  }, [openArtifact, cwd, t])
+
+  const state: ChangeState = view === undefined
+    ? 'active'
+    : view.current === 'abandoned'
+      ? 'abandoned'
+      : view.current === 'completed'
+        ? 'completed'
+        : 'active'
+  // 【变更】2026-10-24 (批次二十 3): a terminal change — the right rail answers
+  // 「这个变更最后怎么了」 instead of showing an arbitrary stage.
+  const terminal = view !== undefined && (view.current === 'completed' || view.current === 'abandoned')
+    ? view.current
+    : null
+  const stateLabel = state === 'completed'
+    ? t('ovw.completed')
+    : state === 'abandoned'
+      ? t('ovw.abandoned')
+      : t('dashboard.activeChanges')
 
   return (
     <div
-      className={css.backdrop}
+      className={css.wsBackdrop}
       role="presentation"
       onClick={onClose}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
     >
       <div
-        className={css.modal}
+        ref={shell}
+        className={css.ws}
         role="dialog"
         aria-modal="true"
         aria-label={t('ovw.detailTitle')}
+        tabIndex={-1}
         data-testid="change-detail-modal"
         onClick={(event) => { event.stopPropagation() }}
       >
-        <header className={css.modalHead}>
-          <div>
-            <div className={css.modalTitle}>{t('ovw.detailTitle')}</div>
-            <div className={css.modalId}>{changeId}</div>
+        {/* ── 顶部 · the identity strip ─────────────────────────────────── */}
+        <header className={css.wsTop} data-testid="change-detail-top">
+          <div className={css.wsTopLead}>
+            <span className={css.wsBrand}>{t('view.brandBaf')}</span>
+            <div className={css.wsTopTitle}>
+              <span className={css.wsTopLabel}>{t('ovw.detailTitle')}</span>
+              <span className={css.wsTopId}>{changeId}</span>
+            </div>
+            <span className={css.wsState} data-state={state}>{stateLabel}</span>
           </div>
-          <button type="button" className={css.modalClose} onClick={onClose}>
+          <div className={css.wsFigures}>
+            {view !== undefined && (
+              <>
+                <span className={css.figure}>
+                  <span className={css.figureLabel}>{t('ovw.columnMode')}</span>
+                  <span className={css.figureValue}>{modeLabel(view.mode, t)}</span>
+                </span>
+                <span className={css.figure}>
+                  <span className={css.figureLabel}>{t('strip.startedAt')}</span>
+                  <span className={css.figureValue}>{formatTimestamp(view.startedAt)}</span>
+                </span>
+                <span className={css.figure}>
+                  <span className={css.figureLabel}>{t('card.duration')}</span>
+                  <span className={css.figureValue}>{formatDuration(view.metrics?.totalDurationMs)}</span>
+                </span>
+                <span className={css.figure}>
+                  <span className={css.figureLabel}>{t('card.tokens')}</span>
+                  <span className={css.figureValue}>
+                    {formatTokens(view.metrics?.totalInputTokens, view.metrics?.totalOutputTokens)}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
+          <button type="button" className={css.wsClose} data-testid="change-detail-close" onClick={onClose}>
             {t('ovw.detailClose')}
           </button>
         </header>
 
-        <div className={css.modalBody}>
-          {loading && <div className={css.status}>{t('ovw.detailLoading')}</div>}
-          {!loading && detail === undefined && (
-            <div className={css.statusError}>{t('ovw.detailFailed')}</div>
-          )}
-          {!loading && detail?.status === 'unknown-change' && (
-            <div className={css.status} data-testid="change-detail-unknown">
-              {t('ovw.detailUnknownChange')}
+        <div className={css.wsBody}>
+          {/* ── 左侧 · classification + artifacts ───────────────────────── */}
+          <aside className={css.wsLeft} data-testid="change-detail-left">
+            {loading && <div className={css.status}>{t('ovw.detailLoading')}</div>}
+            {!loading && detail === undefined && (
+              <div className={css.statusError}>{t('ovw.detailFailed')}</div>
+            )}
+            {!loading && detail?.status === 'unknown-change' && (
+              <div className={css.status} data-testid="change-detail-unknown">
+                {t('ovw.detailUnknownChange')}
+              </div>
+            )}
+            {!loading && detail?.status === 'no-workspace' && (
+              <div className={css.status}>{t('ovw.noWorkspace')}</div>
+            )}
+            {view !== undefined && (
+              <>
+                <IntakeCard view={view} t={t} />
+                {view.artifacts !== undefined && view.artifacts.length > 0 && (
+                  <ArtifactRail
+                    rows={view.artifacts}
+                    onOpen={(path) => { openFile(path) }}
+                    t={t}
+                  />
+                )}
+                {openArtifact === undefined && (
+                  <p className={css.wsNote} data-testid="change-detail-no-session">{t('ovw.detailNoSession')}</p>
+                )}
+                {openNotice !== undefined && (
+                  <p className={css.wsWarn} data-testid="change-detail-open-failed">{openNotice}</p>
+                )}
+              </>
+            )}
+          </aside>
+
+          {/* ── 中间 · the complete workflow graph ───────────────────────── */}
+          <section className={css.wsCenter}>
+            <div className={css.wsCenterHead}>
+              <span className={css.wsCenterLabel}>{t('ovw.detailGraph')}</span>
+              <span className={css.wsCenterHint}>{t('ovw.detailGraphHint')}</span>
             </div>
-          )}
-          {!loading && detail?.status === 'no-workspace' && (
-            <div className={css.status}>{t('ovw.noWorkspace')}</div>
-          )}
-          {view !== undefined && detail?.status === 'ready' && (
-            <>
-              <StageFlow view={view} t={t} />
-              <ArtifactList view={view} t={t} />
-              <MetricLine view={view} t={t} />
-              <HistoryList history={detail.history} t={t} />
-            </>
-          )}
+            {view !== undefined && (
+              <div className={css.wsCanvas} data-testid="change-detail-graph">
+                <FlowCanvas
+                  view={view}
+                  selected={selected ?? null}
+                  onActivate={(id) => { setSelected(id as WorkflowNodeId) }}
+                  onOpenArtifact={(path) => { openFile(path) }}
+                  t={t}
+                />
+              </div>
+            )}
+            {view === undefined && !loading && (
+              <div className={css.wsCenterEmpty}>{t('ovw.detailFailed')}</div>
+            )}
+          </section>
+
+          {/* ── 右侧 · stage head + checklist + detail + history ─────────── */}
+          <aside className={css.wsRight} data-testid="change-detail-right">
+            {view !== undefined && (
+              <>
+                <div className={css.wsStageHead}>
+                  <span className={css.wsStageLabel}>{t('ovw.detailStageHead')}</span>
+                  <span className={css.wsStageName}>
+                    {terminal !== null
+                      ? t(`node.${terminal}`)
+                      : selectedNode === undefined
+                        ? t('ovw.detailSelectStage')
+                        : t(`node.${selectedNode.id}`)}
+                  </span>
+                  {terminal !== null && (
+                    <span className={css.wsStageStatus} data-status={terminal}>
+                      {t(`status.${terminal}`)}
+                    </span>
+                  )}
+                  {selectedNode !== undefined && (
+                    <span className={css.wsStageStatus} data-status={selectedNode.status}>
+                      {t(`status.${selectedNode.status}`)}
+                    </span>
+                  )}
+                </div>
+                <div className={css.wsRightScroll}>
+                  {terminal !== null ? (
+                    <section className={css.wsCard} data-testid="change-detail-terminal">
+                      <div className={css.terminalRow}>
+                        <span className={css.intakeKey}>{t('detail.status')}</span>
+                        <span className={css.intakeValue}>{t(`status.${terminal}`)}</span>
+                      </div>
+                      <div className={css.terminalRow}>
+                        <span className={css.intakeKey}>{t('detail.artifacts')}</span>
+                        <span className={css.intakeValue}>{t(`terminal.${terminal}.artifacts`)}</span>
+                      </div>
+                      <div className={css.terminalRow}>
+                        <span className={css.intakeKey}>{t('detail.completion')}</span>
+                        <span className={css.intakeValue}>{t(`terminal.${terminal}.completion`)}</span>
+                      </div>
+                    </section>
+                  ) : selectedNode === undefined ? (
+                    <p className={css.wsHint}>{t('ovw.detailStageHint')}</p>
+                  ) : (
+                    <>
+                      <StageChecklist node={selectedNode} t={t} />
+                      <section className={css.wsCard}>
+                        <BilingualDetail node={selectedNode} t={t} nextEdge={nextEdge} />
+                      </section>
+                    </>
+                  )}
+                  <HistoryPanel
+                    history={detail?.status === 'ready' ? detail.history : []}
+                    t={t}
+                  />
+                </div>
+              </>
+            )}
+          </aside>
         </div>
       </div>
     </div>
@@ -393,121 +643,90 @@ function ChangeDetailModal(props: {
 }
 
 /**
- * The change's stage flow — the on-path stages in order, each with its
- * recorded state, the current one highlighted.
- * @param props - the flow props.
- * @returns the flow element tree.
+ * 【变更】2026-10-24 (批次二十 3): the change's CLASSIFICATION card — the
+ * intake's kind, mode, affected scope, confidence and reasons. It is the
+ * ledger's left column: what the change IS, before any stage runs.
+ * @param props - the card props.
+ * @returns the card element tree.
  */
-function StageFlow(props: { view: WorkflowTabView; t: ChangeOverviewRowProps['t'] }): React.ReactElement {
+function IntakeCard(props: { view: WorkflowTabView; t: ChangeOverviewRowProps['t'] }): React.ReactElement {
   const { view, t } = props
-  const stages = view.nodes.filter(node => node.onPath)
+  const intake = view.intake
+  if (intake === undefined) {
+    return (
+      <section className={css.wsCard} data-testid="change-detail-intake">
+        <h3 className={css.wsCardTitle}>{t('ovw.detailIntake')}</h3>
+        <p className={css.wsHint}>{t('ovw.detailEmpty')}</p>
+      </section>
+    )
+  }
+  const percent = Math.round(Math.max(0, Math.min(1, intake.confidence)) * 100)
   return (
-    <section className={css.section} data-testid="change-detail-flow">
-      <h3 className={css.sectionTitle}>{t('ovw.detailFlow')}</h3>
-      <ol className={css.flow}>
-        {stages.map((node, index) => {
-          const current = view.current === node.id
-          return (
-            <li key={node.id} className={css.flowStage} data-status={node.status} data-current={current ? 'true' : undefined}>
-              <span className={css.flowDot} />
-              {index < stages.length - 1 && <span className={css.flowLink} />}
-              <span className={css.flowName}>{t(`node.${node.id}`)}</span>
-              <span className={css.flowStatus}>{t(`status.${node.status}`)}</span>
-            </li>
-          )
-        })}
-        {(view.current === 'completed' || view.current === 'abandoned') && (
-          <li className={css.flowStage} data-status={view.current} data-current="true">
-            <span className={css.flowDot} />
-            <span className={css.flowName}>
-              {view.current === 'completed' ? t('status.completed') : t('status.abandoned')}
-            </span>
-          </li>
-        )}
-      </ol>
-    </section>
-  )
-}
-
-/**
- * The change's artifacts — one chip per file with its recorded state.
- * @param props - the artifact props.
- * @returns the artifact element tree.
- */
-function ArtifactList(props: { view: WorkflowTabView; t: ChangeOverviewRowProps['t'] }): React.ReactElement {
-  const { view, t } = props
-  const artifacts = view.artifacts ?? []
-  return (
-    <section className={css.section} data-testid="change-detail-artifacts">
-      <h3 className={css.sectionTitle}>{t('ovw.detailArtifacts')}</h3>
-      {artifacts.length === 0
-        ? <div className={css.status}>—</div>
-        : (
-          <ul className={css.artifacts}>
-            {artifacts.map(artifact => (
-              <li key={artifact.file} className={css.artifact} data-state={artifact.state} title={artifact.path}>
-                <span className={css.artifactFile}>{artifact.file}</span>
-                <span className={css.artifactState}>{t(`artifact.state.${artifact.state}`)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-    </section>
-  )
-}
-
-/**
- * The change's headline numbers — elapsed time and tokens.
- * @param props - the metric props.
- * @returns the metric element tree.
- */
-function MetricLine(props: { view: WorkflowTabView; t: ChangeOverviewRowProps['t'] }): React.ReactElement {
-  const { view, t } = props
-  const metrics = view.metrics
-  return (
-    <section className={css.section} data-testid="change-detail-metrics">
-      <h3 className={css.sectionTitle}>{t('ovw.detailMetrics')}</h3>
-      <div className={css.metrics}>
-        <span className={css.metric} title={t('strip.startedAt')}>
-          <span className={css.metricLabel}>{t('strip.startedAt')}</span>
-          <span className={css.metricValue}>{formatTimestamp(view.startedAt)}</span>
-        </span>
-        <span className={css.metric} title={t('card.duration')}>
-          <span className={css.metricLabel}>{t('card.duration')}</span>
-          <span className={css.metricValue}>{formatDuration(metrics?.totalDurationMs)}</span>
-        </span>
-        <span className={css.metric} title={t('card.tokens')}>
-          <span className={css.metricLabel}>{t('card.tokens')}</span>
-          <span className={css.metricValue}>
-            {formatTokens(metrics?.totalInputTokens, metrics?.totalOutputTokens)}
-          </span>
-        </span>
+    <section className={css.wsCard} data-testid="change-detail-intake">
+      <h3 className={css.wsCardTitle}>{t('ovw.detailIntake')}</h3>
+      <div className={css.intakeRow}>
+        <span className={css.intakeKey}>{t('ovw.detailKind')}</span>
+        <span className={css.intakeValue}>{intake.kind}</span>
       </div>
+      <div className={css.intakeRow}>
+        <span className={css.intakeKey}>{t('ovw.columnMode')}</span>
+        <span className={css.intakeValue}>{modeLabel(intake.mode, t)}</span>
+      </div>
+      <div className={css.intakeRow}>
+        <span className={css.intakeKey}>{t('ovw.detailScope')}</span>
+        <span className={css.intakeValue}>{intake.affectedScope}</span>
+      </div>
+      <div className={css.intakeRow}>
+        <span className={css.intakeKey}>{t('ovw.detailConfidence')}</span>
+        <span className={css.intakeValue}>{percent}%</span>
+      </div>
+      <div className={css.confidence}>
+        <span className={css.confidenceFill} style={{ width: `${percent}%` }} />
+      </div>
+      {intake.reasonCodes.length > 0 && (
+        <div className={css.intakeRow}>
+          <span className={css.intakeKey}>{t('ovw.detailReason')}</span>
+          <span className={css.intakeValue}>{intake.reasonCodes.join(' · ')}</span>
+        </div>
+      )}
+      <div className={css.intakeFlags}>
+        {intake.openspecRequired && (
+          <span className={css.intakeFlag}>{t('ovw.detailOpenSpec')} ✓</span>
+        )}
+        {intake.requiresUserConfirmation && (
+          <span className={css.intakeFlag} data-tone="warn">{t('ovw.detailConfirmation')}</span>
+        )}
+      </div>
+      {intake.confirmation !== '' && (
+        <p className={css.intakeSummary}>{intake.confirmation}</p>
+      )}
     </section>
   )
 }
 
 /**
- * The change's event history — every projection event, oldest first.
- * @param props - the history props.
- * @returns the history element tree.
+ * 【变更】2026-10-24 (批次二十 3): the change's event HISTORY — every
+ * projection event, oldest first, as a timeline in the right rail.
+ * @param props - the panel props.
+ * @returns the panel element tree.
  */
-function HistoryList(props: {
+function HistoryPanel(props: {
   history: readonly BafWorkflowChangeHistoryEntry[]
   t: ChangeOverviewRowProps['t']
 }): React.ReactElement {
   const { history, t } = props
   return (
-    <section className={css.section} data-testid="change-detail-history">
-      <h3 className={css.sectionTitle}>{t('ovw.detailHistory')}</h3>
+    <section className={css.wsCard} data-testid="change-detail-history">
+      <h3 className={css.wsCardTitle}>{t('ovw.detailHistory')}</h3>
       {history.length === 0
-        ? <div className={css.status} data-testid="change-detail-history-empty">{t('ovw.detailEmpty')}</div>
+        ? <p className={css.wsHint} data-testid="change-detail-history-empty">{t('ovw.detailEmpty')}</p>
         : (
           <ol className={css.history}>
             {history.map((entry, index) => (
               <li key={`${entry.at}-${index}`} className={css.historyRow} data-type={entry.type}>
+                <span className={css.historyDot} aria-hidden />
                 <span className={css.historyAt}>{formatTimestamp(entry.at)}</span>
-                <span className={css.historyTitle}>{t(historyKeyOf(entry.type) as Parameters<typeof t>[0])}</span>
+                <span className={css.historyTitle}>{t(historyKeyOf(entry.type) as WorkflowTabKey)}</span>
                 {entry.node !== undefined && (
                   <span className={css.historyNode}>{t(`node.${entry.node}` as WorkflowTabKey)}</span>
                 )}

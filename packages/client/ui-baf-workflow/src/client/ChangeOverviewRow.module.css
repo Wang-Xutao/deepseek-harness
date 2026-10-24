@@ -1,43 +1,123 @@
 /* 【变更】2026-10-23 (批次十八 2.2/2.3): the 工作流 page's 变更总览 tab — a
-   read-only project ledger (tiles + one row per change, the abandoned ones
-   included). Token vocabulary matches the 门禁总览 row next to it.
-   【变更】2026-10-24 (批次十九 1.3): the ledger's redesign — a hero header,
-   accent tiles, clickable change CARDS, and the per-change detail modal
-   (stage flow + artifacts + metrics + event history). The brand accent is the
-   BAF gold the workflow pages use (--wf-accent), declared locally here so the
-   row does not depend on the sibling module's token block. */
+ * read-only project ledger (tiles + one row per change, the abandoned ones
+ * included).
+ * 【变更】2026-10-24 (批次十九 1.3): the ledger's redesign — a hero header,
+ * accent tiles, clickable change CARDS, and the per-change detail modal.
+ * 【变更】2026-10-24 (批次二十 1/3): the「金箔仪表台」console — the gold reads
+ * as MATERIAL (a layered surface with a hairline gold edge, a lit top edge and
+ * a soft floor shadow) instead of flat paint, the entrances stagger, and the
+ * hover state LIFTS. The token vocabulary is the package's shared `--wf-*`
+ * family (the 确认门 row's), so the two pages of the 工作流 surface read as one
+ * system; the 变更详情 workspace additionally re-declares the SESSION graph's
+ * own token values, so the shared `FlowCanvas` renders there exactly as it
+ * does in the conversation tab.
+ */
 
 .block {
-  /* 【变更】2026-10-24 (批次十九 1.3): the ledger's own accent tokens — the
-     same gold the 工作流图 / 测试流图 pages carry. */
-  --ovw-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
-  --ovw-accent-soft: color-mix(in srgb, var(--ovw-accent) 16%, transparent);
-  --ovw-accent-line: color-mix(in srgb, var(--ovw-accent) 46%, transparent);
-  --ovw-surface: var(--dsw-alias-bg-module-platform);
-  --ovw-ink: var(--dsw-alias-label-primary);
-  --ovw-ink-soft: var(--dsw-alias-label-secondary);
+  /* the BAF gold — the accent the session 工作流图 / 测试流图 carry. */
+  --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  --wf-accent-soft: color-mix(in srgb, var(--wf-accent) 72%, #fff);
+  --wf-accent-ink: #1a1406;
+  --wf-accent-text: color-mix(in srgb, var(--wf-accent) 60%, var(--dsw-alias-label-primary, #0f1115));
+  --wf-accent-line: color-mix(in srgb, var(--wf-accent) 42%, transparent);
+  --wf-accent-glow: color-mix(in srgb, var(--wf-accent) 26%, transparent);
+  --wf-surface: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base, #fff));
+  --wf-canvas: var(--dsw-alias-bg-base, #fff);
+  --wf-ink: var(--dsw-alias-label-primary, #0f1115);
+  --wf-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 58%, var(--dsw-alias-label-secondary, #61666b));
+  --wf-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 28%, var(--dsw-alias-label-tertiary, #81858c));
+  --wf-line: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
+  --wf-line-strong: var(--dsw-alias-border-l4, rgba(0, 0, 0, 0.16));
+  --wf-ok: var(--dsw-alias-state-success-primary, #16a34a);
+  --wf-warn: var(--dsw-alias-state-warn-primary, #b8860b);
+  --wf-danger: var(--dsw-alias-state-error-primary, #dc2626);
+  --wf-idle: var(--dsw-alias-state-idle-primary, #9aa1a9);
   padding: 16px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--wf-line);
 }
 
-/* ── hero ─────────────────────────────────────────────────────────────── */
+/* ── motion ────────────────────────────────────────────────────────────── */
 
+@keyframes ovwFadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ovwSweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
+/* ── hero ──────────────────────────────────────────────────────────────── */
+
+/* 【变更】2026-10-24 (批次二十 1): the header is a lit console band — a gold
+   hairline, a gold wash from the left, and a hairline highlight along the
+   top edge, so the page opens with a clear focal point. */
 .hero {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-radius: 12px;
+  gap: 14px;
+  padding: 16px 18px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--wf-accent-line);
   background:
-    linear-gradient(120deg, var(--ovw-accent-soft), transparent 62%),
-    var(--ovw-surface);
-  border: 1px solid var(--ovw-accent-line);
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--ovw-accent) 10%, transparent);
+    radial-gradient(520px 140px at 8% -40%, var(--wf-accent-glow), transparent 70%),
+    linear-gradient(120deg, color-mix(in srgb, var(--wf-accent) 12%, transparent), transparent 58%),
+    var(--wf-surface);
+  box-shadow:
+    0 18px 38px -30px color-mix(in srgb, #000 55%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
+  animation: ovwFadeUp 320ms ease both;
+}
+
+/* The BAF mark — the same wordmark the session's 工作流图 / 测试流图 tabs
+   carry, so the page says which product it belongs to. */
+.heroBrand {
+  flex: none;
+  align-self: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #fff;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--wf-accent) 55%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 62%, #241a08));
+  border-radius: 5px;
+  padding: 0.22rem 0.44rem;
+  box-shadow: 0 6px 14px -10px color-mix(in srgb, #000 70%, transparent);
 }
 
 .heroText {
   min-width: 0;
+  flex: 1;
+}
+
+/* The section eyebrow — small, wide-tracked, quiet. */
+.heroLabel {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wf-accent-text);
+}
+
+.title {
+  margin: 2px 0 0;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--wf-ink);
+}
+
+.description {
+  margin: 4px 0 0;
+  color: var(--wf-ink-2);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .heroActions {
@@ -47,63 +127,37 @@
   gap: 8px;
 }
 
-.title {
-  margin: 0;
-  font-size: 16px;
-  line-height: 22px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--ovw-ink);
-}
-
-.description {
-  margin: 4px 0 0;
-  color: var(--ovw-ink-soft);
-  font-size: 12px;
-  line-height: 18px;
-}
-
+/* 【变更】2026-10-24 (批次二十 1): the two actions are raised buttons — the
+   gold one is the ledger's own action, the ghost one the neutral. */
 .refresh {
   flex: none;
   padding: 0 14px;
   height: 32px;
-  border: 1px solid var(--ovw-accent-line);
+  border: 1px solid var(--wf-accent-line);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--ovw-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
   font: inherit;
   font-size: 12px;
   line-height: 20px;
-  color: var(--ovw-ink);
+  color: var(--wf-ink);
   cursor: pointer;
-  transition: background-color 150ms ease, border-color 150ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .refresh:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ovw-accent) 24%, transparent);
-  border-color: var(--ovw-accent);
+  background: color-mix(in srgb, var(--wf-accent) 24%, transparent);
+  border-color: var(--wf-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px -14px var(--wf-accent-glow);
 }
 
 .refresh:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: default;
 }
 
-.status {
-  margin-top: 12px;
-  color: var(--ovw-ink-soft);
-  font-size: 12px;
-  line-height: 18px;
-}
+/* ── the project line ──────────────────────────────────────────────────── */
 
-.statusError {
-  margin-top: 12px;
-  color: var(--dsw-alias-state-danger-label);
-  font-size: 12px;
-  line-height: 18px;
-  word-break: break-all;
-}
-
-/* The project the rows were read from — one mono line under the hero. */
 .project {
   display: flex;
   align-items: baseline;
@@ -114,7 +168,7 @@
 
 .projectLabel {
   flex: none;
-  color: var(--ovw-ink-soft);
+  color: var(--wf-ink-3);
   font-size: 12px;
   line-height: 18px;
 }
@@ -124,19 +178,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ovw-ink);
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--wf-ink-2);
 }
 
-/* ── tiles ────────────────────────────────────────────────────────────── */
+/* ── the figure plates ─────────────────────────────────────────────────── */
 
+/* 【变更】2026-10-24 (批次二十 1): the four tiles are PLATES — each one a
+   raised panel with a gold rule at its top edge and a tinted floor, so the
+   numbers read as an instrument panel instead of a row of labels. */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .tile {
@@ -144,85 +200,142 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 10px 12px 10px 14px;
-  border-radius: 10px;
-  background: var(--ovw-surface);
+  padding: 12px 14px;
   overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--wf-accent-line);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 9%, transparent), transparent 62%),
+    var(--wf-surface);
+  box-shadow:
+    0 14px 30px -26px color-mix(in srgb, #000 55%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+  animation: ovwFadeUp 360ms ease both;
 }
 
-/* Each tile carries its own hue on a left edge — the rollup reads at a
-   glance without four competing backgrounds. */
+.tile:nth-child(1) { animation-delay: 40ms; }
+.tile:nth-child(2) { animation-delay: 80ms; }
+.tile:nth-child(3) { animation-delay: 120ms; }
+.tile:nth-child(4) { animation-delay: 160ms; }
+
+/* The lit top edge — the gold rule that makes the plate read as metal. */
 .tile::before {
   content: '';
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--ovw-accent);
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in srgb, var(--wf-accent) 85%, transparent),
+    transparent);
 }
 
-.tile[data-tone='active']::before { background: var(--ovw-accent); }
-.tile[data-tone='completed']::before { background: var(--dsw-alias-state-success-label, #1a7f37); }
-.tile[data-tone='abandoned']::before { background: var(--dsw-alias-state-danger-label, #dc2626); }
-.tile[data-tone='tasks']::before { background: var(--dsw-alias-text-info, #4a78d2); }
+.tile[data-tone="completed"]::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--wf-ok) 80%, transparent), transparent);
+}
+
+.tile[data-tone="abandoned"]::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--wf-idle) 80%, transparent), transparent);
+}
+
+.tile[data-tone="tasks"]::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--wf-accent) 85%, transparent), transparent);
+}
 
 .tileValue {
-  font-size: 20px;
-  line-height: 26px;
-  font-weight: 700;
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--wf-ink);
   font-variant-numeric: tabular-nums;
-  color: var(--ovw-ink);
 }
+
+.tile[data-tone="active"] .tileValue { color: var(--wf-accent-text); }
+.tile[data-tone="completed"] .tileValue { color: var(--wf-ok); }
+.tile[data-tone="abandoned"] .tileValue { color: var(--wf-ink-2); }
 
 .tileLabel {
-  color: var(--ovw-ink-soft);
   font-size: 11px;
   line-height: 16px;
+  color: var(--wf-ink-3);
+  letter-spacing: 0.02em;
 }
-
-/* ── change cards ─────────────────────────────────────────────────────── */
 
 .hint {
-  margin: 12px 0 0;
-  color: var(--ovw-ink-soft);
-  font-size: 12px;
-  line-height: 18px;
+  margin: 14px 0 0;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--wf-ink-3);
 }
 
+/* ── the change cards ──────────────────────────────────────────────────── */
+
+/* 【变更】2026-10-24 (批次二十 1): the cards are the ledger's body — a
+   responsive grid of raised plates with a gold edge that lights up on hover. */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 12px;
   margin-top: 10px;
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-left: 3px solid var(--ovw-accent);
-  border-radius: 10px;
-  background: var(--ovw-surface);
-  font: inherit;
+  gap: 8px;
+  min-width: 0;
+  padding: 13px 14px 12px;
   text-align: left;
-  color: inherit;
+  font: inherit;
   cursor: pointer;
-  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+  overflow: hidden;
+  border-radius: 13px;
+  border: 1px solid var(--wf-accent-line);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 8%, transparent), transparent 58%),
+    var(--wf-surface);
+  box-shadow:
+    0 16px 34px -30px color-mix(in srgb, #000 60%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+  transition: transform 170ms ease, border-color 170ms ease, box-shadow 170ms ease;
+  animation: ovwFadeUp 380ms ease both;
 }
-
-.card[data-state='completed'] { border-left-color: var(--dsw-alias-state-success-label, #1a7f37); }
-.card[data-state='abandoned'] { border-left-color: var(--dsw-alias-state-danger-label, #dc2626); }
 
 .card:hover {
-  transform: translateY(-2px);
-  border-color: var(--ovw-accent-line);
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--ovw-accent) 16%, transparent);
+  transform: translateY(-3px);
+  border-color: var(--wf-accent);
+  box-shadow:
+    0 22px 40px -28px var(--wf-accent-glow),
+    inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
 }
 
-.card:focus-visible {
-  outline: 2px solid var(--ovw-accent);
-  outline-offset: 2px;
+/* The left edge bar — the change's STATE, read at a glance from across the
+   page: gold while it runs, green when it completed, grey when abandoned. */
+.cardEdge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--wf-accent) 90%, transparent),
+    color-mix(in srgb, var(--wf-accent) 25%, transparent));
+}
+
+.card[data-state="completed"] .cardEdge {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--wf-ok) 85%, transparent),
+    color-mix(in srgb, var(--wf-ok) 20%, transparent));
+}
+
+.card[data-state="abandoned"] .cardEdge {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--wf-idle) 70%, transparent),
+    color-mix(in srgb, var(--wf-idle) 15%, transparent));
 }
 
 .cardHead {
@@ -230,406 +343,694 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+}
+
+.changeId {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--wf-ink);
+}
+
+.state {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--wf-accent-line);
+  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  color: var(--wf-accent-text);
+}
+
+.state[data-state="completed"] {
+  border-color: color-mix(in srgb, var(--wf-ok) 45%, transparent);
+  background: color-mix(in srgb, var(--wf-ok) 14%, transparent);
+  color: var(--wf-ok);
+}
+
+.state[data-state="abandoned"] {
+  border-color: color-mix(in srgb, var(--wf-idle) 45%, transparent);
+  background: color-mix(in srgb, var(--wf-idle) 14%, transparent);
+  color: var(--wf-ink-2);
 }
 
 .cardMeta {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  color: var(--ovw-ink-soft);
-  font-size: 12px;
-  line-height: 18px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.mode,
+.stage {
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  line-height: 16px;
+  border: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--wf-ink) 4%, transparent);
+  color: var(--wf-ink-2);
+}
+
+.stage {
+  border-color: var(--wf-accent-line);
+  background: color-mix(in srgb, var(--wf-accent) 10%, transparent);
+  color: var(--wf-accent-text);
+  font-weight: 700;
+}
+
+/* The task rollup — a hairline track with a gold fill. */
+.progress {
+  position: relative;
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-ink) 8%, transparent);
+  overflow: visible;
+}
+
+.progressFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--wf-accent) 60%, transparent),
+    var(--wf-accent));
+  box-shadow: 0 0 10px -2px var(--wf-accent-glow);
+}
+
+.progressText {
+  position: absolute;
+  right: 0;
+  top: -16px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--wf-ink-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .cardFoot {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--ovw-ink-soft);
-  font-size: 11px;
-  line-height: 16px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 10.5px;
+  line-height: 15px;
+  color: var(--wf-ink-3);
   font-variant-numeric: tabular-nums;
 }
 
-.changeId {
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 600;
-  color: var(--ovw-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* The card's own affordance line — quiet until the card is hovered. */
+.cardCta {
+  position: absolute;
+  right: 13px;
+  bottom: 11px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--wf-accent-text);
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity 160ms ease, transform 160ms ease;
 }
 
-.mode {
-  color: var(--ovw-ink);
-}
-
-.stage {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The change's state pill — the abandoned ones read as a recorded outcome,
-   not as a missing row. */
-.state {
-  flex: none;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 17px;
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-.state[data-state='active'] {
-  background: color-mix(in srgb, var(--ovw-accent) 20%, transparent);
-  color: var(--ovw-ink);
-}
-
-.state[data-state='completed'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-success-label, #1a7f37) 16%, transparent);
-  color: var(--ovw-ink);
-}
-
-.state[data-state='abandoned'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-danger-label, #dc2626) 16%, transparent);
-  color: var(--ovw-ink);
-}
-
-/* Plan-ledger task rollup: a thin bar plus the done/total numbers. */
-.progress {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 84px;
-}
-
-.progressFill {
-  display: block;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--ovw-accent);
-}
-
-.progressText {
-  color: var(--ovw-ink-soft);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.card:hover .cardCta {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .empty {
   grid-column: 1 / -1;
-  color: var(--ovw-ink-soft);
+  padding: 26px 16px;
   text-align: center;
+  border-radius: 12px;
+  border: 1px dashed var(--wf-accent-line);
+  color: var(--wf-ink-3);
+  font-size: 12px;
 }
 
-/* ── detail modal ─────────────────────────────────────────────────────── */
+/* ── statuses ──────────────────────────────────────────────────────────── */
 
-.backdrop {
+.status {
+  margin-top: 12px;
+  color: var(--wf-ink-2);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.statusError {
+  margin-top: 12px;
+  color: var(--wf-danger);
+  font-size: 12px;
+  line-height: 18px;
+  word-break: break-all;
+}
+
+/* ══ 变更详情 · the four-zone workspace ═════════════════════════════════ */
+
+.wsBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 60;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px;
-  background: color-mix(in srgb, #0b0d10 62%, transparent);
-  backdrop-filter: blur(4px);
+  padding: 3vh 2vw;
+  background: color-mix(in srgb, #0b0d12 62%, transparent);
+  backdrop-filter: blur(6px);
+  animation: ovwFadeUp 220ms ease both;
 }
 
-.modal {
+/* 【变更】2026-10-24 (批次二十 3): the workspace shell — a raised console
+   panel: a lit top edge, a gold hairline, a deep floor shadow. */
+.ws {
+  position: relative;
   display: flex;
   flex-direction: column;
-  width: min(880px, 100%);
-  max-height: 100%;
-  border-radius: 14px;
-  border: 1px solid var(--ovw-accent-line);
-  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-module-platform));
-  box-shadow: 0 24px 64px color-mix(in srgb, #000 42%, transparent);
+  width: min(1560px, 100%);
+  height: min(940px, 100%);
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--wf-accent-line);
+  background:
+    radial-gradient(900px 320px at 50% -10%, color-mix(in srgb, var(--wf-accent) 12%, transparent), transparent 62%),
+    var(--wf-canvas);
+  box-shadow:
+    0 40px 90px -40px color-mix(in srgb, #000 75%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+  outline: none;
+
+  /* 【变更】2026-10-24 (批次二十 3): the SESSION graph's own token values —
+     the shared `FlowCanvas` / `ArtifactRail` / `StageChecklist` /
+     `BilingualDetail` read these, so the graph and the stage cards render
+     here exactly as they do in the conversation tab. */
+  --wf-card: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base, #fff));
+  --wf-ink: var(--dsw-alias-label-primary, #0f1115);
+  --wf-muted: var(--dsw-alias-label-secondary, #61666b);
+  --wf-line: var(--dsw-alias-border-subtle, #d7dee8);
+  --wf-danger: var(--dsw-alias-state-error-primary, #dc2626);
+  --wf-ok: var(--dsw-alias-state-success-primary, #16a34a);
+  --wf-gate: var(--dsw-alias-state-warn-primary, #7c5cff);
+  --wf-brand-fill: linear-gradient(135deg,
+    color-mix(in srgb, var(--wf-accent) 55%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 62%, #241a08));
+
+  /* the workspace chrome's own accents */
+  --ws-line: color-mix(in srgb, var(--wf-accent) 34%, var(--wf-line));
+  --ws-line-strong: color-mix(in srgb, var(--wf-accent) 62%, var(--wf-line));
+  --ws-ink: var(--dsw-alias-label-primary, #0f1115);
+  --ws-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 58%, var(--dsw-alias-label-secondary, #61666b));
+  --ws-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 28%, var(--dsw-alias-label-tertiary, #81858c));
+  --ws-card: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base, #fff));
+}
+
+/* ── 顶部 · the identity strip ─────────────────────────────────────────── */
+
+.wsTop {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ws-line);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--wf-accent) 9%, transparent), transparent);
+}
+
+.wsTopLead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wsBrand {
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #fff;
+  background: var(--wf-brand-fill);
+  border-radius: 5px;
+  padding: 0.2rem 0.42rem;
+}
+
+.wsTopTitle {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wsTopLabel {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ws-ink-3);
+}
+
+.wsTopId {
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ws-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wsState {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--ws-line-strong);
+  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  color: var(--wf-accent-text);
+}
+
+.wsState[data-state="completed"] {
+  border-color: color-mix(in srgb, var(--wf-ok) 45%, transparent);
+  background: color-mix(in srgb, var(--wf-ok) 14%, transparent);
+  color: var(--wf-ok);
+}
+
+.wsState[data-state="abandoned"] {
+  border-color: color-mix(in srgb, var(--wf-idle) 45%, transparent);
+  background: color-mix(in srgb, var(--wf-idle) 14%, transparent);
+  color: var(--ws-ink-2);
+}
+
+/* The headline figures — four lit plates in a row. */
+.wsFigures {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 
-.modalHead {
+.figure {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
-  background: linear-gradient(120deg, var(--ovw-accent-soft), transparent 70%);
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--ws-line);
+  background: color-mix(in srgb, var(--wf-accent) 6%, transparent);
 }
 
-.modalTitle {
-  font-size: 15px;
-  line-height: 21px;
+.figureLabel {
+  font-size: 0.58rem;
   font-weight: 700;
-  color: var(--ovw-ink);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ws-ink-3);
 }
 
-.modalId {
-  margin-top: 2px;
-  font-family: var(--dsw-alias-font-mono, monospace);
+.figureValue {
   font-size: 12px;
-  line-height: 18px;
-  color: var(--ovw-ink-soft);
+  font-weight: 700;
+  color: var(--ws-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.modalClose {
+.wsClose {
   flex: none;
   padding: 0 14px;
   height: 30px;
-  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 15px;
+  border: 1px solid var(--ws-line);
   background: transparent;
   font: inherit;
   font-size: 12px;
-  line-height: 20px;
-  color: var(--ovw-ink);
+  color: var(--ws-ink-2);
   cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
-.modalClose:hover {
-  border-color: var(--ovw-accent);
-  color: var(--ovw-accent);
+.wsClose:hover {
+  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  border-color: var(--ws-line-strong);
+  color: var(--ws-ink);
 }
 
-.modalBody {
+/* ── the three columns ─────────────────────────────────────────────────── */
+
+.wsBody {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 16px 18px 20px;
   display: flex;
-  flex-direction: column;
-  gap: 18px;
 }
 
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.sectionTitle {
-  margin: 0;
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ovw-ink-soft);
-}
-
-/* The stage flow: the on-path stages as a chain of dots. */
-.flow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.flowStage {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 18px 4px 0;
-  margin-right: 10px;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ovw-ink-soft);
-}
-
-.flowDot {
-  width: 9px;
-  height: 9px;
+/* 左侧 · the fixed left rail. */
+.wsLeft {
   flex: none;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ovw-ink-soft) 40%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ovw-ink-soft) 12%, transparent);
-}
-
-.flowLink {
-  position: absolute;
-  left: 12px;
-  right: -2px;
-  top: 50%;
-  height: 1px;
-  background: var(--dsw-alias-border-l2);
-}
-
-.flowName {
-  color: var(--ovw-ink);
-  font-weight: 500;
-}
-
-.flowStatus {
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--ovw-ink-soft);
-}
-
-.flowStage[data-status='completed'] .flowDot {
-  background: var(--dsw-alias-state-success-label, #1a7f37);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-success-label, #1a7f37) 18%, transparent);
-}
-
-.flowStage[data-status='in-progress'] .flowDot {
-  background: var(--ovw-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ovw-accent) 22%, transparent);
-}
-
-.flowStage[data-status='failed'] .flowDot,
-.flowStage[data-status='blocked'] .flowDot,
-.flowStage[data-status='drifted'] .flowDot {
-  background: var(--dsw-alias-state-danger-label, #dc2626);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-danger-label, #dc2626) 18%, transparent);
-}
-
-.flowStage[data-current='true'] .flowName {
-  color: var(--ovw-accent);
-  font-weight: 700;
-}
-
-.flowStage[data-current='true'] .flowDot {
-  background: var(--ovw-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ovw-accent) 26%, transparent);
-}
-
-/* The artifacts: one chip per file. */
-.artifacts {
+  width: 300px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.artifact {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  background: var(--ovw-surface);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.artifactFile {
-  font-family: var(--dsw-alias-font-mono, monospace);
-  color: var(--ovw-ink);
-}
-
-.artifactState {
-  color: var(--ovw-ink-soft);
-}
-
-.artifact[data-state='filled'] { border-color: color-mix(in srgb, var(--dsw-alias-state-success-label, #1a7f37) 40%, transparent); }
-.artifact[data-state='missing'] { border-color: color-mix(in srgb, var(--dsw-alias-state-danger-label, #dc2626) 40%, transparent); }
-.artifact[data-state='planned'],
-.artifact[data-state='template'] { border-color: var(--ovw-accent-line); }
-
-/* The headline numbers. */
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  flex-direction: column;
   gap: 10px;
+  padding: 12px;
+  overflow: auto;
+  border-right: 1px solid var(--ws-line);
+  background: color-mix(in srgb, var(--wf-card) 60%, transparent);
 }
 
-.metric {
+/* 中间 · the graph. */
+.wsCenter {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--ovw-surface);
 }
 
-.metricLabel {
-  color: var(--ovw-ink-soft);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.metricValue {
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--ovw-ink);
-}
-
-/* The event history: a compact timeline. */
-.history {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.historyRow {
+.wsCenterHead {
+  flex: none;
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 5px 8px;
-  border-radius: 6px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--ws-line);
+}
+
+.wsCenterLabel {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wf-accent-text);
+}
+
+.wsCenterHint {
+  font-size: 10.5px;
+  color: var(--ws-ink-3);
+}
+
+.wsCanvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.wsCenterEmpty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-ink-3);
   font-size: 12px;
+}
+
+/* 右侧 · the stage rail. */
+.wsRight {
+  flex: none;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--ws-line);
+  background: color-mix(in srgb, var(--wf-card) 60%, transparent);
+}
+
+/* The stage head — the stage name in big type, so 「现在看的是哪个阶段」 reads
+   before any card does (the session rail's grammar, kept). */
+.wsStageHead {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ws-line);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 14%, transparent), transparent 78%);
+}
+
+.wsStageLabel {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ws-ink-3);
+}
+
+.wsStageName {
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--ws-ink);
+}
+
+.wsStageStatus {
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--ws-line);
+  color: var(--ws-ink-2);
+}
+
+.wsRightScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The workspace's own card — the same material as the session rail's. */
+.wsCard {
+  border: 1px solid var(--ws-line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: var(--ws-card);
+  box-shadow:
+    0 14px 30px -26px color-mix(in srgb, #000 50%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+  animation: ovwFadeUp 320ms ease both;
+}
+
+.wsCardTitle {
+  margin: 0 0 8px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wf-accent-text);
+}
+
+.wsHint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--ws-ink-3);
+}
+
+.wsNote {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--ws-ink-3);
+}
+
+.wsWarn {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--wf-warn);
+  border: 1px solid color-mix(in srgb, var(--wf-warn) 42%, transparent);
+  background: color-mix(in srgb, var(--wf-warn) 12%, transparent);
+}
+
+/* ── the intake card ───────────────────────────────────────────────────── */
+
+.intakeRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.intakeKey {
+  flex: none;
+  color: var(--ws-ink-3);
+  font-weight: 600;
+}
+
+.intakeValue {
+  min-width: 0;
+  text-align: right;
+  color: var(--ws-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The confidence meter — a hairline track with a gold fill. */
+.confidence {
+  position: relative;
+  height: 4px;
+  margin: 7px 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-ink) 9%, transparent);
+  overflow: hidden;
+}
+
+.confidenceFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--wf-accent) 55%, transparent),
+    var(--wf-accent));
+  box-shadow: 0 0 10px -2px var(--wf-accent-glow);
+}
+
+.intakeFlags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.intakeFlag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--ws-line);
+  color: var(--ws-ink-2);
+}
+
+.intakeFlag[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--wf-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--wf-warn) 12%, transparent);
+  color: var(--wf-warn);
+}
+
+.intakeSummary {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--ws-ink-2);
+}
+
+/* The terminal card — a finished change's outcome (状态 / 产物 / 完成条件). */
+.terminalRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 11px;
   line-height: 18px;
 }
 
-.historyRow:nth-child(odd) {
-  background: color-mix(in srgb, var(--ovw-ink-soft) 6%, transparent);
+.terminalRow + .terminalRow {
+  border-top: 1px solid color-mix(in srgb, var(--wf-ink) 7%, transparent);
+}
+
+/* ── the history timeline ──────────────────────────────────────────────── */
+
+.history {
+  margin: 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.historyRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 0 0 10px 0;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* The dot + the connecting rule — the timeline spine. */
+.historyDot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--wf-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-accent) 16%, transparent);
+}
+
+.historyRow:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 12px;
+  bottom: -1px;
+  width: 1px;
+  background: linear-gradient(180deg, var(--wf-accent-line), transparent);
 }
 
 .historyAt {
-  flex: none;
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 11px;
-  color: var(--ovw-ink-soft);
-  font-variant-numeric: tabular-nums;
+  grid-column: 2;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--ws-ink-3);
 }
 
 .historyTitle {
-  flex: none;
-  font-weight: 600;
-  color: var(--ovw-ink);
+  grid-column: 2;
+  font-weight: 700;
+  color: var(--ws-ink);
 }
 
-.historyNode {
-  color: var(--ovw-ink-soft);
+.historyNode,
+.historyGate {
+  grid-column: 2;
+  justify-self: start;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 10px;
+  border: 1px solid var(--ws-line);
+  color: var(--ws-ink-2);
 }
 
 .historyGate {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ovw-accent) 18%, transparent);
-  font-size: 11px;
-  color: var(--ovw-ink);
+  border-color: var(--ws-line-strong);
+  background: color-mix(in srgb, var(--wf-accent) 10%, transparent);
+  color: var(--wf-accent-text);
 }
 
-.historyDetail {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ovw-ink-soft);
+.historyDetail,
+.historyReason {
+  grid-column: 2;
+  font-size: 10.5px;
+  color: var(--ws-ink-2);
+  word-break: break-word;
 }
 
 .historyReason {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-alias-state-danger-label);
+  color: var(--wf-danger);
 }

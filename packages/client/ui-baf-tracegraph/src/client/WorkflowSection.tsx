@@ -34,11 +34,14 @@ const WORKFLOW_TABS: readonly WorkflowSettingsTab[] = [
   { id: 'general', labelKey: 'tabs.general', slotIds: ['trace-graph', 'workflow-tab', 'test-flow-tab'] },
   { id: 'project', labelKey: 'tabs.project', slotIds: ['baf-standard-project'] },
   { id: 'gates', labelKey: 'tabs.gates', slotIds: ['baf-gates-overview'] },
+  // 【变更】2026-10-24 (批次二十 4): the 测试流 tab moves UP to sit between
+  // 确认门 and 指令集 (客户指定位置) — it used to sit after 企业规范, which
+  // put the verification pipeline three tabs away from the gate it feeds.
+  { id: 'quality', labelKey: 'tabs.quality', slotIds: ['baf-standard-quality'] },
   // 【变更】2026-10-21 (指令集): the per-state baf-command chart, between
   // 确认门 and 企业规范 (客户指定位置).
   { id: 'commands', labelKey: 'tabs.commands', slotIds: ['baf-standard-commands'] },
   { id: 'standard', labelKey: 'tabs.standard', slotIds: ['baf-standard-enterprise'] },
-  { id: 'quality', labelKey: 'tabs.quality', slotIds: ['baf-standard-quality'] },
   // 【变更】2026-10-23 (批次十八 2.2/2.3): 变更总览 — the project's change
   // ledger, the LAST tab of the page (客户指定位置). The row it renders is
   // registered by ui-baf-workflow.

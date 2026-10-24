@@ -1,4 +1,22 @@
 /**
+ * 【变更】2026-10-24 (批次二十 2): the 确认门 page reads as ONE premium
+ * console (「金箔仪表台」) — the same material vocabulary the session 工作流图
+ * uses, so the two pages feel like one product:
+ *
+ * - the frame gains a CONSOLE BAR (the chart's name + the two live counts:
+ *   确认门 / 阶段门禁) — a numeric focal point above the canvas, and the
+ *   frame itself becomes a layered gold-lit chassis instead of a hairline box;
+ * - the canvas plane gains the soft radial gold GLOW the session graph has
+ *   (WorkflowView's .flowGlow), so the middle of the page has a focal point;
+ * - every canvas element enters on a STAGGERED fade-up (the step index rides
+ *   the element's inline animation-delay), and the SELECTED element now reads
+ *   GOLD (gold edge + tinted fill + a soft gold glow) instead of its tier
+ *   colour — 「现在选中的是哪一个」 is obvious at a glance;
+ * - the 门禁明细 panel is the page's primary content, so it carries the
+ *   layered surface (gradient + gold hairline + top highlight) and the
+ *   section headings wear the small-caps eyebrow treatment.
+ *
+ * No new copy: every string comes from the existing gates.* keys.
  * 【变更】2026-10-24 (批次十九 3.1): the 需求输入 ENTRY NODE is re-designed —
  * the old box tinted itself with `--dsw-alias-brand-primary`, which the
  * design platform defines as a NEUTRAL INK (near-black / near-white), so the
@@ -91,7 +109,7 @@ import css from './GatesOverviewRow.module.css'
 /** The inject face the slot registration hands the row. */
 export interface GatesOverviewRowInjected {
   /** Load the gate overview projection (first expand; cached client-side). */
-  loadGateOverview(): Promise<BafWorkflowGateOverview>
+  loadGateOverview: () => Promise<BafWorkflowGateOverview>
   /** When true, overview content loads and stays visible without a first expand click. */
   embeddedInTab?: boolean
 }
@@ -309,6 +327,18 @@ function nodeDetailText(label: string, stage: BafWorkflowGateStageRow | undefine
 const join = (...names: ReadonlyArray<string | undefined>): string =>
   names.filter((name): name is string => name !== undefined && name !== '').join(' ')
 
+/**
+ * 【变更】2026-10-24 (批次二十 2): the entrance stagger — the canvas elements
+ * assemble top-to-bottom instead of popping in at once. The step is the
+ * element's place in the canvas order (fractional steps let a node's pills
+ * land between it and the next node); the cap keeps the last element under
+ * ~0.65s so the page never feels slow.
+ */
+const STAGGER_STEP_MS = 40
+const STAGGER_MAX_STEP = 16
+const stagger = (step: number): string =>
+  `${Math.round(Math.min(Math.max(step, 0), STAGGER_MAX_STEP) * STAGGER_STEP_MS)}ms`
+
 /** The localized label for one node id; unknown ids keep their raw text. */
 function nodeLabelOf(node: string, t: GatesOverviewRowProps['t']): string {
   return NODE_LABEL[node] !== undefined ? t(NODE_LABEL[node]) : node
@@ -321,7 +351,7 @@ function nodeLabelOf(node: string, t: GatesOverviewRowProps['t']): string {
  * internal vocabulary and no longer prefixes the line. */
 function stepConditions(from: string, to: string): readonly string[] {
   return TEMPLATE_EDGES
-    .filter(edge => edge.from === from && String(edge.to) === to)
+    .filter(edge => edge.from === from && edge.to === to)
     .map(edge => conditionTextOf(edge))
 }
 
@@ -406,20 +436,22 @@ function vEdgePath(from: Pos, to: Pos): string {
  * because a confirm gate fires BETWEEN states, so its detail belongs to the
  * pill, not to either state card. `width`/`pos` let the intake branch rows
  * place narrower pills off-spine; chain pills keep the centered default. */
-function GatePill({ gate, pos, selected, onSelect, width = PILL_W, ariaLabel }: {
+function GatePill({ gate, pos, selected, onSelect, width = PILL_W, ariaLabel, step }: {
   gate: BafWorkflowGateConfirmRow
   pos: Pos
   selected: boolean
   onSelect: () => void
   width?: number
   ariaLabel: string
+  /** 【变更】2026-10-24 (批次二十 2): the entrance stagger step. */
+  step: number
 }) {
   return (
     <button
       type="button"
       className={join(css.gatePill, selected ? css.gatePillSelected : undefined)}
       data-testid={`baf-gates-gate-node-${gate.id}`}
-      style={{ left: pos.x, top: pos.y, width, height: PILL_H }}
+      style={{ left: pos.x, top: pos.y, width, height: PILL_H, animationDelay: stagger(step) }}
       aria-pressed={selected}
       aria-label={ariaLabel}
       title={gate.question}
@@ -439,7 +471,7 @@ function GatePill({ gate, pos, selected, onSelect, width = PILL_W, ariaLabel }: 
  * column prints (aria-pressed + the selection ring); the full detail stays
  * in the aria-label.
  */
-function CanvasNode({ node, pos, stage, gates, selected, onSelect, t }: {
+function CanvasNode({ node, pos, stage, gates, selected, onSelect, t, step }: {
   node: string
   pos: Pos
   stage: BafWorkflowGateStageRow | undefined
@@ -447,6 +479,8 @@ function CanvasNode({ node, pos, stage, gates, selected, onSelect, t }: {
   selected: boolean
   onSelect: () => void
   t: GatesOverviewRowProps['t']
+  /** 【变更】2026-10-24 (批次二十 2): the entrance stagger step. */
+  step: number
 }) {
   const label = nodeLabelOf(node, t)
   const detailText = nodeDetailText(label, stage, t)
@@ -455,7 +489,7 @@ function CanvasNode({ node, pos, stage, gates, selected, onSelect, t }: {
       type="button"
       className={join(css.flowNode, TIER_CLASS[node] ?? css.nodeMain, selected ? css.nodeSelected : undefined)}
       data-testid={`baf-gate-node-${node}`}
-      style={{ left: pos.x, top: pos.y, width: NODE_W, height: NODE_H }}
+      style={{ left: pos.x, top: pos.y, width: NODE_W, height: NODE_H, animationDelay: stagger(step) }}
       aria-pressed={selected}
       aria-label={detailText}
       onClick={onSelect}
@@ -691,8 +725,20 @@ function GatesFlow({ data, t }: {
     ? undefined
     : allCanvasGates.find(gate => gate.id === selectedGateId)
 
+  /**
+   * 【变更】2026-10-24 (批次二十 2): the entrance stagger steps — the canvas
+   * assembles in reading order: the 需求输入 hero, its scaffold pill, the
+   * horizontal option row, the 分类确认 converge, then the chain (each node
+   * and the pills riding its edge), then the branch column.
+   */
+  const STEP_ENTRY = 0
+  const STEP_SCAFFOLD = 1
+  const STEP_OPTION = 2
+  const STEP_CLASSIFY = STEP_OPTION + optionGates.length
+  const STEP_CHAIN = STEP_CLASSIFY + 1
+
   /** One canvas node + the pills that ride its leaving edge / its stack. */
-  const renderNode = (node: string): ReactNode => {
+  const renderNode = (node: string, step: number): ReactNode => {
     const nodePos = pos.get(node) ?? { x: COL_X[0], y: CANVAS_TOP }
     const pills = chainPillList.get(node) ?? []
     return (
@@ -705,6 +751,7 @@ function GatesFlow({ data, t }: {
           selected={node === selected}
           onSelect={() => { setPicked(node) }}
           t={t}
+          step={step}
         />
         {pills.map((gate, index) => (
           <GatePill
@@ -714,6 +761,7 @@ function GatesFlow({ data, t }: {
             selected={selected === `gate:${gate.id}`}
             onSelect={() => { setPicked(`gate:${gate.id}`) }}
             ariaLabel={gateDetailText(gate, t)}
+            step={step + 0.5 + index * 0.5}
           />
         ))}
       </Fragment>
@@ -727,7 +775,7 @@ function GatesFlow({ data, t }: {
   // (确认门 badge + its card) — the state node's group no longer prints the
   // gate cards, only the count + where to click (确认门 fires BETWEEN states).
   const detailSection = (
-    <section className={css.detail} data-testid="baf-gates-detail">
+    <section className={css.detail} data-testid="baf-gates-detail" style={{ animationDelay: stagger(1) }}>
       <div className={css.detailHead}>{t('gates.detailTitle')}</div>
       {selectedGateRow !== undefined ? (
         <div className={css.detailGroup} data-testid={`baf-gates-detail-gate-${selectedGateRow.id}`}>
@@ -787,107 +835,146 @@ function GatesFlow({ data, t }: {
       <div className={css.flowWrap}>
         {/* 【变更】2026-10-22 (批次十四 2): the legend bar (状态节点 / 确认门) is
             DELETED — the node anatomy is self-explanatory now, no legend. */}
+        {/* 【变更】2026-10-24 (批次二十 2): the CONSOLE BAR — the frame's control
+            deck: the chart's own name (the visible echo of the region's
+            accessible name, so it is hidden from AT) + the two live counts
+            (确认门 / 阶段门禁). The numbers give the page a numeric focal
+            point and the bar gives the frame its identity. */}
+        <div className={css.consoleBar} data-testid="baf-gates-console">
+          <span className={css.consoleLabel} aria-hidden="true">{t('gates.canvasAria')}</span>
+          <div className={css.consoleStats}>
+            <div className={css.statChip}>
+              <span className={css.statLabel}>{t('gates.sectionConfirm')}</span>
+              <span className={css.statValue}>{String(allCanvasGates.length)}</span>
+            </div>
+            <div className={css.statChip}>
+              <span className={css.statLabel}>{t('gates.sectionStage')}</span>
+              <span className={css.statValue}>{String(data.stageGates.length)}</span>
+            </div>
+          </div>
+        </div>
         {/* 【变更】2026-10-20 (批次三 4.5): the canvas and the 门禁明细 split
             the frame left-right (the 状态脚本 split layout); clicking a canvas
-            card swaps the right column to that node. */}
+            card swaps the right column to that node.
+            【变更】2026-10-24 (批次二十 2): the canvas rides a PLANE wrapper, so
+            the glow behind it has a box to live in. */}
         <div className={css.flowSplit}>
-          <div className={css.flowCanvas} style={{ width: CANVAS_W, height: canvasH }}>
-            <svg className={css.flowEdges} viewBox={`0 0 ${CANVAS_W} ${canvasH}`} aria-hidden="true">
-              <defs>
-                <marker
-                  id="baf-gates-flow-arrow"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" className={css.arrowHead} />
-                </marker>
-              </defs>
-              {edgeList.map((edge, index) => (
-                <path
-                  key={index}
-                  d={edge.d}
-                  markerEnd="url(#baf-gates-flow-arrow)"
-                  className={join(css.edge, edge.dashed === true ? css.edgeDashed : undefined)}
-                />
-              ))}
-            </svg>
-            {/*
-              【变更】2026-10-23 (批次十七 2.1): the intake branch block, take two —
-              a clean flowchart. The prominent 需求输入 entry box anchors the
-              spine; the scaffold pill rides right under it; the spine forks
-              into ONE horizontal row of three option cards (each IS its
-              确认门 node — the customer-facing option text leads, the
-              active-change condition rides quiet under it). new-workflow
-              converges solid into 分类确认; the other two re-enter the spine
-              dashed (take over an EXISTING change — no classification).
-            */}
-            <div
-              className={css.entryBox}
-              data-testid="baf-gates-entry"
-              style={{ left: spineX - NODE_W / 2, top: entryY, width: NODE_W, height: ENTRY_H }}
-            >
-              {/* 【变更】2026-10-24 (批次十九 3.1): the entry node carries the
-                  intake glyph, so it reads as a NODE (like the state cards)
-                  instead of a bare text chip. */}
-              <span className={css.entryIcon}><NodeIcon id="intake" /></span>
-              {t('gates.entryInput')}
-            </div>
-            {scaffoldGate !== undefined ? (
-              <GatePill
-                gate={scaffoldGate}
-                pos={{ x: spineX - PILL_W / 2, y: scaffoldPillY }}
-                selected={selected === `gate:${scaffoldGate.id}`}
-                onSelect={() => { setPicked(`gate:${scaffoldGate.id}`) }}
-                ariaLabel={gateDetailText(scaffoldGate, t)}
-              />
-            ) : null}
-            {optionGates.map((gate, index) => (
-              <button
-                key={gate.id}
-                type="button"
-                className={join(css.optionCard, selected === `gate:${gate.id}` ? css.optionCardSelected : undefined)}
-                data-testid={`baf-gates-gate-node-${gate.id}`}
-                style={{ left: optionX(index), top: optionY, width: OPTION_W, height: OPTION_H }}
-                aria-pressed={selected === `gate:${gate.id}`}
-                aria-label={gateDetailText(gate, t)}
-                title={gate.question}
-                onClick={() => { setPicked(`gate:${gate.id}`) }}
+          <div className={css.plane}>
+            <div className={css.flowCanvas} style={{ width: CANVAS_W, height: canvasH }}>
+              {/* 【变更】2026-10-24 (批次二十 2): the soft radial gold GLOW behind
+                  the canvas — the same focal point the session 工作流图 has. */}
+              <div className={css.flowGlow} aria-hidden="true" />
+              <svg className={css.flowEdges} viewBox={`0 0 ${CANVAS_W} ${canvasH}`} aria-hidden="true">
+                <defs>
+                  <marker
+                    id="baf-gates-flow-arrow"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 10 5 L 0 10 z" className={css.arrowHead} />
+                  </marker>
+                </defs>
+                {edgeList.map((edge, index) => (
+                  <path
+                    key={index}
+                    d={edge.d}
+                    markerEnd="url(#baf-gates-flow-arrow)"
+                    className={join(css.edge, edge.dashed === true ? css.edgeDashed : undefined)}
+                  />
+                ))}
+              </svg>
+              {/*
+                【变更】2026-10-23 (批次十七 2.1): the intake branch block, take two —
+                a clean flowchart. The prominent 需求输入 entry box anchors the
+                spine; the scaffold pill rides right under it; the spine forks
+                into ONE horizontal row of three option cards (each IS its
+                确认门 node — the customer-facing option text leads, the
+                active-change condition rides quiet under it). new-workflow
+                converges solid into 分类确认; the other two re-enter the spine
+                dashed (take over an EXISTING change — no classification).
+              */}
+              <div
+                className={css.entryBox}
+                data-testid="baf-gates-entry"
+                style={{
+                  left: spineX - NODE_W / 2,
+                  top: entryY,
+                  width: NODE_W,
+                  height: ENTRY_H,
+                  animationDelay: stagger(STEP_ENTRY),
+                }}
               >
-                <span className={css.optionTitle}>
-                  {gate.id === 'new-workflow'
-                    ? t('gates.entryOptNone')
-                    : gate.id === 'active-conflict'
-                      ? t('gates.entryOptOne')
-                      : t('gates.entryOptMany')}
-                </span>
-                <span className={css.optionCond}>
-                  {gate.id === 'new-workflow'
-                    ? t('gates.entryCondNone')
-                    : gate.id === 'active-conflict'
-                      ? t('gates.entryCondOne')
-                      : t('gates.entryCondMany')}
-                </span>
-              </button>
-            ))}
-            {classifyGate !== undefined ? (
-              <GatePill
-                gate={classifyGate}
-                pos={{ x: spineX - PILL_W / 2, y: classifyY }}
-                selected={selected === `gate:${classifyGate.id}`}
-                onSelect={() => { setPicked(`gate:${classifyGate.id}`) }}
-                ariaLabel={gateDetailText(classifyGate, t)}
-              />
-            ) : null}
-            {chainOrder.map(node => renderNode(node))}
-            <div className={css.branchLabel} data-testid="baf-gates-branch" style={{ left: COL_X[1], top: driftPos.y - 20 }}>
-              {t('gates.branchTitle')}
+                {/* 【变更】2026-10-24 (批次十九 3.1): the entry node carries the
+                    intake glyph, so it reads as a NODE (like the state cards)
+                    instead of a bare text chip. */}
+                <span className={css.entryIcon}><NodeIcon id="intake" /></span>
+                {t('gates.entryInput')}
+              </div>
+              {scaffoldGate !== undefined ? (
+                <GatePill
+                  gate={scaffoldGate}
+                  pos={{ x: spineX - PILL_W / 2, y: scaffoldPillY }}
+                  selected={selected === `gate:${scaffoldGate.id}`}
+                  onSelect={() => { setPicked(`gate:${scaffoldGate.id}`) }}
+                  ariaLabel={gateDetailText(scaffoldGate, t)}
+                  step={STEP_SCAFFOLD}
+                />
+              ) : null}
+              {optionGates.map((gate, index) => (
+                <button
+                  key={gate.id}
+                  type="button"
+                  className={join(css.optionCard, selected === `gate:${gate.id}` ? css.optionCardSelected : undefined)}
+                  data-testid={`baf-gates-gate-node-${gate.id}`}
+                  style={{
+                    left: optionX(index),
+                    top: optionY,
+                    width: OPTION_W,
+                    height: OPTION_H,
+                    animationDelay: stagger(STEP_OPTION + index),
+                  }}
+                  aria-pressed={selected === `gate:${gate.id}`}
+                  aria-label={gateDetailText(gate, t)}
+                  title={gate.question}
+                  onClick={() => { setPicked(`gate:${gate.id}`) }}
+                >
+                  <span className={css.optionTitle}>
+                    {gate.id === 'new-workflow'
+                      ? t('gates.entryOptNone')
+                      : gate.id === 'active-conflict'
+                        ? t('gates.entryOptOne')
+                        : t('gates.entryOptMany')}
+                  </span>
+                  <span className={css.optionCond}>
+                    {gate.id === 'new-workflow'
+                      ? t('gates.entryCondNone')
+                      : gate.id === 'active-conflict'
+                        ? t('gates.entryCondOne')
+                        : t('gates.entryCondMany')}
+                  </span>
+                </button>
+              ))}
+              {classifyGate !== undefined ? (
+                <GatePill
+                  gate={classifyGate}
+                  pos={{ x: spineX - PILL_W / 2, y: classifyY }}
+                  selected={selected === `gate:${classifyGate.id}`}
+                  onSelect={() => { setPicked(`gate:${classifyGate.id}`) }}
+                  ariaLabel={gateDetailText(classifyGate, t)}
+                  step={STEP_CLASSIFY}
+                />
+              ) : null}
+              {chainOrder.map((node, index) => renderNode(node, STEP_CHAIN + index))}
+              <div className={css.branchLabel} data-testid="baf-gates-branch" style={{ left: COL_X[1], top: driftPos.y - 20 }}>
+                {t('gates.branchTitle')}
+              </div>
+              {renderNode('drift', STEP_CHAIN + chainOrder.length)}
+              {renderNode('abandoned', STEP_CHAIN + chainOrder.length + 1)}
             </div>
-            {renderNode('drift')}
-            {renderNode('abandoned')}
           </div>
           {detailSection}
         </div>
@@ -950,19 +1037,23 @@ export function GatesOverviewRow({ loadGateOverview, embeddedInTab, t }: GatesOv
 
   return (
     <div className={css.block} data-testid="baf-gates-row" data-embedded={embedded ? 'true' : undefined}>
-      <div className={css.head}>
-        {/* 【变更】2026-10-20 (批次三 4.5): the 详/略 switch is deleted (the
-            flow is always 详, split canvas + selected detail) — the head keeps
-            only the collapsed-row expand/collapse toggle. Earlier: the intro
-            paragraph left with 2026-10-18 (工作流确认门 2.1/2.2). */}
-        <div className={css.headActions}>
-          {embedded ? null : (
+      {/* 【变更】2026-10-20 (批次三 4.5): the 详/略 switch is deleted (the
+          flow is always 详, split canvas + selected detail) — the head keeps
+          only the collapsed-row expand/collapse toggle. Earlier: the intro
+          paragraph left with 2026-10-18 (工作流确认门 2.1/2.2).
+          【变更】2026-10-24 (批次二十 2): the head renders ONLY when it owns a
+          control — embedded in the 确认门 tab the row has no toggle, so the
+          empty head bar is gone and the console bar (inside the frame) owns
+          the page's identity. */}
+      {embedded ? null : (
+        <div className={css.head}>
+          <div className={css.headActions}>
             <button type="button" className={css.toggle} data-testid="baf-gates-toggle" onClick={expand}>
               {expanded ? t('gates.collapse') : t('gates.expand')}
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {showBody ? (
         loading ? (

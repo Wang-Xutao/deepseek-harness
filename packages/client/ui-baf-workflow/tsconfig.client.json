@@ -22,6 +22,8 @@
     "src/client/dashboard-format.ts",
     "src/client/BafGateComposer.tsx",
     "src/client/WorkflowView.tsx",
+    "src/client/FlowCanvas.tsx",
+    "src/client/flow-parts.tsx",
     "src/client/WorkflowTabRow.tsx",
     "src/client/TestFlowTabRow.tsx",
     "src/client/TestFlowView.tsx",

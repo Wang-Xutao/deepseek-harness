@@ -35,8 +35,49 @@
   --wf-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 55%, var(--dsw-alias-label-secondary, #61666b));
   --wf-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 26%, var(--dsw-alias-label-tertiary, #81858c));
   --wf-line: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
-  padding: 16px 0;
+  /* 【变更】2026-10-24 (批次二十 2): the MATERIAL tokens — the gold hairline
+     every raised surface wears, the top highlight that reads as a lit edge,
+     and the two shadow depths the console's layers share. */
+  --wf-gold-line: color-mix(in srgb, var(--wf-accent) 34%, var(--wf-line));
+  --wf-lift: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
+  --wf-shadow-sm: 0 8px 18px -14px color-mix(in srgb, #000 42%, transparent);
+  --wf-shadow-md: 0 18px 40px -30px color-mix(in srgb, #000 46%, transparent);
+  padding: 16px 0 18px;
   border-bottom: 0.5px solid var(--wf-line);
+}
+
+/* 【变更】2026-10-24 (批次二十 2): the page becomes one premium console
+ * (「金箔仪表台」) — the same material vocabulary the session 工作流图 uses, so
+ * the two pages read as one product:
+ *
+ * - GOLD AS MATERIAL, not flat paint: every raised surface is a layered
+ *   gradient (a gold-tinted sheen over the theme surface), a 1px gold
+ *   hairline, a soft drop shadow and an `inset` top highlight — the gold
+ *   reads as a lit edge, never as a paint bucket;
+ * - DEPTH IN LAYERS: the page canvas (--wf-canvas) sits behind the raised
+ *   cards (--wf-surface), and a soft radial gold glow behind the flow canvas
+ *   gives the middle of the page a focal point;
+ * - HIERARCHY: three copy tiers only (--wf-ink / --wf-ink-2 / --wf-ink-3).
+ *   Gold body copy on a light surface is unreadable, so the gold appears as
+ *   fills, borders, rules and small badges — or as --wf-accent-text (the
+ *   gold mixed toward the theme's ink) for a number;
+ * - MOTION: a staggered fade-up entrance, a 2px hover lift on the interactive
+ *   cards, and a distinct GOLD selected state (gold edge + tinted fill + a
+ *   soft gold glow) so 「现在选中的是哪一个」 is obvious at a glance.
+ */
+
+/* 【变更】2026-10-24 (批次二十 2): the entrance keyframe (the canvas
+   assembles top-to-bottom) and the flowing dash on the re-entry edges.
+   The entrance uses `backwards` (not `both`): the fill then only holds the
+   FROM state while the element waits for its turn, so the hover lift is not
+   pinned to the animation's final keyframe afterwards. */
+@keyframes gatesFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gatesDash {
+  to { stroke-dashoffset: -18; }
 }
 
 .head {
@@ -65,13 +106,16 @@
   line-height: 18px;
 }
 
+/* 【变更】2026-10-24 (批次二十 2): the expand toggle joins the console — a
+   gold hairline and a faint gold fill, so the row's one control reads as
+   part of the same system. */
 .toggle {
   flex: none;
   padding: 0 14px;
   height: 36px;
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 34%, var(--wf-line));
   border-radius: 18px;
-  background: var(--dsw-alias-bg-module-platform);
+  background: color-mix(in srgb, var(--wf-accent) 8%, var(--dsw-alias-bg-module-platform));
   font: inherit;
   font-size: 13px;
   line-height: 20px;
@@ -80,7 +124,7 @@
 }
 
 .toggle:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: color-mix(in srgb, var(--wf-accent) 16%, var(--dsw-alias-interactive-bg-hover));
 }
 
 .status {
@@ -137,21 +181,25 @@
    node identity separates from the labelled 明细 layers beneath it. */
 /* 【变更】2026-10-24 (批次十九 3.2): the head is the panel's SECTION TITLE —
    it carries the gate title, so it gets the primary ink and a 700 weight
-   (the gate card below no longer repeats the title). */
+   (the gate card below no longer repeats the title).
+   【变更】2026-10-24 (批次二十 2): the head is the panel's HERO row — the
+   identity gets the largest type on the page, and the rule under it is a
+   gold hairline (the console's one accent line). */
 .nodeHead {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 8px;
-  padding-bottom: 8px;
-  border-bottom: 0.5px solid var(--wf-line);
+  padding-bottom: 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--wf-accent) 26%, var(--wf-line));
 }
 
 .nodeName {
   color: var(--wf-ink);
-  font-size: 13.5px;
+  font-size: 14.5px;
   line-height: 20px;
-  font-weight: 700;
+  font-weight: 750;
+  letter-spacing: -0.01em;
 }
 
 /* 【变更】2026-10-20 (批次六 3): the English name rides inline after the zh
@@ -171,10 +219,14 @@
   line-height: 16px;
 }
 
+/* 【变更】2026-10-24 (批次二十 2): the artifact chip joins the console's
+   material — a gold hairline and a faint gold fill, so the artifact name
+   reads as a chip of the panel instead of a bare word. */
 .nodeChip {
-  padding: 0 8px;
-  border: 0.5px solid var(--wf-line);
+  padding: 1px 9px;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 28%, var(--wf-line));
   border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-accent) 7%, transparent);
   color: var(--wf-ink-2);
   font-size: 11px;
   line-height: 17px;
@@ -201,13 +253,14 @@
   box-sizing: border-box;
   margin: 10px 0 5px;
   padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 26%, transparent);
   border-radius: 5px;
   background: color-mix(in srgb, var(--wf-accent) 14%, transparent);
   color: var(--wf-ink);
   font-size: 11px;
   line-height: 16px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 
 .sectionLabel::before {
@@ -269,18 +322,23 @@
    pinned it to #fff, which made the card near-white in dark mode) and the
    gate family wears the gold accent. */
 .gateCard {
-  padding: 9px 12px 10px;
-  border: 0.5px solid var(--wf-line);
-  border-left: 2.5px solid color-mix(in srgb, var(--wf-accent) 55%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--wf-accent) 4%, var(--wf-surface));
-  transition: border-color 150ms var(--ds-ease-in-out, ease), background-color 150ms var(--ds-ease-in-out, ease);
+  padding: 10px 12px 11px;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 24%, var(--wf-line));
+  border-left: 3px solid color-mix(in srgb, var(--wf-accent) 70%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--wf-accent) 10%, var(--wf-surface)),
+    var(--wf-surface) 55%
+  );
+  box-shadow: var(--wf-lift);
+  transition: border-color 150ms var(--ds-ease-in-out, ease), box-shadow 150ms var(--ds-ease-in-out, ease);
 }
 
 .gateCard:hover {
-  border-color: var(--dsw-alias-border-l3);
-  border-left-color: color-mix(in srgb, var(--wf-accent) 75%, transparent);
-  background: color-mix(in srgb, var(--wf-accent) 7%, var(--wf-surface));
+  border-color: color-mix(in srgb, var(--wf-accent) 46%, var(--wf-line));
+  border-left-color: var(--wf-accent);
+  box-shadow: var(--wf-lift), 0 10px 22px -14px color-mix(in srgb, var(--wf-accent) 50%, transparent);
 }
 
 /* The card's own title — the 门禁明细 head owns the title there, so this
@@ -382,12 +440,27 @@
 }
 
 /* One option row — the label leads, the command a click runs trails in
-   mono (批次五 2.1). */
+   mono (批次五 2.1).
+   【变更】2026-10-24 (批次二十 2): the gold marker in the gutter turns the
+   option rows into a decision list instead of loose lines of text. */
 .option {
+  position: relative;
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 2px 8px;
+  padding-left: 13px;
+}
+
+.option::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--wf-accent) 70%, transparent);
 }
 
 .optionLabel {
@@ -427,10 +500,11 @@
   flex-direction: column;
   gap: 3px;
   margin: 6px 0 0;
-  padding: 5px 8px;
+  padding: 6px 9px;
   list-style: none;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 16%, var(--wf-line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--wf-accent) 5%, transparent);
   color: var(--wf-ink-2);
   font-size: 11.5px;
   line-height: 17px;
@@ -467,6 +541,7 @@
 .flow {
   display: flex;
   flex-direction: column;
+  gap: 12px;
   margin-top: 12px;
 }
 
@@ -477,17 +552,22 @@
   word-break: break-word;
 }
 
-/* The node glyph on a detail group's head. */
+/* The node glyph on a detail group's head.
+   【变更】2026-10-24 (批次二十 2): the glyph becomes a gold tile (a gold-tinted
+   fill, a gold hairline and the gold mixed toward the theme's ink) — the
+   console's small badge, and the one place the accent is allowed to carry
+   an icon. */
 .nodeIcon {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 0.5px solid var(--wf-line);
-  border-radius: 6px;
-  color: var(--wf-ink-2);
+  width: 24px;
+  height: 24px;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 32%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  color: var(--wf-accent-text);
 }
 
 /* Gate-count chip on a detail group head (accent when gates rest on the node). */
@@ -501,11 +581,15 @@
 }
 
 /* 【变更】2026-10-24 (批次十九 3.2): the 确认门 badge wears the gold accent —
-   the gate family reads as one colour story with the pills and the cards. */
+   the gate family reads as one colour story with the pills and the cards.
+   【变更】2026-10-24 (批次二十 2): the badge's type gets the eyebrow
+   treatment, matching the section chips it sits beside. */
 .badgeGate {
   color: var(--wf-accent-text);
   border-color: color-mix(in srgb, var(--wf-accent) 50%, transparent);
   background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .badgeIdle {
@@ -516,21 +600,129 @@
    settings page scrolls; never the canvas itself).
    【变更】2026-10-24 (批次十九 3.2): the frame wears the theme-aware canvas
    surface (the old `--dsw-alias-bg-elevated` fallback left it transparent,
-   so the dark theme had no canvas plane at all). */
+   so the dark theme had no canvas plane at all).
+   【变更】2026-10-24 (批次二十 2): the frame is the CONSOLE CHASSIS — a gold
+   hairline, the top highlight, a soft drop shadow and a radial gold sheen at
+   its top edge, so the page reads as one raised object. */
 .flowWrap {
-  border: 1px solid var(--wf-line);
-  border-radius: 12px;
-  background: var(--wf-canvas);
+  position: relative;
+  border: 1px solid var(--wf-gold-line);
+  border-radius: 14px;
+  background:
+    radial-gradient(620px 280px at 50% 0%, color-mix(in srgb, var(--wf-accent) 9%, transparent), transparent 72%),
+    var(--wf-canvas);
+  box-shadow: var(--wf-lift), var(--wf-shadow-md);
+}
+
+/* 【变更】2026-10-24 (批次二十 2): the CONSOLE BAR — the frame's control deck.
+   The chart's own name (the visible echo of the region's accessible name) on
+   the left, the two live counts on the right: the numbers give the page a
+   numeric focal point and the bar gives the frame its identity. */
+.consoleBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--wf-line);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--wf-accent) 11%, var(--wf-surface)),
+    color-mix(in srgb, var(--wf-accent) 3%, transparent)
+  );
+}
+
+/* The chart's name — a small-caps eyebrow with the gold rule leading it. */
+.consoleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--wf-ink-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0.14em;
+}
+
+.consoleLabel::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--wf-accent), color-mix(in srgb, var(--wf-accent) 8%, transparent));
+}
+
+.consoleStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* One count chip — a quiet label and a large gold number (the number wears
+   --wf-accent-text: the gold mixed toward the theme's ink, so it stays
+   legible on the light surface). */
+.statChip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 10px;
+  border: 1px solid var(--wf-gold-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--wf-accent) 8%, var(--wf-surface));
+  box-shadow: var(--wf-lift);
+}
+
+.statLabel {
+  color: var(--wf-ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0.1em;
+}
+
+.statValue {
+  color: var(--wf-accent-text);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 18px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 【变更】2026-10-22 (批次十四 2): .legendBar / .legendItem / .legendDot /
    .legendPillDot deleted with the legend bar itself (客户决策：删除图例).
    批次五 2.6's legendOnceChip had already left with the 一次性 badges. */
 
+/* 【变更】2026-10-24 (批次二十 2): the canvas PLANE — the canvas keeps its
+   fixed width (the canvas never shrinks), the wrapper only gives the glow
+   behind it a box to live in. */
+.plane {
+  position: relative;
+  flex: none;
+}
+
 .flowCanvas {
   position: relative;
   flex: none;
   margin: 0 auto;
+}
+
+/* 【变更】2026-10-24 (批次二十 2): the soft radial gold GLOW behind the canvas
+   — the same focal point the session 工作流图 has (WorkflowView's .flowGlow).
+   It sits under the edges and the node cards, so the middle of the page
+   reads as lit rather than as a flat white sheet. */
+.flowGlow {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 170px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--wf-accent) 17%, transparent), transparent 72%);
+  pointer-events: none;
+  filter: blur(18px);
 }
 
 .flowEdges {
@@ -541,21 +733,28 @@
 }
 
 /* 【变更】2026-10-24 (批次十九 3.2): the edges step up from the faint grey
-   stroke to the lifted quiet ink, so the flowchart's routes read. */
+   stroke to the lifted quiet ink, so the flowchart's routes read.
+   【变更】2026-10-24 (批次二十 2): the routes wear the GOLD (tinted toward
+   the hairline, so the gold stays a lit edge and not a paint bucket) — the
+   edges and the console frame now share one colour story. */
 .edge {
   fill: none;
-  stroke: var(--wf-ink-3);
-  stroke-width: 1.6;
-  opacity: 0.7;
+  stroke: color-mix(in srgb, var(--wf-accent) 48%, var(--wf-line));
+  stroke-width: 1.8;
+  opacity: 0.85;
 }
 
+/* The dashed re-entry routes flow — the only motion on the canvas besides
+   the entrance, so the eye follows the branch that takes over an existing
+   change. */
 .edgeDashed {
   stroke-dasharray: 4 5;
-  opacity: 0.55;
+  opacity: 0.6;
+  animation: gatesDash 1.6s linear infinite;
 }
 
 .arrowHead {
-  fill: var(--wf-ink-3);
+  fill: color-mix(in srgb, var(--wf-accent) 72%, var(--wf-line));
 }
 
 /* Tier tints — the route's quiet low-saturation family: main chain blue,
@@ -579,7 +778,11 @@
 /* The route flowNode card verbatim — 【变更】2026-10-20 (批次三 4.5): the card
    is now a selection button, so the cursor returns (pointer).
    【变更】2026-10-24 (批次十九 3.2): the tier tint sits on the theme-aware
-   surface (the old transparent fallback made the tint invisible). */
+   surface (the old transparent fallback made the tint invisible).
+   【变更】2026-10-24 (批次二十 2): the card becomes a layered surface (a
+   tier-tinted sheen over the theme surface, a hairline, the top highlight
+   and a soft shadow), it enters on the staggered fade-up, and the hover
+   lifts it 2px with a brighter edge. */
 .flowNode {
   position: absolute;
   z-index: 1;
@@ -593,26 +796,42 @@
   text-align: left;
   background: linear-gradient(
     155deg,
-    color-mix(in srgb, var(--tier-color) 12%, var(--wf-surface)),
+    color-mix(in srgb, var(--tier-color) 16%, var(--wf-surface)),
     var(--wf-surface)
   );
   border: 1px solid color-mix(in srgb, var(--tier-color) 45%, var(--wf-line));
   border-radius: 10px;
+  box-shadow: var(--wf-lift), var(--wf-shadow-sm);
   cursor: pointer;
   outline: none;
-  transition: transform 160ms ease, border-color 160ms ease;
+  transition: transform 160ms var(--ds-ease-in-out, ease), border-color 160ms ease, box-shadow 160ms ease;
+  animation: gatesFadeUp 380ms var(--ds-ease-in-out, ease) backwards;
 }
 
 .flowNode:hover,
 .flowNode:focus-visible {
   border-color: var(--tier-color);
   transform: translateY(-2px);
+  box-shadow: var(--wf-lift), 0 12px 22px -12px color-mix(in srgb, var(--tier-color) 55%, transparent);
 }
 
-/* The selected canvas node anchors the 门禁明细 column (the 状态脚本 ring). */
-.nodeSelected {
-  border-color: var(--tier-color);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tier-color) 25%, transparent);
+/* 【变更】2026-10-24 (批次二十 2): the SELECTED canvas node — the page's
+   ACTIVE state. It wears the GOLD (not its tier colour): a gold edge, a
+   gold-tinted fill and a soft gold glow, so 「现在选中的是哪一个」 reads at a
+   glance. The rule keeps the .flowNode compound so it outranks the hover
+   edge colour above. */
+.nodeSelected,
+.flowNode.nodeSelected {
+  border-color: var(--wf-accent);
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--wf-accent) 20%, var(--wf-surface)),
+    var(--wf-surface)
+  );
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent),
+    0 0 20px -2px color-mix(in srgb, var(--wf-accent) 45%, transparent),
+    var(--wf-lift);
 }
 
 .flowNode:focus-visible {
@@ -620,14 +839,17 @@
   outline-offset: 1px;
 }
 
+/* 【变更】2026-10-24 (批次二十 2): the stage name leads its card — bigger and
+   tighter, with the quiet meta line beneath it. */
 .canvasName {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   max-width: 100%;
   overflow: hidden;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--wf-ink);
@@ -674,19 +896,23 @@
   align-items: center;
   gap: 5px;
   box-sizing: border-box;
-  padding: 0 8px;
+  padding: 0 10px;
   overflow: hidden;
   border: 1px dashed color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line));
   border-radius: 999px;
-  background: var(--wf-surface);
+  background: color-mix(in srgb, var(--wf-accent) 6%, var(--wf-surface));
+  box-shadow: var(--wf-lift);
   font: inherit;
   cursor: pointer;
-  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  animation: gatesFadeUp 320ms var(--ds-ease-in-out, ease) backwards;
 }
 
 .gatePill:hover {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--wf-accent) 80%, transparent);
+  border-color: color-mix(in srgb, var(--wf-accent) 85%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 13%, var(--wf-surface));
+  transform: translateY(-1px);
 }
 
 .gatePill:focus-visible {
@@ -694,10 +920,17 @@
   outline-offset: 1px;
 }
 
+/* 【变更】2026-10-24 (批次二十 2): the SELECTED pill — the gold edge, a
+   gold-tinted fill and a soft gold glow, so the open gate is obvious at a
+   glance next to the canvas. */
 .gatePillSelected {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--wf-accent) 85%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent);
+  border-color: var(--wf-accent);
+  background: color-mix(in srgb, var(--wf-accent) 20%, var(--wf-surface));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent),
+    0 0 16px -4px color-mix(in srgb, var(--wf-accent) 55%, transparent),
+    var(--wf-lift);
 }
 
 /* 【变更】2026-10-23 (批次十七 2.3): .gatePillHint deleted — the state 明细
@@ -717,6 +950,9 @@
  * left trailing tracking after the last CJK glyph. The gold fill + the dark
  * ink that sits on gold is legible in BOTH themes (7.5:1 on #c9a227), and the
  * 700 weight is a snapped variable-font weight (650 was not).
+ * 【变更】2026-10-24 (批次二十 2): the entry node is the page's HERO — the
+ * top highlight, the deeper gold shadow and the surrounding glow make it the
+ * one element that reads as lit, and it enters first.
  */
 .entryBox {
   position: absolute;
@@ -730,11 +966,15 @@
   border-radius: 12px;
   background: linear-gradient(135deg, var(--wf-accent-soft), var(--wf-accent));
   border: 1px solid color-mix(in srgb, var(--wf-accent) 72%, #6b5410);
-  box-shadow: 0 2px 10px -2px color-mix(in srgb, var(--wf-accent) 45%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 42%, transparent),
+    0 10px 24px -10px color-mix(in srgb, var(--wf-accent) 60%, transparent),
+    0 0 26px -8px color-mix(in srgb, var(--wf-accent) 48%, transparent);
   color: var(--wf-accent-ink);
   font-size: 13px;
   font-weight: 700;
   line-height: 18px;
+  animation: gatesFadeUp 380ms var(--ds-ease-in-out, ease) backwards;
 }
 
 /* The intake glyph — the entry node reads as a NODE, like the state cards. */
@@ -747,7 +987,10 @@
 
 /* 【变更】2026-10-24 (批次十九 3.2): the option cards join the gold gate
    family and ride the theme-aware surface (the old #fff fallback made them
-   near-white in the dark theme). */
+   near-white in the dark theme).
+   【变更】2026-10-24 (批次二十 2): they become layered surfaces (a gold
+   sheen over the theme surface, a hairline, the top highlight) and enter on
+   the staggered fade-up. */
 .optionCard {
   position: absolute;
   z-index: 1;
@@ -760,18 +1003,29 @@
   padding: 7px 10px;
   border-radius: 10px;
   border: 1px dashed color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line));
-  background: color-mix(in srgb, var(--wf-accent) 7%, var(--wf-surface));
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--wf-accent) 11%, var(--wf-surface)),
+    var(--wf-surface)
+  );
+  box-shadow: var(--wf-lift);
   font: inherit;
   text-align: left;
   cursor: pointer;
   outline: none;
-  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  animation: gatesFadeUp 340ms var(--ds-ease-in-out, ease) backwards;
 }
 
 .optionCard:hover {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--wf-accent) 80%, transparent);
-  background: color-mix(in srgb, var(--wf-accent) 12%, var(--wf-surface));
+  border-color: color-mix(in srgb, var(--wf-accent) 85%, transparent);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--wf-accent) 18%, var(--wf-surface)),
+    var(--wf-surface)
+  );
+  transform: translateY(-2px);
 }
 
 .optionCard:focus-visible {
@@ -779,17 +1033,28 @@
   outline-offset: 1px;
 }
 
+/* 【变更】2026-10-24 (批次二十 2): the SELECTED option card — gold edge, a
+   gold-tinted fill and a soft gold glow (the same ACTIVE state as the pills
+   and the state nodes). */
 .optionCardSelected {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--wf-accent) 85%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent);
+  border-color: var(--wf-accent);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--wf-accent) 24%, var(--wf-surface)),
+    var(--wf-surface)
+  );
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent),
+    0 0 18px -4px color-mix(in srgb, var(--wf-accent) 50%, transparent),
+    var(--wf-lift);
 }
 
 .optionTitle {
   max-width: 100%;
   color: var(--wf-ink);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 15px;
   word-break: break-word;
 }
@@ -804,12 +1069,15 @@
   word-break: break-word;
 }
 
+/* 【变更】2026-10-24 (批次二十 2): the pill title leads its chip a step
+   heavier — the pill is a decision, not a caption. */
 .pillTitle {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--wf-ink);
@@ -850,6 +1118,10 @@
  * 【变更】2026-10-24 (批次十九 3.2): the panel rides the theme-aware surface
  * (the old #fff fallback pinned the detail column to white — near-white copy
  * on near-white in the dark theme).
+ * 【变更】2026-10-24 (批次二十 2): the panel is the page's PRIMARY content, so
+ * it becomes the deepest surface of the console: a gold sheen over the theme
+ * surface, a gold hairline, the top highlight and a soft shadow — and it
+ * enters with the rest of the console.
  */
 .detail {
   position: sticky;
@@ -860,19 +1132,41 @@
   min-width: 0;
   max-height: calc(100vh - 120px);
   overflow-y: auto;
-  padding: 12px 14px;
-  border: 1px solid var(--wf-line);
-  border-radius: 12px;
-  background: var(--wf-surface);
-  box-shadow: 0 1px 8px color-mix(in srgb, var(--wf-ink) 8%, transparent);
+  padding: 12px 14px 14px;
+  border: 1px solid var(--wf-gold-line);
+  border-radius: 14px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--wf-accent) 8%, var(--wf-surface)),
+    var(--wf-surface) 45%
+  );
+  box-shadow: var(--wf-lift), var(--wf-shadow-md);
+  animation: gatesFadeUp 420ms var(--ds-ease-in-out, ease) backwards;
 }
 
+/* 【变更】2026-10-24 (批次二十 2): the panel title — the gold rule leads it,
+   and the tracked small-caps type marks it as the column's heading. */
 .detailHead {
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--wf-line);
   color: var(--wf-ink);
   font-size: 13px;
-  line-height: 19px;
-  font-weight: 600;
+  line-height: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.detailHead::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--wf-accent), color-mix(in srgb, var(--wf-accent) 8%, transparent));
 }
 
 .detailGroup {
@@ -885,7 +1179,32 @@
   margin-top: 6px;
 }
 
-/* Trailing group for unanchored gates this client cannot yet place. */
+/* Trailing group for unanchored gates this client cannot yet place.
+   【变更】2026-10-24 (批次二十 2): it becomes a card of the console (the same
+   layered surface as the 门禁明细 panel), not a bare column of text. */
 .fallback {
-  margin-top: 14px;
+  margin-top: 2px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--wf-gold-line);
+  border-radius: 14px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--wf-accent) 7%, var(--wf-surface)),
+    var(--wf-surface) 45%
+  );
+  box-shadow: var(--wf-lift), var(--wf-shadow-sm);
+}
+
+/* 【变更】2026-10-24 (批次二十 2): the reduced-motion escape hatch — the
+   entrance cascade and the flowing dashes are the page's only motion, so a
+   reader who asked for less of it gets the same console, still. */
+@media (prefers-reduced-motion: reduce) {
+  .flowNode,
+  .gatePill,
+  .optionCard,
+  .entryBox,
+  .detail,
+  .edgeDashed {
+    animation: none;
+  }
 }
