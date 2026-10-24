@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for 2026-10-24-baf-plugin-row-health-check.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-10-24-baf-plugin-row-health-check.md
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable:
+  en: aac7f50c03d470c0
+  zh: 2fc78a5a809b49cb
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/problem:
+  en: 62d12cf8ece20cc5
+  zh: 7d607eb0f96dd9cf
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/decision:
+  en: 908e03c487c7d27a
+  zh: 5f4d82576a2b3c4b
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: e01a6c669a9ec6aa
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/alternatives-considered/why-not-let-the-failure-surface-at-runtime-only:
+  en: af88a7d3555031da
+  zh: b9e5ae6adb5c3519
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/alternatives-considered/why-not-a-unit-test-inside-a-package:
+  en: da8eac4e8cd4667f
+  zh: eb358afdf7e6781e
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/alternatives-considered/why-not-check-only-the-baf-profile:
+  en: dcd1206287a81068
+  zh: add80130ef83e84c
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/consequences:
+  en: 04fc5e4c53e51a95
+  zh: d2c91f7e7daff746
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/testing:
+  en: 0c53b320522287dc
+  zh: a6ef8c74c2c525df
+/agent-note-preset-row-health-check-keeps-baf-compositions-resolvable/related:
+  en: 73ae3fae1ba3fcd3
+  zh: 30d9518d27c27dc2

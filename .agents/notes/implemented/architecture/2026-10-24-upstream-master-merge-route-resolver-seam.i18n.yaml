@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for 2026-10-24-upstream-master-merge-route-resolver-seam.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-24-upstream-master-merge-route-resolver-seam.md
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam:
+  en: 0742df0ccb37a2a2
+  zh: ae5d54048f44d684
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/problem:
+  en: 347e3412694a8469
+  zh: 4d94c16aaca8cb81
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/decision:
+  en: ff022a142bda0335
+  zh: 5953efba48cd3f16
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/alternatives-considered:
+  en: 6119e2aff3b6be5a
+  zh: e01a6c669a9ec6aa
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/alternatives-considered/why-not-keep-the-resolver-inside-the-session-controller:
+  en: 8d4550bd93123a00
+  zh: 162f276600671f7f
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/alternatives-considered/why-not-let-upstream-depend-on-the-baf-routing-package:
+  en: 3866c5a43aeb1048
+  zh: 66bb2d172207b5c4
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/alternatives-considered/why-not-resolve-the-tier-once-per-session-instead-of-per-step:
+  en: 2ec5694fde00b54e
+  zh: 9de602088e357769
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/alternatives-considered/why-not-revive-upstream-s-deleted-selection-apis:
+  en: 5231d516530e107a
+  zh: 5141425ed7aeaa81
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/consequences:
+  en: a67c1c9f723ab7c8
+  zh: 74e93763daf9707b
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/testing:
+  en: 1e2c8d378e5a1db8
+  zh: 66053b4b9e58a8cd
+/agent-note-upstream-master-merge-keeps-baf-auto-routing-on-a-generic-steprouteresolver-seam/related:
+  en: b79211799a9df312
+  zh: b1940995bc667a24

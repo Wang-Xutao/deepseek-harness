@@ -1,23 +1,17 @@
-/** Agent activation, composition, and model-selection policy owned by API Session. */
+/** Agent activation, composition, and initial model route owned by API Session. */
 
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
-import { installModelSelection } from '@deepseek-ai/dsh-agent'
-import type {
-  Agent, AgentOptions, AgentSetup, ModelSelection as AgentModelSelection, ModelSelectionRef,
-} from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentOptions, AgentSetup, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
+import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
-import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
-import { routeAutoOf } from './route-auto-bridge.ts'
-import type { ModelSelection } from './types.ts'
 
 /** Cold Session identity absent from persistence. */
 export class ApiSessionNotFound extends Error {}
@@ -96,37 +90,6 @@ export type ApiSessionAgentResult =
   | { readonly agent: Agent }
   | { readonly error: ApiSessionAgentError }
 
-type InstalledSelection = ModelSelectionRef & {
-  current: AgentModelSelection
-  /**
-   * 【变更】2026-10-05 (多模型路由 auto): the RAW, unresolved choice — the
-   * `baf-route/auto` pseudo pair stays itself here. The dispatch route gate
-   * reads this through the controller's `rawSelectionOf` passthrough.
-   */
-  readonly raw: AgentModelSelection | undefined
-  consume(provider: string, model: string, reasoningEffort: string | undefined): boolean
-}
-
-/**
- * The durable request header's selection, for getters that need the logged
- * state rather than the live pick. An effort the adapter defaulted is not a
- * conversation choice: restoring it as one would make an unchanged default
- * read as a request change.
- */
-function loggedSelectionOf(agent: Agent): AgentModelSelection | undefined {
-  const loggedHeader = agent.session.requestHeader()
-  if (loggedHeader === undefined) return undefined
-  const logged = loggedHeader.config
-  return {
-    provider: logged.provider,
-    model: logged.model,
-    ...(logged.reasoningEffort === undefined
-      || loggedHeader.adapterDefaults?.reasoningEffort === true
-      ? {}
-      : { reasoningEffort: logged.reasoningEffort }),
-  }
-}
-
 /**
  * Test whether generic Session routing must leave an identity to subagent routing.
  * @param ctx - Host context carrying the Agent ownership registry.
@@ -159,49 +122,20 @@ export function apiSessionSubagentOwnershipError(sessionId: SessionId): ApiSessi
   )
 }
 
-/**
- * Inspect one cold Session without repairing, resuming, or publishing it.
- * @param ctx - Host context carrying Session persistence.
- * @param sessionId - durable Session identity.
- * @param signal - optional cancellation for persistence reads.
- * @returns the persisted header and complete event prefix.
- */
-export async function inspectApiSession(
-  ctx: Context,
-  sessionId: SessionId,
-  signal?: AbortSignal,
-): Promise<SessionInspection> {
-  try {
-    using observation = await ctx.sessionQuery.observeSession(sessionId, {
-      ...(signal === undefined ? {} : { signal }),
-      projectionMode: 'none',
-    })
-    if (observation.header.cwd === undefined) {
-      throw new ApiSessionNotFound(`session "${sessionId}" not found`)
-    }
-    return {
-      meta: observation.header,
-      inheritedEventCount: observation.inheritedEventCount,
-      events: [...observation.events],
-    }
-  } catch (error: unknown) {
-    if (error instanceof SessionQueryError
-      && error.code === 'SESSION_QUERY_SESSION_NOT_FOUND') {
-      throw new ApiSessionNotFound(`session "${sessionId}" not found`)
-    }
-    throw error
-  }
-}
-
 /** Owns every operation that may create, resume, or configure a Web Agent. */
 export class ApiSessionAgentController {
   private readonly resumes = new Map<SessionId, Promise<Agent>>()
   private readonly claims = new Map<SessionId, Promise<void>>()
-  private readonly selections = new WeakMap<Agent, InstalledSelection>()
   private readonly imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
 
   /** @param ctx - Host context carrying Agent, model, persistence, and Typert services. */
-  constructor(private readonly ctx: Context) {
+  constructor(private readonly ctx: Context) {}
+
+  /**
+   * Configure Session and Agent lookups for Typert.
+   */
+  initialize(): void {
+    const ctx = this.ctx
     ctx.typert.lookups.configure('agent', async (sessionId: SessionId) => {
       const found = await this.resolveAgent(sessionId)
       if ('error' in found) throw found.error
@@ -309,105 +243,40 @@ export class ApiSessionAgentController {
   }
 
   /**
-   * Install or return the Session-local model selection used by prompt assembly.
-   * @param agent - live Agent that owns the selection.
-   * @returns the installed mutable selection reference.
-   */
-  selectionFor(agent: Agent): InstalledSelection {
-    const installed = this.selections.get(agent)
-    if (installed !== undefined) return installed
-    const projectionState = this.ctx.sessionProjections.stateOf(agent.session, 'modelSelection')
-    if (projectionState === undefined) {
-      throw new Error('api-session: required modelSelection projection is not registered')
-    }
-    let picked = projectionState.pending === null
-      ? undefined
-      : agentModelSelection(projectionState.pending)
-    const defaultModel = this.ctx.agentDefaultModel
-    // 【变更】2026-10-05 (多模型路由 auto): the host-realm runtime, when its
-    // entry is mounted, resolves the pseudo baf-route/auto pick per step
-    // (dispatch pin → keyword scan of the last user message → Worker default).
-    const auto = routeAutoOf(this.ctx)
-    const selection: InstalledSelection = {
-      get current(): AgentModelSelection {
-        if (picked !== undefined) {
-          if (auto !== undefined && auto.accepts(picked.provider, picked.model)) {
-            const resolved = auto.resolveAuto(agent.session.header.id, picked)
-            if (resolved !== undefined) {
-              // The runtime's effort is a config-file string; brand it at this
-              // boundary the way request-header assembly does.
-              return {
-                provider: resolved.provider,
-                model: resolved.model,
-                ...(resolved.reasoningEffort === undefined
-                  ? {}
-                  : { reasoningEffort: ReasoningEffortId(resolved.reasoningEffort) }),
-              }
-            }
-            // Routing went away after the pick (没有使能则没有 auto): fall
-            // through to the durable header / deployment default — the pseudo
-            // pair must never reach a provider.
-          } else {
-            return picked
-          }
-        }
-        const logged = loggedSelectionOf(agent)
-        return logged === undefined ? defaultModel.currentSelection() : logged
-      },
-      get raw(): AgentModelSelection | undefined {
-        return picked ?? loggedSelectionOf(agent)
-      },
-      set current(next: AgentModelSelection) {
-        picked = next
-      },
-      consume(provider: string, model: string, reasoningEffort: string | undefined): boolean {
-        if (picked?.provider !== provider
-          || picked.model !== model
-          || picked.reasoningEffort !== reasoningEffort) return false
-        picked = undefined
-        return true
-      },
-      assembled: undefined,
-    }
-    installModelSelection(agent.ctx, selection)
-    this.selections.set(agent, selection)
-    return selection
-  }
-
-  /**
-   * Commit and cache one validated selection for the next prompt assembly.
-   * @param agent - live Agent that owns the selection.
-   * @param selection - validated selection to record and apply.
-   */
-  selectForNextRequest(agent: Agent, selection: AgentModelSelection): void {
-    agent.session.append('model/selection', selection)
-    this.selectionFor(agent).current = selection
-  }
-
-  /**
-   * Let a matching durable request header retire the execution cache.
-   * @param agent - live Agent whose request was recorded.
-   * @param provider - provider route used by the request.
-   * @param model - provider-owned model used by the request.
-   * @param reasoningEffort - adapter-owned effort used by the request.
-   * @returns whether the pending selection was consumed.
-   */
-  consumeSelection(
-    agent: Agent,
-    provider: string,
-    model: string,
-    reasoningEffort: string | undefined,
-  ): boolean {
-    return this.selections.get(agent)?.consume(provider, model, reasoningEffort) ?? false
-  }
-
-  /**
    * Read the current Agent preset from the Session projection.
    * @param session - live Session whose projection state is available.
-   * @returns the current preset, or undefined when the capability is absent.
+   * @returns the current preset, or undefined without a preset service or recorded selection.
    */
   presetForSession(session: Session): string | undefined {
-    return this.ctx.sessionProjections.stateOf(session, 'agentPreset') ?? undefined
+    return this.ctx.get('agentPresets')?.presetForSession(session) ?? undefined
+  }
+
+  /**
+   * 【变更】2026-10-05 (多模型路由 M2): record the model for the addressed
+   * agent's NEXT request. Public facade passthrough over the agents
+   * controller (whose instance is private): host-plane dispatch surfaces —
+   * baf-workflow's route hook reaches this service through the scope chain —
+   * must not need a second model-selection waterfall of their own; this is
+   * the same durable path the `selectModel` remote walks (the recorded
+   * selection is consumed by the next prompt assembly).
+   * @param agent - live Agent the upcoming request belongs to.
+   * @param selection - validated selection to record.
+   */
+  selectForNextRequest(agent: Agent, selection: AgentModelSelection): void {
+    agent.model.select(selection)
+  }
+
+  /**
+   * 【变更】2026-10-05 (多模型路由 auto): the RAW model selection — what the
+   * session's customer actually picked, BEFORE the per-step route resolution
+   * maps a `baf-route/auto` pseudo pick to a tier model. The dispatch route
+   * gate (baf-workflow) reads this through the scope chain to decide whether
+   * the session opts into tier routing at all.
+   * @param agent - live Agent whose selection is read.
+   * @returns the raw pick, or undefined when the Agent has no route yet.
+   */
+  rawSelectionOf(agent: Agent): AgentModelSelection | undefined {
+    return agent.model.current()
   }
 
   /**
@@ -430,13 +299,13 @@ export class ApiSessionAgentController {
   async composeAgent(presetId: string | undefined): Promise<ApiSessionComposition> {
     const presets = this.ctx.get('agentPresets')
     if (presets === undefined) {
-      return { setup: (_agentCtx, agent) => { this.installSelection(agent) } }
+      return { setup: (agentCtx) => { installModelSelection(agentCtx) } }
     }
     const resolvedId = (await presets.resolve(presetId)).id
     return {
       agentPreset: resolvedId,
-      setup: async (agentCtx, agent) => {
-        this.installSelection(agent)
+      setup: async (agentCtx) => {
+        installModelSelection(agentCtx)
         await presets.mount(agentCtx, resolvedId)
       },
     }
@@ -585,8 +454,8 @@ export class ApiSessionAgentController {
 
   /** Whether no turn has started, by the predicate the preset registry's `select` enforces. */
   private isBlank(session: Session): boolean {
-    const boundary = this.ctx.sessionProjections.stateOf(session, 'turnBoundary')
-    return boundary === undefined || (boundary.openTurnStartSeq === null && boundary.lastTurn === 0)
+    const boundary = this.ctx.agents.turnBoundaryOf(session)
+    return boundary.openTurnStartSeq === null && boundary.lastTurn === 0
   }
 
   /** Without a roster, reuse cannot apply a named preset. */
@@ -621,12 +490,13 @@ export class ApiSessionAgentController {
   }
 
   private agentOptions(): AgentOptions {
-    const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
-    return { provider, model }
-  }
-
-  private installSelection(agent: Agent): void {
-    this.selectionFor(agent)
+    const defaults = this.ctx.agentDefaultModel
+    // A Session that records no selection or request follows default changes.
+    return {
+      get provider() { return defaults.currentSelection().provider },
+      get model() { return defaults.currentSelection().model },
+      get reasoningEffort() { return defaults.currentSelection().reasoningEffort },
+    }
   }
 
   /**
@@ -639,15 +509,5 @@ export class ApiSessionAgentController {
       throw new Error('api-session: Agent activation requires a projected Session observation')
     }
     return observation.projections.values.agentPreset ?? undefined
-  }
-}
-
-function agentModelSelection(selection: ModelSelection): AgentModelSelection {
-  return {
-    provider: selection.provider,
-    model: selection.model,
-    ...(selection.reasoningEffort === undefined
-      ? {}
-      : { reasoningEffort: ReasoningEffortId(selection.reasoningEffort) }),
   }
 }

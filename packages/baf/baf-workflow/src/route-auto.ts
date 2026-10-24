@@ -29,6 +29,8 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-session' // Context 'session/event' augmentation
+import type { Session } from '@deepseek-ai/dsh-session'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import {
   isTierRoutingActive,
   resolveTaskTier,
@@ -58,6 +60,16 @@ export interface RouteAutoCatalogGroup {
   readonly id: string
   readonly name: string
   readonly models: readonly { readonly id: string; readonly name: string }[]
+}
+
+/**
+ * Structural view of one step's route: the provider route the agent loop
+ * read, plus the optional adapter-owned reasoning effort.
+ */
+export interface StepRouteLike {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
 }
 
 /** The single catalog entry routing injects while active. */
@@ -95,6 +107,9 @@ export class BafRouteAutoRuntime extends Service {
 
   constructor(ctx: Context, _config: Record<string, never>) {
     super(ctx, 'bafRouteAuto')
+    // The agent loop reads a step's route before every step; this runtime is
+    // the resolver that maps the auto pseudo pair to that step's tier route.
+    ctx.effect(() => ctx.provide('stepRouteResolver', this), 'bafRouteAuto.stepRouteResolver')
     ctx.on('session/event', (session, event) => {
       if (event.type !== 'user/message') return
       const data = (event.data ?? {}) as UserMessageLike
@@ -155,6 +170,69 @@ export class BafRouteAutoRuntime extends Service {
     const config = readRouteTierConfigSync()
     if (config === undefined || !isTierRoutingActive(config)) return []
     return [AUTO_GROUP]
+  }
+
+  /**
+   * Resolve one step's route for the agent loop.
+   *
+   * The `baf-route/auto` pseudo pair is not a provider route: the loop reads
+   * the recorded selection before every step, and this runtime maps the pseudo
+   * pair to the tier route that step runs on. A session on any other selection
+   * runs on exactly that selection.
+   * @param session - the Session the step belongs to.
+   * @param route - the recorded route the step would otherwise use.
+   * @returns the route the step runs on.
+   */
+  resolveStepRoute(session: Session, route: StepRouteLike): StepRouteLike {
+    if (!this.accepts(route.provider, route.model)) return route
+    const resolved = this.resolveAuto(String(session.header.id), route)
+    if (resolved !== undefined) {
+      // The runtime's effort is a config-file string; brand it at this
+      // boundary the way request-header assembly does.
+      return {
+        provider: resolved.provider,
+        model: resolved.model,
+        ...(resolved.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: ReasoningEffortId(resolved.reasoningEffort) }),
+      }
+    }
+    // Routing went away after the pick (没有使能则没有 auto): fall through to
+    // the route the last request used, then to the deployment default — the
+    // pseudo pair must never reach a provider.
+    return this.fallbackRoute(session)
+  }
+
+  /**
+   * The route a session falls back to when its auto pick cannot be resolved:
+   * the route its last request used, else the deployment default.
+   * @param session - the Session the step belongs to.
+   * @returns the concrete route the step runs on.
+   */
+  private fallbackRoute(session: Session): StepRouteLike {
+    const header = session.requestHeader()
+    const logged = header?.config
+    if (logged !== undefined) {
+      // An effort the adapter defaulted is not a conversation choice: restoring
+      // it as one would make an unchanged default read as a request change.
+      return {
+        provider: logged.provider,
+        model: logged.model,
+        ...(logged.reasoningEffort === undefined || header?.adapterDefaults?.reasoningEffort === true
+          ? {}
+          : { reasoningEffort: logged.reasoningEffort }),
+      }
+    }
+    const defaults = this.ctx.get('agentDefaultModel') as { currentSelection(): StepRouteLike } | undefined
+    const fallback = defaults?.currentSelection()
+    if (fallback === undefined) {
+      throw new Error('baf-route/auto: no route to fall back to — the deployment has no default model')
+    }
+    return {
+      provider: fallback.provider,
+      model: fallback.model,
+      ...(fallback.reasoningEffort === undefined ? {} : { reasoningEffort: fallback.reasoningEffort }),
+    }
   }
 }
 

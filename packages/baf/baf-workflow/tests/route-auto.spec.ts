@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import type { RouteTierConfig } from '@deepseek-ai/dsh-baf-core'
+import type { Session } from '@deepseek-ai/dsh-session'
 import { writeRoutePresetsSync, writeRouteTierConfigSync } from '../src/route-config-io.ts'
 import { BafRouteAutoRuntime, AUTO_MODEL, AUTO_PROVIDER } from '../src/route-auto.ts'
 
@@ -174,5 +175,35 @@ describe('BafRouteAutoRuntime (多模型路由 auto 模型)', () => {
     writeRouteTierConfigSync(undefined, makeConfig({ packs: { myPack: false } }))
     expect(service.resolveAuto('sess-1', { provider: AUTO_PROVIDER, model: AUTO_MODEL }))
       .toEqual({ provider: 'p2', model: 'cheap-fast' })
+  })
+
+  it('registers as the step route resolver the agent loop reads', async () => {
+    const { ctx, service } = await fixture()
+    expect(ctx.get('stepRouteResolver')).toBe(service)
+  })
+
+  it('resolveStepRoute() maps the pseudo pair to the step route and leaves other routes alone', async () => {
+    const { service } = await fixture()
+    writeRouteTierConfigSync(undefined, makeConfig())
+    const session = { header: { id: 'sess-1' }, requestHeader: () => undefined } as unknown as Session
+    // The auto pseudo pair is not a provider route: the step runs on the tier route.
+    expect(service.resolveStepRoute(session, { provider: AUTO_PROVIDER, model: AUTO_MODEL }))
+      .toEqual({ provider: 'p2', model: 'cheap-fast' })
+    // Any other recorded route is the step's route.
+    const other = { provider: 'p1', model: 'big-brain' }
+    expect(service.resolveStepRoute(session, other)).toBe(other)
+  })
+
+  it('resolveStepRoute() falls back to the last request route when routing went away', async () => {
+    const { service } = await fixture()
+    writeRouteTierConfigSync(undefined, makeConfig({ enabled: false }))
+    const session = {
+      header: { id: 'sess-1' },
+      requestHeader: () => ({ config: { provider: 'p1', model: 'big-brain' } }),
+    } as unknown as Session
+    // The pseudo pair must never reach a provider: the step runs on the route
+    // the last request used.
+    expect(service.resolveStepRoute(session, { provider: AUTO_PROVIDER, model: AUTO_MODEL }))
+      .toEqual({ provider: 'p1', model: 'big-brain' })
   })
 })
