@@ -39,6 +39,7 @@ import { ProjectionStore } from './projection.ts'
 import { isActiveChange } from './projection.ts'
 import { StagePipeline } from './stages/pipeline.ts'
 import { BUG_RECORD_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH, bugRecordGate, checklistGate, checklistTickedGate, implementGate, proposalGate } from './stages/gates.ts'
+import { checkBlocksVerify } from './stages/check-runner.ts'
 import { BUG_FIX_PROPOSAL_FILE } from './stages/bug-fix-path.ts'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { readLedger } from './stages/implement.ts'
@@ -1304,8 +1305,13 @@ async function driveVerifyNow(context: RouteContext): Promise<CommandResult> {
     row => `${row.ok ? '✓' : '✗'} ${row.name}${row.required ? '' : '（非必需）'}`,
   )
   if (driven.result.backToImplement) {
+    // 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能通过
+    // 确认门」): the failure list names the checks that BLOCKED — a required
+    // failure, or a check that ran and failed. A check that never ran
+    // (skipped / tool_unavailable / cancelled) is not a failure and must not
+    // read as one in the fix order.
     const failures = driven.result.report.checks
-      .filter(row => !row.ok)
+      .filter(row => checkBlocksVerify(row))
       .map(row => `${row.name}: ${row.diagnostics.join('; ')}`)
     // §18.4.2 the T11 loop is the one implement rest whose work list comes from
     // a verify report instead of the ledger — same dispatch, explicit cause so
@@ -1314,7 +1320,7 @@ async function driveVerifyNow(context: RouteContext): Promise<CommandResult> {
       dispatchWorkOrder(context, 'implement', failures, 'verify-failed'),
       ['模型修复后敲 /baf-go'],
     )
-    return errorCard('必需检查未通过 · 退回实现阶段', [
+    return errorCard('检查未通过 · 退回实现阶段', [
       { title: '检查', lines: rows.length === 0 ? ['（无检查项）'] : rows },
       { title: '失败详情', lines: failures.length === 0 ? ['（无诊断信息）'] : failures },
       { title: '报告', lines: [driven.result.reportPath] },

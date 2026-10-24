@@ -47,21 +47,23 @@ html, body {
 }
 
 /*
- * 【变更】2026-10-23 (批次十七 1): the slow-launch BAND is retired — the hint
- * now rides the rotating #status line (splash.js), so the only slow-launch
- * chrome left is the 后台启动 button, absolutely pinned to the panel's
- * BOTTOM-LEFT corner (mirroring the top-left version). Hidden until .on
- * (opacity + pointer-events), so it can never shift the centered logo group
- * and never collides with the bottom-right credit.
+ * 【变更】2026-10-23 (批次十八 1.3): the slow-launch BUTTON now pins the
+ * panel's TOP-RIGHT corner (it took over the version's old slot, mirrored)
+ * and carries a down-arrow glyph — 「转入后台」 reads at a glance. Hidden
+ * until .on (opacity + pointer-events), so it can never shift the centered
+ * logo group; the version badge owns the bottom-left corner.
  */
 .bgStart {
   position: absolute;
-  left: 16px;
-  bottom: 14px;
+  top: 9px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   appearance: none;
   border: 1px solid rgba(94, 115, 255, 0.45);
   border-radius: 999px;
-  padding: 4px 16px;
+  padding: 4px 12px 4px 9px;
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 500;
@@ -72,6 +74,17 @@ html, body {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.bgStartIcon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .bgStart.on {
@@ -213,20 +226,21 @@ html, body {
   display: flex;
   flex-direction: row;
   align-items: center;
-  /* 【变更】2026-10-23 (批次十六 1.1): the version left the footer for the
-     top-left corner, so the single remaining credit parks right. */
+  /* 【变更】2026-10-23 (批次十八 1.2): the version badge is absolutely
+     positioned at the panel's bottom-left corner, so the single remaining
+     credit parks right. */
   justify-content: flex-end;
   gap: 12px;
 }
 
 /*
- * 【变更】2026-10-23 (批次十六 1.1): the version pins the panel's TOP-LEFT
+ * 【变更】2026-10-23 (批次十八 1.2): the version pins the panel's BOTTOM-LEFT
  * corner — absolutely positioned so the centered logo group never shifts,
  * tucked just inside the panel padding.
  */
 .version {
   position: absolute;
-  top: 10px;
+  bottom: 14px;
   left: 16px;
   margin: 0;
   font-size: 11px;

@@ -1224,16 +1224,21 @@ describe('renderVerifyMd (demo33 问题 3 — 正式测试报告)', () => {
       checks: [
         row({ name: 'future-check', required: false, ok: false, durationMs: 3, diagnostics: [] }),
       ],
-      passed: true,
+      // 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能
+      // 通过确认门」): a non-required check that RAN and failed blocks the
+      // confirm gate — the report is not passed any more, and its verdict line
+      // must not claim 「不阻断」.
+      passed: false,
       finishedAt: '2026-09-30T12:00:00.000Z',
     })
     // Unknown catalog name → the name itself is the 验证名称.
-    expect(md).toContain('| 1 | future-check | 辅助 | ⚠️ 未通过（非必需，不阻断） | 3ms |')
+    expect(md).toContain('| 1 | future-check | 辅助 | ❌ 失败（检查已执行，阻断归档） | 3ms |')
     expect(md).toContain('### 1. future-check')
     expect(md).toContain('- **验证内容**：检查项 future-check（暂无中文元数据')
-    // A failed non-required row alone keeps the overall conclusion passing.
-    expect(md).toContain('**✅ 通过**')
+    // The failed non-required check alone now fails the conclusion.
+    expect(md).toContain('**❌ 未通过**')
     expect(md).toContain('| 必需检查 | 通过 0/0 |')
+    expect(md).toContain('| 已执行检查 | 通过 0/1 |')
   })
 
   it('renders the failing conclusion when a required check failed', async () => {

@@ -198,6 +198,7 @@ export function replay(changeId: string, events: readonly ProjectionEvent[]): Wo
     applyEvent(state, event)
   }
 
+  const startedAt = events.at(0)?.at
   return {
     changeId,
     mode: state.mode,
@@ -209,6 +210,9 @@ export function replay(changeId: string, events: readonly ProjectionEvent[]): Wo
     projectionVersion: events.at(-1)?.seq ?? 0,
     ...(state.terminal === undefined ? {} : { terminal: state.terminal }),
     ...(state.updatedAt === undefined ? {} : { updatedAt: state.updatedAt }),
+    // 【变更】2026-10-24 (批次十九 1.4): the change's START time — the first
+    // event's timestamp (the fold only remembers the last one).
+    ...(startedAt === undefined ? {} : { startedAt }),
     ...(state.openspecSkipped === undefined ? {} : { openspecSkipped: state.openspecSkipped }),
     ...(state.baseline === undefined ? {} : { baseline: state.baseline }),
   }

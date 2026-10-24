@@ -20,6 +20,7 @@ desktop/_asar-extract/
 scripts/.*-report.txt
 scripts/cdp-*.mjs
 scripts/probe-*
+scripts/out/
 scripts/fetch-icons.mjs
 scripts/list-windows.ps1
 scripts/close-window.ps1

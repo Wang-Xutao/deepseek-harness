@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import type { OpenSpecAdapter } from '@deepseek-ai/dsh-baf-core'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { BUG_FIX_PATH_LEDGER_FILE, BUG_FIX_PROPOSAL_FILE, REGRESSION_TASK_ID, sectionOf } from './bug-fix-path.ts'
+import { checkBlocksVerify, type CheckVerdict } from './check-runner.ts'
 import { parsePlanLedger } from './plan-ledger.ts'
 
 /** Outcome of one completion gate. */
@@ -164,6 +165,38 @@ const BUG_FIX_CLIPPED_FILES: ReadonlySet<string> = new Set([
   ARTIFACT_FILES.planJson,
   ARTIFACT_FILES.tasks,
 ])
+
+/**
+ * 【变更】2026-10-24 (批次十九 2.4, 客户决策「工作流触发的测试流会生成报告，该报告
+ * 也是验证阶段的必须产物」): the 测试流's durable reports — WORKSPACE level
+ * (`.baf/reports/`), the same files baf-quality's test-flow reader enforces.
+ * They are the evidence that the flow actually ran, so the verify stage's
+ * artifact list carries the ones that exist.
+ */
+export const TEST_FLOW_REPORT_FILES = ['ut-coverage.json', 'static-analysis.json'] as const
+
+/**
+ * 【变更】2026-10-24 (批次十九 2.4): the workspace-relative paths of the 测试流
+ * reports that exist on disk.
+ *
+ * Decision (the customer may argue here): the report is a verify artifact only
+ * once the flow PRODUCED it — a workspace whose test flow never ran gets NO
+ * rail row, because the rail never invents a 「尚未生成」 row for a
+ * workspace-level file (unlike verify.md, which the verify stage always writes
+ * for the change). Its ABSENCE blocks the confirm gate only where the baseline
+ * configured the flow — that judgment rides the `test-flow` check's own
+ * `required` flag, not this list.
+ * @param workspaceRoot - absolute workspace root.
+ * @returns workspace-relative report paths (empty when the flow never ran).
+ */
+export async function testFlowReportPaths(workspaceRoot: string): Promise<readonly string[]> {
+  const paths: string[] = []
+  for (const file of TEST_FLOW_REPORT_FILES) {
+    const exists = await stat(join(workspaceRoot, '.baf', 'reports', file)).then(() => true, () => false)
+    if (exists) paths.push(`.baf/reports/${file}`)
+  }
+  return paths
+}
 
 /** What each documentation stage's gate requires, in customer language. */
 export const DOC_REQUIREMENTS_ZH: Readonly<Record<'open' | 'clarify' | 'design' | 'plan', readonly string[]>> = {
@@ -623,17 +656,28 @@ export async function implementGate(
 
 /**
  * N6 verify gate: every required check passed and none skipped silently.
+ *
+ * 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能通过
+ * 确认门」): a NON-required check that ran and failed blocks the gate too —
+ * 「跑过的测试必须通过」, whatever the check's own required flag says. A check
+ * that never ran (skipped / tool_unavailable / cancelled) still cannot fail, so
+ * the 2026-09-22 placeholder semantics stay untouched. The gate reads the SAME
+ * rule the aggregated report reads (`checkBlocksVerify`), so the two can never
+ * disagree. The reason code stays `verify_required` (the frozen enterprise code
+ * list); the specifics ride `detail` + `missing`, which the refusal cards and
+ * the Tab readiness projection render.
  * @param checks - check results from the CheckRunner.
  * @returns gate outcome.
  */
-export function verifyGate(
-  checks: readonly { readonly name: string; readonly ok: boolean; readonly required: boolean }[],
-): GateOutcome {
-  const failedRequired = checks.filter(c => c.required && !c.ok)
-  if (failedRequired.length > 0) {
+export function verifyGate(checks: readonly CheckVerdict[]): GateOutcome {
+  const blocked = checks.filter(check => checkBlocksVerify(check))
+  if (blocked.length > 0) {
     return fail(
       ['verify_required'],
-      `failed checks: ${failedRequired.map(c => c.name).join(', ')}`,
+      `failed checks: ${blocked.map(c => c.name).join(', ')}`,
+      blocked.map(c =>
+        `验证未通过：${c.name}${c.required ? '' : '（非必需，但检查已执行）'} —— ${c.diagnostics?.[0] ?? '检查失败，修复后重跑验证'}`,
+      ),
     )
   }
   return ok
@@ -886,6 +930,14 @@ export async function changeArtifactStatus(input: GateInput): Promise<readonly A
       row = { file, path, state: md.state, missing: md.state === 'filled' ? [] : md.missing }
     }
     rows.push(row)
+  }
+  // 【变更】2026-10-24 (批次十九 2.4): the 测试流's report rides the rail as a
+  // verify-stage artifact — but only once the flow produced it (see
+  // testFlowReportPaths). The row's path is workspace-relative (the report
+  // lives at the workspace level, not inside the change directory).
+  for (const rel of await testFlowReportPaths(input.workspaceRoot)) {
+    const file = rel.slice(rel.lastIndexOf('/') + 1)
+    rows.push({ file, path: rel, state: 'filled', missing: [] })
   }
   return rows
 }

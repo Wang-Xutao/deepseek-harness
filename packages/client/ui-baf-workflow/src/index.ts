@@ -14,6 +14,7 @@ import {
   BafError,
   isBafError,
   type GuardPolicy,
+  type ProjectionEvent,
   type StackAdapter,
 } from '@deepseek-ai/dsh-baf-core'
 import {
@@ -87,6 +88,10 @@ import type {
   BafWorkflowChainRunRequest,
   BafWorkflowChainRunResult,
   BafWorkflowChainStageOutcome,
+  BafWorkflowChangeDetailRequest,
+  BafWorkflowChangeDetailResult,
+  BafWorkflowChangeHistoryEntry,
+  BafWorkflowChangeOverviewResult,
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
   BafWorkflowFileReadRequest,
@@ -160,6 +165,52 @@ export interface ProjectionStorePool {
   storeFor(cwd: string): ProjectionStore
   /** Drop every cached store (ctx dispose — the bus goes with them). */
   dispose(): void
+}
+
+/**
+ * 【变更】2026-10-24 (批次十九 1.3): flatten one projection event into the
+ * history row the change-detail modal renders.
+ *
+ * The projection event union carries type-specific payloads; the modal only
+ * needs the WHEN / WHAT / WHICH-STAGE triple, so the union is reduced here
+ * (the host owns the event shape) and the client localizes the `type`.
+ * @param event - one projection event.
+ * @returns the flattened history row.
+ */
+function flattenChangeEvent(event: ProjectionEvent): BafWorkflowChangeHistoryEntry {
+  const base = { at: event.at, type: event.type }
+  switch (event.type) {
+    case 'intake-mode-set':
+      return { ...base, detail: `${event.from} → ${event.to}` }
+    case 'task-tier-frozen':
+      return { ...base, detail: event.matched === undefined ? event.tier : `${event.tier} · ${event.matched}` }
+    case 'intake-settled':
+      return {
+        ...base,
+        ...(event.kind === undefined ? {} : { detail: event.kind }),
+        ...(event.affectedScope === undefined ? {} : { reason: event.affectedScope }),
+      }
+    case 'stage-entered':
+      return { ...base, node: event.node, ...(event.cause === undefined ? {} : { reason: event.cause }) }
+    case 'stage-completed':
+      return { ...base, node: event.node, ...(event.artifacts.length === 0 ? {} : { detail: event.artifacts.join('、') }) }
+    case 'stage-failed':
+      return { ...base, node: event.node, reason: event.reason }
+    case 'drift-detected':
+      return { ...base, node: event.node, reason: event.cause }
+    case 'mode-upgraded':
+      return { ...base, detail: `${event.from} → ${event.to}` }
+    case 'awaiting-confirm':
+      return { ...base, gate: event.gate }
+    case 'transition-rejected':
+      // 【变更】2026-10-24 (批次十九 1.3): the source node is NULLABLE on this
+      // event, and the history row's optional props are exact (the key must be
+      // absent, not `undefined`) — the same conditional-spread shape the rest
+      // of this function uses.
+      return { ...base, ...(event.from === null ? {} : { node: event.from }), reason: event.reason }
+    default:
+      return base
+  }
 }
 
 /**
@@ -1223,6 +1274,99 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     return await buildWorkflowDashboard(store, points)
   }
 
+  /**
+   * 【变更】2026-10-23 (批次十八 2.2/2.3): the 工作流 page's 「变更总览」 —
+   * every change of the CURRENT project, the abandoned ones included.
+   *
+   * Unlike `dashboard` (session-scoped), this read is workspace-scoped: the
+   * page is a main-stage surface with no conversation behind it, so the
+   * workspace comes from the newest live session that names one. The rollup
+   * is the same builder the session modal uses, so both surfaces list the
+   * same changes with the same numbers.
+   * @returns the project change rows plus the header rollups.
+   */
+  @Remote('changeOverview')
+  async changeOverview(): Promise<BafWorkflowChangeOverviewResult> {
+    const cwd = this.workspaceCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    const store = this.pool.storeFor(cwd)
+    // The token attribution folds every session that ever ran in this
+    // workspace (same rule the session dashboard applies).
+    const points: UsagePoint[] = []
+    try {
+      for (const snap of await this.ctx.sessionPersistence.list()) {
+        if (snap.header.cwd !== cwd) continue
+        points.push(...await this.usagePointsFor(snap.header.id))
+      }
+    } catch {
+      // listing is best-effort — the rows still render without tokens
+    }
+    const dashboard = await buildWorkflowDashboard(store, points)
+    return {
+      status: 'ready',
+      cwd,
+      rows: dashboard.rows,
+      summary: dashboard.summary,
+    }
+  }
+
+  /**
+   * 【变更】2026-10-24 (批次十九 1.3): ONE change's detail — the 变更总览
+   * tab's row drill-down.
+   *
+   * The session tab used to open the change inside a modal built from
+   * `getTabView({sessionId, changeId})`; the project-level page has no
+   * conversation behind it, so the change is read straight from the workspace
+   * projection: the same `buildWorkflowTabView` projection the flow graph
+   * renders, plus the change's event history flattened for the modal's
+   * history list.
+   * @param request - the change to describe.
+   * @returns the change's view + history, or the reason it is unavailable.
+   */
+  @Remote('changeDetail')
+  async changeDetail(request: BafWorkflowChangeDetailRequest): Promise<BafWorkflowChangeDetailResult> {
+    const cwd = this.workspaceCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    const store = this.pool.storeFor(cwd)
+    const changeId = request.changeId
+    // A change id the workspace never knew → the ledger row is stale.
+    const known = (await store.readIndex()).changes.some(entry => entry.changeId === changeId)
+    if (!known) return { status: 'unknown-change', changeId }
+    const events = await store.readEvents(changeId)
+    const view = await buildWorkflowTabView(store, changeId, {
+      includeMetrics: true,
+      usagePoints: await this.workspaceUsagePoints(cwd),
+    })
+    return {
+      status: 'ready',
+      cwd,
+      changeId,
+      view,
+      // 【变更】2026-10-24 (批次十九 1.3): readEvents returns the parsed events
+      // plus an optional corruption line — the row's history is the event list.
+      history: events.events.map(event => flattenChangeEvent(event)),
+    }
+  }
+
+  /**
+   * Every session that ever ran in this workspace contributes its token
+   * samples — the same attribution the dashboard rollup uses.
+   * @param cwd - workspace root.
+   * @returns the usage points (best effort).
+   */
+  private async workspaceUsagePoints(cwd: string): Promise<UsagePoint[]> {
+    const points: UsagePoint[] = []
+    try {
+      for (const snap of await this.ctx.sessionPersistence.list()) {
+        if (snap.header.cwd !== cwd) continue
+        points.push(...await this.usagePointsFor(snap.header.id))
+      }
+    } catch {
+      // listing is best-effort — the view still renders without tokens
+    }
+    return points
+  }
+
   @Remote('gateResolve')
   async gateResolve(request: BafWorkflowGateResolveRequest): Promise<WorkflowTabView> {
     const { cwd, store } = await this.contextFor(request.sessionId)
@@ -1646,6 +1790,26 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     // §22.19 R5 — the persistent per-cwd store (its append bus feeds the
     // push event), replacing the per-RPC throwaway.
     return { cwd, store: this.pool.storeFor(cwd) }
+  }
+
+  /**
+   * 【变更】2026-10-23 (批次十八 2.3): the workspace a project-scoped read
+   * answers for — the newest live session that names a cwd (sessions list in
+   * creation order, so the last entry is the newest). Undefined when no live
+   * session carries a workspace.
+   * @returns absolute workspace root, or undefined.
+   */
+  private workspaceCwd(): string | undefined {
+    try {
+      const sessions = this.ctx.sessions.list()
+      for (let index = sessions.length - 1; index >= 0; index -= 1) {
+        const cwd = sessions[index]?.header?.cwd
+        if (cwd !== undefined && cwd !== '') return cwd
+      }
+    } catch {
+      // No live session store — the caller answers with the empty state.
+    }
+    return undefined
   }
 
   /**

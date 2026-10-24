@@ -32,6 +32,72 @@ export interface CheckReportRow {
   readonly diagnostics: readonly string[]
 }
 
+/**
+ * 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能通过
+ * 确认门」): the compact view of one check row the gate rule reads. The gate and
+ * the aggregated report share ONE rule, so both take this shape — the report
+ * row satisfies it structurally.
+ */
+export interface CheckVerdict {
+  /** Check id — named in the gate's refusal. */
+  readonly name: string
+  /** Machine verdict; a required failure always blocks. */
+  readonly ok: boolean
+  /** Required checks block on failure. */
+  readonly required: boolean
+  /** Stable per-check diagnostics; absent for callers that carry none. */
+  readonly diagnostics?: readonly string[]
+}
+
+/**
+ * 【变更】2026-10-24 (批次十九 2.4): the diagnostic prefixes that mark a check
+ * that did NOT actually run. `skipped:` is the 2026-09-22 placeholder
+ * semantics (an unconfigured check annotates instead of failing),
+ * `tool_unavailable:` is the unwired-adapter annotation, and `cancelled` is an
+ * aborted run. None of them is a test result — an absent check cannot fail.
+ * Every OTHER failure carries the real reason code (`build:nonzero_exit`,
+ * `ut_coverage.failed: …`), i.e. the check RAN and the run failed.
+ */
+const NOT_RUN_DIAGNOSTIC_PREFIXES = ['skipped:', 'tool_unavailable:', 'cancelled'] as const
+
+/**
+ * 【变更】2026-10-24 (批次十九 2.4): whether one check did not actually run.
+ * True only when every diagnostic is a not-run marker — a row that also
+ * carries a real reason code ran and failed, whatever else it reported.
+ * @param check - the check row.
+ * @returns true when the check never ran.
+ */
+export function checkDidNotRun(check: CheckVerdict): boolean {
+  const diagnostics = check.diagnostics ?? []
+  if (diagnostics.length === 0) return false
+  return diagnostics.every(d => NOT_RUN_DIAGNOSTIC_PREFIXES.some(prefix => d.startsWith(prefix)))
+}
+
+/**
+ * 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能通过
+ * 确认门」): whether one check ACTUALLY RAN and failed — the shared rule both
+ * the verify gate and the aggregated report read. A check that ran and failed
+ * blocks the confirm gate even when it is not `required`; a check that never
+ * ran (skipped / tool_unavailable / cancelled) still cannot fail.
+ * @param check - the check row.
+ * @returns true when the check ran and did not pass.
+ */
+export function checkActuallyRanAndFailed(check: CheckVerdict): boolean {
+  if (check.ok) return false
+  return !checkDidNotRun(check)
+}
+
+/**
+ * 【变更】2026-10-24 (批次十九 2.4): whether one check row BLOCKS the verify
+ * gate — the single rule the gate and the aggregated report share, so the two
+ * can never disagree about what 「跑过的测试必须通过」 means.
+ * @param check - the check row.
+ * @returns true when the check blocks the gate.
+ */
+export function checkBlocksVerify(check: CheckVerdict): boolean {
+  return (check.required && !check.ok) || checkActuallyRanAndFailed(check)
+}
+
 /** Aggregated verify report written as verify-report.json. */
 export interface VerifyReport {
   readonly schema: 1
@@ -121,6 +187,11 @@ export class CheckRunner {
 
   /**
    * Aggregate rows into the durable report shape.
+   *
+   * 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能通过
+   * 确认门」): `passed` now reads the SAME rule the verify gate reads — a check
+   * that ran and failed blocks the report even when it is not `required`, while
+   * a check that never ran still only annotates.
    * @param changeId - owning change.
    * @param rows - rows from {@link runAll}.
    * @param identity - mode, source revision, baseline, and tool versions.
@@ -144,7 +215,9 @@ export class CheckRunner {
       ...(identity.baselineId === undefined ? {} : { baselineId: identity.baselineId }),
       toolVersions: identity.toolVersions ?? {},
       checks: rows,
-      passed: rows.every(row => !row.required || row.ok),
+      // 【变更】2026-10-24 (批次十九 2.4): the shared gate rule — a required
+      // failure OR a check that ran and failed makes the report not passed.
+      passed: rows.every(row => !checkBlocksVerify(row)),
       finishedAt: new Date().toISOString(),
     }
   }

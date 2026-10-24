@@ -53,7 +53,8 @@ import {
   type DriftObservation,
   type DriftSignal,
 } from './drift.ts'
-import { clarifyGate, designGate, planGate } from './gates.ts'
+import { clarifyGate, designGate, planGate, testFlowReportPaths } from './gates.ts'
+import { checkBlocksVerify } from './check-runner.ts'
 import { stageArtifactPaths } from './artifacts.ts'
 import { writeArtifact } from './write.ts'
 import {
@@ -580,7 +581,16 @@ export class StagePipeline {
     const status = await this.enterStage(changeId, 'verify')
     const result = await driveVerify(this.ctx, changeId, signal)
     if (result.backToImplement) {
-      await this.failStage(changeId, 'verify', 'required checks failed')
+      // 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能
+      // 通过确认门」): the reason names the checks that BLOCKED — a non-required
+      // check that ran and failed blocks too, so 「required checks failed」 would
+      // misreport it.
+      const blocking = result.report.checks.filter(check => checkBlocksVerify(check)).map(c => c.name)
+      await this.failStage(
+        changeId,
+        'verify',
+        blocking.length > 0 ? `failed checks: ${blocking.join(', ')}` : 'checks failed',
+      )
       // T11: required check failed → re-enter implement for the fix loop.
       const statusAfterFail = await this.store.readStatus(changeId)
       const decision = decideTransition({
@@ -602,7 +612,14 @@ export class StagePipeline {
       }
       return { node: 'verify', result, status: statusAfterFail }
     }
-    await this.completeStage(changeId, 'verify', [result.reportPath])
+    // 【变更】2026-10-24 (批次十九 2.4, 客户决策「工作流触发的测试流会生成报告，
+    // 该报告也是验证阶段的必须产物」): the verify stage's artifact list carries
+    // the 测试流's reports too — the ones the flow actually produced. Their
+    // ABSENCE blocks only where the baseline configured the flow, which the
+    // test-flow check's own required flag carries.
+    const testFlowArtifacts = (await testFlowReportPaths(this.ctx.workspace.root))
+      .map(rel => join(this.ctx.workspace.root, rel))
+    await this.completeStage(changeId, 'verify', [result.reportPath, ...testFlowArtifacts])
     return { node: 'verify', result, status }
   }
 

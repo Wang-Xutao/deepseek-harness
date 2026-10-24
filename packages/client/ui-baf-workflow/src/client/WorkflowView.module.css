@@ -2,6 +2,15 @@
 .root {
   --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
   --wf-accent-soft: color-mix(in srgb, var(--wf-accent) 72%, #fff);
+  /* 【变更】2026-10-24 (批次十九 2.1): the fill the white-on-brand surfaces
+     share — this tab's brand chip and the 测试流图 tab's brand chip (and its
+     全部运行 button) are the SAME BAF mark, so they take the SAME fill. The
+     raw brand accent (#c9a227 gold) is 2.4:1 against white — unreadable — so
+     the gold is mixed toward the theme's dark ink: 5.6:1 … 4.9:1 across the
+     gradient, white text and glyph safe at small sizes. */
+  --wf-brand-fill: linear-gradient(135deg,
+    color-mix(in srgb, var(--wf-accent) 55%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 62%, #241a08));
   --wf-card: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas, #fff));
   --wf-ink: var(--dsw-alias-text-primary, #1f2937);
   --wf-muted: var(--dsw-alias-text-secondary, #64748b);
@@ -51,8 +60,12 @@
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: #1a1406;
-  background: linear-gradient(135deg, var(--wf-accent-soft), var(--wf-accent));
+  /* 【变更】2026-10-24 (批次十九 2.1): the brand wordmark is WHITE (the
+     customer asked both chips to read white). The old fill ran from a 72%
+     white mix (1.9:1 against white) to the raw gold (2.4:1) — illegible —
+     so the chip now takes the shared dark-gold brand fill. */
+  color: #fff;
+  background: var(--wf-brand-fill);
   border-radius: 4px;
   padding: 0.16rem 0.38rem;
 }
@@ -100,6 +113,16 @@
 
 .stripMuted { color: var(--wf-muted); }
 .stripBlocked { color: var(--wf-danger); }
+
+/* 【变更】2026-10-24 (批次十九 1.4): the strip's button group — pushed to the
+   right edge as one block (配置 → 刷新 → 变更总览). */
+.stripActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  padding-left: 0.6rem;
+}
 .stripHint {
   margin-left: auto;
   font-size: 0.64rem;
@@ -111,6 +134,30 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+/* 【变更】2026-10-24 (批次十九 1.1): the FIXED left column — 变更分类 / 阶段产物
+   / 会话统计 moved off the right rail into a constant-width column (no
+   splitter: the customer asked for a fixed left rail). The right rail keeps
+   the stage-scoped cards. */
+.leftRail {
+  flex: none;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, var(--wf-card)) 94%, transparent);
+}
+
+.leftRailScroll {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+  padding-bottom: 9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
 }
 
 .main {
@@ -384,7 +431,9 @@
 
 /* 【变更】2026-10-22 (批次十三 1): the 测试流图 jump chip on the
    implement/verify/archive cards — an accent-tinted pill (a Tab SWITCH, not
-   a file open, so it reads more prominent than the artifact text above). */
+   a file open, so it reads more prominent than the artifact text above).
+   【变更】2026-10-24 (批次十八 2.1): the chip turned SOLID brand — white text
+   on the accent fill, so the 验证 card's shortcut reads at a glance. */
 .flowNodeJumps {
   display: flex;
   flex-wrap: wrap;
@@ -396,20 +445,21 @@
   display: inline-flex;
   align-items: center;
   gap: 0.22rem;
-  padding: 0.16rem 0.5rem;
-  font-size: 0.6rem;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  color: var(--wf-accent);
-  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 45%, transparent);
+  color: #fff;
+  background: linear-gradient(135deg, var(--wf-accent), color-mix(in srgb, var(--wf-accent) 70%, #141414));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 70%, #141414);
   border-radius: 999px;
   cursor: pointer;
-  transition: background 0.16s ease-out, border-color 0.16s ease-out;
+  box-shadow: 0 4px 10px -6px color-mix(in srgb, var(--wf-accent) 70%, transparent);
+  transition: filter 0.16s ease-out, box-shadow 0.16s ease-out;
 }
 
 .flowNodeTestFlowChip:hover {
-  background: color-mix(in srgb, var(--wf-accent) 20%, transparent);
-  border-color: color-mix(in srgb, var(--wf-accent) 70%, transparent);
+  filter: brightness(1.08);
+  box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--wf-accent) 85%, transparent);
 }
 
 .flowNodeTestFlowChip:focus-visible {
@@ -579,6 +629,39 @@
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+}
+
+/* 【变更】2026-10-24 (批次十九 1.2): the rail's STAGE HEADER — the stage name
+   in big type above the stage-scoped cards, so 「现在在哪个阶段」 reads before
+   any card does. */
+.railStageHead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.85rem 1rem 0.9rem;
+  border-bottom: 1px solid var(--wf-line);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 16%, transparent), transparent 78%);
+}
+
+.railStageLabel {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wf-muted);
+}
+
+.railStageName {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--wf-ink);
+}
+
+.railStageHint {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--wf-muted);
 }
 
 .card {

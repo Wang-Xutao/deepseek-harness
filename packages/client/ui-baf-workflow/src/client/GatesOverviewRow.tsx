@@ -1,4 +1,18 @@
 /**
+ * 【变更】2026-10-24 (批次十九 3.1): the 需求输入 ENTRY NODE is re-designed —
+ * the old box tinted itself with `--dsw-alias-brand-primary`, which the
+ * design platform defines as a NEUTRAL INK (near-black / near-white), so the
+ * "brand tint" rendered as a grey wash (and, in dark mode, near-white text on
+ * a near-white box). The node now wears the BAF GOLD accent (the package's
+ * own --wf-accent family, as WorkflowView / TestFlowView use) with the dark
+ * ink that sits ON gold — legible in BOTH themes — plus a glyph, real padding
+ * and 700 weight (the old 650 weight is not a snapped variable-font weight).
+ * 【变更】2026-10-24 (批次十九 3.2): the 门禁明细 panel reads as one system —
+ * the gate title is printed ONCE (the detail head owns it; the card no longer
+ * repeats it), the question body's 【…】 sections are FLATTENED (caption /
+ * text / list are siblings — the .qSection wrapper is gone; grouping now comes
+ * from spacing + a left rule), and the muted copy gets a real hierarchy
+ * (primary ink / supporting ink / quiet ink) instead of one flat grey.
  * 【变更】2026-10-23 (批次十七 2.1/2.3): the intake decision is now a REAL
  * flowchart — a prominent 需求输入 entry box, the scaffold pill on the spine,
  * then ONE horizontal row of three option cards (未发现进行中的工作流 / 已有
@@ -187,10 +201,19 @@ function OptionLine({ option, t }: {
  * registry copy (【状态变化】【完成情况】【确认后】) reads as blocks instead of
  * one run-on line. A sectionless question (plain prose gates) stays one
  * quiet paragraph.
+ * 【变更】2026-10-24 (批次十九 3.2): the body is FLATTER — each section's
+ * caption / text / list render as SIBLINGS inside one body container, so the
+ * copy sits one level shallower than the old .qSection wrapper (the grouping
+ * now comes from spacing + a left rule, not from a nested element). The card
+ * TITLE is optional: the 门禁明细 head prints the gate title, so that card
+ * renders body-only (`showTitle={false}`) and the title appears exactly once.
  */
-function GateCard({ gate, t }: {
+function GateCard({ gate, t, showTitle = true }: {
   gate: BafWorkflowGateConfirmRow
   t: GatesOverviewRowProps['t']
+  /** 【变更】2026-10-24 (批次十九 3.2): false when the caller already prints
+   * the gate title (the 门禁明细 head) — the title must appear exactly once. */
+  showTitle?: boolean
 }) {
   // 【变更】2026-10-23 (批次十六 2.2): peel the {{change:}} marker the same way
   // the dialog projection does — the token never prints as body copy. The
@@ -201,13 +224,13 @@ function GateCard({ gate, t }: {
   const titled = sections.some(section => section.title !== undefined)
   return (
     <div className={css.gateCard} data-testid={`baf-gate-confirm-${gate.id}`}>
-      <div className={css.gateTitle}>{gate.title}</div>
+      {showTitle ? <div className={css.gateTitle}>{gate.title}</div> : null}
       {!titled
         ? <div className={css.gateQuestion}>{body}</div>
         : (
           <div className={css.gateQuestionSections} data-testid={`baf-gate-question-${gate.id}`}>
             {sections.map((section, si) => (
-              <div key={`qsec-${si}`} className={css.qSection}>
+              <Fragment key={`qsec-${si}`}>
                 {section.title !== undefined && <div className={css.qSectionTitle}>{section.title}</div>}
                 {section.blocks.map((block, bi) => block.kind === 'text'
                   ? <div key={`qt-${si}-${bi}`} className={css.qText}>{block.text}</div>
@@ -218,7 +241,7 @@ function GateCard({ gate, t }: {
                       ))}
                     </ul>
                   ))}
-              </div>
+              </Fragment>
             ))}
           </div>
         )}
@@ -332,8 +355,11 @@ const CANVAS_TOP = 16
  * the other two re-enter the spine dashed (take over an EXISTING change —
  * no classification).
  */
-/** Entry box height (the prominent 需求输入 card at the very top). */
-const ENTRY_H = 32
+/** Entry box height (the prominent 需求输入 card at the very top).
+ * 【变更】2026-10-24 (批次十九 3.1): 32→40 — the old box squeezed a 12.5px
+ * label into 32px with no horizontal padding; 40 carries the gold node's
+ * 13px/700 label with real breathing room. */
+const ENTRY_H = 40
 /** The scaffold pill sits this far under the entry box (on the spine). */
 const ENTRY_GAP = 8
 /** Fork point → the option row's tops (the fan-out curves' air). */
@@ -705,12 +731,15 @@ function GatesFlow({ data, t }: {
       <div className={css.detailHead}>{t('gates.detailTitle')}</div>
       {selectedGateRow !== undefined ? (
         <div className={css.detailGroup} data-testid={`baf-gates-detail-gate-${selectedGateRow.id}`}>
+          {/* 【变更】2026-10-24 (批次十九 3.2): the head owns the gate title —
+              the card below renders body-only, so the title is written ONCE
+              (it used to print twice: here AND in the card's own title line). */}
           <div className={css.nodeHead}>
             <span className={join(css.badge, css.badgeGate)}>{t('gates.sectionConfirm')}</span>
             <span className={css.nodeName}>{selectedGateRow.title}</span>
           </div>
           <div className={css.gates}>
-            <GateCard gate={selectedGateRow} t={t} />
+            <GateCard gate={selectedGateRow} t={t} showTitle={false} />
           </div>
         </div>
       ) : selectedSpec === undefined ? null : (
@@ -801,6 +830,10 @@ function GatesFlow({ data, t }: {
               data-testid="baf-gates-entry"
               style={{ left: spineX - NODE_W / 2, top: entryY, width: NODE_W, height: ENTRY_H }}
             >
+              {/* 【变更】2026-10-24 (批次十九 3.1): the entry node carries the
+                  intake glyph, so it reads as a NODE (like the state cards)
+                  instead of a bare text chip. */}
+              <span className={css.entryIcon}><NodeIcon id="intake" /></span>
               {t('gates.entryInput')}
             </div>
             {scaffoldGate !== undefined ? (

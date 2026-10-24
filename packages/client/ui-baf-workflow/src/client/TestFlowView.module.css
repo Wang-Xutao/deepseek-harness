@@ -14,7 +14,14 @@
  */
 .root {
   --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
-  --wf-accent-soft: color-mix(in srgb, var(--wf-accent) 72%, #fff);
+  /* 【变更】2026-10-24 (批次十九 2.1/2.2): the fill the white-on-brand
+     surfaces share (the brand chip + the 全部运行 button). The raw brand
+     accent (#c9a227 gold) is 2.4:1 against white — unreadable — so the gold
+     is mixed toward the theme's dark ink: 5.6:1 … 4.9:1 across the
+     gradient, white text and glyph safe at small sizes. */
+  --wf-brand-fill: linear-gradient(135deg,
+    color-mix(in srgb, var(--wf-accent) 55%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 62%, #241a08));
   --wf-card: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-canvas, #fff));
   --wf-ink: var(--dsw-alias-text-primary, #1f2937);
   --wf-muted: var(--dsw-alias-text-secondary, #64748b);
@@ -55,8 +62,12 @@
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: #1a1406;
-  background: linear-gradient(135deg, var(--wf-accent-soft), var(--wf-accent));
+  /* 【变更】2026-10-24 (批次十九 2.1): the brand wordmark is WHITE (the
+     customer asked both chips to read white). The old fill ran from a 72%
+     white mix (1.9:1 against white) to the raw gold (2.4:1) — illegible —
+     so the chip now takes the shared dark-gold brand fill. */
+  color: #fff;
+  background: var(--wf-brand-fill);
   border-radius: 4px;
   padding: 0.16rem 0.38rem;
 }
@@ -221,8 +232,8 @@
 }
 
 /* 批次十三 1 — the strip's 全部运行: the primary action of the tab (filled
-   accent, ink text — the gold accent fails 4.5:1 under white), visually
-   ahead of the ghost 配置/刷新 pair beside it. */
+   brand fill, white label + white glyph — the glyph paints with
+   currentColor), visually ahead of the ghost 配置/刷新 pair beside it. */
 .runAllBtn {
   display: inline-flex;
   align-items: center;
@@ -231,8 +242,11 @@
   font: inherit;
   font-size: 0.7rem;
   font-weight: 700;
-  color: var(--wf-ink);
-  background: var(--wf-accent);
+  /* 【变更】2026-10-24 (批次十九 2.2): the label AND the run glyph are WHITE.
+     The raw gold accent is 2.4:1 against white, so the button takes the
+     shared dark-gold brand fill (4.9:1 … 5.6:1). */
+  color: #fff;
+  background: var(--wf-brand-fill);
   border: 1px solid color-mix(in srgb, var(--wf-accent) 78%, #000 22%);
   border-radius: 6px;
   cursor: pointer;

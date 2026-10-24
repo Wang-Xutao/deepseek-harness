@@ -132,6 +132,13 @@ export interface WorkflowStatus {
   readonly terminal?: TerminalState
   /** ISO timestamp of the last projection event. */
   readonly updatedAt?: string
+  /**
+   * 【变更】2026-10-24 (批次十九 1.4): ISO timestamp of the FIRST projection
+   * event — the change's start time. The Tab's top info box shows it next to
+   * the elapsed duration, so a reader sees WHEN the change started, not only
+   * how long it has been running.
+   */
+  readonly startedAt?: string
   /** Whether OpenSpec stages were skipped on the active mode. */
   readonly openspecSkipped?: {
     readonly skipped: boolean

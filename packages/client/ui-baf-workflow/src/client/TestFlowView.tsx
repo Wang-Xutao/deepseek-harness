@@ -33,6 +33,16 @@
  * running); 4 a stage switched OFF in the 工作流 · 测试流 canvas greys out
  * (已关闭 badge, disabled 运行) and the 工作流图's jump chips address this
  * tab through the view-request channel (`stage:<id>` focus selects the card).
+ * 【变更】2026-10-24 (批次十九 2.1/2.2/2.3): 2.1 the top-left chip is the BAF
+ * brand mark (t('view.brandBaf')) — the SAME wordmark the 会话·工作流图 tab
+ * shows, so the two conversation tabs read as one family; the 工作流图 side
+ * (WorkflowView.tsx + WorkflowView.module.css) is updated in this same batch
+ * by the parent agent, which keeps the two chips identical. 2.2 the 全部运行
+ * button's label AND its glyph are white (the glyph paints with
+ * currentColor). 2.3 every report timestamp on this page (the strip's
+ * 报告时间, the 执行结果 lines, the rail's timestamp metrics) rides the
+ * shared formatter — `YYYY-MM-DD HH:mm:ss` in local time, not the raw wire
+ * string.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
@@ -48,6 +58,7 @@ import {
   type WorkflowTabTestFlowStatus,
 } from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
+import { formatTimestamp } from './dashboard-format.ts'
 import css from './TestFlowView.module.css'
 
 /** Session-bound 测试流图 Remote callbacks. */
@@ -158,12 +169,12 @@ function resultLines(
     case 'instrument':
       return chainAt === undefined
         ? [{ text: t('tflow.chainIdle'), tone: 'idle' }]
-        : [{ text: t('tflow.chainDone').replace('{at}', chainAt), tone: 'passed' }]
+        : [{ text: t('tflow.chainDone').replace('{at}', formatTimestamp(chainAt)), tone: 'passed' }]
     case 'report':
       return chainAt === undefined
         ? [{ text: t('tflow.chainIdle'), tone: 'idle' }]
         : [
-          { text: t('tflow.chainDone').replace('{at}', chainAt), tone: 'passed' },
+          { text: t('tflow.chainDone').replace('{at}', formatTimestamp(chainAt)), tone: 'passed' },
           ...(ready?.reportHtmlExists === true && ready.reportHtmlRel !== undefined
             ? [{ text: `${t('tflow.reportPath')}：${ready.reportHtmlRel}`, tone: 'idle' as StepState }]
             : []),
@@ -185,7 +196,7 @@ function resultLines(
       if (statics === undefined) return [{ text: t('tflow.staticIdle'), tone: 'idle' }]
       const lines = [{ text: t('tflow.staticValue').replace('{n}', String(statics.errors ?? '—')), tone: (statics.errors ?? 0) > 0 ? ('failed' as StepState) : ('passed' as StepState) }]
       if (statics.generatedAt !== undefined) {
-        lines.push({ text: t('tflow.chainDone').replace('{at}', statics.generatedAt), tone: 'passed' })
+        lines.push({ text: t('tflow.chainDone').replace('{at}', formatTimestamp(statics.generatedAt)), tone: 'passed' })
       }
       return lines
     }
@@ -578,6 +589,17 @@ export function TestFlowView({
   const outcomes = projectTestFlowSteps(status)
   const coverage = status?.status === 'ready' ? status.coverage : undefined
   const statics = status?.status === 'ready' ? status.staticAnalysis : undefined
+  // 【变更】2026-10-24 (批次十九 2.3): the rail's metric slot — the report row
+  // and the analyze row (when the static report carries no error count) hold a
+  // report TIMESTAMP. The projection keeps the raw wire string; the view
+  // prints it through the shared formatter, like the strip's 报告时间.
+  const railMetric = (id: TestFlowStepId): string | undefined => {
+    const metric = outcomes[id].metric
+    if (metric === undefined) return undefined
+    if (id === 'report') return formatTimestamp(coverage?.generatedAt)
+    if (id === 'analyze' && statics?.errors === undefined) return formatTimestamp(statics?.generatedAt)
+    return metric
+  }
   const gatePassed = coverage?.passed
   const reportAt = coverage?.generatedAt ?? statics?.generatedAt
   // thresholdLine is a 0-1 fraction; the report's own minimum (already a
@@ -597,7 +619,11 @@ export function TestFlowView({
   return (
     <div className={css.root} data-testid="baf-test-flow-view">
       <div className={css.strip}>
-        <span className={css.stripBrand}>{t('view.testFlow')}</span>
+        {/* 【变更】2026-10-24 (批次十九 2.1): the top-left chip is the BAF brand
+            mark — the SAME wordmark the 会话·工作流图 tab shows (the 工作流图
+            side is updated in this same batch by the parent agent, so the two
+            chips stay identical). */}
+        <span className={css.stripBrand} data-testid="baf-test-flow-brand">{t('view.brandBaf')}</span>
         <span className={css.stripItem}>
           <span className={css.stripLabel}>{t('tflow.verdictCoverage')}</span>
           <span className={clsx(
@@ -624,7 +650,9 @@ export function TestFlowView({
         </span>
         <span className={css.stripItem}>
           <span className={css.stripLabel}>{t('tflow.verdictReport')}</span>
-          <span className={clsx(css.stripValue, css.stripMuted)}>{reportAt ?? '—'}</span>
+          {/* 【变更】2026-10-24 (批次十九 2.3): the report time reads
+              `YYYY-MM-DD HH:mm:ss` (local), not the raw wire string. */}
+          <span className={clsx(css.stripValue, css.stripMuted)} data-testid="baf-test-flow-report-at">{formatTimestamp(reportAt)}</span>
         </span>
         {status?.gateMode !== undefined && (
           <span className={css.gateChip} title={t('tflow.gateMode')}>{`${t('tflow.gateMode')} · ${status.gateMode}`}</span>
@@ -713,7 +741,7 @@ export function TestFlowView({
                     index={index}
                     command={entry.command}
                     state={outcomes[entry.id].state}
-                    metric={entry.id === 'format' ? undefined : outcomes[entry.id].metric}
+                    metric={entry.id === 'format' ? undefined : railMetric(entry.id)}
                     stateLabel={t(STATE_TEXT[outcomes[entry.id].state])}
                     nameLabel={t(NODE_LABEL[entry.id])}
                     enLabel={t(NODE_EN[entry.id])}

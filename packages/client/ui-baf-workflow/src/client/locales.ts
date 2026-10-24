@@ -302,6 +302,61 @@ export type WorkflowTabKey =
   | 'dashboard.note'
   // 【变更】2026-09-23 (demo5 issue #5): the history flow modal's title.
   | 'dashboard.historyTitle'
+  // 【变更】2026-10-23 (批次十八 2.2/2.3): the 工作流 page's 变更总览 tab — the
+  // project's change ledger (the abandoned changes are recorded rows too).
+  | 'ovw.title'
+  | 'ovw.help'
+  | 'ovw.project'
+  | 'ovw.completed'
+  | 'ovw.abandoned'
+  | 'ovw.columnChange'
+  | 'ovw.columnMode'
+  | 'ovw.columnState'
+  | 'ovw.columnEnded'
+  | 'ovw.empty'
+  | 'ovw.noWorkspace'
+  | 'ovw.loading'
+  | 'ovw.refresh'
+  // 【变更】2026-10-24 (批次十九 1.1/1.2/1.3/1.4): the session 工作流图 tab's
+  // fixed LEFT column + the rail's stage header + the strip's start time, and
+  // the 变更总览 tab's redesigned ledger with its per-change detail modal.
+  | 'rail.sideRail'
+  | 'rail.stage'
+  | 'rail.stageSelected'
+  | 'rail.stageCurrent'
+  | 'strip.startedAt'
+  | 'ovw.clickHint'
+  | 'ovw.detailOpen'
+  | 'ovw.detailTitle'
+  | 'ovw.detailFlow'
+  | 'ovw.detailHistory'
+  | 'ovw.detailArtifacts'
+  | 'ovw.detailMetrics'
+  | 'ovw.detailIntake'
+  | 'ovw.detailLoading'
+  | 'ovw.detailFailed'
+  | 'ovw.detailEmpty'
+  | 'ovw.detailClose'
+  | 'ovw.detailUnknownChange'
+  | 'hist.event'
+  | 'hist.intakeClassified'
+  | 'hist.intakeConfirmed'
+  | 'hist.intakeModeSet'
+  | 'hist.intakeSettled'
+  | 'hist.taskTierFrozen'
+  | 'hist.baselineLocked'
+  | 'hist.stageEntered'
+  | 'hist.stageCompleted'
+  | 'hist.stageFailed'
+  | 'hist.driftDetected'
+  | 'hist.modeUpgraded'
+  | 'hist.awaitingConfirm'
+  | 'hist.changeArchived'
+  | 'hist.changeAbandoned'
+  | 'hist.transitionRejected'
+  // 【变更】2026-10-24 (批次十九 2.1): the BAF brand mark as a locale key, so
+  // the 工作流图 tab and the 测试流图 tab carry the SAME badge text.
+  | 'view.brandBaf'
   // 【变更】2026-09-29 (demo23 问题 3): terminal dashboard rows list the
   // artifacts the change actually generated (abandoned included).
   | 'dashboard.artifacts'
@@ -726,6 +781,57 @@ export const en: Record<WorkflowTabKey, string> = {
   'dashboard.tasksHelp': 'Plan tasks: done/total checkboxes from the change\'s plan.json task ledger (full-go-path changes only; a change without a plan ledger counts 0).',
   'dashboard.loadFailed': 'Dashboard load failed — retry with Refresh.',
   'dashboard.historyTitle': 'Change history',
+  // 【变更】2026-10-23 (批次十八 2.2/2.3): the 工作流 page's 变更总览 tab.
+  'ovw.title': 'Change overview',
+  'ovw.help': 'Every change of this project — active, completed, and abandoned ones recorded.',
+  'ovw.project': 'Project',
+  'ovw.completed': 'Completed',
+  'ovw.abandoned': 'Abandoned',
+  'ovw.columnChange': 'Change',
+  'ovw.columnMode': 'Mode',
+  'ovw.columnState': 'State',
+  'ovw.columnEnded': 'Ended',
+  'ovw.empty': 'This project has no change yet.',
+  'ovw.noWorkspace': 'No workspace is bound — open a session in this project to list its changes.',
+  'ovw.loading': 'Loading changes…',
+  'ovw.refresh': 'Refresh',
+  // 【变更】2026-10-24 (批次十九 1.1/1.2/1.3/1.4)
+  'rail.sideRail': 'Change info',
+  'rail.stage': 'Stage',
+  'rail.stageSelected': 'Selected stage',
+  'rail.stageCurrent': 'Current stage',
+  'strip.startedAt': 'Started at',
+  'ovw.clickHint': 'Click a change to open its flow and full history.',
+  'ovw.detailOpen': 'Open details',
+  'ovw.detailTitle': 'Change details',
+  'ovw.detailFlow': 'Stage flow',
+  'ovw.detailHistory': 'History',
+  'ovw.detailArtifacts': 'Artifacts',
+  'ovw.detailMetrics': 'Duration & tokens',
+  'ovw.detailIntake': 'Intake',
+  'ovw.detailLoading': 'Loading change details…',
+  'ovw.detailFailed': 'Could not load the change details.',
+  'ovw.detailEmpty': 'This change has no history yet.',
+  'ovw.detailClose': 'Close',
+  'ovw.detailUnknownChange': 'This change is no longer in the project ledger.',
+  'hist.event': 'Event',
+  'hist.intakeClassified': 'Change classified',
+  'hist.intakeConfirmed': 'Classification confirmed',
+  'hist.intakeModeSet': 'Path adjusted',
+  'hist.intakeSettled': 'Classification settled',
+  'hist.taskTierFrozen': 'Tier frozen',
+  'hist.baselineLocked': 'Baseline locked',
+  'hist.stageEntered': 'Stage entered',
+  'hist.stageCompleted': 'Stage completed',
+  'hist.stageFailed': 'Stage failed',
+  'hist.driftDetected': 'Drift detected',
+  'hist.modeUpgraded': 'Path upgraded',
+  'hist.awaitingConfirm': 'Awaiting confirmation',
+  'hist.changeArchived': 'Change archived',
+  'hist.changeAbandoned': 'Change abandoned',
+  'hist.transitionRejected': 'Transition rejected',
+  // 【变更】2026-10-24 (批次十九 2.1)
+  'view.brandBaf': 'BAF',
   'dashboard.artifacts': 'Generated artifacts',
   'dashboard.openExternal': 'Open in browser',
   'dashboard.board.title': 'BAF Change Board',
@@ -1133,6 +1239,57 @@ export const zh: Record<WorkflowTabKey, string> = {
   'dashboard.tasksHelp': '计划任务：该变更实现账本（plan.json / bug-fix-path-ledger.json）中已完成任务的数量。',
   'dashboard.loadFailed': '总览加载失败 — 点刷新重试。',
   'dashboard.historyTitle': '历史流程图',
+  // 【变更】2026-10-23 (批次十八 2.2/2.3): the 工作流 page's 变更总览 tab.
+  'ovw.title': '变更总览',
+  'ovw.help': '本项目的全部变更 — 进行中、已完成，以及已放弃的记录都在这里。',
+  'ovw.project': '项目路径',
+  'ovw.completed': '已完成',
+  'ovw.abandoned': '已放弃',
+  'ovw.columnChange': '变更',
+  'ovw.columnMode': '模式',
+  'ovw.columnState': '状态',
+  'ovw.columnEnded': '结束时间',
+  'ovw.empty': '本项目还没有任何变更。',
+  'ovw.noWorkspace': '未绑定工作区 — 在本项目里开一个会话后即可看到它的变更。',
+  'ovw.loading': '正在加载变更…',
+  'ovw.refresh': '刷新',
+  // 【变更】2026-10-24 (批次十九 1.1/1.2/1.3/1.4)
+  'rail.sideRail': '变更信息',
+  'rail.stage': '阶段',
+  'rail.stageSelected': '已选阶段',
+  'rail.stageCurrent': '当前阶段',
+  'strip.startedAt': '开始时间',
+  'ovw.clickHint': '点击变更项可展开它的流程图与完整历史记录。',
+  'ovw.detailOpen': '查看详情',
+  'ovw.detailTitle': '变更详情',
+  'ovw.detailFlow': '阶段流程',
+  'ovw.detailHistory': '历史记录',
+  'ovw.detailArtifacts': '阶段产物',
+  'ovw.detailMetrics': '耗时与 Tokens',
+  'ovw.detailIntake': '变更分类',
+  'ovw.detailLoading': '正在加载变更详情…',
+  'ovw.detailFailed': '无法加载该变更的详情。',
+  'ovw.detailEmpty': '该变更还没有历史记录。',
+  'ovw.detailClose': '关闭',
+  'ovw.detailUnknownChange': '该变更已不在项目台账中。',
+  'hist.event': '事件',
+  'hist.intakeClassified': '变更分类',
+  'hist.intakeConfirmed': '分类已确认',
+  'hist.intakeModeSet': '路径已调整',
+  'hist.intakeSettled': '分类已收敛',
+  'hist.taskTierFrozen': '档位已冻结',
+  'hist.baselineLocked': '基线已锁定',
+  'hist.stageEntered': '进入阶段',
+  'hist.stageCompleted': '阶段完成',
+  'hist.stageFailed': '阶段失败',
+  'hist.driftDetected': '检测到漂移',
+  'hist.modeUpgraded': '路径升级',
+  'hist.awaitingConfirm': '等待确认',
+  'hist.changeArchived': '变更已归档',
+  'hist.changeAbandoned': '变更已放弃',
+  'hist.transitionRejected': '推进被拒',
+  // 【变更】2026-10-24 (批次十九 2.1)
+  'view.brandBaf': 'BAF',
   'dashboard.artifacts': '已生成产物',
   'dashboard.openExternal': '在浏览器中打开',
   'dashboard.board.title': 'BAF 变更看板',

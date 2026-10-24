@@ -85,6 +85,9 @@ export type WorkflowKey =
   | 'tabs.commands'
   | 'tabs.standard'
   | 'tabs.quality'
+  // 【变更】2026-10-23 (批次十八 2.3): the 变更总览 tab (the project's change
+  // ledger) — the LAST tab of the 工作流 page.
+  | 'tabs.changes'
   | 'traceGraph.title'
   | 'traceGraph.description'
 
@@ -246,6 +249,7 @@ export const zhWorkflow: Record<WorkflowKey, string> = {
   'tabs.commands': '指令集',
   'tabs.standard': '企业规范',
   'tabs.quality': '测试流',
+  'tabs.changes': '变更总览',
   'traceGraph.title': '轨迹图',
   'traceGraph.description': '关闭后，对话 Tab 不再显示「轨迹图」。',
 }
@@ -261,6 +265,7 @@ export const enWorkflow: Record<WorkflowKey, string> = {
   'tabs.commands': 'Commands',
   'tabs.standard': 'Enterprise standards',
   'tabs.quality': 'Test flow',
+  'tabs.changes': 'Change overview',
   'traceGraph.title': 'Trace Graph',
   'traceGraph.description': 'Hide the Trace Graph tab on the conversation view.',
 }

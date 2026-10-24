@@ -192,6 +192,12 @@ export interface WorkflowTabView {
   readonly graph: ReturnType<typeof buildWorkflowGraph>
   readonly projectionVersion: number
   readonly updatedAt?: string
+  /**
+   * 【变更】2026-10-24 (批次十九 1.4): ISO timestamp of the change's FIRST
+   * projection event — its start time. The Tab's top info box shows it next to
+   * the elapsed duration.
+   */
+  readonly startedAt?: string
   readonly sourceRevision?: string
   readonly baselineId?: string
   readonly route?: WorkflowStatus['route']
@@ -480,6 +486,9 @@ export function statusToTabView(
     graph,
     projectionVersion: status.projectionVersion,
     ...(status.updatedAt === undefined ? {} : { updatedAt: status.updatedAt }),
+    // 【变更】2026-10-24 (批次十九 1.4): the change's start time rides the
+    // view so the Tab's top info box can show WHEN it began.
+    ...(status.startedAt === undefined ? {} : { startedAt: status.startedAt }),
     ...(status.sourceRevision === undefined ? {} : { sourceRevision: status.sourceRevision }),
     ...(status.baseline === undefined ? {} : { baselineId: status.baseline.baselineId }),
     ...(status.route === undefined ? {} : { route: status.route }),

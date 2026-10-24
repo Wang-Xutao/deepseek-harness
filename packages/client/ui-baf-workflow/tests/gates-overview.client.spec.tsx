@@ -35,6 +35,11 @@
  * cards (each IS its 确认门 node: option text + the condition line ride the
  * card). The state node's 明细 no longer counts 确认门 either — the state
  * prints stage + entry conditions only.
+ * 【变更】2026-10-24 (批次十九 3.2): the gate title is printed ONCE in the
+ * 门禁明细 panel (the detail head owns it — the card below no longer repeats
+ * it), and the question body's 【…】 sections are FLATTENED: the caption /
+ * text / list blocks are direct children of the `baf-gate-question-<id>`
+ * container (the .qSection wrapper is gone).
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -110,6 +115,21 @@ function flowCardIds(): string[] {
   const root = screen.getByTestId('baf-gates-flow')
   return Array.from(root.querySelectorAll<HTMLElement>('[data-testid^="baf-gate-node-"], [data-testid^="baf-gates-gate-node-"]'))
     .map(el => el.getAttribute('data-testid') ?? '')
+}
+
+/** How many times `needle` occurs in `haystack`. */
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1
+}
+
+/**
+ * The deepest element under `root` whose text contains `needle` — the element
+ * that actually holds the copy (no descendant of it matches too).
+ */
+function deepestChildWith(root: HTMLElement, needle: string): HTMLElement | undefined {
+  const hits = Array.from(root.querySelectorAll<HTMLElement>('*'))
+    .filter(el => el.textContent?.includes(needle) === true)
+  return hits.find(el => !hits.some(other => other !== el && el.contains(other))) ?? hits[0]
 }
 
 describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected detail)', () => {
@@ -261,6 +281,9 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
     const fallback = await screen.findByTestId('baf-gates-once')
     expect(fallback.textContent).toContain('gates.onceTitle')
     expect(fallback.textContent).toContain('future-gate 标题')
+    // 【变更】2026-10-24 (批次十九 3.2): the fallback group has no per-gate
+    // head, so its card still prints the gate title — exactly once.
+    expect(countOccurrences(fallback.textContent ?? '', 'future-gate 标题')).toBe(1)
   })
 
   it('localizes sentinel commands (noop / continued dispatch nothing)', async () => {
@@ -323,6 +346,44 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
     const plain = screen.getByTestId('baf-gate-confirm-new-workflow')
     expect(plain.textContent).toContain('new-workflow 问题')
     expect(screen.queryByTestId('baf-gate-question-new-workflow')).toBeNull()
+  })
+
+  it('prints the gate title ONCE in the 门禁明细 panel and flattens the question body (批次十九 3.2)', async () => {
+    const fixture = overviewFixture()
+    const advance = fixture.confirmGates.find(gate => gate.id === 'clarify-advance')
+    if (advance === undefined) throw new Error('fixture lost clarify-advance')
+    advance.question = [
+      '{{change:change-a}}',
+      '【状态变化】提案（已完成，通过完成门）→ 澄清（待开始）',
+      '【完成情况】',
+      '- Why / Scope / Impact 均已填写',
+      '- 澄清文档已就绪',
+    ].join('\n\n')
+    const load = vi.fn().mockResolvedValue(fixture)
+    mount(load)
+    fireEvent.click(screen.getByTestId('baf-gates-toggle'))
+    await screen.findByTestId('baf-gates-flow')
+    fireEvent.click(screen.getByTestId('baf-gates-gate-node-clarify-advance'))
+    const detail = screen.getByTestId('baf-gates-detail')
+    // 【变更】2026-10-24 (批次十九 3.2): the title is written ONCE — the
+    // detail head owns it, and the card below no longer repeats it.
+    expect(detail.textContent).toContain('clarify-advance 标题')
+    expect(countOccurrences(detail.textContent ?? '', 'clarify-advance 标题')).toBe(1)
+    expect(screen.getByTestId('baf-gate-confirm-clarify-advance').textContent).not.toContain('clarify-advance 标题')
+    // The question body is FLAT: the section caption and the section text are
+    // DIRECT children of the body container — the .qSection wrapper between
+    // them is gone (the copy sits one level shallower).
+    const body = screen.getByTestId('baf-gate-question-clarify-advance')
+    const caption = deepestChildWith(body, '状态变化')
+    const paragraph = deepestChildWith(body, '提案（已完成，通过完成门）→ 澄清（待开始）')
+    expect(caption?.parentElement).toBe(body)
+    expect(paragraph?.parentElement).toBe(body)
+    expect(body.textContent).toContain('Why / Scope / Impact 均已填写')
+    // The list block is a direct child too — li → ul → body, one level
+    // shallower than the old li → ul → .qSection → body.
+    const item = deepestChildWith(body, 'Why / Scope / Impact 均已填写')
+    expect(item?.parentElement?.tagName).toBe('UL')
+    expect(item?.parentElement?.parentElement).toBe(body)
   })
 
   it('keeps every node detail in the aria-label while the column shows one node', async () => {

@@ -12,7 +12,7 @@ import type { WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
 import { changeDir } from '@deepseek-ai/dsh-baf-openspec'
 import { collectStatusBlockers, testFlowCompletion, testFlowGated } from '@deepseek-ai/dsh-baf-quality'
 import type { StageContext } from './context.ts'
-import { CheckRunner, type CheckReportRow, type VerifyReport } from './check-runner.ts'
+import { CheckRunner, checkActuallyRanAndFailed, checkDidNotRun, type CheckReportRow, type VerifyReport } from './check-runner.ts'
 import { verifyGate } from './gates.ts'
 import { readLedger } from './implement.ts'
 import { regressionSatisfied } from './bug-fix-path.ts'
@@ -122,6 +122,13 @@ export function buildVerifyRunner(
       const real = failed.filter(check => entry(check).reasonCode !== 'policy_missing')
       const placeholders = failed.filter(check => entry(check).reasonCode === 'policy_missing')
       const ok = !signal.aborted && (report.passed || real.length === 0)
+      // 【变更】2026-10-24 (批次十九 2.4): an aborted run did NOT run — the
+      // shared gate rule reads the diagnostic, so the cancelled marker has to
+      // be there. Before, an aborted run with no real failure carried NO
+      // diagnostic at all and read as 「ran and failed」.
+      if (signal.aborted) {
+        return { ok: false, diagnostics: ['cancelled'] }
+      }
       return {
         ok,
         diagnostics: ok && real.length === 0
@@ -359,6 +366,14 @@ const CHECK_CATALOG_ZH: Readonly<Record<string, CheckCatalogEntry>> = {
     content: '本次改动的文件中是否引入了密钥、令牌等敏感信息。',
     method: '对 touched 列表逐文件调用守卫适配器的 secret-scan 动作；基线配置为 off 时标注 skipped，未接线时标注 tool_unavailable。',
   },
+  // 【变更】2026-10-24 (批次十九 2.4, 客户决策「工作流触发的测试流会生成报告，该
+  // 报告也是验证阶段的必须产物」): the 测试流 check now names itself in the
+  // customer-facing report — it is the check that carries the flow's reports.
+  'test-flow': {
+    name: '测试流完成检查',
+    content: '工作流触发的测试流是否全部完成成功：覆盖率链（编译/用例/插桩/报告/门禁）与静态分析链（lint/分析）的报告都已生成且通过。',
+    method: '读取 .baf/reports/ut-coverage.json 与 .baf/reports/static-analysis.json 两份持久化证据逐项判定；基线未配置单元测试流时标注跳过。',
+  },
 }
 
 /** One check's catalog entry with a fallback for unknown future names. */
@@ -370,7 +385,14 @@ function catalogEntryOf(name: string): CheckCatalogEntry {
 /** Verdict line for one report row. */
 function checkVerdictZh(check: CheckReportRow): string {
   if (check.ok) return '✅ 通过'
-  return check.required ? '❌ 失败（必需检查）' : '⚠️ 未通过（非必需，不阻断）'
+  if (check.required) return '❌ 失败（必需检查）'
+  // 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能通过
+  // 确认门」): a non-required check that RAN and failed blocks the confirm gate —
+  // the copy must not call it 不阻断 any more. A check that never ran (skipped /
+  // tool_unavailable / cancelled) still only annotates.
+  return checkActuallyRanAndFailed(check)
+    ? '❌ 失败（检查已执行，阻断归档）'
+    : '⚠️ 未执行（不阻断）'
 }
 
 /**
@@ -392,6 +414,11 @@ export async function renderVerifyMd(
 ): Promise<void> {
   const requiredTotal = report.checks.filter(c => c.required).length
   const requiredPassed = report.checks.filter(c => c.required && c.ok).length
+  // 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能通过
+  // 确认门」): the report also states how many checks ACTUALLY ran — the rule
+  // the confirm gate reads is 「跑过的测试必须通过」, not 「必需项必须通过」.
+  const ranTotal = report.checks.filter(c => !checkDidNotRun(c)).length
+  const ranPassed = report.checks.filter(c => c.ok && !checkDidNotRun(c)).length
   const lines: string[] = [
     `# 验证报告 — ${changeId}`,
     '',
@@ -410,12 +437,13 @@ export async function renderVerifyMd(
       : [`| 工具版本 | ${Object.entries(report.toolVersions).map(([tool, v]) => `${tool}@${v}`).join('、')} |`]),
     `| 完成时间 | ${report.finishedAt} |`,
     `| 必需检查 | 通过 ${requiredPassed}/${requiredTotal} |`,
+    `| 已执行检查 | 通过 ${ranPassed}/${ranTotal} |`,
     '',
     '## 验证结论',
     '',
     report.passed
-      ? '**✅ 通过** —— 全部必需检查项均通过，变更满足进入归档的质量要求。'
-      : '**❌ 未通过** —— 存在未通过的必需检查项，变更退回实现阶段修复后重新验证。',
+      ? '**✅ 通过** —— 必需检查项全部通过，已执行的检查项也全部通过，变更满足进入归档的质量要求。'
+      : '**❌ 未通过** —— 存在未通过的检查项（含已执行但未通过的检查），变更退回实现阶段修复后重新验证。',
     '',
     '## 验证总览',
     '',

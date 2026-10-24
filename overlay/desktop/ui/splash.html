@@ -9,9 +9,8 @@
 <body>
   <div class="shell">
     <div class="panel">
-      <!-- 【变更】2026-10-23 (批次十六 1.1): the version moved from the
-           footer's bottom-left slot to the panel's TOP-LEFT corner (the
-           footer keeps only the credit). -->
+      <!-- 【变更】2026-10-23 (批次十八 1.2): the version moved BACK to the
+           panel's BOTTOM-LEFT corner (the footer keeps only the credit). -->
       <p id="version" class="version" aria-label="应用版本"></p>
       <div class="main">
         <div class="logos" aria-hidden="true">
@@ -61,8 +60,18 @@
         joins the rotating status line (splash.js inserts it into the statuses
         array so it reads like 正在检查更新…, no layout shift ever), and the
         button stands ALONE pinned to the panel's bottom-left corner.
+        【变更】2026-10-23 (批次十八 1.3/1.4): the button moves to the panel's
+        TOP-RIGHT corner and grows a down-arrow glyph (「启动转入后台」); it
+        reveals in the same frame as the hint sentence, never ahead of it.
       -->
-      <button id="bgStart" class="bgStart" type="button">后台启动</button>
+      <button id="bgStart" class="bgStart" type="button">
+        <svg class="bgStartIcon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M8 1.75v6.25" />
+          <path d="M4.75 5.25 8 8.5l3.25-3.25" />
+          <path d="M2.75 13.25h10.5" />
+        </svg>
+        <span>后台启动</span>
+      </button>
       <div class="footer">
         <p class="credit">by sora</p>
       </div>

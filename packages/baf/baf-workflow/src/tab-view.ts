@@ -25,6 +25,8 @@ import { deriveWorkflowMetrics, type UsagePoint } from './metrics.ts'
 import type { ProjectionStore } from './projection.ts'
 import { pickActiveChange } from './projection.ts'
 import { bugRecordGate, changeArtifactStatus, clarifyGate, designGate, implementGate, planGate, proposalGate, type GateInput, type GateOutcome } from './stages/gates.ts'
+import { checkBlocksVerify } from './stages/check-runner.ts'
+import { readVerifyReport } from './stages/verify.ts'
 import { readLedger } from './stages/implement.ts'
 import { parsePlanLedger } from './stages/plan-ledger.ts'
 import type { WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
@@ -312,10 +314,25 @@ async function deriveAdvanceReadiness(
       if (ledger === undefined) return { ready: false, missing: ['plan.json 账本不可读——补齐 tasks 结构（每任务 id / title / files / done / touched）'] }
       return of(await implementGate(input, ledger.touched))
     }
-    case 'verify':
-      return status.nodes.verify === 'completed'
-        ? { ready: true, missing: [] }
-        : { ready: false, missing: ['系统验证尚未完成——验证跑完会自动弹归档确认卡'] }
+    case 'verify': {
+      if (status.nodes.verify === 'completed') return { ready: true, missing: [] }
+      // 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能
+      // 通过确认门」): the refusal now names WHY — the checks that blocked the
+      // confirm gate (a required failure, or a check that ran and failed). Same
+      // rule the gate reads, so the Tab can never promise an advance the gate
+      // would refuse, and the customer sees which test to fix.
+      const report = await readVerifyReport(cwd, changeId).catch(() => undefined)
+      const blocked = (report?.checks ?? []).filter(check => checkBlocksVerify(check))
+      if (blocked.length === 0) {
+        return { ready: false, missing: ['系统验证尚未完成——验证跑完会自动弹归档确认卡'] }
+      }
+      return {
+        ready: false,
+        missing: blocked.map(check =>
+          `验证未通过：${check.name}${check.required ? '' : '（非必需，但检查已执行）'} —— ${check.diagnostics?.[0] ?? '检查失败，修复后重跑验证'}`,
+        ),
+      }
+    }
     case 'intake':
       return status.intake?.confirmation === 'confirmed'
         ? { ready: true, missing: [] }

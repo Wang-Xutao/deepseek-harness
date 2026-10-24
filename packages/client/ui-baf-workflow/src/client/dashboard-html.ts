@@ -7,10 +7,14 @@
  * summary tiles, a mode-distribution donut, a duration ranking, and one card
  * per change (phase, task progress, cost, generated artifacts).
  * Pure string builder — no DOM access, no React, trivially testable.
+ * 【变更】2026-10-24 (批次十九 2.3): the board's 生成时间 line rides the SHARED
+ * timestamp formatter (dashboard-format.ts) so the standalone page and the
+ * in-app 测试流图 surface print report times in one format.
  * @module @deepseek-ai/dsh-client-ui-baf-workflow/dashboard-html
  */
 
 import type { WorkflowDashboardRow, WorkflowDashboardView } from './tab-types.ts'
+import { formatTimestamp } from './dashboard-format.ts'
 
 /** Localized strings the page renders (built by the caller through `t`). */
 export interface DashboardHtmlLabels {
@@ -253,7 +257,7 @@ export function buildDashboardHtml(data: WorkflowDashboardView, labels: Dashboar
 <main>
   <h1>${esc(labels.title)}</h1>
   <p class="sub">${esc(labels.subtitle)}</p>
-  <p class="meta">${esc(labels.generatedAt)}：${new Date().toLocaleString('zh-CN', { hour12: false })}</p>
+  <p class="meta">${esc(labels.generatedAt)}：${formatTimestamp(new Date().toISOString())}</p>
 
   <section class="tiles">
     <div class="tile"><span class="tileValue">${summary.active}</span><span class="tileLabel">${esc(labels.tileActive)}</span></div>

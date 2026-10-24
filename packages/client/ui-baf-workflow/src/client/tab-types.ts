@@ -200,6 +200,12 @@ export interface WorkflowTabView {
   }
   readonly projectionVersion: number
   readonly updatedAt?: string
+  /**
+   * 【变更】2026-10-24 (批次十九 1.4): ISO timestamp of the change's FIRST
+   * projection event — its start time. The strip shows it next to the elapsed
+   * duration.
+   */
+  readonly startedAt?: string
   readonly sourceRevision?: string
   readonly baselineId?: string
   readonly openspecSkipped?: {
@@ -346,6 +352,85 @@ export interface WorkflowDashboardView {
     readonly tasksTotal: number
   }
 }
+
+/**
+ * 【变更】2026-10-23 (批次十八 2.2/2.3): the 工作流 page's 「变更总览」 payload
+ * (client mirror of the host's `BafWorkflowChangeOverviewResult`) — every
+ * change of the current project, the abandoned ones included.
+ */
+export type BafWorkflowChangeOverviewResult =
+  | {
+    /** No live session names a workspace — the page shows its empty state. */
+    readonly status: 'no-workspace'
+  }
+  | {
+    readonly status: 'ready'
+    /** Absolute workspace root the rows were read from. */
+    readonly cwd: string
+    /** Every change row, newest first. */
+    readonly rows: readonly WorkflowDashboardRow[]
+    /** Header rollups (active / archived / abandoned / task counts). */
+    readonly summary: {
+      readonly active: number
+      readonly archived: number
+      readonly abandoned: number
+      readonly tasksDone: number
+      readonly tasksTotal: number
+    }
+  }
+
+/**
+ * 【变更】2026-10-24 (批次十九 1.3): one change's detail request — the
+ * 变更总览 tab's row drill-down (client mirror of the host's request).
+ */
+export interface BafWorkflowChangeDetailRequest {
+  /** The change to describe. */
+  readonly changeId: string
+}
+
+/**
+ * 【变更】2026-10-24 (批次十九 1.3): one flattened projection event (client
+ * mirror of the host's history row).
+ */
+export interface BafWorkflowChangeHistoryEntry {
+  /** ISO timestamp of the event. */
+  readonly at: string
+  /** The projection event type (e.g. `stage-completed`). */
+  readonly type: string
+  /** The stage the event belongs to, when it names one. */
+  readonly node?: string
+  /** The confirm gate the event parked on, when it names one. */
+  readonly gate?: string
+  /** Why the event happened (failure / drift / rejection reason). */
+  readonly reason?: string
+  /** A short extra line (artifact list, mode change, …). */
+  readonly detail?: string
+}
+
+/**
+ * 【变更】2026-10-24 (批次十九 1.3): the 变更总览 tab's per-change drill-down
+ * payload (client mirror of the host's `BafWorkflowChangeDetailResult`).
+ */
+export type BafWorkflowChangeDetailResult =
+  | {
+    /** No live session names a workspace — the page shows its empty state. */
+    readonly status: 'no-workspace'
+  }
+  | {
+    /** The change id is not in this workspace's projection. */
+    readonly status: 'unknown-change'
+    readonly changeId: string
+  }
+  | {
+    readonly status: 'ready'
+    /** Absolute workspace root the change was read from. */
+    readonly cwd: string
+    readonly changeId: string
+    /** The change's projection view (graph, nodes, artifacts, intake). */
+    readonly view: WorkflowTabView
+    /** Every projection event of the change, oldest first. */
+    readonly history: readonly BafWorkflowChangeHistoryEntry[]
+  }
 
 /** Empty template used when Remote is unavailable — still shows the full graph. */
 export { buildClientTemplateTabView as buildClientEmptyTabView } from './graph-template.ts'

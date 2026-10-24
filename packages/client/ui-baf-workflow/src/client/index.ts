@@ -22,16 +22,27 @@ import type {} from './remote-types.ts'
 import { WorkflowView, type WorkflowViewInjected } from './WorkflowView.tsx'
 import { WorkflowTabRow, type WorkflowTabRowInjected } from './WorkflowTabRow.tsx'
 import { GatesOverviewRow, type GatesOverviewRowInjected } from './GatesOverviewRow.tsx'
+// 【变更】2026-10-23 (批次十八 2.2/2.3): the 变更总览 row — the 工作流 page's
+// last tab, listing the project's changes (the abandoned ones included).
+import { ChangeOverviewRow, type ChangeOverviewRowInjected } from './ChangeOverviewRow.tsx'
 // 【变更】2026-10-21 (批次十 测试流图): the session tab + its 工作流通用 row.
 import { TestFlowView, type TestFlowViewInjected } from './TestFlowView.tsx'
 import { TestFlowTabRow, type TestFlowTabRowInjected } from './TestFlowTabRow.tsx'
 import {
   INITIAL_WORKFLOW_TAB_PREFS, WORKFLOW_TAB_PREF_KEY, type BafWorkflowTabSettings,
 } from '../workflow-tab-settings.ts'
-import { buildClientEmptyTabView, type WorkflowTabView, type WorkflowTabTestFlowStatus } from './tab-types.ts'
+import {
+  buildClientEmptyTabView,
+  type BafWorkflowChangeDetailResult,
+  type WorkflowTabView,
+  type WorkflowTabTestFlowStatus,
+} from './tab-types.ts'
 import { en, zh, NS, type WorkflowTabKey } from './locales.ts'
 import { isBafGatePending } from './gate-ask.ts'
 import { bindGateOpenArtifact } from './BafGateComposer.tsx'
+// 【变更】2026-10-24 (批次十九 1.3): the hand-off to the 工作流 page's
+// 「变更总览」 tab — the ledger's new home.
+import { requestWorkflowPageTab } from './workflow-page-nav.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -169,6 +180,29 @@ export function apply(ctx: ClientContext): void {
     }),
   }, GatesOverviewRow))
 
+  // 【变更】2026-10-23 (批次十八 2.2/2.3): the 变更总览 row — the 工作流 page's
+  // LAST tab, listing every change of the current project (the abandoned ones
+  // are recorded rows, not a missing entry). The read is workspace-scoped:
+  // the page is a main-stage surface with no conversation behind it.
+  // 【变更】2026-10-24 (批次十九 1.3): the row's drill-down — clicking a change
+  // opens its flow + history modal (the session tab's 变更总览 modal is gone).
+  ctx.slots.inject('settings.workflow.item', () => ctx.slots.register({
+    name: 'settings.workflow.item',
+    id: 'baf-change-overview',
+    order: 16,
+    locale: NS,
+    inject: (): ChangeOverviewRowInjected => ({
+      loadChangeOverview: async () => unwrap(await ctx.remote.bafWorkflowView.changeOverview()),
+      // 【变更】2026-10-24 (批次十九 1.3): the host's payload type is the
+      // baf-core .d.ts build (compiled WITHOUT exactOptionalPropertyTypes, so
+      // its optional props carry `| undefined`), while the client mirror is
+      // strict — the two differ only in that optionality, so the same plain
+      // `as` the 测试流图 tab's `testFlowStatus` uses bridges them.
+      loadChangeDetail: async (changeId: string) =>
+        unwrap(await ctx.remote.bafWorkflowView.changeDetail({ changeId })) as BafWorkflowChangeDetailResult,
+    }),
+  }, ChangeOverviewRow))
+
   const installView = (): (() => void) => ctx.slots.register({
     name: 'conversation.view',
     id: 'baf-workflow',
@@ -232,8 +266,6 @@ export function apply(ctx: ClientContext): void {
           ...(request.mode === undefined ? {} : { mode: request.mode }),
           text: request.text,
         })) as WorkflowTabView,
-        // 【变更】2026-09-23 (user issue #6): the 变更总览 dashboard payload.
-        dashboard: async () => unwrap(await remote.dashboard({ sessionId })),
         // 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview — same pure
         // core a real dispatch runs, no pin, no audit.
         routePreview: async (changeId, node) => unwrap(await remote.routePreview({
@@ -264,6 +296,13 @@ export function apply(ctx: ClientContext): void {
         // the same panel the sidebar's 工作流 entry selects (ui-baf-tracegraph's
         // 'workflow' MainPanelId); the strip's 配置 button fires this.
         openWorkflowConfig: () => {
+          ctx.layout.selectPanel('workflow' as MainPanelId)
+        },
+        // 【变更】2026-10-24 (批次十九 1.3): the strip's 变更总览 button — the
+        // change ledger moved to the 工作流 page, so the button asks that page
+        // for its 变更总览 tab and opens the panel.
+        openChangeOverview: () => {
+          requestWorkflowPageTab('changes')
           ctx.layout.selectPanel('workflow' as MainPanelId)
         },
       }

@@ -19,8 +19,6 @@ import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 import type {
   TerminalStateId,
   TestFlowStepId,
-  WorkflowDashboardRow,
-  WorkflowDashboardView,
   WorkflowNodeId,
   WorkflowTabLanesView,
   WorkflowTabNodeView,
@@ -35,7 +33,10 @@ import { createRefreshScheduler } from './refresh-scheduler.ts'
 import { RouteStatusRow, routeBadgeText } from './RouteStatusRow.tsx'
 import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel, parseGateSections } from './gate-ask.ts'
 import { setWorkflowTabActive } from './tab-activity.ts'
-import { buildDashboardHtml, type DashboardHtmlLabels } from './dashboard-html.ts'
+// 【变更】2026-10-24 (批次十八 2.3): the shared row display helpers — the
+// 工作流 page's 变更总览 ledger formats a change row the same way.
+// 【变更】2026-10-24 (批次十九 1.3): the timestamp helper — the strip's 开始时间.
+import { formatDuration, formatTokenCount, formatTimestamp, formatTokens, modeLabel } from './dashboard-format.ts'
 import css from './WorkflowView.module.css'
 
 /** intake.mode wire value → locale key (the rail's 变更分类 card). */
@@ -130,11 +131,11 @@ export interface WorkflowViewInjected {
     text: string
   }) => Promise<WorkflowTabView>
   /**
-   * 【变更】2026-09-23 (user issue #6): the 变更总览 dashboard payload — every
-   * change in the workspace as one rollup row (phase, task progress,
-   * duration, tokens) plus the summary tiles. Fetched when the modal opens.
+   * 【变更】2026-10-24 (批次十九 1.3): the session tab no longer carries the
+   * change overview — the ledger moved to the 工作流 page's 变更总览 tab, which
+   * reads the WORKSPACE-scoped rollup (the host's `changeOverview`). This tab
+   * only hands the user over to it.
    */
-  dashboard: () => Promise<WorkflowDashboardView>
   /**
    * 2026-09-21 (session 5.jsonl) — open one change artifact in the right
    * sidebar (view/edit). The workspace-relative `path` comes straight off a
@@ -162,6 +163,13 @@ export interface WorkflowViewInjected {
    * page (the one the sidebar's 工作流 entry opens) — the strip's 配置 button.
    */
   openWorkflowConfig: () => void
+  /**
+   * 【变更】2026-10-24 (批次十九 1.3): open the 工作流 page's 「变更总览」 tab —
+   * the strip's 变更总览 button. The session tab no longer carries the change
+   * overview as a modal (the ledger moved to the 工作流 page), so the button
+   * hands the user over to the one home of the ledger.
+   */
+  openChangeOverview: () => void
 }
 
 export type WorkflowViewProps =
@@ -181,18 +189,6 @@ const ZOOM_MAX = 1.8
 
 /** Clamp a number into [min, max] — wheel-pan bounds. */
 const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v))
-
-function formatDuration(ms: number | undefined): string {
-  // 【变更】2026-09-23 (demo5 issue #2): 0 is a REAL value (a finished stage
-  // that took no time) — only undefined/negative reads as the — blank.
-  if (ms === undefined || ms < 0) return '—'
-  if (ms === 0) return '0s'
-  if (ms < 1000) return `${Math.round(ms)}ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-  const m = Math.floor(ms / 60_000)
-  const s = Math.round((ms % 60_000) / 1000)
-  return `${m}m${s}s`
-}
 
 /**
  * 【变更】2026-09-23 (demo5 issue #2): whether a node status means the flow
@@ -220,29 +216,6 @@ function stageTokens(
 ): string {
   if (input !== undefined || output !== undefined) return formatTokens(input, output)
   return stageExecuted(status) ? formatTokens(0, 0) : '—'
-}
-
-function formatTokens(input?: number, output?: number): string {
-  // 【变更】2026-09-23 (demo1 十问题 6): the node-card token display — unit is
-  // always K (0K under a thousand); '—' means the stage did no model work at
-  // all, which is the only honest blank.
-  if (input === undefined && output === undefined) return '—'
-  return formatTokenCount((input ?? 0) + (output ?? 0))
-}
-
-/**
- * 【变更】2026-09-23 (demo1 十问题 6): K is the default unit everywhere — a
- * value under a thousand reads 0K (not a bare number that reads like a
- * different unit), millions keep the M tier.
- * @param value - non-negative token count.
- * @returns compact display string (0K / 12.3K / 1.2M).
- */
-function formatTokenCount(value: number): string {
-  const scaled = (candidate: number): string =>
-    candidate >= 100 ? String(Math.round(candidate)) : String(Math.round(candidate * 10) / 10)
-  if (value < 1_000) return '0K'
-  if (value < 1_000_000) return `${scaled(value / 1_000)}K`
-  return `${scaled(value / 1_000_000)}M`
 }
 
 /**
@@ -381,16 +354,6 @@ function fillTemplate(template: string, values: Record<string, string>): string 
 function artifactName(path: string): string {
   const parts = path.split(/[\\/]/)
   return parts[parts.length - 1] || path
-}
-
-function modeLabel(mode: string, t: (key: WorkflowTabKey) => string): string {
-  switch (mode) {
-    case 'template': return t('mode.template')
-    case 'full-go-path': return t('mode.fullGoPath')
-    case 'bug-fix-path': return t('mode.bugFixPath')
-    case 'clarify-required': return t('mode.clarify')
-    default: return mode
-  }
 }
 
 /**
@@ -602,8 +565,11 @@ function RailSplitter(props: {
 export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   const {
     t, refresh, startIntake, advance, transition, resume,
-    gateResolve, gateRevise, openArtifact, routePreview, useProjection, subscribe, dashboard,
+    gateResolve, gateRevise, openArtifact, routePreview, useProjection, subscribe,
     openWorkflowConfig,
+    // 【变更】2026-10-24 (批次十九 1.3): the strip's 变更总览 button hands the
+    // user over to the 工作流 page's 变更总览 tab.
+    openChangeOverview,
     // 批次十三 1 — the 测试流图 jump chips' channel: select that tab and
     // address a `stage:<id>` focus to it (ConvViewOwnerProps contract).
     openView,
@@ -623,11 +589,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [railWidth, setRailWidth] = useState(RAIL_DEFAULT)
-  const [dashboardOpen, setDashboardOpen] = useState(false)
-  // 【变更】2026-09-23 (user issue #6): the 变更总览 modal's payload — fetched
-  // when the modal opens (and on manual refresh), never on the poll path.
-  const [dashboardData, setDashboardData] = useState<WorkflowDashboardView | null>(null)
-  const [dashboardBusy, setDashboardBusy] = useState(false)
+
   // 【变更】2026-09-23 (demo5 issue #5): the opened history flow — its OWN
   // modal, independent of the main view. `refresh(changeId)`'s return value
   // feeds it directly, so the 2 s poll (which re-picks the ACTIVE change in
@@ -842,75 +804,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     void run(() => refresh())
   }, [preset, refresh, run])
 
-  // 【变更】2026-09-24 (demo6 问题 11): fetch on the OPEN transition only.
-  // The old effect listed `dashboardBusy` in its deps and flipped busy inside
-  // — busy false→true→false re-fired the effect forever, so the head showed
-  // 刷新… the whole time the modal was open (and each pass re-fetched).
-  // `loadDashboard` keeps the last data painted while refetching (no null
-  // flash), so the busy span is a real transient now.
-  const loadDashboard = useCallback(() => {
-    setDashboardBusy(true)
-    dashboard()
-      .then((data) => { setDashboardData(data) })
-      .catch(() => { setDashboardData(null) })
-      .finally(() => { setDashboardBusy(false) })
-  }, [dashboard])
-  useEffect(() => {
-    if (!dashboardOpen) return
-    loadDashboard()
-  }, [dashboardOpen, loadDashboard])
 
-  /**
-   * 【变更】2026-09-30 (demo33 问题 4): the 变更总览's 在浏览器中打开 —
-   * bakes the current dashboard snapshot into a standalone HTML page (tiles,
-   * mode donut, duration ranking, one card per change) and opens it in a new
-   * browser tab via a Blob URL. The click-originated window.open keeps popup
-   * blockers happy; the URL is revoked a minute later (the page outlives it —
-   * the document is fully baked, no fetches back).
-   */
-  const openDashboardExternal = useCallback(() => {
-    if (dashboardData === null) return
-    const nodeIds = ['intake', 'open', 'clarify', 'design', 'plan', 'implement', 'verify', 'archive', 'drift', 'completed', 'abandoned'] as const
-    const nodeLabels: Record<string, string> = {}
-    for (const id of nodeIds) nodeLabels[id] = t(`node.${id}` as WorkflowTabKey)
-    const modeLabels: Record<string, string> = {
-      'full-go-path': t('mode.fullGoPath'),
-      'bug-fix-path': t('mode.bugFixPath'),
-      'clarify-required': t('mode.clarify'),
-    }
-    const labels: DashboardHtmlLabels = {
-      title: t('dashboard.board.title'),
-      subtitle: t('dashboard.board.subtitle'),
-      generatedAt: t('dashboard.board.generatedAt'),
-      snapshotNote: t('dashboard.board.snapshotNote'),
-      tileActive: t('dashboard.board.tileActive'),
-      tileArchived: t('dashboard.board.tileArchived'),
-      tileAbandoned: t('dashboard.board.tileAbandoned'),
-      tileTasks: t('dashboard.board.tileTasks'),
-      tileDuration: t('dashboard.board.tileDuration'),
-      tileTokens: t('dashboard.board.tileTokens'),
-      chartModes: t('dashboard.board.chartModes'),
-      chartDuration: t('dashboard.board.chartDuration'),
-      allChanges: t('dashboard.board.allChanges'),
-      empty: t('dashboard.board.empty'),
-      tasksHelp: t('dashboard.tasksHelp'),
-      durationHelp: t('card.duration'),
-      tokensHelp: t('card.tokens'),
-      endedAt: t('dashboard.board.endedAt'),
-      artifactsLabel: t('dashboard.artifacts'),
-      artifactStates: {
-        template: t('artifact.state.template'),
-        planned: t('artifact.state.planned'),
-        filled: t('artifact.state.filled'),
-      },
-      nodeLabels,
-      modeLabels,
-    }
-    const html = buildDashboardHtml(dashboardData, labels)
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
-    window.open(url, '_blank', 'noopener,noreferrer')
-    window.setTimeout(() => { URL.revokeObjectURL(url) }, 60_000)
-  }, [dashboardData, t])
 
   // §22.19 R5 — synchronous in-flight mirror. `busy` is state, so a closure
   // reading it in the same tick it was set sees the old value; the push
@@ -974,6 +868,41 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // terminal placements activate through the same cast.
   const selectedId = selected as WorkflowNodeId | TerminalStateId | null
   const selectedTerminal = selectedId === 'completed' || selectedId === 'abandoned' ? selectedId : null
+
+  // 【变更】2026-10-24 (批次十九 1.2): the rail's stage header values. The
+  // column's cards describe ONE stage — the SELECTED node's — so the header
+  // names it; with nothing selected the change's current stage stands in.
+  // The hint line is the stage's one-line purpose (the catalog copy).
+  const railStage = useMemo(() => {
+    if (selectedNode !== null) {
+      return {
+        name: t(`node.${selectedNode.id}` as WorkflowTabKey),
+        hint: CATALOG_ZH[selectedNode.id]?.purpose ?? selectedNode.catalog.purpose,
+        hintKey: 'rail.stageSelected' as WorkflowTabKey,
+      }
+    }
+    if (selectedTerminal !== null) {
+      return {
+        name: t(`status.${selectedTerminal}` as WorkflowTabKey),
+        hint: t(`terminal.${selectedTerminal}.completion` as WorkflowTabKey),
+        hintKey: 'rail.stageSelected' as WorkflowTabKey,
+      }
+    }
+    if (view.current !== null) {
+      const node = view.nodes.find(n => n.id === view.current)
+      const terminal = view.current === 'completed' || view.current === 'abandoned'
+      return {
+        name: terminal
+          ? t(`status.${view.current}` as WorkflowTabKey)
+          : t(`node.${view.current}` as WorkflowTabKey),
+        hint: node === undefined ? null : (CATALOG_ZH[node.id]?.purpose ?? node.catalog.purpose),
+        hintKey: 'rail.stageCurrent' as WorkflowTabKey,
+      }
+    }
+    return { name: t('strip.idle'), hint: null, hintKey: 'rail.stageCurrent' as WorkflowTabKey }
+  }, [selectedNode, selectedTerminal, view, t])
+  const railStageName = railStage.name
+  const railStageHint = railStage.hint
 
   // 【变更】2026-09-22 (user report #4) — strip token cell + stats-card
   // figures derived from the tokenUsage projection (undefined → placeholder).
@@ -1043,105 +972,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   }, [refresh])
 
   /**
-   * 【变更】2026-09-23 (user issue #6): one dashboard table row — phase pill,
-   * task progress bar, duration, tokens, and the 查看工作流 action.
-   * 【变更】2026-09-23 (demo5 issue #5): a TERMINAL row opens the history
-   * modal (dashboard stays open underneath); an active row keeps the old
-   * focus jump.
-   * 【变更】2026-09-29 (demo23 问题 3): a terminal row also lists the
-   * artifacts the change actually generated — abandoned changes keep their
-   * directory in place, so the overview shows what was produced before the
-   * give-up, each chip opening the file in the right sidebar.
+   * 【变更】2026-10-24 (批次十九 1.3): the dashboard table row (phase pill, task
+   * progress bar, duration, tokens, and the 查看工作流 action) left with the
+   * session tab's 变更总览 modal — the ledger moved to the 工作流 page, which
+   * renders its own cards (ChangeOverviewRow.tsx).
    */
-  const dashboardArtifactStateClass = (state: 'template' | 'planned' | 'filled'): string =>
-    state === 'filled' ? css.artifactStateFilled ?? ''
-      : state === 'planned' ? css.artifactStatePlanned ?? css.artifactStateTemplate ?? ''
-        : css.artifactStateTemplate ?? ''
-  const dashboardRow = (row: WorkflowDashboardRow, current: WorkflowTabView, terminal: boolean) => {
-    const focused = row.changeId === current.selectedChangeId || row.changeId === current.changeId
-    const stageLabel = t(`node.${row.current}` as WorkflowTabKey)
-    const done = row.tasks?.done ?? 0
-    const total = row.tasks?.total ?? 0
-    const percent = total === 0 ? 0 : Math.round((done / total) * 100)
-    const tokens = formatTokens(row.inputTokens, row.outputTokens)
-    const artifactStateLabel = (state: 'template' | 'planned' | 'filled'): string =>
-      t(`artifact.state.${state}` as WorkflowTabKey)
-    return (
-      <>
-        <button
-          type="button"
-          className={clsx(css.dashboardItem, css.dashboardPick, focused && css.dashboardItemFocus)}
-          disabled={busy}
-          title={t('dashboard.openChange')}
-          onClick={() => {
-            if (terminal) {
-              openHistory(row.changeId, row.endedAt)
-              return
-            }
-            setDashboardOpen(false)
-            void run(() => refresh(row.changeId))
-          }}
-        >
-          <span className={css.dashboardItemMain}>
-            <span className={css.dashboardId}>{row.changeId}</span>
-            <span className={css.dashboardMeta}>
-              {modeLabel(row.mode, t)}
-              {' · '}
-              <span className={clsx(css.dashboardPhase, terminal && css.dashboardPhaseTerminal)}>{stageLabel}</span>
-              {row.endedAt !== undefined && ` · ${row.endedAt.slice(0, 16).replace('T', ' ')}`}
-              {/* 【变更】2026-10-07 (九点批 问题 4): the last-served 档位·模型 chip —
-                  from the focused session's byChange fold; changes this session
-                  never dispatched stay unbadged (the fold never guesses). */}
-              {(() => {
-                const byChange = view.routeStatus?.state === 'routed' ? view.routeStatus.byChange : undefined
-                const served = byChange?.[row.changeId]
-                if (served === undefined) return null
-                return (
-                  <span
-                    className={css.dashboardRouteChip}
-                    data-testid="dashboard-route-chip"
-                    title={t('route.title')}
-                  >
-                    {routeBadgeText(served, t)}
-                  </span>
-                )
-              })()}
-            </span>
-            <span className={css.dashboardRowMetrics}>
-              {row.tasks !== undefined && (
-                <span className={css.dashboardProgress} title={t('dashboard.tasksHelp')}>
-                  <span className={css.dashboardProgressFill} style={{ width: `${percent}%` }} />
-                  <span className={css.dashboardProgressText}>{done}/{total}</span>
-                </span>
-              )}
-              <span title={t('card.duration')}>{formatDuration(row.durationMs)}</span>
-              <span title={t('card.tokens')}>{tokens}</span>
-            </span>
-          </span>
-          {focused && <span className={css.currentPill}>{t('dashboard.focus')}</span>}
-        </button>
-        {terminal && row.artifacts !== undefined && row.artifacts.length > 0 && (
-          <div className={css.dashboardArtifacts} aria-label={t('dashboard.artifacts')}>
-            <span className={css.dashboardArtifactsLabel}>{t('dashboard.artifacts')}</span>
-            <div className={css.dashboardArtifactChips}>
-              {row.artifacts.map(artifact => (
-                <button
-                  key={`${row.changeId}:${artifact.file}`}
-                  type="button"
-                  className={clsx(css.dashboardArtifactChip, dashboardArtifactStateClass(artifact.state))}
-                  title={artifact.path}
-                  onClick={() => openArtifact(artifact.path)}
-                >
-                  {artifact.file}
-                  <span className={css.dashboardArtifactState}>{artifactStateLabel(artifact.state)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </>
-    )
-  }
 
   if (preset !== 'baf') {
     return <div className={css.root} data-conversation-composer-overlay="" />
@@ -1150,7 +985,12 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   return (
     <div className={css.root} data-conversation-composer-overlay="">
       <div className={css.strip} role="status">
-        <span className={css.stripBrand}>BAF</span>
+        {/* 【变更】2026-10-24 (批次十九 2.1): the top-left chip is the BAF brand
+            mark (t('view.brandBaf')) — the SAME wordmark the 测试流图 tab
+            shows, so the two conversation tabs read as one family. The
+            测试流图 side lands in this same batch (TestFlowView.tsx +
+            TestFlowView.module.css) and takes the same brand fill. */}
+        <span className={css.stripBrand} data-testid="baf-workflow-brand">{t('view.brandBaf')}</span>
         {/* 【变更】2026-10-20 (批次四 4): the active change id rides the strip
             as an accent-tinted mono chip right after the brand — change-xx is
             readable at a glance from every corner of the tab, and the rail
@@ -1207,89 +1047,102 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
             <span className={css.stripValue}>{error}</span>
           </span>
         )}
-        <button
-          type="button"
-          className={clsx(css.btn, css.btnGhost)}
-          disabled={busy}
-          onClick={() => setDashboardOpen(true)}
-        >
-          {t('action.dashboard')}
-        </button>
-        <button
-          type="button"
-          className={clsx(css.btn, css.btnGhost)}
-          disabled={busy}
-          onClick={() => void runSilent(() => refresh())}
-        >
-          {t('action.refresh')}
-        </button>
-        {/* 【变更】2026-10-21 (配置按钮): open the main-stage 工作流 config page —
-            the settings the graph's gates/hooks/standards render in (确认门 /
-            指令集 / 企业规范 / 测试流 tabs). */}
-        <button
-          type="button"
-          className={clsx(css.btn, css.btnGhost)}
-          disabled={busy}
-          data-testid="strip-workflow-config"
-          onClick={() => { openWorkflowConfig() }}
-        >
-          {t('action.config')}
-        </button>
-        {/* §22.14 P3 — abandon gate Tab surface. The abandon gate only ever
-            fires when an active change is parked on a non-terminal node; the
-            slash form is /baf-workflow-abandon confirm, gated by a Tab
-            confirm modal (matches §13 R1 spirit: destructive → modal). The
-            strip button mirrors that flow on the Tab side so the principle
-            "card ≡ button" holds for abandon too. */}
-        {view.changeId !== null
-          && view.current !== null
-          && view.current !== 'completed'
-          && view.current !== 'abandoned' ? (
-            <button
-              type="button"
-              className={clsx(css.btn, css.btnGhost)}
-              disabled={busy}
-              onClick={() => {
-                const changeId = view.changeId
-                if (changeId === null) return
-                setPendingAbandon({ changeId })
-              }}
-            >
-              {t('action.abandon')}
-            </button>
-          ) : null}
-        {/* §22 user-request 2026-09-20 — the strip 「推进」 button is GONE
-            (【变更】2026-09-25 用户需求 工作流 1): the always-on button became
-            the TOP advance dialog below — it pops only when the host-derived
-            `advance` says the change rests at a point that can advance, so
-            the strip no longer carries a permanent decision the customer
-            would otherwise see on every paint.
-            【变更】2026-10-07 (九点批 问题 3): it is BACK as a RE-ARM — a quiet
-            ghost button that shows only while an advance rest point actually
-            exists (view.advance.ready), and its single job is to undo the
-            暂不推进 dismissal for the CURRENT rest point so the TOP dialog
-            re-renders (then scrolls into view). Before this, dismissing the
-            dialog left typing /baf-go in chat as the only way back. */}
-        {view.advance?.ready === true && (
+        {/* 【变更】2026-10-24 (批次十九 1.4): the change's START time rides the
+            info box next to the elapsed duration — WHEN the change began is
+            as load-bearing as HOW LONG it has been running. */}
+        <span className={css.stripItem}>
+          <span className={css.stripLabel}>{t('strip.startedAt')}</span>
+          <span className={css.stripValue} data-testid="strip-started-at">
+            {formatTimestamp(view.startedAt)}
+          </span>
+        </span>
+        {/* 【变更】2026-10-24 (批次十九 1.4): the strip's buttons live in their
+            own right-aligned group, ordered 配置 → 刷新 → 变更总览 (客户指定
+            顺序). The 变更总览 button no longer opens a modal here — the
+            ledger moved to the 工作流 page's 变更总览 tab (批次十九 1.3). */}
+        <span className={css.stripActions}>
           <button
             type="button"
             className={clsx(css.btn, css.btnGhost)}
             disabled={busy}
-            data-testid="strip-advance-rearm"
-            onClick={() => {
-              setAdvanceDismissed(null)
-              // The dialog mounts on the re-render this click schedules —
-              // scroll AFTER the commit (rAF), not now.
-              requestAnimationFrame(() => {
-                document
-                  .querySelector('[data-advance-dialog]')
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-              })
-            }}
+            data-testid="strip-workflow-config"
+            onClick={() => { openWorkflowConfig() }}
           >
-            {t('action.advance')}
+            {t('action.config')}
           </button>
-        )}
+          <button
+            type="button"
+            className={clsx(css.btn, css.btnGhost)}
+            disabled={busy}
+            onClick={() => void runSilent(() => refresh())}
+          >
+            {t('action.refresh')}
+          </button>
+          <button
+            type="button"
+            className={clsx(css.btn, css.btnGhost)}
+            disabled={busy}
+            data-testid="strip-change-overview"
+            onClick={() => { openChangeOverview() }}
+          >
+            {t('action.dashboard')}
+          </button>
+          {/* §22.14 P3 — abandon gate Tab surface. The abandon gate only ever
+              fires when an active change is parked on a non-terminal node; the
+              slash form is /baf-workflow-abandon confirm, gated by a Tab
+              confirm modal (matches §13 R1 spirit: destructive → modal). The
+              strip button mirrors that flow on the Tab side so the principle
+              "card ≡ button" holds for abandon too. */}
+          {view.changeId !== null
+            && view.current !== null
+            && view.current !== 'completed'
+            && view.current !== 'abandoned' ? (
+              <button
+                type="button"
+                className={clsx(css.btn, css.btnGhost)}
+                disabled={busy}
+                onClick={() => {
+                  const changeId = view.changeId
+                  if (changeId === null) return
+                  setPendingAbandon({ changeId })
+                }}
+              >
+                {t('action.abandon')}
+              </button>
+            ) : null}
+          {/* §22 user-request 2026-09-20 — the strip 「推进」 button is GONE
+              (【变更】2026-09-25 用户需求 工作流 1): the always-on button became
+              the TOP advance dialog below — it pops only when the host-derived
+              `advance` says the change rests at a point that can advance, so
+              the strip no longer carries a permanent decision the customer
+              would otherwise see on every paint.
+              【变更】2026-10-07 (九点批 问题 3): it is BACK as a RE-ARM — a quiet
+              ghost button that shows only while an advance rest point actually
+              exists (view.advance.ready), and its single job is to undo the
+              暂不推进 dismissal for the CURRENT rest point so the TOP dialog
+              re-renders (then scrolls into view). Before this, dismissing the
+              dialog left typing /baf-go in chat as the only way back. */}
+          {view.advance?.ready === true && (
+            <button
+              type="button"
+              className={clsx(css.btn, css.btnGhost)}
+              disabled={busy}
+              data-testid="strip-advance-rearm"
+              onClick={() => {
+                setAdvanceDismissed(null)
+                // The dialog mounts on the re-render this click schedules —
+                // scroll AFTER the commit (rAF), not now.
+                requestAnimationFrame(() => {
+                  document
+                    .querySelector('[data-advance-dialog]')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                })
+              }}
+            >
+              {t('action.advance')}
+            </button>
+          )}
+        </span>
       </div>
 
       {/* 多模型路由 M3 批次C —「当前路由」chips row. Absent when the fold says
@@ -1716,55 +1569,8 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
       )}
 
       <div className={css.body}>
-        <div className={css.main}>
-          {view.lanes !== undefined && <LanePanel lanes={view.lanes} t={t} />}
-          {/* 【变更】2026-09-23 (demo5 issue #5): the flow canvas is its own
-              component (pan/zoom/canvas math live inside) so the history
-              modal re-renders the SAME graph for any change without touching
-              the main view's state. */}
-          <FlowCanvas
-            view={view}
-            selected={selected}
-            onActivate={onCardActivate}
-            onOpenArtifact={openArtifact}
-            onOpenTestFlow={(stage) => { openView('baf-test-flow', `stage:${stage}`) }}
-            t={t}
-          />
-
-          {view.empty && (
-            <div className={css.toolbar}>
-              <input
-                className={css.intakeInput}
-                value={draft}
-                placeholder={t('empty.hint')}
-                onChange={e => setDraft(e.target.value)}
-                disabled={busy}
-              />
-              <button
-                type="button"
-                className={clsx(css.btn, css.btnPrimary)}
-                disabled={busy || draft.trim() === ''}
-                title={t('action.newChangeHelp')}
-                onClick={() => void run(async () => {
-                  const next = await startIntake(draft.trim())
-                  setDraft('')
-                  return next
-                })}
-              >
-                {t('action.newChange')}
-              </button>
-            </div>
-          )}
-        </div>
-
-        <RailSplitter width={railWidth} onChange={setRailWidth} />
-
-        <aside className={css.rail} style={{ width: railWidth }}>
-          <div className={css.railScroll}>
-            {/* 【变更】2026-10-21 (批次八 2): the rail's change banner
-                (当前变更 + node status) is deleted — the strip above the graph
-                already shows the change id and the current node; the rail opens
-                straight into the intake card. */}
+        <aside className={css.leftRail} aria-label={t('rail.sideRail')}>
+          <div className={css.leftRailScroll}>
             {view.intake !== undefined && (
               <section className={clsx(css.card, css.cardAccent)} aria-label={t('intake.title')}>
                 <h3 className={css.cardTitle}>{t('intake.title')}</h3>
@@ -1967,13 +1773,75 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               <ArtifactRail rows={view.artifacts} disabled={busy} onOpen={openArtifact} t={t} />
             )}
 
-            {/* 【变更】2026-09-22 (user report #4) — session statistics card.
-                Session-scoped (not change-scoped): renders whenever either
-                projection has served a value, independent of the artifact rail. */}
             {(sessionStats !== undefined || tokenUsage !== undefined) && (
               <SessionStatsCard stats={sessionStats} usage={tokenUsage} t={t} />
             )}
 
+          </div>
+        </aside>
+
+        <div className={css.main}>
+          {view.lanes !== undefined && <LanePanel lanes={view.lanes} t={t} />}
+          {/* 【变更】2026-09-23 (demo5 issue #5): the flow canvas is its own
+              component (pan/zoom/canvas math live inside) so the history
+              modal re-renders the SAME graph for any change without touching
+              the main view's state. */}
+          <FlowCanvas
+            view={view}
+            selected={selected}
+            onActivate={onCardActivate}
+            onOpenArtifact={openArtifact}
+            onOpenTestFlow={(stage) => { openView('baf-test-flow', `stage:${stage}`) }}
+            t={t}
+          />
+
+          {view.empty && (
+            <div className={css.toolbar}>
+              <input
+                className={css.intakeInput}
+                value={draft}
+                placeholder={t('empty.hint')}
+                onChange={e => setDraft(e.target.value)}
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className={clsx(css.btn, css.btnPrimary)}
+                disabled={busy || draft.trim() === ''}
+                title={t('action.newChangeHelp')}
+                onClick={() => void run(async () => {
+                  const next = await startIntake(draft.trim())
+                  setDraft('')
+                  return next
+                })}
+              >
+                {t('action.newChange')}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <RailSplitter width={railWidth} onChange={setRailWidth} />
+
+        <aside className={css.rail} style={{ width: railWidth }}>
+          {/* 【变更】2026-10-24 (批次十九 1.2): the rail's STAGE HEADER — the
+              stage name in big type at the very top of the column, so 「现在在
+              哪个阶段」 reads before any card. The stage is the SELECTED node
+              (the cards below describe it); with nothing selected the change's
+              current stage stands in. */}
+          <div className={css.railStageHead} data-testid="rail-stage-head">
+            <span className={css.railStageLabel}>{t('rail.stage')}</span>
+            <span className={css.railStageName} data-testid="rail-stage-name">
+              {railStageName}
+            </span>
+            {railStageHint !== null && (
+              <span className={css.railStageHint}>{railStageHint}</span>
+            )}
+          </div>
+          <div className={css.railScroll}>
+            {/* 【变更】2026-10-24 (批次十九 1.1): the intake / artifacts / stats
+                cards moved to the FIXED LEFT column (css.leftRail); the rail
+                keeps only the stage-scoped cards below. */}
             {selectedNode !== null && (
               <section className={clsx(css.card, css.cardChecklist)} aria-label={t('detail.checklist')}>
                 <h3 className={css.cardTitle}>
@@ -2055,130 +1923,6 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         </aside>
       </div>
 
-      {dashboardOpen && (
-        <div
-          className={css.dashboardBackdrop}
-          role="presentation"
-          onClick={() => setDashboardOpen(false)}
-        >
-          <div
-            className={css.dashboardPanel}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('dashboard.title')}
-            onClick={event => event.stopPropagation()}
-          >
-            <div className={css.dashboardHead}>
-              <h2 className={css.dashboardTitle}>{t('dashboard.title')}</h2>
-              <div className={css.dashboardHeadActions}>
-                {dashboardBusy && <span className={css.dashboardMuted}>{t('action.refresh')}…</span>}
-                {/* 【变更】2026-09-30 (demo33 问题 4): the standalone browser
-                    board — full snapshot page in a new tab. Disabled until the
-                    first payload lands (nothing to bake before that). */}
-                <button
-                  type="button"
-                  className={clsx(css.btn, css.btnGhost)}
-                  disabled={dashboardData === null}
-                  title={t('dashboard.board.snapshotNote')}
-                  onClick={openDashboardExternal}
-                >
-                  {t('dashboard.openExternal')}
-                </button>
-                <button
-                  type="button"
-                  className={clsx(css.btn, css.btnGhost)}
-                  disabled={dashboardBusy}
-                  onClick={loadDashboard}
-                >
-                  {t('action.refresh')}
-                </button>
-                <button
-                  type="button"
-                  className={clsx(css.btn, css.btnGhost)}
-                  onClick={() => setDashboardOpen(false)}
-                >
-                  {t('dashboard.close')}
-                </button>
-              </div>
-            </div>
-            {dashboardData === null ? (
-              <p className={css.hint}>{dashboardBusy ? t('dashboard.help') : t('dashboard.loadFailed')}</p>
-            ) : (
-              <div className={css.dashboardBody}>
-                {/* Summary tiles (2026-09-23 issue #6, comet-style): the four
-                    numbers the header of the reference dashboard leads with. */}
-                <div className={css.dashboardTiles}>
-                  <div className={css.dashboardTile}>
-                    <span className={css.dashboardTileValue}>{dashboardData.summary.active}</span>
-                    <span className={css.dashboardTileLabel}>{t('dashboard.activeChanges')}</span>
-                  </div>
-                  <div className={css.dashboardTile} title={t('dashboard.tasksHelp')}>
-                    <span className={css.dashboardTileValue}>
-                      {dashboardData.summary.tasksDone}/{dashboardData.summary.tasksTotal}
-                    </span>
-                    <span className={css.dashboardTileLabel}>{t('dashboard.tasks')}</span>
-                  </div>
-                  <div className={css.dashboardTile} title={t('dashboard.tasksHelp')}>
-                    <span className={css.dashboardTileValue}>
-                      {dashboardData.summary.tasksTotal === 0
-                        ? '—'
-                        : `${Math.round((dashboardData.summary.tasksDone / dashboardData.summary.tasksTotal) * 100)}%`}
-                    </span>
-                    <span className={css.dashboardTileLabel}>{t('dashboard.completion')}</span>
-                    <span className={css.dashboardTileBar}>
-                      <span
-                        className={css.dashboardTileBarFill}
-                        style={{
-                          width: dashboardData.summary.tasksTotal === 0
-                            ? 0
-                            : `${Math.round((dashboardData.summary.tasksDone / dashboardData.summary.tasksTotal) * 100)}%`,
-                        }}
-                      />
-                    </span>
-                  </div>
-                  <div className={css.dashboardTile}>
-                    <span className={css.dashboardTileValue}>{dashboardData.summary.archived}</span>
-                    <span className={css.dashboardTileLabel}>{t('dashboard.archived')}</span>
-                  </div>
-                </div>
-
-                {/* Active changes table: one row per running change with its
-                    phase pill, task progress, duration and tokens. */}
-                <h3 className={css.dashboardSection}>
-                  {t('dashboard.activeSection')}
-                  （{dashboardData.rows.filter(r => r.current !== 'completed' && r.current !== 'abandoned').length}）
-                </h3>
-                <ul className={css.dashboardList}>
-                  {dashboardData.rows
-                    .filter(r => r.current !== 'completed' && r.current !== 'abandoned')
-                    .map(row => (
-                      <li key={row.changeId}>{dashboardRow(row, view, false)}</li>
-                    ))}
-                  {dashboardData.rows.every(r => r.current === 'completed' || r.current === 'abandoned') && (
-                    <li className={css.dashboardMuted}>{t('dashboard.empty')}</li>
-                  )}
-                </ul>
-
-                {/* Archive history: terminal rows stay inspectable (issue #5's
-                    read path — the rows open the graph focused on the ended
-                    change, whose rail reads the archived artifacts). */}
-                <h3 className={css.dashboardSection}>
-                  {t('dashboard.archiveSection')}
-                  （{dashboardData.rows.filter(r => r.current === 'completed' || r.current === 'abandoned').length}）
-                </h3>
-                <ul className={css.dashboardList}>
-                  {dashboardData.rows
-                    .filter(r => r.current === 'completed' || r.current === 'abandoned')
-                    .map(row => (
-                      <li key={row.changeId}>{dashboardRow(row, view, true)}</li>
-                    ))}
-                </ul>
-              </div>
-            )}
-            <p className={css.hint}>{t('dashboard.note')}</p>
-          </div>
-        </div>
-      )}
 
       {/* 【变更】2026-09-23 (demo5 issue #5): the opened history flow — its own
           modal stacked OVER the still-open dashboard (变更总览与历史流程图是
@@ -2640,7 +2384,10 @@ function FlowCanvas(props: {
                     implement/verify/archive cards' shortcut into the quality
                     pipeline. stopPropagation (the node selects on click, the
                     chip switches Tab instead); the stage lands selected via
-                    the view-request channel. */}
+                    the view-request channel.
+                    【变更】2026-10-24 (批次十八 2.1): the chip reads 「测试流图」
+                    alone — the stage name moved into the tooltip, so the label
+                    stays short and loud on the 验证 card. */}
                 {(() => {
                   // placement.id is the wire graph's plain string — same
                   // `as WorkflowNodeId` cast the node label lookup above uses.
@@ -2652,13 +2399,13 @@ function FlowCanvas(props: {
                         type="button"
                         className={css.flowNodeTestFlowChip}
                         data-testid={`flow-node-testflow-${placement.id}`}
-                        title={t('flow.testFlowJumpDesc')}
+                        title={`${t('flow.testFlowJumpDesc')} · ${t(TEST_FLOW_JUMP_LABEL[jumpStage])}`}
                         onClick={(event) => {
                           event.stopPropagation()
                           onOpenTestFlow(jumpStage)
                         }}
                       >
-                        {`${t('flow.testFlowJump')} · ${t(TEST_FLOW_JUMP_LABEL[jumpStage])}`}
+                        {t('flow.testFlowJump')}
                       </button>
                     </div>
                   )

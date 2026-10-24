@@ -1,9 +1,42 @@
 /* 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 read-only row — tables and
  * text only, no inputs (the StandardsOverview precedent). */
 
+/*
+ * 【变更】2026-10-24 (批次十九 3.1/3.2): the page's OWN brand + surface token
+ * block. The design platform's `--dsw-alias-brand-primary` is a NEUTRAL INK
+ * (near-black in light, near-white in dark) — NOT a hue — so tinting with it
+ * produced a grey wash (and, in dark mode, near-white text on a near-white
+ * box). The BAF surface carries its own GOLD accent (the package's --wf-accent
+ * family, as WorkflowView / TestFlowView use) and its own theme-aware
+ * surfaces, so 需求输入 and the 门禁明细 read as ONE system in BOTH themes.
+ *
+ * - --wf-accent      the BAF gold (fills, borders, rules — never body copy on
+ *                    a light surface: gold text on white is unreadable)
+ * - --wf-accent-ink  the dark ink that sits ON the gold fill (same both themes)
+ * - --wf-accent-text the gold AS TEXT: mixed toward the theme's primary ink,
+ *                    so it stays a deep gold on light and a pale gold on dark
+ * - --wf-surface     the elevated surface (white / dark grey — theme aware)
+ * - --wf-canvas      the page-level surface behind the canvas
+ * - --wf-ink         primary copy (question text, option labels, titles)
+ * - --wf-ink-2       supporting copy (commands, conditions, notes) — one step
+ *                    down from primary, but a real step: the old flat
+ *                    `--dsw-alias-label-secondary` grey was the same tone
+ *                    everywhere, which is what read as washed out
+ * - --wf-ink-3       quiet bits (counts, hints) — still the quietest tier
+ */
 .block {
+  --wf-accent: var(--dsw-alias-border-brand, var(--dsw-alias-text-brand, #c9a227));
+  --wf-accent-soft: color-mix(in srgb, var(--wf-accent) 72%, #fff);
+  --wf-accent-ink: #1a1406;
+  --wf-accent-text: color-mix(in srgb, var(--wf-accent) 60%, var(--dsw-alias-label-primary, #0f1115));
+  --wf-surface: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base, #fff));
+  --wf-canvas: var(--dsw-alias-bg-base, #fff);
+  --wf-ink: var(--dsw-alias-label-primary, #0f1115);
+  --wf-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 55%, var(--dsw-alias-label-secondary, #61666b));
+  --wf-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary, #0f1115) 26%, var(--dsw-alias-label-tertiary, #81858c));
+  --wf-line: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
   padding: 16px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--wf-line);
 }
 
 .head {
@@ -27,7 +60,7 @@
 
 .description {
   margin-top: 4px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-size: 12px;
   line-height: 18px;
 }
@@ -42,7 +75,7 @@
   font: inherit;
   font-size: 13px;
   line-height: 20px;
-  color: var(--dsw-alias-label-primary);
+  color: var(--wf-ink);
   cursor: pointer;
 }
 
@@ -52,7 +85,7 @@
 
 .status {
   margin-top: 12px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-size: 12px;
   line-height: 18px;
 }
@@ -75,7 +108,7 @@
 }
 
 .table th {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-weight: normal;
   white-space: nowrap;
 }
@@ -102,19 +135,23 @@
    group vocabulary (详 mode). */
 /* 【变更】2026-10-20 (批次六 4): the head row takes a bottom hairline so the
    node identity separates from the labelled 明细 layers beneath it. */
+/* 【变更】2026-10-24 (批次十九 3.2): the head is the panel's SECTION TITLE —
+   it carries the gate title, so it gets the primary ink and a 700 weight
+   (the gate card below no longer repeats the title). */
 .nodeHead {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 8px;
   padding-bottom: 8px;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--wf-line);
 }
 
 .nodeName {
-  font-size: 13px;
-  line-height: 19px;
-  font-weight: 600;
+  color: var(--wf-ink);
+  font-size: 13.5px;
+  line-height: 20px;
+  font-weight: 700;
 }
 
 /* 【变更】2026-10-20 (批次六 3): the English name rides inline after the zh
@@ -125,20 +162,20 @@
   font-size: 9.5px;
   font-weight: 400;
   letter-spacing: 0.2px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-3);
 }
 
 .nodeHint {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-size: 11px;
   line-height: 16px;
 }
 
 .nodeChip {
   padding: 0 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--wf-line);
   border-radius: 999px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-size: 11px;
   line-height: 17px;
   white-space: nowrap;
@@ -152,7 +189,10 @@
    【变更】2026-10-23 (批次十六 2.4): the label graduates from the hairline bar
    to a real section CHIP — brand-tinted fill, a leading brand dot, 600 weight
    and primary ink — so 阶段门禁 / 进入下一步的条件 / 确认门 read as the
-   column's headings, not quiet captions. */
+   column's headings, not quiet captions.
+   【变更】2026-10-24 (批次十九 3.2): the chip wears the GOLD accent (the page's
+   own brand), not the neutral-ink "brand" token, so the section headings read
+   as one coloured system with the 确认门 badge. */
 .sectionLabel {
   display: inline-flex;
   align-items: center;
@@ -162,8 +202,8 @@
   margin: 10px 0 5px;
   padding: 2px 9px;
   border-radius: 5px;
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 10%, transparent);
-  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--wf-accent) 14%, transparent);
+  color: var(--wf-ink);
   font-size: 11px;
   line-height: 16px;
   font-weight: 600;
@@ -176,18 +216,22 @@
   width: 5px;
   height: 5px;
   border-radius: 999px;
-  background: var(--dsw-alias-brand-primary, #4a78d2);
+  background: var(--wf-accent);
 }
 
 /* 【变更】2026-10-23 (批次十六 2.4/2.5): the 确认门 layer's chip wears the
    warning tint (the gate-pill hue) so the gate family reads as one color
-   story across canvas and column. */
+   story across canvas and column.
+   【变更】2026-10-24 (批次十九 3.2): the gate family wears the GOLD accent
+   across the whole page (the purple `--dsw-alias-text-warning` is not a real
+   design-platform token — it resolves to a hardcoded fallback that never
+   follows the theme). */
 .sectionLabelGate {
-  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 12%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 22%, transparent);
 }
 
 .sectionLabelGate::before {
-  background: var(--dsw-alias-text-warning, #7c5cff);
+  background: var(--wf-accent);
 }
 
 .sectionLabel:first-child {
@@ -219,32 +263,40 @@
    not clickable, so it must not promise a press. */
 /* 【变更】2026-10-23 (批次十七 2.2): the gate card drops the gray fill for a
    bright elevated surface with a warning left bar — the gate family's color
-   story leads the card instead of a dull wash. */
+   story leads the card instead of a dull wash.
+   【变更】2026-10-24 (批次十九 3.2): the card rides the theme-aware surface
+   (--wf-surface: white / dark grey — the old `--dsw-alias-bg-elevated` fallback
+   pinned it to #fff, which made the card near-white in dark mode) and the
+   gate family wears the gold accent. */
 .gateCard {
   padding: 9px 12px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-left: 2.5px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 50%, transparent);
+  border: 0.5px solid var(--wf-line);
+  border-left: 2.5px solid color-mix(in srgb, var(--wf-accent) 55%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 3%, var(--dsw-alias-bg-elevated, #fff));
+  background: color-mix(in srgb, var(--wf-accent) 4%, var(--wf-surface));
   transition: border-color 150ms var(--ds-ease-in-out, ease), background-color 150ms var(--ds-ease-in-out, ease);
 }
 
 .gateCard:hover {
   border-color: var(--dsw-alias-border-l3);
-  border-left-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 70%, transparent);
-  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 6%, var(--dsw-alias-bg-elevated, #fff));
+  border-left-color: color-mix(in srgb, var(--wf-accent) 75%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 7%, var(--wf-surface));
 }
 
+/* The card's own title — the 门禁明细 head owns the title there, so this
+   line only renders in the fallback group (one title per surface). */
 .gateTitle {
+  color: var(--wf-ink);
   font-size: 13px;
   line-height: 19px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-primary);
+  font-weight: 700;
 }
 
+/* 【变更】2026-10-24 (批次十九 3.2): the question is the panel's PRIMARY copy
+   — it moves off the flat grey onto the primary ink. */
 .gateQuestion {
   margin-top: 2px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink);
   font-size: 12px;
   line-height: 18px;
 }
@@ -255,53 +307,67 @@
  * the same anatomy the session dialog and the Tab's live-gate card already
  * use — instead of one run-on paragraph. Fallback: no 【…】 heading found →
  * the flat .gateQuestion above still prints.
+ * 【变更】2026-10-24 (批次十九 3.2): the sections are FLAT — a section's
+ * caption / text / list are SIBLINGS in this one container (the old
+ * .qSection wrapper is gone), so the copy sits one level shallower. The
+ * grouping now comes from spacing + a left rule on the body blocks.
  */
 .gateQuestionSections {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 3px;
-  color: var(--dsw-alias-label-secondary);
+  margin-top: 6px;
+  color: var(--wf-ink);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 19px;
 }
 
-.qSection {
-  padding: 0 0 0 8px;
-  border-left: 2px solid color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 30%, transparent);
-}
-
+/* 【变更】2026-10-24 (批次十九 3.2): the section caption is an EYEBROW — a
+   small gold label above its body, not a nested block title. */
 .qSectionTitle {
-  color: var(--dsw-alias-label-primary);
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 17px;
+  margin: 10px 0 2px;
+  color: var(--wf-accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0.04em;
 }
 
+/* The first caption/body block carries no top gap — the container starts the
+   body flush. */
+.gateQuestionSections > :first-child {
+  margin-top: 0;
+}
+
+/* 【变更】2026-10-24 (批次十九 3.2): the body blocks carry the LEFT RULE that
+   used to live on the deleted .qSection wrapper — the visual grouping
+   survives the flattening. Consecutive blocks share one continuous rule. */
 .qText {
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in srgb, var(--wf-accent) 26%, transparent);
   word-break: break-word;
 }
 
 .qList {
   margin: 0;
   padding: 0;
+  border-left: 2px solid color-mix(in srgb, var(--wf-accent) 26%, transparent);
   list-style: none;
 }
 
 .qList li {
   position: relative;
-  padding-left: 14px;
+  padding-left: 12px;
 }
 
 .qList li::before {
   content: '';
   position: absolute;
-  left: 2px;
+  left: 0;
   top: 8px;
   width: 4px;
   height: 4px;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 60%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 65%, transparent);
 }
 
 .gateOptions {
@@ -310,7 +376,7 @@
   gap: 4px;
   margin-top: 8px;
   padding-top: 7px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  border-top: 0.5px solid var(--wf-line);
   font-size: 12px;
   line-height: 18px;
 }
@@ -325,20 +391,22 @@
 }
 
 .optionLabel {
-  color: var(--dsw-alias-label-primary);
+  color: var(--wf-ink);
   word-break: break-word;
 }
 
 /* 【变更】2026-10-20 (批次六 4): the command a click runs reads as a quiet
    mono chip trailing its label — auto-margin parks it at the row's right on
    single-line rows; a long command still wraps as a chip rather than
-   overflowing the card. */
+   overflowing the card.
+   【变更】2026-10-24 (批次十九 3.2): the command chip keeps the QUIET tier but
+   on the lifted ink (--wf-ink-3), so it stops reading as washed-out grey. */
 .optionCommand {
   margin-left: auto;
   padding: 0 6px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--wf-line);
   border-radius: 4px;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--wf-ink-3);
   font-family: var(--dsw-alias-font-mono, monospace);
   font-size: 10.5px;
   line-height: 16px;
@@ -350,6 +418,9 @@
  * raw browser bullets for a quiet checklist — rows on a soft fill panel, an
  * empty square marker per row (a gate condition is something to SATISFY),
  * secondary ink at 11.5px so the copy stops shouting over the artifact chip.
+ * 【变更】2026-10-24 (批次十九 3.2): the conditions read as SUPPORTING copy
+ * (--wf-ink-2, a real step below the primary ink) and the checklist marker
+ * wears the gold accent.
  */
 .conditions {
   display: flex;
@@ -360,7 +431,7 @@
   list-style: none;
   border-radius: 6px;
   background: color-mix(in srgb, var(--dsw-alias-fill-l1, rgba(127, 127, 127, 0.08)) 35%, transparent);
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-size: 11.5px;
   line-height: 17px;
   word-break: break-word;
@@ -379,13 +450,13 @@
   box-sizing: border-box;
   width: 10px;
   height: 10px;
-  border: 1.5px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 65%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--wf-accent) 70%, transparent);
   border-radius: 3px;
 }
 
 .note {
   margin-top: 4px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
 }
 
 /* 【变更】2026-10-19 (流程图样式对齐批): the flow adopts the 多模型路由
@@ -400,7 +471,7 @@
 }
 
 .connectorCondition {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-size: 11px;
   line-height: 16px;
   word-break: break-word;
@@ -414,36 +485,42 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--wf-line);
   border-radius: 6px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
 }
 
 /* Gate-count chip on a detail group head (accent when gates rest on the node). */
 .badge {
   padding: 0 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--wf-line);
   border-radius: 999px;
   font-size: 11px;
   line-height: 17px;
   white-space: nowrap;
 }
 
+/* 【变更】2026-10-24 (批次十九 3.2): the 确认门 badge wears the gold accent —
+   the gate family reads as one colour story with the pills and the cards. */
 .badgeGate {
-  color: var(--dsw-alias-text-warning, #7c5cff);
-  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 45%, transparent);
+  color: var(--wf-accent-text);
+  border-color: color-mix(in srgb, var(--wf-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
 }
 
 .badgeIdle {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-3);
 }
 
 /* The framed canvas — the route flowWrap (the whole graph visible, the
-   settings page scrolls; never the canvas itself). */
+   settings page scrolls; never the canvas itself).
+   【变更】2026-10-24 (批次十九 3.2): the frame wears the theme-aware canvas
+   surface (the old `--dsw-alias-bg-elevated` fallback left it transparent,
+   so the dark theme had no canvas plane at all). */
 .flowWrap {
-  border: 1px solid var(--dsw-alias-separator, rgba(128, 128, 128, 0.3));
+  border: 1px solid var(--wf-line);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-elevated, transparent);
+  background: var(--wf-canvas);
 }
 
 /* 【变更】2026-10-22 (批次十四 2): .legendBar / .legendItem / .legendDot /
@@ -463,20 +540,22 @@
   overflow: visible;
 }
 
+/* 【变更】2026-10-24 (批次十九 3.2): the edges step up from the faint grey
+   stroke to the lifted quiet ink, so the flowchart's routes read. */
 .edge {
   fill: none;
-  stroke: var(--dsw-alias-label-tertiary, #8b949e);
+  stroke: var(--wf-ink-3);
   stroke-width: 1.6;
-  opacity: 0.55;
+  opacity: 0.7;
 }
 
 .edgeDashed {
   stroke-dasharray: 4 5;
-  opacity: 0.4;
+  opacity: 0.55;
 }
 
 .arrowHead {
-  fill: var(--dsw-alias-label-tertiary, #8b949e);
+  fill: var(--wf-ink-3);
 }
 
 /* Tier tints — the route's quiet low-saturation family: main chain blue,
@@ -494,11 +573,13 @@
 }
 
 .nodeTerminal {
-  --tier-color: var(--dsw-alias-label-tertiary, #8b949e);
+  --tier-color: var(--wf-ink-3);
 }
 
 /* The route flowNode card verbatim — 【变更】2026-10-20 (批次三 4.5): the card
-   is now a selection button, so the cursor returns (pointer). */
+   is now a selection button, so the cursor returns (pointer).
+   【变更】2026-10-24 (批次十九 3.2): the tier tint sits on the theme-aware
+   surface (the old transparent fallback made the tint invisible). */
 .flowNode {
   position: absolute;
   z-index: 1;
@@ -512,10 +593,10 @@
   text-align: left;
   background: linear-gradient(
     155deg,
-    color-mix(in srgb, var(--tier-color) 10%, var(--dsw-alias-bg-elevated, transparent)),
-    var(--dsw-alias-bg-elevated, transparent)
+    color-mix(in srgb, var(--tier-color) 12%, var(--wf-surface)),
+    var(--wf-surface)
   );
-  border: 1px solid color-mix(in srgb, var(--tier-color) 45%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
+  border: 1px solid color-mix(in srgb, var(--tier-color) 45%, var(--wf-line));
   border-radius: 10px;
   cursor: pointer;
   outline: none;
@@ -535,7 +616,7 @@
 }
 
 .flowNode:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline: 2px solid var(--wf-accent);
   outline-offset: 1px;
 }
 
@@ -549,7 +630,7 @@
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dsw-alias-label-primary);
+  color: var(--wf-ink);
 }
 
 .nodeIconInline {
@@ -566,7 +647,7 @@
 
 .nodeAccentIdle {
   font-weight: 400;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--wf-ink-3);
 }
 
 .nodeMeta {
@@ -575,14 +656,17 @@
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--wf-ink-3);
 }
 
 /* A gate pill centered ON the edge it guards — the dashed checkpoint chip;
    its background covers the edge line so the pill reads as sitting on it.
    【变更】2026-10-23 (批次十六 2.5): the pill is a BUTTON (click = open THIS
    gate in the 门禁明细), so it gains the press affordances — cursor, hover
-   fill, focus ring, and the selection ring while its detail is open. */
+   fill, focus ring, and the selection ring while its detail is open.
+   【变更】2026-10-24 (批次十九 3.2): the pill wears the gold accent and the
+   theme-aware surface (the old #fff fallback made the pill near-white — with
+   near-white title text — in the dark theme). */
 .gatePill {
   position: absolute;
   z-index: 1;
@@ -592,9 +676,9 @@
   box-sizing: border-box;
   padding: 0 8px;
   overflow: hidden;
-  border: 1px dashed color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 55%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
+  border: 1px dashed color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line));
   border-radius: 999px;
-  background: var(--dsw-alias-bg-elevated, #fff);
+  background: var(--wf-surface);
   font: inherit;
   cursor: pointer;
   transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
@@ -602,18 +686,18 @@
 
 .gatePill:hover {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 75%, transparent);
+  border-color: color-mix(in srgb, var(--wf-accent) 80%, transparent);
 }
 
 .gatePill:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline: 2px solid var(--wf-accent);
   outline-offset: 1px;
 }
 
 .gatePillSelected {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 80%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 22%, transparent);
+  border-color: color-mix(in srgb, var(--wf-accent) 85%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent);
 }
 
 /* 【变更】2026-10-23 (批次十七 2.3): .gatePillHint deleted — the state 明细
@@ -622,12 +706,17 @@
 
 /*
  * 【变更】2026-10-23 (批次十七 2.1): the intake branch block, take two — the
- * 需求输入 ENTRY BOX anchors the spine (prominent: brand-tinted gradient,
- * solid brand border, 650 weight — never gray), and the three mutually-
- * exclusive options are ONE horizontal row of OPTION CARDS. Each option card
- * IS its 确认门 node (click = open the gate in the 门禁明细): the customer's
- * option text leads, the active-change condition rides quiet beneath it
- * (条件上节点). The dashed border keeps the gate-pill family language.
+ * 需求输入 ENTRY BOX anchors the spine and the three mutually-exclusive
+ * options are ONE horizontal row of OPTION CARDS. Each option card IS its
+ * 确认门 node (click = open the gate in the 门禁明细): the customer's option
+ * text leads, the active-change condition rides quiet beneath it (条件上节点).
+ * The dashed border keeps the gate-pill family language.
+ * 【变更】2026-10-24 (批次十九 3.1): the entry box is REBUILT as a real gold
+ * node — the old brand-tint gradient was built on `--dsw-alias-brand-primary`
+ * (a NEUTRAL INK), so it rendered as a grey wash, and `letter-spacing: 0.06em`
+ * left trailing tracking after the last CJK glyph. The gold fill + the dark
+ * ink that sits on gold is legible in BOTH themes (7.5:1 on #c9a227), and the
+ * 700 weight is a snapped variable-font weight (650 was not).
  */
 .entryBox {
   position: absolute;
@@ -635,22 +724,30 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   box-sizing: border-box;
-  border-radius: 10px;
-  background: linear-gradient(
-    155deg,
-    color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 16%, var(--dsw-alias-bg-elevated, transparent)),
-    color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 6%, var(--dsw-alias-bg-elevated, transparent))
-  );
-  border: 1.5px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 65%, transparent);
-  box-shadow: 0 1px 6px color-mix(in srgb, var(--dsw-alias-brand-primary, #4a78d2) 18%, transparent);
-  color: var(--dsw-alias-label-primary);
-  font-size: 12.5px;
-  font-weight: 650;
-  line-height: 17px;
-  letter-spacing: 0.06em;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--wf-accent-soft), var(--wf-accent));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 72%, #6b5410);
+  box-shadow: 0 2px 10px -2px color-mix(in srgb, var(--wf-accent) 45%, transparent);
+  color: var(--wf-accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
 }
 
+/* The intake glyph — the entry node reads as a NODE, like the state cards. */
+.entryIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--wf-accent-ink);
+  opacity: 0.9;
+}
+
+/* 【变更】2026-10-24 (批次十九 3.2): the option cards join the gold gate
+   family and ride the theme-aware surface (the old #fff fallback made them
+   near-white in the dark theme). */
 .optionCard {
   position: absolute;
   z-index: 1;
@@ -662,8 +759,8 @@
   box-sizing: border-box;
   padding: 7px 10px;
   border-radius: 10px;
-  border: 1px dashed color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 55%, var(--dsw-alias-separator, rgba(128, 128, 128, 0.3)));
-  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 6%, var(--dsw-alias-bg-elevated, #fff));
+  border: 1px dashed color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line));
+  background: color-mix(in srgb, var(--wf-accent) 7%, var(--wf-surface));
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -673,24 +770,24 @@
 
 .optionCard:hover {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 75%, transparent);
-  background: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 10%, var(--dsw-alias-bg-elevated, #fff));
+  border-color: color-mix(in srgb, var(--wf-accent) 80%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 12%, var(--wf-surface));
 }
 
 .optionCard:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary, #4a78d2);
+  outline: 2px solid var(--wf-accent);
   outline-offset: 1px;
 }
 
 .optionCardSelected {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 80%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-text-warning, #7c5cff) 22%, transparent);
+  border-color: color-mix(in srgb, var(--wf-accent) 85%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent);
 }
 
 .optionTitle {
   max-width: 100%;
-  color: var(--dsw-alias-label-primary);
+  color: var(--wf-ink);
   font-size: 11px;
   font-weight: 600;
   line-height: 15px;
@@ -701,7 +798,7 @@
    (无进行中的变更 / 已有一条 / 多条). */
 .optionCond {
   max-width: 100%;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-size: 10px;
   line-height: 14px;
   word-break: break-word;
@@ -715,7 +812,7 @@
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dsw-alias-label-primary);
+  color: var(--wf-ink);
 }
 
 /* 【变更】2026-10-20 (批次五 2.3/2.6): pillChip / pillOnce left with the
@@ -724,7 +821,7 @@
 /* The 分支 label riding above the column-1 branch nodes. */
 .branchLabel {
   position: absolute;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--wf-ink-2);
   font-size: 11px;
   line-height: 16px;
   white-space: nowrap;
@@ -750,6 +847,9 @@
  * max-height + own scroll so a long gate body never runs off-screen.
  * align-self: flex-start is what lets a flex child stick (stretch would
  * pin its height to the canvas column instead).
+ * 【变更】2026-10-24 (批次十九 3.2): the panel rides the theme-aware surface
+ * (the old #fff fallback pinned the detail column to white — near-white copy
+ * on near-white in the dark theme).
  */
 .detail {
   position: sticky;
@@ -761,18 +861,18 @@
   max-height: calc(100vh - 120px);
   overflow-y: auto;
   padding: 12px 14px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 1px solid var(--wf-line);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-elevated, #fff);
-  box-shadow: 0 1px 8px color-mix(in srgb, var(--dsw-alias-label-primary, #1f2329) 6%, transparent);
+  background: var(--wf-surface);
+  box-shadow: 0 1px 8px color-mix(in srgb, var(--wf-ink) 8%, transparent);
 }
 
 .detailHead {
   margin-bottom: 8px;
+  color: var(--wf-ink);
   font-size: 13px;
   line-height: 19px;
   font-weight: 600;
-  color: var(--dsw-alias-label-primary);
 }
 
 .detailGroup {

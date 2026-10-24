@@ -3,7 +3,9 @@
  * @module @deepseek-ai/dsh-client-ui-baf-workflow/types
  */
 
-import type { TerminalState, WorkflowNode } from '@deepseek-ai/dsh-baf-core/types'
+import type {
+  TerminalState, WorkflowDashboardRow, WorkflowNode, WorkflowTabView,
+} from '@deepseek-ai/dsh-baf-core/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /**
@@ -347,3 +349,88 @@ export interface BafWorkflowGateOverview {
  * one type; re-exported here for the package's historical import site.
  */
 export type { BafWorkflowProjectionAppended } from '@deepseek-ai/dsh-baf-workflow/projection-events'
+
+/**
+ * 【变更】2026-10-23 (批次十八 2.2/2.3): the 工作流 page's 「变更总览」 payload —
+ * every change of the CURRENT project, the abandoned ones included.
+ *
+ * The project scope comes from the workspace the newest session runs in (the
+ * same resolution the 工程规范 settings row uses), so the page answers
+ * 「本项目有哪些变更」 without being bound to one conversation.
+ */
+export type BafWorkflowChangeOverviewResult =
+  | {
+    /** No live session names a workspace — the page shows its empty state. */
+    readonly status: 'no-workspace'
+  }
+  | {
+    readonly status: 'ready'
+    /** Absolute workspace root the rows were read from. */
+    readonly cwd: string
+    /** Every change row, newest first (the dashboard rollup). */
+    readonly rows: readonly WorkflowDashboardRow[]
+    /** Header rollups (active / archived / abandoned / task counts). */
+    readonly summary: {
+      readonly active: number
+      readonly archived: number
+      readonly abandoned: number
+      readonly tasksDone: number
+      readonly tasksTotal: number
+    }
+  }
+
+/**
+ * 【变更】2026-10-24 (批次十九 1.3): one change's detail request — the
+ * 变更总览 tab's row drill-down (the flow graph + the full history).
+ */
+export interface BafWorkflowChangeDetailRequest {
+  /** The change to describe. */
+  readonly changeId: string
+}
+
+/**
+ * 【变更】2026-10-24 (批次十九 1.3): one projection event, flattened for the
+ * change-detail modal's history list. The host owns the event union; the
+ * client renders the flat shape and localizes the `type` itself.
+ */
+export interface BafWorkflowChangeHistoryEntry {
+  /** ISO timestamp of the event. */
+  readonly at: string
+  /** The projection event type (e.g. `stage-completed`). */
+  readonly type: string
+  /** The stage the event belongs to, when it names one. */
+  readonly node?: string
+  /** The confirm gate the event parked on, when it names one. */
+  readonly gate?: string
+  /** Why the event happened (failure / drift / rejection reason). */
+  readonly reason?: string
+  /** A short extra line (artifact list, mode change, …). */
+  readonly detail?: string
+}
+
+/**
+ * 【变更】2026-10-24 (批次十九 1.3): the 变更总览 tab's per-change drill-down
+ * payload — the same projection view the session's 工作流图 tab renders (the
+ * stage graph, the artifacts, the intake card) plus the change's event
+ * history, so the project-level page can open a change WITHOUT a conversation.
+ */
+export type BafWorkflowChangeDetailResult =
+  | {
+    /** No live session names a workspace — the page shows its empty state. */
+    readonly status: 'no-workspace'
+  }
+  | {
+    /** The change id is not in this workspace's projection. */
+    readonly status: 'unknown-change'
+    readonly changeId: string
+  }
+  | {
+    readonly status: 'ready'
+    /** Absolute workspace root the change was read from. */
+    readonly cwd: string
+    readonly changeId: string
+    /** The change's projection view (graph, nodes, artifacts, intake). */
+    readonly view: WorkflowTabView
+    /** Every projection event of the change, oldest first. */
+    readonly history: readonly BafWorkflowChangeHistoryEntry[]
+  }

@@ -54,6 +54,9 @@ describe('测试流图 catalog parity (批次十)', () => {
 
   // 【变更】2026-10-22 (批次十二 2.1/2.4): the 运行 buttons spawn the baf-wrapped
   // CLI — one wrapper subcommand per chain, format stays raw clang-format.
+  // 【变更】2026-10-24 (批次十九 2.1/2.3): the dynamic import pulls the WHOLE host
+  // entry (the baf-workflow graph), so its transform+load can outrun Vitest's
+  // default 5 s budget when the lane is loaded — the budget is explicit here.
   it('maps each stage to its baf-quality wrapper command (批次十二)', async () => {
     const { testFlowStageCommand } = await import('../src/index.ts')
     expect(testFlowStageCommand('build')).toBe('baf-quality test')
@@ -63,15 +66,17 @@ describe('测试流图 catalog parity (批次十)', () => {
     expect(testFlowStageCommand('gate')).toBe('baf-quality check')
     expect(testFlowStageCommand('lint')).toBe('baf-quality lint')
     expect(testFlowStageCommand('analyze')).toBe('baf-quality lint')
-  })
+  }, 30_000)
 
   // 【变更】2026-10-22 (批次十三 1): the 全部运行 sweep walks the host's
   // canonical order — it must equal the rail's step order so the folded
   // per-stage results land on the cards in the order the customer watched.
+  // 【变更】2026-10-24 (批次十九 2.1/2.3): same explicit budget as the test above
+  // (the same heavy host import).
   it('the chain order equals the rail order (批次十三)', async () => {
     const { TEST_FLOW_CHAIN_ORDER } = await import('../src/index.ts')
     expect([...TEST_FLOW_CHAIN_ORDER]).toEqual(TEST_FLOW_STEPS.map(step => step.id))
-  })
+  }, 30_000)
 })
 
 describe('projectTestFlowSteps outcome mapping', () => {
