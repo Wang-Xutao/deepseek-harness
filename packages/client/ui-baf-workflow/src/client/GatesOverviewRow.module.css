@@ -23,6 +23,15 @@
  *                    `--dsw-alias-label-secondary` grey was the same tone
  *                    everywhere, which is what read as washed out
  * - --wf-ink-3       quiet bits (counts, hints) — still the quietest tier
+ *
+ * 【变更】2026-10-25 (批次二十五 3): the page sheds its gold COVERAGE. The
+ * accent was not an accent but a fill — the 需求输入 node was a solid gold
+ * slab, the hero carried a 26% gold wash, every selected card sat inside a
+ * gold ring plus a gold glow, and the ambient washes tinted the whole
+ * canvas. Every one of those drops by roughly half. The gold now reads as
+ * what an accent is: a hairline, a marker, a number, and the surfaces carry
+ * the page. The hue itself is untouched — it is the same BAF gold the rest
+ * of the 工作流 surface uses.
  */
 .block {
   /* 【变更】2026-10-25 (批次二十一 2): the gold is stated outright, in both
@@ -76,6 +85,13 @@
  * - MOTION: a staggered fade-up entrance, a 2px hover lift on the interactive
  *   cards, and a distinct GOLD selected state (gold edge + tinted fill + a
  *   soft gold glow) so 「现在选中的是哪一个」 is obvious at a glance.
+ *
+ * 【变更】2026-10-25 (批次二十五 3): the MATERIAL stays, its WEIGHT goes. The
+ * console read as one gold field: the sheen was a 26% wash, the lit edge was
+ * a 72% border, the selected state's glow was a 55% halo. Each is now a
+ * trace — the sheen 11%, the edge a hairline, the glow a faint ring — so the
+ * page reads as a console with a gold accent rather than a gold object. The
+ * vocabulary above stays true; only the amounts changed.
  */
 
 /* 【变更】2026-10-24 (批次二十 2): the entrance keyframe (the canvas
@@ -125,9 +141,9 @@
   flex: none;
   padding: 0 14px;
   height: 36px;
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 34%, var(--wf-line));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 22%, var(--wf-line));
   border-radius: 18px;
-  background: color-mix(in srgb, var(--wf-accent) 8%, var(--dsw-alias-bg-module-platform));
+  background: color-mix(in srgb, var(--wf-accent) 4%, var(--dsw-alias-bg-module-platform));
   font: inherit;
   font-size: 13px;
   line-height: 20px;
@@ -136,7 +152,7 @@
 }
 
 .toggle:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--wf-accent) 16%, var(--dsw-alias-interactive-bg-hover));
+  background: color-mix(in srgb, var(--wf-accent) 9%, var(--dsw-alias-interactive-bg-hover));
 }
 
 .status {
@@ -203,7 +219,7 @@
   flex-wrap: wrap;
   gap: 6px 8px;
   padding-bottom: 9px;
-  border-bottom: 1px solid color-mix(in srgb, var(--wf-accent) 26%, var(--wf-line));
+  border-bottom: 1px solid color-mix(in srgb, var(--wf-accent) 16%, var(--wf-line));
 }
 
 .nodeName {
@@ -236,9 +252,9 @@
    reads as a chip of the panel instead of a bare word. */
 .nodeChip {
   padding: 1px 9px;
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 28%, var(--wf-line));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 20%, var(--wf-line));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--wf-accent) 7%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 4%, transparent);
   color: var(--wf-ink-2);
   font-size: 11px;
   line-height: 17px;
@@ -265,9 +281,9 @@
   box-sizing: border-box;
   margin: 10px 0 5px;
   padding: 2px 9px;
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 26%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 18%, transparent);
   border-radius: 5px;
-  background: color-mix(in srgb, var(--wf-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 8%, transparent);
   color: var(--wf-ink);
   font-size: 11px;
   line-height: 16px;
@@ -292,7 +308,7 @@
    design-platform token — it resolves to a hardcoded fallback that never
    follows the theme). */
 .sectionLabelGate {
-  background: color-mix(in srgb, var(--wf-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 11%, transparent);
 }
 
 .sectionLabelGate::before {
@@ -335,22 +351,18 @@
    gate family wears the gold accent. */
 .gateCard {
   padding: 10px 12px 11px;
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 24%, var(--wf-line));
-  border-left: 3px solid color-mix(in srgb, var(--wf-accent) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 16%, var(--wf-line));
+  border-left: 2px solid color-mix(in srgb, var(--wf-accent) 42%, transparent);
   border-radius: 10px;
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--wf-accent) 10%, var(--wf-surface)),
-    var(--wf-surface) 55%
-  );
+  background: var(--wf-surface);
   box-shadow: var(--wf-lift);
   transition: border-color 150ms var(--ds-ease-in-out, ease), box-shadow 150ms var(--ds-ease-in-out, ease);
 }
 
 .gateCard:hover {
-  border-color: color-mix(in srgb, var(--wf-accent) 46%, var(--wf-line));
+  border-color: color-mix(in srgb, var(--wf-accent) 28%, var(--wf-line));
   border-left-color: var(--wf-accent);
-  box-shadow: var(--wf-lift), 0 10px 22px -14px color-mix(in srgb, var(--wf-accent) 50%, transparent);
+  box-shadow: var(--wf-lift), 0 10px 22px -14px color-mix(in srgb, #000 32%, transparent);
 }
 
 /* The card's own title — the 门禁明细 head owns the title there, so this
@@ -413,14 +425,14 @@
    survives the flattening. Consecutive blocks share one continuous rule. */
 .qText {
   padding-left: 12px;
-  border-left: 2px solid color-mix(in srgb, var(--wf-accent) 26%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--wf-accent) 18%, transparent);
   word-break: break-word;
 }
 
 .qList {
   margin: 0;
   padding: 0;
-  border-left: 2px solid color-mix(in srgb, var(--wf-accent) 26%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--wf-accent) 18%, transparent);
   list-style: none;
 }
 
@@ -437,7 +449,7 @@
   width: 4px;
   height: 4px;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--wf-accent) 65%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 45%, transparent);
 }
 
 .gateOptions {
@@ -472,7 +484,7 @@
   width: 4px;
   height: 4px;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--wf-accent) 70%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 52%, transparent);
 }
 
 .optionLabel {
@@ -514,9 +526,9 @@
   margin: 6px 0 0;
   padding: 6px 9px;
   list-style: none;
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 16%, var(--wf-line));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 12%, var(--wf-line));
   border-radius: 8px;
-  background: color-mix(in srgb, var(--wf-accent) 5%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 3%, transparent);
   color: var(--wf-ink-2);
   font-size: 11.5px;
   line-height: 17px;
@@ -536,7 +548,7 @@
   box-sizing: border-box;
   width: 10px;
   height: 10px;
-  border: 1.5px solid color-mix(in srgb, var(--wf-accent) 70%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--wf-accent) 48%, transparent);
   border-radius: 3px;
 }
 
@@ -576,9 +588,9 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 22%, transparent);
   border-radius: 7px;
-  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 6%, transparent);
   color: var(--wf-accent-text);
 }
 
@@ -598,8 +610,8 @@
    treatment, matching the section chips it sits beside. */
 .badgeGate {
   color: var(--wf-accent-text);
-  border-color: color-mix(in srgb, var(--wf-accent) 50%, transparent);
-  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--wf-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 6%, transparent);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -621,7 +633,7 @@
   border: 1px solid var(--wf-gold-line);
   border-radius: 14px;
   background:
-    radial-gradient(620px 280px at 50% 0%, color-mix(in srgb, var(--wf-accent) 9%, transparent), transparent 72%),
+    radial-gradient(620px 280px at 50% 0%, color-mix(in srgb, var(--wf-accent) 5%, transparent), transparent 72%),
     var(--wf-canvas);
   box-shadow: var(--wf-lift), var(--wf-shadow-md);
 }
@@ -639,8 +651,8 @@
   border-bottom: 1px solid var(--wf-line);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--wf-accent) 11%, var(--wf-surface)),
-    color-mix(in srgb, var(--wf-accent) 3%, transparent)
+    color-mix(in srgb, var(--wf-accent) 5%, var(--wf-surface)),
+    color-mix(in srgb, var(--wf-accent) 2%, transparent)
   );
 }
 
@@ -662,45 +674,156 @@
   width: 18px;
   height: 2px;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--wf-accent), color-mix(in srgb, var(--wf-accent) 8%, transparent));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--wf-accent) 72%, transparent), color-mix(in srgb, var(--wf-accent) 4%, transparent));
 }
 
-.consoleStats {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* 【变更】2026-10-25 (批次二十四 2): the frame's quiet hint — what replaced the
+   two count chips that moved up to the page's figure plates. */
+.consoleHint {
   margin-left: auto;
-}
-
-/* One count chip — a quiet label and a large gold number (the number wears
-   --wf-accent-text: the gold mixed toward the theme's ink, so it stays
-   legible on the light surface). */
-.statChip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 3px 10px;
-  border: 1px solid var(--wf-gold-line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--wf-accent) 8%, var(--wf-surface));
-  box-shadow: var(--wf-lift);
-}
-
-.statLabel {
-  color: var(--wf-ink-3);
   font-size: 10.5px;
-  font-weight: 700;
   line-height: 16px;
-  letter-spacing: 0.1em;
+  color: var(--wf-ink-3);
 }
 
-.statValue {
-  color: var(--wf-accent-text);
-  font-size: 15px;
+/* ── the page's own chrome (批次二十四 2) ──────────────────────────────── */
+
+/* 【变更】2026-10-25 (批次二十四 2): the hero band — the SAME material as the
+   变更总览 ledger's hero (a gold hairline, a gold wash from the left, a lit
+   top edge, a deep floor shadow), so the two pages of the 工作流 surface read
+   as siblings instead of as two different products. */
+.hero {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--wf-gold-line);
+  background:
+    radial-gradient(520px 140px at 8% -40%, color-mix(in srgb, var(--wf-accent) 11%, transparent), transparent 70%),
+    linear-gradient(120deg, color-mix(in srgb, var(--wf-accent) 5%, transparent), transparent 58%),
+    var(--wf-surface);
+  box-shadow: var(--wf-lift), var(--wf-shadow-md);
+  animation: gatesFadeUp 320ms ease both;
+}
+
+/* The BAF mark — the same wordmark the 变更总览 ledger carries. */
+.heroBrand {
+  flex: none;
+  align-self: center;
+  font-size: 0.72rem;
   font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #fff;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--wf-accent) 36%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 44%, #241a08));
+  border-radius: 5px;
+  padding: 0.22rem 0.44rem;
+  box-shadow: 0 6px 14px -10px color-mix(in srgb, #000 70%, transparent);
+}
+
+.heroText {
+  min-width: 0;
+  flex: 1;
+}
+
+/* The section eyebrow — small, wide-tracked, quiet. */
+.heroLabel {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wf-accent-text);
+}
+
+.heroTitle {
+  margin: 2px 0 0;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--wf-ink);
+}
+
+.heroDescription {
+  margin: 4px 0 0;
+  color: var(--wf-ink-2);
+  font-size: 12px;
   line-height: 18px;
+}
+
+/* The figure plates — the ledger's instrument-panel tiles, so the two pages
+   carry their numbers the same way. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  /* The stack rhythm comes from `.flow`'s own gap — the plates sit directly
+     under the hero band, not on a second, competing margin. */
+  margin-top: 0;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  overflow: hidden;
+  border-radius: 13px;
+  border: 1px solid var(--wf-gold-line);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 4%, transparent), transparent 62%),
+    var(--wf-surface);
+  box-shadow: var(--wf-lift), 0 14px 30px -26px color-mix(in srgb, #000 55%, transparent);
+  animation: gatesFadeUp 360ms ease both;
+}
+
+.tile:nth-child(1) { animation-delay: 40ms; }
+.tile:nth-child(2) { animation-delay: 80ms; }
+.tile:nth-child(3) { animation-delay: 120ms; }
+
+/* The lit top edge — the gold rule that makes the plate read as metal. */
+.tile::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--wf-accent) 38%, transparent), transparent);
+}
+
+.tile[data-tone="stage"]::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--dsw-alias-text-success) 80%, transparent), transparent);
+}
+
+.tile[data-tone="states"]::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--wf-ink-3) 80%, transparent), transparent);
+}
+
+.tileValue {
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 800;
   letter-spacing: -0.01em;
+  color: var(--wf-ink);
   font-variant-numeric: tabular-nums;
+}
+
+.tile[data-tone="confirm"] .tileValue { color: var(--wf-accent-text); }
+.tile[data-tone="stage"] .tileValue { color: var(--dsw-alias-text-success); }
+.tile[data-tone="states"] .tileValue { color: var(--wf-ink-2); }
+
+.tileLabel {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--wf-ink-3);
+  letter-spacing: 0.02em;
 }
 
 /* 【变更】2026-10-22 (批次十四 2): .legendBar / .legendItem / .legendDot /
@@ -732,7 +855,7 @@
   bottom: 0;
   width: 170px;
   transform: translateX(-50%);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--wf-accent) 17%, transparent), transparent 72%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--wf-accent) 8%, transparent), transparent 72%);
   pointer-events: none;
   filter: blur(18px);
 }
@@ -837,12 +960,12 @@
   border-color: var(--wf-accent);
   background: linear-gradient(
     155deg,
-    color-mix(in srgb, var(--wf-accent) 20%, var(--wf-surface)),
+    color-mix(in srgb, var(--wf-accent) 12%, var(--wf-surface)),
     var(--wf-surface)
   );
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent),
-    0 0 20px -2px color-mix(in srgb, var(--wf-accent) 45%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--wf-accent) 15%, transparent),
+    0 0 20px -2px color-mix(in srgb, var(--wf-accent) 24%, transparent),
     var(--wf-lift);
 }
 
@@ -910,9 +1033,9 @@
   box-sizing: border-box;
   padding: 0 10px;
   overflow: hidden;
-  border: 1px dashed color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line));
+  border: 1px dashed color-mix(in srgb, var(--wf-accent) 40%, var(--wf-line));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--wf-accent) 6%, var(--wf-surface));
+  background: color-mix(in srgb, var(--wf-accent) 4%, var(--wf-surface));
   box-shadow: var(--wf-lift);
   font: inherit;
   cursor: pointer;
@@ -922,8 +1045,8 @@
 
 .gatePill:hover {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--wf-accent) 85%, transparent);
-  background: color-mix(in srgb, var(--wf-accent) 13%, var(--wf-surface));
+  border-color: color-mix(in srgb, var(--wf-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 8%, var(--wf-surface));
   transform: translateY(-1px);
 }
 
@@ -938,10 +1061,10 @@
 .gatePillSelected {
   border-style: solid;
   border-color: var(--wf-accent);
-  background: color-mix(in srgb, var(--wf-accent) 20%, var(--wf-surface));
+  background: color-mix(in srgb, var(--wf-accent) 12%, var(--wf-surface));
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent),
-    0 0 16px -4px color-mix(in srgb, var(--wf-accent) 55%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--wf-accent) 15%, transparent),
+    0 0 16px -4px color-mix(in srgb, var(--wf-accent) 26%, transparent),
     var(--wf-lift);
 }
 
@@ -965,6 +1088,13 @@
  * 【变更】2026-10-24 (批次二十 2): the entry node is the page's HERO — the
  * top highlight, the deeper gold shadow and the surrounding glow make it the
  * one element that reads as lit, and it enters first.
+ * 【变更】2026-10-25 (批次二十五 3): the solid gold slab is gone. The user
+ * read the 需求输入 node as the heaviest thing on the page — a gold plate
+ * that outweighed the canvas it sits on. The node keeps its place in the
+ * entrance order and its gold identity, but the gold is now a HAIRLINE
+ * around a light surface with a faint gold ring: the same mark, one weight
+ * down. The ink follows the surface (--wf-accent-text), because the gold
+ * fill it used to sit on is no longer there.
  */
 .entryBox {
   position: absolute;
@@ -976,15 +1106,15 @@
   box-sizing: border-box;
   padding: 0 14px;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--wf-accent-soft), var(--wf-accent));
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 72%, #6b5410);
+  background: color-mix(in srgb, var(--wf-accent) 6%, var(--wf-surface));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 38%, var(--wf-line));
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 42%, transparent),
-    0 10px 24px -10px color-mix(in srgb, var(--wf-accent) 60%, transparent),
-    0 0 26px -8px color-mix(in srgb, var(--wf-accent) 48%, transparent);
-  color: var(--wf-accent-ink);
+    var(--wf-lift),
+    var(--wf-shadow-sm),
+    0 0 0 2px color-mix(in srgb, var(--wf-accent) 10%, transparent);
+  color: var(--wf-accent-text);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 18px;
   animation: gatesFadeUp 380ms var(--ds-ease-in-out, ease) backwards;
 }
@@ -993,8 +1123,8 @@
 .entryIcon {
   display: inline-flex;
   flex: none;
-  color: var(--wf-accent-ink);
-  opacity: 0.9;
+  color: var(--wf-accent-text);
+  opacity: 0.85;
 }
 
 /* 【变更】2026-10-24 (批次十九 3.2): the option cards join the gold gate
@@ -1014,10 +1144,10 @@
   box-sizing: border-box;
   padding: 7px 10px;
   border-radius: 10px;
-  border: 1px dashed color-mix(in srgb, var(--wf-accent) 60%, var(--wf-line));
+  border: 1px dashed color-mix(in srgb, var(--wf-accent) 40%, var(--wf-line));
   background: linear-gradient(
     160deg,
-    color-mix(in srgb, var(--wf-accent) 11%, var(--wf-surface)),
+    color-mix(in srgb, var(--wf-accent) 6%, var(--wf-surface)),
     var(--wf-surface)
   );
   box-shadow: var(--wf-lift);
@@ -1031,10 +1161,10 @@
 
 .optionCard:hover {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--wf-accent) 85%, transparent);
+  border-color: color-mix(in srgb, var(--wf-accent) 55%, transparent);
   background: linear-gradient(
     160deg,
-    color-mix(in srgb, var(--wf-accent) 18%, var(--wf-surface)),
+    color-mix(in srgb, var(--wf-accent) 10%, var(--wf-surface)),
     var(--wf-surface)
   );
   transform: translateY(-2px);
@@ -1053,12 +1183,12 @@
   border-color: var(--wf-accent);
   background: linear-gradient(
     160deg,
-    color-mix(in srgb, var(--wf-accent) 24%, var(--wf-surface)),
+    color-mix(in srgb, var(--wf-accent) 13%, var(--wf-surface)),
     var(--wf-surface)
   );
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--wf-accent) 26%, transparent),
-    0 0 18px -4px color-mix(in srgb, var(--wf-accent) 50%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--wf-accent) 15%, transparent),
+    0 0 18px -4px color-mix(in srgb, var(--wf-accent) 24%, transparent),
     var(--wf-lift);
 }
 
@@ -1149,7 +1279,7 @@
   border-radius: 14px;
   background: linear-gradient(
     160deg,
-    color-mix(in srgb, var(--wf-accent) 8%, var(--wf-surface)),
+    color-mix(in srgb, var(--wf-accent) 4%, var(--wf-surface)),
     var(--wf-surface) 45%
   );
   box-shadow: var(--wf-lift), var(--wf-shadow-md);
@@ -1178,7 +1308,7 @@
   width: 18px;
   height: 2px;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--wf-accent), color-mix(in srgb, var(--wf-accent) 8%, transparent));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--wf-accent) 72%, transparent), color-mix(in srgb, var(--wf-accent) 4%, transparent));
 }
 
 .detailGroup {
@@ -1201,7 +1331,7 @@
   border-radius: 14px;
   background: linear-gradient(
     160deg,
-    color-mix(in srgb, var(--wf-accent) 7%, var(--wf-surface)),
+    color-mix(in srgb, var(--wf-accent) 4%, var(--wf-surface)),
     var(--wf-surface) 45%
   );
   box-shadow: var(--wf-lift), var(--wf-shadow-sm);

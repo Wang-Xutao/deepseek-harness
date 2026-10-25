@@ -211,6 +211,27 @@ describe('SettingsRoot trigger', () => {
     expect(screen.getByRole('button', { name, expanded: true })).toBeTruthy()
   })
 
+  // 【变更】2026-10-25 (批次二十六 4): a pending update grows a tag at the end
+  // of the Settings trigger, and the tag opens the 版本与更新 page directly.
+  it('shows the update tag at the end of the Settings button and opens 版本与更新', async () => {
+    const holder = window as Window & { bafDesktop?: unknown }
+    const original = holder.bafDesktop
+    holder.bafDesktop = {
+      isDesktop: true,
+      getLastCheckResult: async () => ({ status: 'available' }),
+      onCheckResult: () => () => {},
+    }
+    try {
+      mount({ dictionary: zh, rows: [{ id: 'version-updates', order: 0, label: '版本与更新' }] })
+      const tag = await screen.findByTestId('settings-update-tag')
+      expect(tag.textContent).toContain('更新')
+      fireEvent.click(tag)
+      expect(await screen.findByTestId('section-version-updates')).toBeTruthy()
+    } finally {
+      holder.bafDesktop = original
+    }
+  })
+
   it('shows outage, retry progress, and a two-second recovery confirmation', () => {
     vi.useFakeTimers()
     const mounted = mount()

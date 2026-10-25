@@ -3,17 +3,32 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-baf-desktop/README.md
 /deepseek-ai-dsh-client-ui-baf-desktop:
-  en: 629675bb9c369c67
-  zh: 0a12b4d64bc03144
+  en: a34345fc4e3d24c9
+  zh: 92518e42f9d978b2
+/deepseek-ai-dsh-client-ui-baf-desktop/desktop-notifications:
+  en: abca3dcd27a19c3b
+  zh: 4bc92b71158a2e6d
+/deepseek-ai-dsh-client-ui-baf-desktop/in-app-update-prompt:
+  en: 1ef56cf08ca19264
+  zh: 53e6d89154d92c53
 /deepseek-ai-dsh-client-ui-baf-desktop/composer-tidy-up-control:
-  en: 8dcbc6a2f78b8f66
-  zh: 4b06490c1239053b
+  en: 414311f6d81bd5a0
+  zh: 31ea00841187f935
 /deepseek-ai-dsh-client-ui-baf-desktop/model-experience:
-  en: dd7badd076b167a1
-  zh: 111b99691facb43f
-/deepseek-ai-dsh-client-ui-baf-desktop/model-experience/kv-cache-effect:
-  en: 6250c7744b2590b1
-  zh: 30d5febe673dd6b9
+  en: 215e7ba838619b7b
+  zh: 215e7ba838619b7b
+/deepseek-ai-dsh-client-ui-baf-desktop/model-experience/composer-tidy-up-request:
+  en: b43fe504bb6fea45
+  zh: b43fe504bb6fea45
+/deepseek-ai-dsh-client-ui-baf-desktop/model-experience/composer-tidy-up-request/what-the-model-sees:
+  en: a4b350ae693ed0a9
+  zh: 89802b1b33320abf
+/deepseek-ai-dsh-client-ui-baf-desktop/model-experience/composer-tidy-up-request/token-effect:
+  en: 1f76ad5db8930f8a
+  zh: e17309d67057c084
+/deepseek-ai-dsh-client-ui-baf-desktop/model-experience/composer-tidy-up-request/kv-cache-effect:
+  en: ea6f26729d802638
+  zh: 98ccf60ed149c83b
 /deepseek-ai-dsh-client-ui-baf-desktop/known-limitations-and-deferred-work:
-  en: d11c717d134205ba
-  zh: c3564631c3418893
+  en: beee87ebbb4b22c3
+  zh: b065f5687919a8e2

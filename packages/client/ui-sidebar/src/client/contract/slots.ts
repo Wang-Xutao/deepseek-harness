@@ -8,6 +8,7 @@
  * actions in `sidebar.footer.action`.
  */
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
@@ -100,6 +101,17 @@ export interface SidebarPanelActionEntry {
   readonly pinned: boolean
   /** Whether this panel is selected, independently of its pin state. */
   readonly active?: boolean
+  /**
+   * 【变更】2026-10-25 (批次二十五 1): the launcher's leading icon.
+   *
+   * A launcher that moved out of the rail must not lose its icon: the row in
+   * the More menu reads as the same object as the row in the rail, and the icon
+   * is what makes that obvious at a glance. The shell owns the icon (it is the
+   * `sidebar.panellist` registrant), so the shell hands the row a RENDERER
+   * rather than a node — a node would instantiate every panel's icon even for
+   * the rows the menu never shows.
+   */
+  readonly icon?: () => ReactNode
 }
 
 /** Owner share of the panel list's More menu rows. */

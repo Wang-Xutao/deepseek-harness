@@ -83,7 +83,9 @@ describe('ui-sidebar apply', () => {
     const injected = (b.slots.entries('sidebar')[0]!.inject as () => SidebarRootInjected)()
     expect(Object.keys(injected)).toEqual(['startSession', 'toggleSidebar', 'selectPanel', 'setPinned', 'trackEntryClick', 'hooks'])
     expect(injected.hooks.panels.getSnapshot()).toEqual([])
-    expect(injected.hooks.entryPins.getSnapshot()).toEqual([])
+    // 【变更】2026-10-25 (批次二十四 3): 自动化任务 starts in the More menu, so
+    // the launcher pin list is not empty on a fresh instance.
+    expect(injected.hooks.entryPins.getSnapshot()).toEqual(['schedules'])
     expect(injected.hooks.entryActions.getSnapshot()).toBe(false)
     expect(b.slots.entries('main')).toEqual([])
     // Both arms delegate to the Workspace UI's shared New Session action.

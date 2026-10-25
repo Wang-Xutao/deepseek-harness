@@ -53,6 +53,7 @@
       "inject": [
         "@deepseek-ai/dsh-baf-core",
         "@deepseek-ai/dsh-baf-workflow",
+        "@deepseek-ai/dsh-llm",
         "@deepseek-ai/dsh-session",
         "@deepseek-ai/dsh-session-persistence",
         "@deepseek-ai/dsh-typert-protocol"
@@ -94,6 +95,7 @@
     "@deepseek-ai/dsh-client-ui-session": "workspace:^",
     "@deepseek-ai/dsh-client-ui-sidebar-right": "workspace:^",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
+    "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-session-persistence": "workspace:^",
     "@deepseek-ai/dsh-session-stats": "workspace:^",
@@ -118,6 +120,7 @@
   "dependencies": {
     "clsx": "^2.0.0",
     "@deepseek-ai/dsh-baf-quality": "workspace:^",
+    "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "zod": "^4.4.3"
   }

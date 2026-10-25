@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { DraftFormatButton } from '../src/client/DraftFormatButton.tsx'
-import { formatDraft } from '../src/client/draft-format.ts'
+import { formatDraft, sanitizeModelDraft } from '../src/client/draft-format.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -40,18 +40,38 @@ function useInput(selector: (state: DraftState) => unknown): unknown {
 }
 
 /** Translate a key through the package's own dictionary. */
-function t(key: string): string {
-  return zh[key as keyof typeof zh] ?? key
+function t(key: string, params?: Record<string, unknown>): string {
+  const template = zh[key as keyof typeof zh] ?? key
+  if (params === undefined) return template
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const value = params[name]
+    return value === undefined ? match : String(value)
+  })
 }
 
-function renderControl(over?: { draft?: string; phase?: DraftState['phase']; references?: number }) {
+function renderControl(over?: {
+  draft?: string
+  phase?: DraftState['phase']
+  references?: number
+  /** 【变更】2026-10-25 (批次二十四 3): the model path the control calls. */
+  /** 【变更】2026-10-25 (批次二十五 2): the answer names the model that ran. */
+  formatWithModel?: (draft: string) => Promise<{ readonly text: string; readonly model: string } | undefined>
+  /** 【变更】2026-10-25 (批次二十五 2): the app-wide notice the outcome reaches. */
+  notifyOutcome?: (kind: string, model?: string) => void
+}) {
   store.set({
     draft: over?.draft ?? '',
     phase: over?.phase ?? 'plain',
     occurrences: over?.references === undefined ? [] : [{}],
   })
   const setDraft = vi.fn()
-  const props = { useInput, inputActions: { setDraft }, t } as never
+  const props = {
+    useInput,
+    inputActions: { setDraft },
+    t,
+    ...(over?.formatWithModel === undefined ? {} : { formatWithModel: over.formatWithModel }),
+    ...(over?.notifyOutcome === undefined ? {} : { notifyOutcome: over.notifyOutcome }),
+  } as never
   const view = render(<DraftFormatButton {...props} />)
   const button = view.container.querySelector<HTMLButtonElement>('[data-baf-draft-format]')
   if (button === null) throw new Error('the tidy-up control did not render')
@@ -189,6 +209,39 @@ describe('draft Markdown arrangement', () => {
   })
 })
 
+/**
+ * 【变更】2026-10-25 (批次二十四 3): the model's answer, cleaned for the
+ * composer. Only the wrappers go — every character that could be the author's
+ * own wording survives.
+ */
+describe('the model answer sanitizer', () => {
+  it('unwraps one fence around the whole answer', () => {
+    expect(sanitizeModelDraft('```markdown\n## 标题\n\n- 一\n```')).toBe('## 标题\n\n- 一')
+  })
+
+  it('keeps a code block that carries its own fence', () => {
+    const answer = '## 标题\n\n```ts\nconst a = 1\n```'
+    expect(sanitizeModelDraft(answer)).toBe(answer)
+  })
+
+  it('drops a leading courtesy line and a trailing one', () => {
+    expect(sanitizeModelDraft('整理后的内容如下：\n\n## 标题')).toBe('## 标题')
+    expect(sanitizeModelDraft('## 标题\n\n希望对你有帮助！')).toBe('## 标题')
+  })
+
+  it('collapses a run of blank lines into one separator', () => {
+    expect(sanitizeModelDraft('## 标题\n\n\n\n- 一')).toBe('## 标题\n\n- 一')
+  })
+
+  it('normalizes line endings and trims the edges', () => {
+    expect(sanitizeModelDraft('\r\n## 标题\r\n')).toBe('## 标题')
+  })
+
+  it('answers an empty body with an empty string', () => {
+    expect(sanitizeModelDraft('   ')).toBe('')
+  })
+})
+
 describe('composer tidy-up control', () => {
   it('wears the document+pen glyph and swaps to its document+undo twin', () => {
     const { button } = renderControl({ draft: '第一步。\n第二步。' })
@@ -289,5 +342,135 @@ describe('composer tidy-up control', () => {
 
     // fireEvent reports false once the event's default was prevented.
     expect(fireEvent.mouseDown(button)).toBe(false)
+  })
+})
+
+/**
+ * 【变更】2026-10-25 (批次二十四 3): the control's model path. The press asks
+ * the SESSION'S OWN MODEL to arrange the draft; the local arranger answers
+ * when no model did (no route, a provider failure, an empty answer), and the
+ * author's own typing always wins over a late answer.
+ *
+ * 【变更】2026-10-25 (批次二十五 2): the outcome is VISIBLE — the control says
+ * which of the two answered, so a silent fallback can never read as
+ * 「模型没有生效」.
+ */
+describe('the model path of the tidy-up control', () => {
+  it('writes the model answer into the draft', async () => {
+    const formatWithModel = vi.fn(async () => ({ text: '## 标题\n\n- 一', model: 'deepseek-chat' }))
+    const { button, setDraft } = renderControl({ draft: '帮我整理这段话', formatWithModel })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(formatWithModel).toHaveBeenCalledWith('帮我整理这段话')
+    expect(setDraft).toHaveBeenCalledWith('## 标题\n\n- 一')
+  })
+
+  it('sanitizes the model answer before it reaches the draft', async () => {
+    const formatWithModel = vi.fn(async () => ({ text: '```markdown\n## 标题\n```', model: 'deepseek-chat' }))
+    const { button, setDraft } = renderControl({ draft: '帮我整理这段话', formatWithModel })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(setDraft).toHaveBeenCalledWith('## 标题')
+  })
+
+  it('falls back to the local arranger when no model answered', async () => {
+    const formatWithModel = vi.fn(async () => undefined)
+    const { button, setDraft } = renderControl({ draft: '第一步。\n第二步。', formatWithModel })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(setDraft).toHaveBeenCalledWith('- 第一步。\n- 第二步。')
+  })
+
+  it('falls back to the local arranger when the model call failed', async () => {
+    const formatWithModel = vi.fn(async () => { throw new Error('provider down') })
+    const { button, setDraft } = renderControl({ draft: '第一步。\n第二步。', formatWithModel })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(setDraft).toHaveBeenCalledWith('- 第一步。\n- 第二步。')
+  })
+
+  it('wears the working state while the model arranges the draft', async () => {
+    let resolveModel: (value: { readonly text: string; readonly model: string } | undefined) => void = () => {}
+    const formatWithModel = vi.fn(() => new Promise<{ readonly text: string; readonly model: string } | undefined>(
+      (resolve) => { resolveModel = resolve },
+    ))
+    const { button } = renderControl({ draft: '原文', formatWithModel })
+
+    act(() => { fireEvent.click(button) })
+    expect(button.getAttribute('data-baf-draft-format-working')).toBe('true')
+
+    await act(async () => { resolveModel({ text: '整理后的', model: 'deepseek-chat' }) })
+    expect(button.getAttribute('data-baf-draft-format-working')).toBeNull()
+  })
+
+  it('drops the answer when the author typed while the model worked', async () => {
+    let resolveModel: (value: { readonly text: string; readonly model: string } | undefined) => void = () => {}
+    const formatWithModel = vi.fn(() => new Promise<{ readonly text: string; readonly model: string } | undefined>(
+      (resolve) => { resolveModel = resolve },
+    ))
+    const { button, setDraft } = renderControl({ draft: '原文', formatWithModel })
+
+    act(() => { fireEvent.click(button) })
+    act(() => { store.set({ draft: '作者改过了', phase: 'plain', occurrences: [] }) })
+    await act(async () => { resolveModel({ text: '整理后的', model: 'deepseek-chat' }) })
+
+    expect(setDraft).not.toHaveBeenCalled()
+  })
+
+  // 【变更】2026-10-25 (批次二十五 2): the visible outcome. The user reported
+  // the model path as「没有效果」, and the silent fallback is exactly what
+  // that looks like — so the control now names the model that answered.
+  it('names the model that optimized the draft', async () => {
+    const formatWithModel = vi.fn(async () => ({ text: '## 标题', model: 'deepseek-chat' }))
+    const { button } = renderControl({ draft: '帮我整理这段话', formatWithModel })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(button.getAttribute('data-baf-draft-format-notice')).toBe('optimized')
+  })
+
+  it('says that the local rules answered when no model did', async () => {
+    const formatWithModel = vi.fn(async () => undefined)
+    const { button } = renderControl({ draft: '第一步。\n第二步。', formatWithModel })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(button.getAttribute('data-baf-draft-format-notice')).toBe('local')
+  })
+
+  it('says that the model found nothing to change when it echoed the draft', async () => {
+    const formatWithModel = vi.fn(async () => ({ text: '帮我看下这个 bug', model: 'deepseek-chat' }))
+    const { button, setDraft } = renderControl({ draft: '帮我看下这个 bug', formatWithModel })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(setDraft).not.toHaveBeenCalled()
+    expect(button.getAttribute('data-baf-draft-format-notice')).toBe('same')
+  })
+
+  // 【变更】2026-10-25 (批次二十五 2): the outcome also reaches the app-wide
+  // notice, so it is visible without hovering the control.
+  it('publishes the outcome to the app-wide notice', async () => {
+    const formatWithModel = vi.fn(async () => ({ text: '## 标题', model: 'deepseek-chat' }))
+    const notifyOutcome = vi.fn()
+    const { button } = renderControl({ draft: '帮我整理这段话', formatWithModel, notifyOutcome })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(notifyOutcome).toHaveBeenCalledWith('optimized', 'deepseek-chat')
+  })
+
+  it('publishes the local fallback to the app-wide notice', async () => {
+    const formatWithModel = vi.fn(async () => undefined)
+    const notifyOutcome = vi.fn()
+    const { button } = renderControl({ draft: '第一步。\n第二步。', formatWithModel, notifyOutcome })
+
+    await act(async () => { fireEvent.click(button) })
+
+    expect(notifyOutcome).toHaveBeenCalledWith('local')
   })
 })

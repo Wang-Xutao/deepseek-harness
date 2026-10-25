@@ -4,6 +4,8 @@
 export const zh = {
   'trigger': '设置',
   'shortcut.open': '打开设置',
+  'update.tag': '更新',
+  'update.tagHint': '有新版本，点击打开「版本与更新」',
   'desktop.update.available': '新版本',
   'desktop.update.checking': '正在检查更新…',
   'desktop.update.progress': '{percent}%',
@@ -46,6 +48,11 @@ export const zh = {
   'desktopLaunch.title': '开机自启动',
   'desktopLaunch.description': '开启后，开机时在后台自动启动并最小化到托盘，不显示启动画面',
   'desktopLaunch.error': '设置开机自启动失败，请重试',
+  // 【变更】2026-10-25 (批次二十六 3): 桌面通知 — the OS toast for the states
+  // that need the user away from the window.
+  'desktopNotification.title': '桌面通知',
+  'desktopNotification.description': '任务完成、出错或需要你审批时，发送系统通知提醒',
+  'desktopNotification.error': '设置桌面通知失败，请重试',
   'hostRelease.title': '服务版本变化',
   'hostRelease.description': '服务版本已变化，本页面已暂停热更新，刷新后加载新版本。',
   'hostRelease.service': '服务',
@@ -62,6 +69,8 @@ export type SettingsKey = keyof typeof zh
 export const en = {
   'trigger': 'Settings',
   'shortcut.open': 'Open settings',
+  'update.tag': 'Update',
+  'update.tagHint': 'A new version is available — open Version & updates',
   'desktop.update.available': 'Update',
   'desktop.update.checking': 'Checking for updates…',
   'desktop.update.progress': '{percent}%',
@@ -104,6 +113,10 @@ export const en = {
   'desktopLaunch.title': 'Launch at startup',
   'desktopLaunch.description': 'Start in the background at login, minimized to the tray, without the splash screen',
   'desktopLaunch.error': 'Could not set launch at startup, try again',
+  // 【变更】2026-10-25 (批次二十六 3): desktop notifications.
+  'desktopNotification.title': 'Desktop notifications',
+  'desktopNotification.description': 'Send a system notification when a task finishes, fails, or waits for your approval',
+  'desktopNotification.error': 'Could not set desktop notifications, try again',
   'hostRelease.title': 'Service version changed',
   'hostRelease.description': 'The service version changed. This page paused live updates; reload to load the new version.',
   'hostRelease.service': 'Service',
@@ -117,6 +130,8 @@ export const en = {
 export const ja = {
   'trigger': '設定',
   'shortcut.open': '設定を開く',
+  'update.tag': '更新',
+  'update.tagHint': '新しいバージョンがあります。バージョンと更新を開きます',
   'desktop.update.available': '更新',
   'desktop.update.checking': '更新を確認中…',
   'desktop.update.progress': '{percent}%',
@@ -158,6 +173,10 @@ export const ja = {
   'desktopLaunch.title': '自動起動',
   'desktopLaunch.description': 'ログイン時にバックグラウンドで起動し、トレイに最小化します。スプラッシュ画面は表示しません',
   'desktopLaunch.error': '自動起動を設定できませんでした。もう一度お試しください',
+  // 【变更】2026-10-25 (批次二十六 3): デスクトップ通知.
+  'desktopNotification.title': 'デスクトップ通知',
+  'desktopNotification.description': 'タスクの完了、エラー、承認待ちのときにシステム通知を送ります',
+  'desktopNotification.error': 'デスクトップ通知を設定できませんでした。もう一度お試しください',
   'hostRelease.title': 'サービスのバージョンが変更されました',
   'hostRelease.description': 'サービスのバージョンが変更されました。このページのライブ更新は停止しています。再読み込みして新しいバージョンを読み込んでください。',
   'hostRelease.service': 'サービス',
@@ -171,6 +190,8 @@ export const ja = {
 export const es = {
   'trigger': 'Configuración',
   'shortcut.open': 'Abrir configuración',
+  'update.tag': 'Actualizar',
+  'update.tagHint': 'Hay una nueva versión: abre Versión y actualizaciones',
   'desktop.update.available': 'Actualizar',
   'desktop.update.checking': 'Buscando actualizaciones...',
   'desktop.update.progress': '{percent}%',
@@ -212,6 +233,10 @@ export const es = {
   'desktopLaunch.title': 'Inicio automático',
   'desktopLaunch.description': 'Inicia en segundo plano al iniciar sesión, minimizado a la bandeja y sin la pantalla de bienvenida',
   'desktopLaunch.error': 'No se pudo activar el inicio automático, inténtelo de nuevo',
+  // 【变更】2026-10-25 (批次二十六 3): notificaciones de escritorio.
+  'desktopNotification.title': 'Notificaciones de escritorio',
+  'desktopNotification.description': 'Envía una notificación del sistema cuando una tarea termine, falle o espere tu aprobación',
+  'desktopNotification.error': 'No se pudieron activar las notificaciones de escritorio, inténtelo de nuevo',
   'hostRelease.title': 'La versión del servicio cambió',
   'hostRelease.description': 'La versión del servicio cambió. Esta página detuvo las actualizaciones en vivo; recargar para cargar la nueva versión.',
   'hostRelease.service': 'Servicio',
@@ -225,6 +250,8 @@ export const es = {
 export const fr = {
   'trigger': 'Paramètres',
   'shortcut.open': 'Ouvrir les paramètres',
+  'update.tag': 'Mettre à jour',
+  'update.tagHint': 'Une nouvelle version est disponible — ouvrir Version et mises à jour',
   'desktop.update.available': 'Mise à jour',
   'desktop.update.checking': 'Vérification des mises à jour…',
   'desktop.update.progress': '{percent}%',
@@ -266,6 +293,10 @@ export const fr = {
   'desktopLaunch.title': 'Lancement au démarrage',
   'desktopLaunch.description': 'Démarre en arrière-plan à la connexion, réduit dans la zone de notification, sans l’écran de démarrage',
   'desktopLaunch.error': 'Impossible d’activer le lancement au démarrage, réessayez',
+  // 【变更】2026-10-25 (批次二十六 3): notifications de bureau.
+  'desktopNotification.title': 'Notifications de bureau',
+  'desktopNotification.description': 'Envoie une notification système lorsqu’une tâche se termine, échoue ou attend votre approbation',
+  'desktopNotification.error': 'Impossible d’activer les notifications de bureau, réessayez',
   'hostRelease.title': 'La version du service a été modifiée',
   'hostRelease.description': 'La version du service a changé. Cette page a suspendu les mises à jour en direct ; recharger pour charger la nouvelle version.',
   'hostRelease.service': 'Service',
@@ -279,6 +310,8 @@ export const fr = {
 export const de = {
   'trigger': 'Einstellungen',
   'shortcut.open': 'Einstellungen öffnen',
+  'update.tag': 'Aktualisieren',
+  'update.tagHint': 'Eine neue Version ist verfügbar — Version und Updates öffnen',
   'desktop.update.available': 'Aktualisieren',
   'desktop.update.checking': 'Suche nach Updates…',
   'desktop.update.progress': '{percent}%',
@@ -320,6 +353,10 @@ export const de = {
   'desktopLaunch.title': 'Beim Systemstart starten',
   'desktopLaunch.description': 'Startet bei der Anmeldung im Hintergrund, minimiert in den Infobereich, ohne Startbildschirm',
   'desktopLaunch.error': 'Der Start beim Systemstart konnte nicht aktiviert werden, bitte erneut versuchen',
+  // 【变更】2026-10-25 (批次二十六 3): Desktop-Benachrichtigungen.
+  'desktopNotification.title': 'Desktop-Benachrichtigungen',
+  'desktopNotification.description': 'Sendet eine Systembenachrichtigung, wenn eine Aufgabe endet, fehlschlägt oder auf Ihre Freigabe wartet',
+  'desktopNotification.error': 'Die Desktop-Benachrichtigungen konnten nicht aktiviert werden, bitte erneut versuchen',
   'hostRelease.title': 'Dienstversion geändert',
   'hostRelease.description': 'Die Dienstversion hat sich geändert. Diese Seite hat Live-Updates angehalten. Neu laden, um die neue Version zu laden.',
   'hostRelease.service': 'Service',
@@ -333,6 +370,8 @@ export const de = {
 export const ru = {
   'trigger': 'Настройки',
   'shortcut.open': 'Открыть настройки',
+  'update.tag': 'Обновить',
+  'update.tagHint': 'Доступна новая версия — открыть «Версия и обновления»',
   'desktop.update.available': 'Обновить',
   'desktop.update.checking': 'Проверка обновлений…',
   'desktop.update.progress': '{percent}%',
@@ -374,6 +413,10 @@ export const ru = {
   'desktopLaunch.title': 'Запуск при старте',
   'desktopLaunch.description': 'Запускается в фоне при входе в систему, сворачиваясь в трей, без заставки',
   'desktopLaunch.error': 'Не удалось включить запуск при старте, попробуйте ещё раз',
+  // 【变更】2026-10-25 (批次二十六 3): уведомления на рабочем столе.
+  'desktopNotification.title': 'Уведомления на рабочем столе',
+  'desktopNotification.description': 'Отправляет системное уведомление, когда задача завершается, завершается с ошибкой или ожидает вашего подтверждения',
+  'desktopNotification.error': 'Не удалось включить уведомления на рабочем столе, попробуйте ещё раз',
   'hostRelease.title': 'Версия сервиса изменена',
   'hostRelease.description': 'Версия сервиса изменилась. На этой странице приостановлены текущие обновления; перезагрузите, чтобы загрузить новую версию.',
   'hostRelease.service': 'Сервис',
@@ -387,6 +430,8 @@ export const ru = {
 export const pt = {
   'trigger': 'Configurações',
   'shortcut.open': 'Abrir configurações',
+  'update.tag': 'Atualizar',
+  'update.tagHint': 'Há uma nova versão — abra Versão e atualizações',
   'desktop.update.available': 'Atualizar',
   'desktop.update.checking': 'Verificando atualizações…',
   'desktop.update.progress': '{percent}%',
@@ -428,6 +473,10 @@ export const pt = {
   'desktopLaunch.title': 'Iniciar na abertura',
   'desktopLaunch.description': 'Inicia em segundo plano ao entrar, minimizado na bandeja e sem a tela de abertura',
   'desktopLaunch.error': 'Não foi possível ativar a inicialização automática, tente novamente',
+  // 【变更】2026-10-25 (批次二十六 3): notificações da área de trabalho.
+  'desktopNotification.title': 'Notificações da área de trabalho',
+  'desktopNotification.description': 'Envia uma notificação do sistema quando uma tarefa termina, falha ou espera sua aprovação',
+  'desktopNotification.error': 'Não foi possível ativar as notificações da área de trabalho, tente novamente',
   'hostRelease.title': 'Versão do serviço alterada',
   'hostRelease.description': 'A versão do serviço mudou. Esta página pausou as atualizações ao vivo; reload para carregar a nova versão.',
   'hostRelease.service': 'Serviço',

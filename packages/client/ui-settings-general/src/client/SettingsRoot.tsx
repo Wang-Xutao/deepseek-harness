@@ -73,6 +73,8 @@ type PanelProps = {
   activeId: string | undefined
   onSelect: (id: string) => void
   onClose: () => void
+  /** Whether the baf-dsh shell reports an available update. */
+  updateAvailable: boolean
 }
 
 /**
@@ -80,14 +82,11 @@ type PanelProps = {
  * header button, a mask click, and document-level Escape (mounted only while
  * open, so the listener lifetime is the panel's).
  */
-function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelProps) {
+function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, updateAvailable }: PanelProps) {
   // Entries can unmount underneath the requested id, so the render-time
   // projection falls back to the first row when the id is gone.
   const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
   const titleId = useId()
-  // 【变更】2026-10-04 (用户问题 3): red dot on the 版本与更新 nav row while
-  // the baf-dsh shell reports an available update (retained check + push).
-  const updateAvailable = useBafUpdateAvailable()
   const featuredUpdateAvailable = useFeaturedPluginsUpdateAvailable()
 
   const panel = useRef<HTMLDivElement>(null)
@@ -173,6 +172,11 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const rows = useSections(s => s)
   const desktopUpdate = useDesktopUpdate(state => state)
   const connectionState = useConnectionState(state => state)
+  // 【变更】2026-10-04 (用户问题 3): red dot on the 版本与更新 nav row while
+  // the baf-dsh shell reports an available update (retained check + push).
+  // 【变更】2026-10-25 (批次二十六 4): the same fact drives the update tag at
+  // the end of the Settings trigger — one source, one reading.
+  const updateAvailable = useBafUpdateAvailable()
   const previousConnectionState = useRef(connectionState)
   const onboardingSteps = useOnboardingSteps(s => s)
   const onboardingActive = useSessions((state) => {
@@ -258,30 +262,51 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   return (
     <>
       <div className={clsx(css.triggerRow, !wide && css.railRow)}>
-        {renderSlot('settings.launcher', {
-          wide, settingsOpen: open, openSettings: actions.open,
-          ...(shortcut?.keys.length ? { settingsShortcut: { keys: shortcut.keys, aria: shortcut.aria } } : {}),
-          openOnboarding: (id) => { close(); setRequestedOnboarding(id) },
-        }, { fallback: <Tooltip disabled={wide || open} label={t('trigger')} shortcutKeys={shortcut?.keys}>
-          <button
-            type="button"
-            className={clsx(css.trigger, !wide && css.rail)}
-            aria-label={t('trigger')}
-            aria-keyshortcuts={shortcut?.aria}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-            onClick={() => { actions.open() }}
-          >
-            {renderSlot('settings.trigger', { wide })}
-            {/* 【变更】2026-10-20 (批次二 1.2): wide-mode hover keycap, the same
-                reveal the Help trigger uses — tooltip stays rail-only. */}
-            {wide && shortcut !== undefined && shortcut.keys.length > 0 && (
-              <span className={css.triggerShortcut} aria-hidden="true">
-                <ShortcutKeys keys={shortcut.keys} />
-              </span>
-            )}
-          </button>
-        </Tooltip> })}
+        <div className={clsx(css.triggerGroup, !wide && css.railGroup)}>
+          {renderSlot('settings.launcher', {
+            wide, settingsOpen: open, openSettings: actions.open,
+            ...(shortcut?.keys.length ? { settingsShortcut: { keys: shortcut.keys, aria: shortcut.aria } } : {}),
+            openOnboarding: (id) => { close(); setRequestedOnboarding(id) },
+          }, { fallback: <Tooltip disabled={wide || open} label={t('trigger')} shortcutKeys={shortcut?.keys}>
+            <button
+              type="button"
+              className={clsx(css.trigger, !wide && css.rail)}
+              aria-label={t('trigger')}
+              aria-keyshortcuts={shortcut?.aria}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              onClick={() => { actions.open() }}
+            >
+              {renderSlot('settings.trigger', { wide })}
+              {/* 【变更】2026-10-20 (批次二 1.2): wide-mode hover keycap, the same
+                  reveal the Help trigger uses — tooltip stays rail-only. */}
+              {wide && shortcut !== undefined && shortcut.keys.length > 0 && (
+                <span className={css.triggerShortcut} aria-hidden="true">
+                  <ShortcutKeys keys={shortcut.keys} />
+                </span>
+              )}
+            </button>
+          </Tooltip> })}
+          {/* 【变更】2026-10-25 (批次二十六 4): the update tag. It sits at the
+              Settings button's end and opens the 版本与更新 page directly, so
+              the user can apply the update without hunting for the section.
+              The rail (collapsed sidebar) has no room for a label, so the tag
+              stays out of it — the panel's red dot still carries the news. */}
+          {updateAvailable && wide ? (
+            <Tooltip label={t('update.tagHint')} side="top">
+              <button
+                type="button"
+                className={css.updateTag}
+                data-testid="settings-update-tag"
+                aria-label={t('update.tagHint')}
+                onClick={() => { openSection('version-updates') }}
+              >
+                <IconDownloadOutlineMedium className={css.updateTagIcon} size={12} />
+                <span>{t('update.tag')}</span>
+              </button>
+            </Tooltip>
+          ) : null}
+        </div>
         <ConnectionIndicator
           state={wide && desktopUpdate.presentation?.phase !== 'installing' ? connectionIndicator : undefined}
           disconnectedLabel={t('connection.error')}
@@ -301,6 +326,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           activeId={activeId}
           onSelect={actions.select}
           onClose={close}
+          updateAvailable={updateAvailable}
         />
       )}
       {/* Dialog chrome and `#root` inert ownership live inside each step's

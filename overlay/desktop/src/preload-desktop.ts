@@ -46,10 +46,32 @@ contextBridge.exposeInMainWorld('bafDesktop', {
   isDesktop: true,
   getPrefs: () => ipcRenderer.invoke('prefs:get'),
   setPrefs: (prefs: unknown) => ipcRenderer.invoke('prefs:set', prefs),
+  // 【变更】2026-10-25 (批次二十六 3): the renderer reports a Session event
+  // (finished / failed / blocked on the user); the shell decides whether to
+  // raise the toast — the `desktopNotifications` pref is the switch.
+  notify: (payload: unknown) => ipcRenderer.invoke('notify:desktop', payload) as Promise<{ shown: boolean }>,
   getVersions: () => ipcRenderer.invoke('update:getVersions') as Promise<DesktopVersions>,
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   startUpdate: () => ipcRenderer.invoke('update:start'),
   getLastCheckResult: () => ipcRenderer.invoke('update:lastCheck'),
+  // 【变更】2026-10-25 (批次二十六 4): the update prompt the app draws itself.
+  // The shell pushes the prompt facts; the renderer draws them and applies the
+  // update through `startUpdate` above.
+  getUpdatePrompt: () => ipcRenderer.invoke('update:getPrompt'),
+  dismissUpdatePrompt: () => ipcRenderer.invoke('update:dismissPrompt') as Promise<boolean>,
+  onUpdatePrompt: (cb: (payload: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      cb(payload)
+    }
+    ipcRenderer.on('update:prompt', listener)
+    return () => {
+      ipcRenderer.off('update:prompt', listener)
+    }
+  },
+  // 【变更】2026-10-25 (批次二十六 4): a required update refuses to let the app
+  // keep running on the old version — the renderer asks the shell to end the
+  // process, because a renderer cannot do it itself.
+  quitApp: () => ipcRenderer.invoke('app:quit') as Promise<boolean>,
   getDshReleaseNotes: () => ipcRenderer.invoke('update:dshReleaseNotes') as Promise<DshReleaseNotes>,
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   onUpdateProgress: (cb: (payload: unknown) => void) => {

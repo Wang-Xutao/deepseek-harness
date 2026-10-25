@@ -377,7 +377,18 @@ export function SidebarRoot({
               wide={wide}
               label={t('panels.more')}
               entries={panels.filter(({ id }) => id !== FIXED_PANEL_ID)
-                .map(({ id, label }) => ({ id, label, pinned: !unpinned.includes(id), active: id === activePanelId }))}
+                .map(({ id, label }) => ({
+                  id,
+                  label,
+                  pinned: !unpinned.includes(id),
+                  active: id === activePanelId,
+                  // 【变更】2026-10-25 (批次二十五 1): the More menu shows the
+                  // SAME icon the rail shows for that launcher — a row that
+                  // moved out of the rail must not lose its face. The renderer
+                  // is lazy: the icon is instantiated only for the rows the
+                  // menu actually draws.
+                  icon: () => renderSlot('sidebar.panellist', { size: 16, active: id === activePanelId }, { only: id }),
+                }))}
               onOpen={(id) => {
                 const entry = officialEntry(id)
                 if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar_more' })

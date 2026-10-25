@@ -4,6 +4,18 @@ import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-c
 /** View whose tab always shows and never enters the customization list. */
 export const FIXED_VIEW_ID = 'chat'
 
+/**
+ * The Views that keep a tab in the Session header strip.
+ *
+ * 【变更】2026-10-25 (批次二十四 4): the strip carries the five views a user
+ * opens constantly — 对话 / 轨迹 / 轨迹图 / 工作流图 / 测试流图 — and every other
+ * View folds into the 更多会话视图 menu. A plugin View therefore no longer adds
+ * a tab to the header; it stays one click away in the menu.
+ */
+export const PRIMARY_VIEW_IDS: readonly string[] = [
+  FIXED_VIEW_ID, 'trajectory', 'trace-graph', 'baf-workflow', 'baf-test-flow',
+]
+
 const NO_VIEWS: readonly string[] = []
 
 /** Unpinned View ids and their only mutation. */

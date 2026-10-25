@@ -91,15 +91,25 @@ describe('the curated overlay manifest', () => {
   // 【变更】2026-10-06 (问题 7): the real overlay/plugin/featured-plugins.json must
   // parse clean and carry the dshmarket entry (dsh-market, already running in the
   // customer's web profile but absent from this distribution) beside feishu.
+  // 【变更】2026-10-25 (批次二十五 4/5/6): the manifest grows the three
+  // capability entries the user asked for — a code-base index, a C language
+  // LSP, and experience/memory — each with the advantage its card claims.
   const overlayPath = join(import.meta.dirname, '..', '..', '..', '..', 'overlay', 'plugin', 'featured-plugins.json')
 
-  it('parses clean and carries feishu plus dshmarket at revision 2', () => {
+  it('parses clean and carries feishu plus dshmarket at revision 3', () => {
     expect(existsSync(overlayPath)).toBe(true)
     const parsed: unknown = JSON.parse(readFileSync(overlayPath, 'utf8'))
     const { manifest, problems } = parseFeaturedManifest(parsed)
     expect(problems).toEqual([])
-    expect(manifest?.revision).toBe(2)
-    expect(manifest?.plugins.map(plugin => plugin.id)).toEqual(['dsh-feishu', 'dshmarket'])
+    expect(manifest?.revision).toBe(3)
+    expect(manifest?.plugins.map(plugin => plugin.id)).toEqual([
+      'dsh-feishu',
+      'dshmarket',
+      'dsh-codebase-memory',
+      'dsh-code-navigator',
+      'dsh-memory',
+      'dsh-memory-vault',
+    ])
     const market = manifest?.plugins.find(plugin => plugin.id === 'dshmarket')
     expect(market).toMatchObject({
       package: 'dshmarket',
@@ -107,6 +117,32 @@ describe('the curated overlay manifest', () => {
       registryFirst: 'https://registry.npmmirror.com',
       peerExemptionExpected: true,
     })
+  })
+
+  // 【变更】2026-10-25 (批次二十五 4/5/6): the three capability entries name
+  // the packages the research verified on npm, and each carries the fields
+  // the installer reads (a `^` range, an absolute homepage, the China mirror
+  // first). The two whose peer ranges do not fit this runtime say so with
+  // `peerExemptionExpected`, which is what turns their install into the
+  // one-time compatibility card.
+  it.each([
+    ['dsh-codebase-memory', '@lovedolove/dsh-codebase-memory-mcp', '^0.1.4', false],
+    ['dsh-code-navigator', 'dsh-code-navigator', '^0.1.0', true],
+    ['dsh-memory', '@openviking/dsh-memory-plugin', '^0.5.29', false],
+    ['dsh-memory-vault', '@jacklika/dsh-memory', '^0.1.7-rc.40', true],
+  ] as const)('recommends %s as %s', (id, pkg, range, exempt) => {
+    const parsed: unknown = JSON.parse(readFileSync(overlayPath, 'utf8'))
+    const { manifest } = parseFeaturedManifest(parsed)
+    const entry = manifest?.plugins.find(plugin => plugin.id === id)
+    expect(entry).toMatchObject({
+      package: pkg,
+      version: range,
+      registryFirst: 'https://registry.npmmirror.com',
+      autoUpdateDefault: true,
+      verified: true,
+    })
+    expect(entry?.homepage.startsWith('https://')).toBe(true)
+    expect(entry?.peerExemptionExpected ?? false).toBe(exempt)
   })
 })
 

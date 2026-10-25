@@ -52,14 +52,14 @@ function VersionRow(props: {
   version: string | undefined
   notes: string | undefined
   /** 【变更】2026-10-05 (插件包说明): static plain-language description of what the row's package DOES. */
-  desc?: string
+  desc?: string | undefined
   /** 【变更】2026-10-20 (批次四 2): small heading line above the notes — the
    * DeepSeek Harness row uses it to name the upstream release its notes came
    * from now that they render INSIDE the row instead of a standalone panel. */
-  caption?: string
+  caption?: string | undefined
   /** Optional testid for the row's li (the upstream-backed dsh row keeps the
    * `dsh-release-notes` anchor the smoke probes query). */
-  testid?: string
+  testid?: string | undefined
 }): ReactElement {
   const { label, version, notes, desc, caption, testid } = props
   // 【变更】2026-10-04 (用户问题 1): notes render one paragraph per line —
@@ -271,10 +271,15 @@ export function UpdatesSection({ t }: UpdatesSectionProps) {
             <span className={css.updateValue}>{targetVersion}</span>
           </p>
           {updateNotes !== undefined && updateNotes.length > 0 ? (
-            <p className={css.updateLine}>
+            /* 【变更】2026-10-25 (批次二十六 4): one paragraph per point. The
+               notes used to run together as one wall of text; a reader has to
+               see the important changes one by one. */
+            <div className={css.updateNotes}>
               <span className={css.updateLabel}>{t('updateNotes')}</span>
-              <span className={css.updateValue}>{updateNotes}</span>
-            </p>
+              {noteParagraphs(updateNotes).map(line => (
+                <p key={line} className={css.updateNote}>{line}</p>
+              ))}
+            </div>
           ) : null}
         </div>
       ) : null}

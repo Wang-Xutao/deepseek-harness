@@ -157,16 +157,26 @@ describe('projectStandardCards (pure projection)', () => {
   })
 })
 
-describe('环境探针版本解析 + PATH 遮蔽修复 (批次十三复核 3)', () => {
-  it('readToolVersion parses the version off the first FOUR lines — Ceedling 1.x greets with a banner', () => {
+describe('环境探针版本解析 + PATH 遮蔽修复 (批次十三复核 3 / 批次二十四 6)', () => {
+  it('readToolVersion parses the version off the banner — Ceedling 1.x greets with a banner', () => {
     // Ceedling 1.0.1 real output: banner on line 1, version on line 3.
     expect(readToolVersion('Welcome to Ceedling!\n\n  Ceedling => 1.0.1-fb1ce6c\n  ---')).toBe('1.0.1')
     // Single-line banners keep resolving.
     expect(readToolVersion('gcovr 8.3')).toBe('8.3')
     expect(readToolVersion('gcc (Rev3, Built by MSYS2 project) 13.2.0')).toBe('13.2.0')
-    // A version buried deeper than line 4 stays unknown (conservative).
-    expect(readToolVersion('a\nb\nc\nd\ne 1.2.3')).toBeUndefined()
     expect(readToolVersion('')).toBeUndefined()
+  })
+
+  it('readToolVersion reads a version a Ruby warning pushed down, and never a path digit', () => {
+    // 【变更】2026-10-25 (批次二十四 6): a warning above the banner pushed the
+    // version past the old four-line window, so the scan covers eight lines.
+    expect(readToolVersion('warning: gems are not installed\nWelcome to Ceedling!\n\n  Ceedling => 1.0.1\n  ---')).toBe('1.0.1')
+    // A gem path names the RUBY version, not the tool's — it never wins.
+    expect(readToolVersion('C:/Ruby33/lib/ruby/gems/3.3.0/gems/ceedling-1.0.1')).toBeUndefined()
+    // A labelled version on a path line still wins (the tool states it).
+    expect(readToolVersion('C:/Ruby33/bin/ruby.exe version 3.2.2')).toBe('3.2.2')
+    // Beyond the eight-line window nothing is read (conservative).
+    expect(readToolVersion('a\nb\nc\nd\ne\nf\ng\nh\ni 1.2.3')).toBeUndefined()
   })
 
   it('decidePipShadowQuarantine quarantines dead No-Python shims before the first working candidate', () => {

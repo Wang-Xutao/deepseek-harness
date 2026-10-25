@@ -30,7 +30,7 @@ import type {
 import type {
   BafWorkflowChangeDetailResult, BafWorkflowChangeOverviewResult,
   BafWorkflowChangeHistoryEntry, WorkflowDashboardRow, WorkflowNodeId,
-  WorkflowTabNodeView, WorkflowTabView,
+  WorkflowTabFileReadResult, WorkflowTabNodeView, WorkflowTabView,
 } from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
 import { formatDuration, formatTimestamp, formatTokens, modeLabel } from './dashboard-format.ts'
@@ -59,6 +59,14 @@ export interface ChangeOverviewRowInjected {
    * that cannot work.
    */
   openArtifact?: (cwd: string, path: string) => boolean
+  /**
+   * 【变更】2026-10-25 (批次二十四 1): read one artifact's text for the
+   * preview window. The 变更总览 page is PROJECT-scoped, so the reader resolves
+   * a LIVE session of the same workspace and reads the file through it —
+   * undefined when the workspace has none, and the page then says so instead
+   * of offering a preview that cannot open.
+   */
+  readArtifact?: (cwd: string, path: string) => Promise<WorkflowTabFileReadResult>
 }
 
 /** Full component props for the 变更总览 settings row. */
@@ -115,7 +123,7 @@ export function historyKeyOf(type: string): string {
  * @returns the row element tree.
  */
 export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactElement {
-  const { t, loadChangeOverview, loadChangeDetail, openArtifact } = props
+  const { t, loadChangeOverview, loadChangeDetail, openArtifact, readArtifact } = props
   const [result, setResult] = useState<BafWorkflowChangeOverviewResult | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
@@ -243,7 +251,9 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
         </span>
         {change.tasks !== undefined && total > 0 && (
           <span className={css.progress} title={t('dashboard.tasksHelp')}>
-            <span className={css.progressFill} style={{ width: `${percent}%` }} />
+            <span className={css.progressTrack}>
+              <span className={css.progressFill} style={{ width: `${percent}%` }} />
+            </span>
             <span className={css.progressText}>{done}/{total}</span>
           </span>
         )}
@@ -253,8 +263,11 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           <span title={t('ovw.columnEnded')}>
             {change.endedAt === undefined ? '—' : formatTimestamp(change.endedAt)}
           </span>
+          {/* 【变更】2026-10-25 (批次二十四 1): the affordance line rides the
+              foot row instead of floating over it — the metrics and the
+              affordance no longer overlap. */}
+          <span className={css.cardCta} aria-hidden>{t('ovw.detailOpen')} ↗</span>
         </span>
-        <span className={css.cardCta} aria-hidden>{t('ovw.detailOpen')} ↗</span>
       </button>
     )
   }
@@ -271,9 +284,13 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           <p className={css.description}>{t('ovw.help')}</p>
         </div>
         <div className={css.heroActions}>
+          {/* 【变更】2026-10-25 (批次二十四 2): the two actions split into
+              primary / secondary — the ledger's own action (导出看板) carries
+              the gold, the utility action (刷新) stays a ghost. Two identical
+              pills side by side read as one loud band and no focal point. */}
           <button
             type="button"
-            className={css.refresh}
+            className={css.refreshPrimary}
             data-testid="change-overview-external"
             disabled={result?.status !== 'ready'}
             title={t('dashboard.board.snapshotNote')}
@@ -333,14 +350,23 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
             </div>
           </div>
 
-          <p className={css.hint}>{t('ovw.clickHint')}</p>
-
-          <div className={css.cards} data-testid="change-overview-cards">
-            {result.rows.map(card)}
-            {result.rows.length === 0 && (
-              <div className={css.empty}>{t('ovw.empty')}</div>
-            )}
-          </div>
+          {/* 【变更】2026-10-25 (批次二十四 2): the list gets its OWN section
+              head — an eyebrow, the record count and the click hint on one
+              hairline rule. The tiles and the cards used to float as one
+              undifferentiated field; the rule says 「these are the records」. */}
+          <section className={css.section}>
+            <div className={css.sectionHead}>
+              <span className={css.sectionLabel}>{t('ovw.listLabel')}</span>
+              <span className={css.sectionCount}>{result.rows.length}</span>
+              <span className={css.sectionHint}>{t('ovw.clickHint')}</span>
+            </div>
+            <div className={css.cards} data-testid="change-overview-cards">
+              {result.rows.map(card)}
+              {result.rows.length === 0 && (
+                <div className={css.empty}>{t('ovw.empty')}</div>
+              )}
+            </div>
+          </section>
         </>
       )}
 
@@ -350,6 +376,7 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           detail={detail}
           loading={detailLoading}
           openArtifact={openArtifact}
+          readArtifact={readArtifact}
           onClose={() => { setOpenChangeId(undefined); setDetail(undefined) }}
           t={t}
         />
@@ -372,9 +399,10 @@ function ChangeDetailWorkspace(props: {
   loading: boolean
   onClose: () => void
   openArtifact: ((cwd: string, path: string) => boolean) | undefined
+  readArtifact: ((cwd: string, path: string) => Promise<WorkflowTabFileReadResult>) | undefined
   t: ChangeOverviewRowProps['t']
 }): React.ReactElement {
-  const { changeId, detail, loading, onClose, openArtifact, t } = props
+  const { changeId, detail, loading, onClose, openArtifact, readArtifact, t } = props
   const view = detail?.status === 'ready' ? detail.view : undefined
   const cwd = detail?.status === 'ready' ? detail.cwd : undefined
   const shell = useRef<HTMLDivElement | null>(null)
@@ -440,6 +468,41 @@ function ChangeDetailWorkspace(props: {
   // 【变更】2026-10-24 (批次二十 3): a failed artifact open is reported in
   // place — the rail says why instead of leaving a button that did nothing.
   const [openNotice, setOpenNotice] = useState<string | undefined>(undefined)
+  // 【变更】2026-10-25 (批次二十四 1): the artifact PREVIEW — the same window
+  // the 测试流图's config files use (title + path + body + 在侧栏打开).
+  const [preview, setPreview] = useState<{ path: string; result?: WorkflowTabFileReadResult } | null>(null)
+
+  // The preview reads through a live session of this workspace; without one
+  // the page says so instead of opening a window that cannot read anything.
+  const openPreview = useCallback(async (path: string): Promise<void> => {
+    if (readArtifact === undefined || cwd === undefined) {
+      setOpenNotice(t('ovw.detailNoSession'))
+      return
+    }
+    setPreview({ path })
+    try {
+      const result = await readArtifact(cwd, path)
+      setPreview(current => (current !== null && current.path === path ? { path, result } : current))
+    } catch (err) {
+      setPreview(current => (current !== null && current.path === path
+        ? { path, result: { status: 'unreadable', reason: err instanceof Error ? err.message : String(err) } }
+        : current))
+    }
+  }, [readArtifact, cwd, t])
+
+  // Escape closes the preview first; the workspace itself closes on Escape too.
+  useEffect(() => {
+    if (preview === null) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        setPreview(null)
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => { document.removeEventListener('keydown', onKey, true) }
+  }, [preview])
+
   const openFile = useCallback((path: string): void => {
     if (openArtifact === undefined || cwd === undefined) {
       setOpenNotice(t('ovw.detailNoSession'))
@@ -467,178 +530,225 @@ function ChangeDetailWorkspace(props: {
       : t('dashboard.activeChanges')
 
   return (
-    <div
-      className={css.wsBackdrop}
-      role="presentation"
-      onClick={onClose}
-    >
+    <>
       <div
-        ref={shell}
-        className={css.ws}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('ovw.detailTitle')}
-        tabIndex={-1}
-        data-testid="change-detail-modal"
-        onClick={(event) => { event.stopPropagation() }}
+        className={css.wsBackdrop}
+        role="presentation"
+        onClick={onClose}
       >
-        {/* ── 顶部 · the identity strip ─────────────────────────────────── */}
-        <header className={css.wsTop} data-testid="change-detail-top">
-          <div className={css.wsTopLead}>
-            <span className={css.wsBrand}>{t('view.brandBaf')}</span>
-            <div className={css.wsTopTitle}>
-              <span className={css.wsTopLabel}>{t('ovw.detailTitle')}</span>
-              <span className={css.wsTopId}>{changeId}</span>
-            </div>
-            <span className={css.wsState} data-state={state}>{stateLabel}</span>
-          </div>
-          <div className={css.wsFigures}>
-            {view !== undefined && (
-              <>
-                <span className={css.figure}>
-                  <span className={css.figureLabel}>{t('ovw.columnMode')}</span>
-                  <span className={css.figureValue}>{modeLabel(view.mode, t)}</span>
-                </span>
-                <span className={css.figure}>
-                  <span className={css.figureLabel}>{t('strip.startedAt')}</span>
-                  <span className={css.figureValue}>{formatTimestamp(view.startedAt)}</span>
-                </span>
-                <span className={css.figure}>
-                  <span className={css.figureLabel}>{t('card.duration')}</span>
-                  <span className={css.figureValue}>{formatDuration(view.metrics?.totalDurationMs)}</span>
-                </span>
-                <span className={css.figure}>
-                  <span className={css.figureLabel}>{t('card.tokens')}</span>
-                  <span className={css.figureValue}>
-                    {formatTokens(view.metrics?.totalInputTokens, view.metrics?.totalOutputTokens)}
-                  </span>
-                </span>
-              </>
-            )}
-          </div>
-          <button type="button" className={css.wsClose} data-testid="change-detail-close" onClick={onClose}>
-            {t('ovw.detailClose')}
-          </button>
-        </header>
-
-        <div className={css.wsBody}>
-          {/* ── 左侧 · classification + artifacts ───────────────────────── */}
-          <aside className={css.wsLeft} data-testid="change-detail-left">
-            {loading && <div className={css.status}>{t('ovw.detailLoading')}</div>}
-            {!loading && detail === undefined && (
-              <div className={css.statusError}>{t('ovw.detailFailed')}</div>
-            )}
-            {!loading && detail?.status === 'unknown-change' && (
-              <div className={css.status} data-testid="change-detail-unknown">
-                {t('ovw.detailUnknownChange')}
+        <div
+          ref={shell}
+          className={css.ws}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('ovw.detailTitle')}
+          tabIndex={-1}
+          data-testid="change-detail-modal"
+          onClick={(event) => { event.stopPropagation() }}
+        >
+          {/* ── 顶部 · the identity strip ─────────────────────────────────── */}
+          <header className={css.wsTop} data-testid="change-detail-top">
+            <div className={css.wsTopLead}>
+              <span className={css.wsBrand}>{t('view.brandBaf')}</span>
+              <div className={css.wsTopTitle}>
+                <span className={css.wsTopLabel}>{t('ovw.detailTitle')}</span>
+                <span className={css.wsTopId}>{changeId}</span>
               </div>
-            )}
-            {!loading && detail?.status === 'no-workspace' && (
-              <div className={css.status}>{t('ovw.noWorkspace')}</div>
-            )}
-            {view !== undefined && (
-              <>
-                <IntakeCard view={view} t={t} />
-                {view.artifacts !== undefined && view.artifacts.length > 0 && (
-                  <ArtifactRail
-                    rows={view.artifacts}
-                    onOpen={(path) => { openFile(path) }}
+              <span className={css.wsState} data-state={state}>{stateLabel}</span>
+            </div>
+            <div className={css.wsFigures}>
+              {view !== undefined && (
+                <>
+                  <span className={css.figure}>
+                    <span className={css.figureLabel}>{t('ovw.columnMode')}</span>
+                    <span className={css.figureValue}>{modeLabel(view.mode, t)}</span>
+                  </span>
+                  <span className={css.figure}>
+                    <span className={css.figureLabel}>{t('strip.startedAt')}</span>
+                    <span className={css.figureValue}>{formatTimestamp(view.startedAt)}</span>
+                  </span>
+                  <span className={css.figure}>
+                    <span className={css.figureLabel}>{t('card.duration')}</span>
+                    <span className={css.figureValue}>{formatDuration(view.metrics?.totalDurationMs)}</span>
+                  </span>
+                  <span className={css.figure}>
+                    <span className={css.figureLabel}>{t('card.tokens')}</span>
+                    <span className={css.figureValue}>
+                      {formatTokens(view.metrics?.totalInputTokens, view.metrics?.totalOutputTokens)}
+                    </span>
+                  </span>
+                </>
+              )}
+            </div>
+            <button type="button" className={css.wsClose} data-testid="change-detail-close" onClick={onClose}>
+              {t('ovw.detailClose')}
+            </button>
+          </header>
+
+          <div className={css.wsBody}>
+            {/* ── 左侧 · classification + artifacts ───────────────────────── */}
+            <aside className={css.wsLeft} data-testid="change-detail-left">
+              {loading && <div className={css.status}>{t('ovw.detailLoading')}</div>}
+              {!loading && detail === undefined && (
+                <div className={css.statusError}>{t('ovw.detailFailed')}</div>
+              )}
+              {!loading && detail?.status === 'unknown-change' && (
+                <div className={css.status} data-testid="change-detail-unknown">
+                  {t('ovw.detailUnknownChange')}
+                </div>
+              )}
+              {!loading && detail?.status === 'no-workspace' && (
+                <div className={css.status}>{t('ovw.noWorkspace')}</div>
+              )}
+              {view !== undefined && (
+                <>
+                  <IntakeCard view={view} t={t} />
+                  {view.artifacts !== undefined && view.artifacts.length > 0 && (
+                    <ArtifactRail
+                      rows={view.artifacts}
+                      onOpen={(path) => { void openPreview(path) }}
+                      t={t}
+                    />
+                  )}
+                  {openArtifact === undefined && (
+                    <p className={css.wsNote} data-testid="change-detail-no-session">{t('ovw.detailNoSession')}</p>
+                  )}
+                  {openNotice !== undefined && (
+                    <p className={css.wsWarn} data-testid="change-detail-open-failed">{openNotice}</p>
+                  )}
+                </>
+              )}
+            </aside>
+
+            {/* ── 中间 · the complete workflow graph ───────────────────────── */}
+            <section className={css.wsCenter}>
+              <div className={css.wsCenterHead}>
+                <span className={css.wsCenterLabel}>{t('ovw.detailGraph')}</span>
+                <span className={css.wsCenterHint}>{t('ovw.detailGraphHint')}</span>
+              </div>
+              {view !== undefined && (
+                <div className={css.wsCanvas} data-testid="change-detail-graph">
+                  <FlowCanvas
+                    view={view}
+                    selected={selected ?? null}
+                    onActivate={(id) => { setSelected(id as WorkflowNodeId) }}
+                    onOpenArtifact={(path) => { void openPreview(path) }}
                     t={t}
                   />
-                )}
-                {openArtifact === undefined && (
-                  <p className={css.wsNote} data-testid="change-detail-no-session">{t('ovw.detailNoSession')}</p>
-                )}
-                {openNotice !== undefined && (
-                  <p className={css.wsWarn} data-testid="change-detail-open-failed">{openNotice}</p>
-                )}
-              </>
-            )}
-          </aside>
-
-          {/* ── 中间 · the complete workflow graph ───────────────────────── */}
-          <section className={css.wsCenter}>
-            <div className={css.wsCenterHead}>
-              <span className={css.wsCenterLabel}>{t('ovw.detailGraph')}</span>
-              <span className={css.wsCenterHint}>{t('ovw.detailGraphHint')}</span>
-            </div>
-            {view !== undefined && (
-              <div className={css.wsCanvas} data-testid="change-detail-graph">
-                <FlowCanvas
-                  view={view}
-                  selected={selected ?? null}
-                  onActivate={(id) => { setSelected(id as WorkflowNodeId) }}
-                  onOpenArtifact={(path) => { openFile(path) }}
-                  t={t}
-                />
-              </div>
-            )}
-            {view === undefined && !loading && (
-              <div className={css.wsCenterEmpty}>{t('ovw.detailFailed')}</div>
-            )}
-          </section>
-
-          {/* ── 右侧 · stage head + checklist + detail + history ─────────── */}
-          <aside className={css.wsRight} data-testid="change-detail-right">
-            {view !== undefined && (
-              <>
-                <div className={css.wsStageHead}>
-                  <span className={css.wsStageLabel}>{t('ovw.detailStageHead')}</span>
-                  <span className={css.wsStageName}>
-                    {terminal !== null
-                      ? t(`node.${terminal}`)
-                      : selectedNode === undefined
-                        ? t('ovw.detailSelectStage')
-                        : t(`node.${selectedNode.id}`)}
-                  </span>
-                  {terminal !== null && (
-                    <span className={css.wsStageStatus} data-status={terminal}>
-                      {t(`status.${terminal}`)}
-                    </span>
-                  )}
-                  {selectedNode !== undefined && (
-                    <span className={css.wsStageStatus} data-status={selectedNode.status}>
-                      {t(`status.${selectedNode.status}`)}
-                    </span>
-                  )}
                 </div>
-                <div className={css.wsRightScroll}>
-                  {terminal !== null ? (
-                    <section className={css.wsCard} data-testid="change-detail-terminal">
-                      <div className={css.terminalRow}>
-                        <span className={css.intakeKey}>{t('detail.status')}</span>
-                        <span className={css.intakeValue}>{t(`status.${terminal}`)}</span>
-                      </div>
-                      <div className={css.terminalRow}>
-                        <span className={css.intakeKey}>{t('detail.artifacts')}</span>
-                        <span className={css.intakeValue}>{t(`terminal.${terminal}.artifacts`)}</span>
-                      </div>
-                      <div className={css.terminalRow}>
-                        <span className={css.intakeKey}>{t('detail.completion')}</span>
-                        <span className={css.intakeValue}>{t(`terminal.${terminal}.completion`)}</span>
-                      </div>
-                    </section>
-                  ) : selectedNode === undefined ? (
-                    <p className={css.wsHint}>{t('ovw.detailStageHint')}</p>
-                  ) : (
-                    <>
-                      <StageChecklist node={selectedNode} t={t} />
-                      <section className={css.wsCard}>
-                        <BilingualDetail node={selectedNode} t={t} nextEdge={nextEdge} />
+              )}
+              {view === undefined && !loading && (
+                <div className={css.wsCenterEmpty}>{t('ovw.detailFailed')}</div>
+              )}
+            </section>
+
+            {/* ── 右侧 · stage head + checklist + detail + history ─────────── */}
+            <aside className={css.wsRight} data-testid="change-detail-right">
+              {view !== undefined && (
+                <>
+                  <div className={css.wsStageHead}>
+                    <span className={css.wsStageLabel}>{t('ovw.detailStageHead')}</span>
+                    <span className={css.wsStageName}>
+                      {terminal !== null
+                        ? t(`node.${terminal}`)
+                        : selectedNode === undefined
+                          ? t('ovw.detailSelectStage')
+                          : t(`node.${selectedNode.id}`)}
+                    </span>
+                    {terminal !== null && (
+                      <span className={css.wsStageStatus} data-status={terminal}>
+                        {t(`status.${terminal}`)}
+                      </span>
+                    )}
+                    {selectedNode !== undefined && (
+                      <span className={css.wsStageStatus} data-status={selectedNode.status}>
+                        {t(`status.${selectedNode.status}`)}
+                      </span>
+                    )}
+                  </div>
+                  <div className={css.wsRightScroll}>
+                    {terminal !== null ? (
+                      <section className={css.wsCard} data-testid="change-detail-terminal">
+                        <div className={css.terminalRow}>
+                          <span className={css.intakeKey}>{t('detail.status')}</span>
+                          <span className={css.intakeValue}>{t(`status.${terminal}`)}</span>
+                        </div>
+                        <div className={css.terminalRow}>
+                          <span className={css.intakeKey}>{t('detail.artifacts')}</span>
+                          <span className={css.intakeValue}>{t(`terminal.${terminal}.artifacts`)}</span>
+                        </div>
+                        <div className={css.terminalRow}>
+                          <span className={css.intakeKey}>{t('detail.completion')}</span>
+                          <span className={css.intakeValue}>{t(`terminal.${terminal}.completion`)}</span>
+                        </div>
                       </section>
-                    </>
-                  )}
-                  <HistoryPanel
-                    history={detail?.status === 'ready' ? detail.history : []}
-                    t={t}
-                  />
-                </div>
-              </>
-            )}
-          </aside>
+                    ) : selectedNode === undefined ? (
+                      <p className={css.wsHint}>{t('ovw.detailStageHint')}</p>
+                    ) : (
+                      <>
+                        <StageChecklist node={selectedNode} t={t} />
+                        <section className={css.wsCard}>
+                          <BilingualDetail node={selectedNode} t={t} nextEdge={nextEdge} />
+                        </section>
+                      </>
+                    )}
+                    <HistoryPanel
+                      history={detail?.status === 'ready' ? detail.history : []}
+                      t={t}
+                    />
+                  </div>
+                </>
+              )}
+            </aside>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* 【变更】2026-10-25 (批次二十四 1): the artifact PREVIEW — the same
+          window the 测试流图's config files use, so a 文档产物 reads the same
+          wherever it is opened. */}
+      {preview !== null && (
+        <div
+          className={css.modalBackdrop}
+          data-testid="change-artifact-preview"
+          onClick={(event) => { if (event.target === event.currentTarget) setPreview(null) }}
+        >
+          <div className={css.modal} role="dialog" aria-modal="true" aria-label={t('ovw.artifactPreview')}>
+            <div className={css.modalHead}>
+              <span className={css.modalTitle}>{t('ovw.artifactPreview')}</span>
+              <span className={css.modalPath} title={preview.result?.path ?? preview.path}>
+                {preview.result?.path ?? preview.path}
+              </span>
+              <button
+                type="button"
+                className={css.modalClose}
+                data-testid="change-artifact-preview-close"
+                onClick={() => { setPreview(null) }}
+              >
+                {t('ovw.artifactPreviewClose')}
+              </button>
+            </div>
+            <pre className={css.modalBody} data-testid="change-artifact-preview-body">
+              {preview.result === undefined
+                ? t('ovw.artifactPreviewLoading')
+                : preview.result.status === 'ready' ? preview.result.content
+                  : preview.result.status === 'missing' ? t('ovw.artifactPreviewMissing')
+                    : `${t('ovw.artifactPreviewFailed')}${preview.result.reason ?? ''}`}
+            </pre>
+            <div className={css.modalFoot}>
+              <button
+                type="button"
+                className={css.modalAction}
+                data-testid="change-artifact-preview-open"
+                onClick={() => { openFile(preview.path) }}
+              >
+                {t('ovw.artifactPreviewOpen')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

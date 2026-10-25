@@ -832,26 +832,50 @@ function GatesFlow({ data, t }: {
 
   return (
     <div className={css.flow} data-testid="baf-gates-flow" aria-label={t('gates.canvasAria')}>
+      {/* 【变更】2026-10-25 (批次二十四 2): the page gains the LEDGER's
+          structure — a hero band (the BAF mark, the page's identity, what it
+          shows) and a row of figure plates (确认门 / 阶段门禁 / 状态节点). The
+          确认门 tab and the 变更总览 tab are the two pages of the 工作流
+          surface; before, one opened with a console bar and the other with a
+          hero, and they did not read as siblings. The counts that used to sit
+          inside the frame's console bar are page figures now, so the frame is
+          the chart alone. */}
+      <header className={css.hero} data-testid="baf-gates-hero">
+        <span className={css.heroBrand}>{t('view.brandBaf')}</span>
+        <div className={css.heroText}>
+          <span className={css.heroLabel}>{t('gates.heroLabel')}</span>
+          <h2 className={css.heroTitle}>{t('gates.heroTitle')}</h2>
+          <p className={css.heroDescription}>{t('gates.heroHelp')}</p>
+        </div>
+      </header>
+
+      <div className={css.tiles} data-testid="baf-gates-tiles">
+        <div className={css.tile} data-tone="confirm">
+          <span className={css.tileValue}>{String(allCanvasGates.length)}</span>
+          <span className={css.tileLabel}>{t('gates.sectionConfirm')}</span>
+        </div>
+        <div className={css.tile} data-tone="stage">
+          <span className={css.tileValue}>{String(data.stageGates.length)}</span>
+          <span className={css.tileLabel}>{t('gates.sectionStage')}</span>
+        </div>
+        <div className={css.tile} data-tone="states">
+          <span className={css.tileValue}>{String(detailSpecs.length)}</span>
+          <span className={css.tileLabel}>{t('gates.tileStates')}</span>
+        </div>
+      </div>
+
       <div className={css.flowWrap}>
         {/* 【变更】2026-10-22 (批次十四 2): the legend bar (状态节点 / 确认门) is
             DELETED — the node anatomy is self-explanatory now, no legend. */}
         {/* 【变更】2026-10-24 (批次二十 2): the CONSOLE BAR — the frame's control
             deck: the chart's own name (the visible echo of the region's
-            accessible name, so it is hidden from AT) + the two live counts
-            (确认门 / 阶段门禁). The numbers give the page a numeric focal
-            point and the bar gives the frame its identity. */}
+            accessible name, so it is hidden from AT).
+            【变更】2026-10-25 (批次二十四 2): the two live counts left the bar
+            for the page's figure plates, so the bar says what the frame IS and
+            the plates say how big it is. The quiet hint replaces them. */}
         <div className={css.consoleBar} data-testid="baf-gates-console">
           <span className={css.consoleLabel} aria-hidden="true">{t('gates.canvasAria')}</span>
-          <div className={css.consoleStats}>
-            <div className={css.statChip}>
-              <span className={css.statLabel}>{t('gates.sectionConfirm')}</span>
-              <span className={css.statValue}>{String(allCanvasGates.length)}</span>
-            </div>
-            <div className={css.statChip}>
-              <span className={css.statLabel}>{t('gates.sectionStage')}</span>
-              <span className={css.statValue}>{String(data.stageGates.length)}</span>
-            </div>
-          </div>
+          <span className={css.consoleHint}>{t('gates.canvasHint')}</span>
         </div>
         {/* 【变更】2026-10-20 (批次三 4.5): the canvas and the 门禁明细 split
             the frame left-right (the 状态脚本 split layout); clicking a canvas

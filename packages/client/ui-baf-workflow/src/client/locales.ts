@@ -343,6 +343,8 @@ export type WorkflowTabKey =
   // 右侧 rail). The workspace reuses the session graph's own components, so the
   // copy here only names the zones the session tab does not have.
   | 'ovw.ledgerLabel'
+  // 【变更】2026-10-25 (批次二十四 2): the ledger's list section head.
+  | 'ovw.listLabel'
   | 'ovw.detailGraph'
   | 'ovw.detailGraphHint'
   | 'ovw.detailStageHead'
@@ -357,6 +359,15 @@ export type WorkflowTabKey =
   | 'ovw.detailOpenSpec'
   | 'ovw.detailNoSession'
   | 'ovw.detailOpenFailed'
+  // 【变更】2026-10-25 (批次二十四 1): the 文档产物 preview modal — the change
+  // detail's artifacts open in the SAME preview window the 测试流图's config
+  // files use.
+  | 'ovw.artifactPreview'
+  | 'ovw.artifactPreviewClose'
+  | 'ovw.artifactPreviewLoading'
+  | 'ovw.artifactPreviewMissing'
+  | 'ovw.artifactPreviewFailed'
+  | 'ovw.artifactPreviewOpen'
   | 'hist.event'
   | 'hist.intakeClassified'
   | 'hist.intakeConfirmed'
@@ -432,6 +443,14 @@ export type WorkflowTabKey =
   | 'gates.branchTitle'
   | 'gates.conditionsCount'
   | 'gates.noGate'
+  // 【变更】2026-10-25 (批次二十四 2): the page's own chrome — the hero band
+  // (identity + purpose), the figure plates (the live counts), and the frame's
+  // quiet hint. They make the 确认门 tab a sibling of the 变更总览 tab.
+  | 'gates.heroLabel'
+  | 'gates.heroTitle'
+  | 'gates.heroHelp'
+  | 'gates.tileStates'
+  | 'gates.canvasHint'
   // 【变更】2026-10-18 (工作流确认门 2.3): the flow copy (canvas since gone).
   | 'gates.canvasAria'
   | 'gates.stageGate'
@@ -836,6 +855,8 @@ export const en: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-24 (批次二十 1/3): the ledger's console copy + the 变更详情
   // workspace's four zones.
   'ovw.ledgerLabel': 'Change ledger',
+  // 【变更】2026-10-25 (批次二十四 2): the ledger's list section head.
+  'ovw.listLabel': 'Change records',
   'ovw.detailGraph': 'Workflow graph',
   'ovw.detailGraphHint': 'Scroll to pan · Ctrl + wheel to zoom · click a node for its stage',
   'ovw.detailStageHead': 'Stage',
@@ -850,6 +871,12 @@ export const en: Record<WorkflowTabKey, string> = {
   'ovw.detailOpenSpec': 'Openspec',
   'ovw.detailNoSession': 'No live session in this workspace — the artifacts are read-only here.',
   'ovw.detailOpenFailed': 'Could not open the artifact in the sidebar.',
+  'ovw.artifactPreview': 'Document preview',
+  'ovw.artifactPreviewClose': 'Close',
+  'ovw.artifactPreviewLoading': 'Loading the document…',
+  'ovw.artifactPreviewMissing': 'This document does not exist yet.',
+  'ovw.artifactPreviewFailed': 'Could not read the document: ',
+  'ovw.artifactPreviewOpen': 'Open in the sidebar',
   'hist.event': 'Event',
   'hist.intakeClassified': 'Change classified',
   'hist.intakeConfirmed': 'Classification confirmed',
@@ -913,6 +940,12 @@ export const en: Record<WorkflowTabKey, string> = {
   'gates.branchTitle': 'Branches',
   'gates.conditionsCount': 'pass conditions: ',
   'gates.noGate': 'no gate on this node',
+  // 【变更】2026-10-25 (批次二十四 2): the page's own chrome.
+  'gates.heroLabel': 'Confirmation gate ledger',
+  'gates.heroTitle': 'Workflow confirmation gates',
+  'gates.heroHelp': 'Every stage of the flow with the gate that guards it — click a node or a gate on the chart to read its detail.',
+  'gates.tileStates': 'State nodes',
+  'gates.canvasHint': 'Click a node or a gate to read its detail',
   // 【变更】2026-10-18 (工作流确认门 2.3): flow-canvas copy.
   'gates.canvasAria': 'Workflow confirmation-gate flow chart',
   'gates.stageGate': 'stage gate:',
@@ -1311,6 +1344,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-24 (批次二十 1/3): the ledger's console copy + the 变更详情
   // workspace's four zones.
   'ovw.ledgerLabel': '变更台账',
+  // 【变更】2026-10-25 (批次二十四 2): the ledger's list section head.
+  'ovw.listLabel': '变更记录',
   'ovw.detailGraph': '工作流图',
   'ovw.detailGraphHint': '滚轮平移 · Ctrl + 滚轮缩放 · 点击节点查看该阶段',
   'ovw.detailStageHead': '阶段详情',
@@ -1325,6 +1360,12 @@ export const zh: Record<WorkflowTabKey, string> = {
   'ovw.detailOpenSpec': '需要 Openspec',
   'ovw.detailNoSession': '该工作区没有可用会话 — 此处的阶段产物仅作只读展示。',
   'ovw.detailOpenFailed': '无法在侧栏打开该产物。',
+  'ovw.artifactPreview': '文档预览',
+  'ovw.artifactPreviewClose': '关闭',
+  'ovw.artifactPreviewLoading': '正在读取文档…',
+  'ovw.artifactPreviewMissing': '该文档尚未生成。',
+  'ovw.artifactPreviewFailed': '无法读取文档：',
+  'ovw.artifactPreviewOpen': '在侧栏打开',
   'hist.event': '事件',
   'hist.intakeClassified': '变更分类',
   'hist.intakeConfirmed': '分类已确认',
@@ -1388,6 +1429,12 @@ export const zh: Record<WorkflowTabKey, string> = {
   'gates.branchTitle': '分支',
   'gates.conditionsCount': '完成条件数：',
   'gates.noGate': '本节点无门禁',
+  // 【变更】2026-10-25 (批次二十四 2): 页面自身的标识区。
+  'gates.heroLabel': '确认门台账',
+  'gates.heroTitle': '工作流确认门',
+  'gates.heroHelp': '流程的每一个阶段与守在它门口的门禁 — 点击图上的节点或门禁即可查看明细。',
+  'gates.tileStates': '状态节点',
+  'gates.canvasHint': '点击节点或门禁查看明细',
   // 【变更】2026-10-18 (工作流确认门 2.3): 流程图画布文案。
   'gates.canvasAria': '工作流确认门流程图',
   'gates.stageGate': '阶段门：',

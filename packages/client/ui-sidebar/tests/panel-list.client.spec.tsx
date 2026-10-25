@@ -91,8 +91,10 @@ function ProbeActions({ entries, onOpen, onPinnedChange, onDismiss }: PropsRunti
     <>
       {entries.map(entry => (
         <span key={entry.id}>
+          {/* 【变更】2026-10-25 (批次二十五 1): the More-menu row carries the
+              launcher's own icon, so the probe draws it like the real menu. */}
           <button type="button" role="menuitem" aria-current={entry.active ? 'page' : undefined}
-            onClick={() => { onOpen(entry.id) }}>Open {entry.label}</button>
+            onClick={() => { onOpen(entry.id) }}>{entry.icon?.()}Open {entry.label}</button>
           <button type="button" role="menuitem" onClick={() => { onPinnedChange(entry.id, !entry.pinned) }}>
             {entry.pinned ? 'Unpin' : 'Pin'} {entry.label}
           </button>
@@ -369,6 +371,22 @@ describe('sidebar launcher pins', () => {
     await waitFor(() => { expect(within(navigation).queryByRole('button', { name: 'More' })).toBeNull() })
   })
 
+  // 【变更】2026-10-25 (批次二十五 1): a launcher that moved out of the rail
+  // keeps its face. The More menu draws the SAME icon the rail draws, at the
+  // menu's 16px size — a row that lost its glyph read as a different object.
+  it('keeps the rail icon on the More-menu rows', async () => {
+    const { runtime, locale, view } = await bench()
+    await mountPanels(runtime, locale)
+    await mountProbeActions(runtime)
+    const navigation = await view.findByRole('navigation', { name: 'Global panels' })
+    fireEvent.click(await within(navigation).findByRole('button', { name: 'More' }))
+    const menu = within(view.getByRole('menu'))
+    for (const id of [ALPHA, BETA]) {
+      const icon = menu.getByTestId(`${id}-icon`)
+      expect(icon.querySelector('svg')?.getAttribute('width')).toBe('16')
+    }
+  })
+
   it.each([false, true])('opens, pins, and dismisses through the More menu with collapsed=%s', async (collapsed) => {
     const { runtime, locale, layout, view } = await bench(collapsed)
     await mountPanels(runtime, locale)
@@ -441,21 +459,39 @@ describe('sidebar entry click analytics', () => {
     await mountPanel(b.runtime, { id: PLUGINS, heading: 'Plugins content', label: 'Plugins', order: 0 })
     const schedules = await mountPanel(b.runtime, { id: SCHEDULES, heading: 'Automation content', label: 'Automation', order: 5 })
     const navigation = await b.view.findByRole('navigation', { name: 'Global panels' })
-    await within(navigation).findByRole('button', { name: 'Automation' })
+    // 【变更】2026-10-25 (批次二十四 3): 自动化任务 starts in the More menu, so
+    // the rail carries the Plugins row and the two test panels only.
+    await within(navigation).findByRole('button', { name: 'Beta panel' })
     return { ...b, track, schedules, navigation }
   }
 
-  it('reports the Plugins and Automation rows and leaves other panel rows unreported', async () => {
+  it('reports the Plugins row and leaves other panel rows unreported', async () => {
     const { layout, track, navigation } = await analyticsBench()
-    for (const name of ['Plugins', 'Automation', 'Alpha panel', 'Beta panel']) {
+    for (const name of ['Plugins', 'Alpha panel', 'Beta panel']) {
       fireEvent.click(within(navigation).getByRole('button', { name }))
     }
     expect(track.mock.calls).toEqual([
       ['sidebar_menu_click', { menu_name: 'plugin', position: 'sidebar' }],
+    ])
+    expect(layout.selectPanel.mock.calls).toEqual([[PLUGINS], [ALPHA], [BETA]])
+    expect(track.mock.invocationCallOrder[0]).toBeLessThan(layout.selectPanel.mock.invocationCallOrder[0]!)
+  })
+
+  // 【变更】2026-10-25 (批次二十四 3): a launcher the user pins back into the
+  // rail reports like any other official row.
+  it('reports a pinned Automation row at the sidebar position', async () => {
+    const { runtime, layout, track, navigation, view } = await analyticsBench()
+    await mountProbeActions(runtime)
+    fireEvent.click(await within(navigation).findByRole('button', { name: 'More' }))
+    const menu = within(view.getByRole('menu'))
+    fireEvent.click(menu.getByRole('menuitem', { name: 'Pin Automation' }))
+    const automation = await within(navigation).findByRole('button', { name: 'Automation' })
+    fireEvent.click(automation)
+    expect(track.mock.calls).toEqual([
+      MORE_CLICK,
       ['sidebar_menu_click', { menu_name: 'cron', position: 'sidebar' }],
     ])
-    expect(layout.selectPanel.mock.calls).toEqual([[PLUGINS], [SCHEDULES], [ALPHA], [BETA]])
-    expect(track.mock.invocationCallOrder[0]).toBeLessThan(layout.selectPanel.mock.invocationCallOrder[0]!)
+    expect(layout.selectPanel).toHaveBeenLastCalledWith(SCHEDULES)
   })
 
   it('reports every More button click, whether it opens or closes the menu', async () => {

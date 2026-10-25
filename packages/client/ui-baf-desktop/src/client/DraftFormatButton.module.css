@@ -56,6 +56,30 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* 【变更】2026-10-25 (批次二十四 3): the working state — the model is
+   arranging the draft. The glyph turns into a spinner and the button holds
+   its ground (no lift, no hover wash) so the control reads as BUSY, not as a
+   second action. */
+.button[data-baf-draft-format-working='true'] {
+  cursor: progress;
+  color: var(--baf-accent);
+  border-color: color-mix(in srgb, var(--baf-accent) 28%, transparent);
+}
+
+.button[data-baf-draft-format-working='true']:hover {
+  background: transparent;
+  color: var(--baf-accent);
+}
+
+.spinner {
+  animation: draftSpin 900ms linear infinite;
+}
+
+@keyframes draftSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 :global(body[data-ds-dark-theme]) .button {
   --baf-accent: #d9b64c;
 }
@@ -63,5 +87,11 @@
 @media (prefers-reduced-motion: reduce) {
   .button {
     transition: none;
+  }
+
+  /* 【变更】2026-10-25 (批次二十四 3): a reduced-motion host gets a still
+     glyph — the state still reads, it just does not move. */
+  .spinner {
+    animation: none;
   }
 }

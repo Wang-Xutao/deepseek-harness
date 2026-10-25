@@ -11,6 +11,12 @@
  * system; the 变更详情 workspace additionally re-declares the SESSION graph's
  * own token values, so the shared `FlowCanvas` renders there exactly as it
  * does in the conversation tab.
+ * 【变更】2026-10-25 (批次二十五 3): the ledger sheds its gold COVERAGE, the
+ * same pass the 确认门 row takes. The gold was a FILL — a 26% hero wash, 42%
+ * accent lines, 60% progress bars, a 12% gold wash under every state chip —
+ * and the page read as one loud gold field instead of a ledger. The accent
+ * lines and glow tokens drop to hairline weight, the washes to a trace, and
+ * the surfaces carry the page. The hue itself is untouched.
  */
 
 .block {
@@ -22,8 +28,8 @@
   --wf-accent-soft: color-mix(in srgb, var(--wf-accent) 72%, #fff);
   --wf-accent-ink: #1a1406;
   --wf-accent-text: color-mix(in srgb, var(--wf-accent) 60%, var(--dsw-alias-label-primary));
-  --wf-accent-line: color-mix(in srgb, var(--wf-accent) 42%, transparent);
-  --wf-accent-glow: color-mix(in srgb, var(--wf-accent) 26%, transparent);
+  --wf-accent-line: color-mix(in srgb, var(--wf-accent) 24%, transparent);
+  --wf-accent-glow: color-mix(in srgb, var(--wf-accent) 13%, transparent);
   --wf-surface: var(--dsw-alias-bg-layer-2);
   --wf-canvas: var(--dsw-alias-bg-base);
   --wf-ink: var(--dsw-alias-label-primary);
@@ -40,7 +46,7 @@
   --wf-danger: var(--dsw-alias-text-danger);
   --wf-idle: var(--dsw-alias-state-idle-primary);
   padding: 16px 0;
-  border-bottom: 0.5px solid var(--wf-line);
+  border-bottom: 1px solid var(--wf-line);
 }
 
 /* ── motion ────────────────────────────────────────────────────────────── */
@@ -67,11 +73,11 @@
   gap: 14px;
   padding: 16px 18px;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid var(--wf-accent-line);
   background:
     radial-gradient(520px 140px at 8% -40%, var(--wf-accent-glow), transparent 70%),
-    linear-gradient(120deg, color-mix(in srgb, var(--wf-accent) 12%, transparent), transparent 58%),
+    linear-gradient(120deg, color-mix(in srgb, var(--wf-accent) 5%, transparent), transparent 58%),
     var(--wf-surface);
   box-shadow:
     0 18px 38px -30px color-mix(in srgb, #000 55%, transparent),
@@ -89,8 +95,8 @@
   letter-spacing: 0.14em;
   color: #fff;
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--wf-accent) 55%, #241a08),
-    color-mix(in srgb, var(--wf-accent) 62%, #241a08));
+    color-mix(in srgb, var(--wf-accent) 36%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 44%, #241a08));
   border-radius: 5px;
   padding: 0.22rem 0.44rem;
   box-shadow: 0 6px 14px -10px color-mix(in srgb, #000 70%, transparent);
@@ -134,32 +140,71 @@
   gap: 8px;
 }
 
-/* 【变更】2026-10-24 (批次二十 1): the two actions are raised buttons — the
-   gold one is the ledger's own action, the ghost one the neutral. */
+/* 【变更】2026-10-25 (批次二十四 2): the two actions are GRADED — the
+   ledger's own action (导出看板) is the gold primary, the utility action
+   (刷新) is a ghost. Before, both wore the same gold-tinted pill, so the
+   header carried two identical shapes and no focal point. */
 .refresh {
   flex: none;
   padding: 0 14px;
   height: 32px;
-  border: 1px solid var(--wf-accent-line);
+  border: 1px solid var(--wf-line);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  background: transparent;
   font: inherit;
   font-size: 12px;
   line-height: 20px;
-  color: var(--wf-ink);
+  color: var(--wf-ink-2);
   cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
 .refresh:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--wf-accent) 24%, transparent);
-  border-color: var(--wf-accent);
+  background: color-mix(in srgb, var(--wf-ink) 7%, transparent);
+  border-color: var(--wf-line-strong);
+  color: var(--wf-ink);
   transform: translateY(-1px);
-  box-shadow: 0 8px 18px -14px var(--wf-accent-glow);
 }
 
 .refresh:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
+  cursor: default;
+}
+
+.refresh:focus-visible,
+.refreshPrimary:focus-visible {
+  outline: 2px solid var(--wf-accent);
+  outline-offset: 2px;
+}
+
+/* The gold primary — the one action the ledger exists to offer. */
+.refreshPrimary {
+  flex: none;
+  padding: 0 16px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 46%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--wf-accent) 62%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 72%, #241a08));
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 700;
+  color: #1a1406;
+  cursor: pointer;
+  box-shadow: 0 10px 22px -14px var(--wf-accent-glow);
+  transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.refreshPrimary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px -14px var(--wf-accent-glow);
+}
+
+.refreshPrimary:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 
@@ -209,10 +254,10 @@
   gap: 2px;
   padding: 12px 14px;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 13px;
   border: 1px solid var(--wf-accent-line);
   background:
-    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 9%, transparent), transparent 62%),
+    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 4%, transparent), transparent 62%),
     var(--wf-surface);
   box-shadow:
     0 14px 30px -26px color-mix(in srgb, #000 55%, transparent),
@@ -235,7 +280,7 @@
   height: 2px;
   background: linear-gradient(90deg,
     transparent,
-    color-mix(in srgb, var(--wf-accent) 85%, transparent),
+    color-mix(in srgb, var(--wf-accent) 40%, transparent),
     transparent);
 }
 
@@ -248,7 +293,7 @@
 }
 
 .tile[data-tone="tasks"]::before {
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--wf-accent) 85%, transparent), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--wf-accent) 38%, transparent), transparent);
 }
 
 .tileValue {
@@ -271,11 +316,52 @@
   letter-spacing: 0.02em;
 }
 
-.hint {
-  margin: 14px 0 0;
+/* ── the records section ───────────────────────────────────────────────── */
+
+/* 【变更】2026-10-25 (批次二十四 2): the list owns a section head — an
+   eyebrow, the record count and the click hint over one hairline rule. The
+   figures and the records used to float as one undifferentiated field; the
+   rule says 「these are the records」. */
+.section {
+  margin-top: 18px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--wf-line);
+}
+
+.sectionLabel {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wf-accent-text);
+}
+
+.sectionCount {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--wf-ink) 5%, transparent);
+  color: var(--wf-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.sectionHint {
+  min-width: 0;
+  margin-left: auto;
   font-size: 11px;
   line-height: 16px;
   color: var(--wf-ink-3);
+  text-align: right;
 }
 
 /* ── the change cards ──────────────────────────────────────────────────── */
@@ -303,7 +389,7 @@
   border-radius: 13px;
   border: 1px solid var(--wf-accent-line);
   background:
-    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 8%, transparent), transparent 58%),
+    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 4%, transparent), transparent 58%),
     var(--wf-surface);
   box-shadow:
     0 16px 34px -30px color-mix(in srgb, #000 60%, transparent),
@@ -312,12 +398,41 @@
   animation: ovwFadeUp 380ms ease both;
 }
 
+/* 【变更】2026-10-25 (批次二十四 2): the hover sheen — the same 「金箔」 material
+   language as the hero, a single low-contrast pass of light across the plate.
+   It is the one motion the card owns; nothing else moves on hover. */
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg,
+    transparent 38%,
+    color-mix(in srgb, #fff 13%, transparent) 50%,
+    transparent 62%);
+  transform: translateX(-120%);
+  opacity: 0;
+}
+
+.card:hover::after {
+  animation: ovwSweep 900ms ease-out;
+  opacity: 1;
+}
+
 .card:hover {
   transform: translateY(-3px);
   border-color: var(--wf-accent);
   box-shadow:
     0 22px 40px -28px var(--wf-accent-glow),
     inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+}
+
+/* 【变更】2026-10-25 (批次二十四 2): the card is a real button, so it needs a
+   real focus ring — keyboard users got nothing to follow. */
+.card:focus-visible {
+  outline: 2px solid var(--wf-accent);
+  outline-offset: 2px;
+  border-color: var(--wf-accent);
 }
 
 /* The left edge bar — the change's STATE, read at a glance from across the
@@ -329,8 +444,8 @@
   bottom: 0;
   width: 3px;
   background: linear-gradient(180deg,
-    color-mix(in srgb, var(--wf-accent) 90%, transparent),
-    color-mix(in srgb, var(--wf-accent) 25%, transparent));
+    color-mix(in srgb, var(--wf-accent) 52%, transparent),
+    color-mix(in srgb, var(--wf-accent) 14%, transparent));
 }
 
 .card[data-state="completed"] .cardEdge {
@@ -373,7 +488,7 @@
   font-weight: 700;
   letter-spacing: 0.03em;
   border: 1px solid var(--wf-accent-line);
-  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 6%, transparent);
   color: var(--wf-accent-text);
 }
 
@@ -409,19 +524,29 @@
 
 .stage {
   border-color: var(--wf-accent-line);
-  background: color-mix(in srgb, var(--wf-accent) 10%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 5%, transparent);
   color: var(--wf-accent-text);
   font-weight: 700;
 }
 
-/* The task rollup — a hairline track with a gold fill. */
+/* The task rollup — a hairline track with a gold fill and the count beside it.
+   【变更】2026-10-25 (批次二十四 1): the count sits INSIDE the row (it used to
+   float above the track and could sit on the meta row above it). */
 .progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.progressTrack {
   position: relative;
-  display: block;
+  flex: 1;
+  min-width: 0;
   height: 5px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--wf-ink) 8%, transparent);
-  overflow: visible;
+  overflow: hidden;
 }
 
 .progressFill {
@@ -431,15 +556,28 @@
   bottom: 0;
   border-radius: 999px;
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--wf-accent) 60%, transparent),
+    color-mix(in srgb, var(--wf-accent) 44%, transparent),
     var(--wf-accent));
   box-shadow: 0 0 10px -2px var(--wf-accent-glow);
 }
 
+/* 【变更】2026-10-25 (批次二十四 2): the rollup wears the change's STATE —
+   a finished change's bar is green, an abandoned one's is grey. One gold bar
+   for every card said 「running」 on all of them. */
+.card[data-state="completed"] .progressFill {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--wf-ok) 55%, transparent),
+    var(--wf-ok));
+  box-shadow: none;
+}
+
+.card[data-state="abandoned"] .progressFill {
+  background: color-mix(in srgb, var(--wf-idle) 55%, transparent);
+  box-shadow: none;
+}
+
 .progressText {
-  position: absolute;
-  right: 0;
-  top: -16px;
+  flex: none;
   font-size: 10px;
   font-weight: 700;
   color: var(--wf-ink-3);
@@ -456,31 +594,34 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The card's own affordance line — quiet until the card is hovered. */
+/* The card's own affordance line — quiet until the card is hovered. It rides
+   the foot row (批次二十四 1), so it never covers a metric. */
 .cardCta {
-  position: absolute;
-  right: 13px;
-  bottom: 11px;
+  margin-left: auto;
+  padding-left: 4px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--wf-accent-text);
+  white-space: nowrap;
   opacity: 0;
   transform: translateX(4px);
   transition: opacity 160ms ease, transform 160ms ease;
 }
 
-.card:hover .cardCta {
+.card:hover .cardCta,
+.card:focus-visible .cardCta {
   opacity: 1;
   transform: translateX(0);
 }
 
 .empty {
   grid-column: 1 / -1;
-  padding: 26px 16px;
+  padding: 30px 16px;
   text-align: center;
-  border-radius: 12px;
+  border-radius: 13px;
   border: 1px dashed var(--wf-accent-line);
+  background: color-mix(in srgb, var(--wf-accent) 4%, transparent);
   color: var(--wf-ink-3);
   font-size: 12px;
 }
@@ -530,7 +671,7 @@
   border-radius: 16px;
   border: 1px solid var(--wf-accent-line);
   background:
-    radial-gradient(900px 320px at 50% -10%, color-mix(in srgb, var(--wf-accent) 12%, transparent), transparent 62%),
+    radial-gradient(900px 320px at 50% -10%, color-mix(in srgb, var(--wf-accent) 6%, transparent), transparent 62%),
     var(--wf-canvas);
   box-shadow:
     0 40px 90px -40px color-mix(in srgb, #000 75%, transparent),
@@ -557,12 +698,12 @@
   --wf-ok: var(--dsw-alias-text-success);
   --wf-gate: var(--dsw-alias-text-warning);
   --wf-brand-fill: linear-gradient(135deg,
-    color-mix(in srgb, var(--wf-accent) 55%, #241a08),
-    color-mix(in srgb, var(--wf-accent) 62%, #241a08));
+    color-mix(in srgb, var(--wf-accent) 36%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 44%, #241a08));
 
   /* the workspace chrome's own accents */
-  --ws-line: color-mix(in srgb, var(--wf-accent) 34%, var(--wf-line));
-  --ws-line-strong: color-mix(in srgb, var(--wf-accent) 62%, var(--wf-line));
+  --ws-line: color-mix(in srgb, var(--wf-accent) 20%, var(--wf-line));
+  --ws-line-strong: color-mix(in srgb, var(--wf-accent) 40%, var(--wf-line));
   --ws-ink: var(--dsw-alias-label-primary);
   --ws-ink-2: color-mix(in srgb, var(--dsw-alias-label-primary) 58%, var(--dsw-alias-label-secondary));
   --ws-ink-3: color-mix(in srgb, var(--dsw-alias-label-primary) 28%, var(--dsw-alias-label-tertiary));
@@ -584,7 +725,7 @@
   gap: 18px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--ws-line);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--wf-accent) 9%, transparent), transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--wf-accent) 4%, transparent), transparent);
 }
 
 .wsTopLead {
@@ -636,7 +777,7 @@
   font-size: 10.5px;
   font-weight: 700;
   border: 1px solid var(--ws-line-strong);
-  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 6%, transparent);
   color: var(--wf-accent-text);
 }
 
@@ -669,7 +810,7 @@
   padding: 5px 11px;
   border-radius: 9px;
   border: 1px solid var(--ws-line);
-  background: color-mix(in srgb, var(--wf-accent) 6%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 3%, transparent);
 }
 
 .figureLabel {
@@ -703,7 +844,7 @@
 }
 
 .wsClose:hover {
-  background: color-mix(in srgb, var(--wf-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 6%, transparent);
   border-color: var(--ws-line-strong);
   color: var(--ws-ink);
 }
@@ -795,7 +936,7 @@
   gap: 2px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--ws-line);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 14%, transparent), transparent 78%);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 7%, transparent), transparent 78%);
 }
 
 .wsStageLabel {
@@ -924,7 +1065,7 @@
   bottom: 0;
   border-radius: 999px;
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--wf-accent) 55%, transparent),
+    color-mix(in srgb, var(--wf-accent) 40%, transparent),
     var(--wf-accent));
   box-shadow: 0 0 10px -2px var(--wf-accent-glow);
 }
@@ -1001,7 +1142,7 @@
   margin-top: 4px;
   border-radius: 50%;
   background: var(--wf-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-accent) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-accent) 10%, transparent);
 }
 
 .historyRow:not(:last-child)::before {
@@ -1040,7 +1181,7 @@
 
 .historyGate {
   border-color: var(--ws-line-strong);
-  background: color-mix(in srgb, var(--wf-accent) 10%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 5%, transparent);
   color: var(--wf-accent-text);
 }
 
@@ -1055,3 +1196,115 @@
 .historyReason {
   color: var(--wf-danger);
 }
+
+/* ── 批次二十四 1: the artifact PREVIEW modal ────────────────────────────── */
+
+/* 【变更】2026-10-25 (批次二十四 1): the 文档产物 preview — the SAME window
+   the 测试流图's config files use. The token values are declared here (not
+   inherited) so the window reads identically wherever it is opened. */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: color-mix(in srgb, #000 42%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  --wf-card: var(--dsw-alias-bg-elevated);
+  --wf-ink: var(--dsw-alias-text-primary);
+  --wf-muted: var(--dsw-alias-text-secondary);
+  --wf-line: var(--dsw-alias-border-subtle);
+  display: flex;
+  flex-direction: column;
+  width: min(56rem, 100%);
+  max-height: min(80vh, 52rem);
+  background: var(--wf-card);
+  color: var(--wf-ink);
+  border: 1px solid var(--wf-line);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.modalHead {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--wf-accent) 4%, var(--wf-card));
+}
+
+.modalTitle {
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.modalPath {
+  min-width: 0;
+  flex: 1;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  color: var(--wf-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modalClose {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.6rem;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.modalClose:hover { border-color: var(--wf-accent); }
+
+.modalBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0.8rem 1rem;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.modalFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  border-top: 1px solid var(--wf-line);
+}
+
+.modalAction {
+  align-self: flex-start;
+  margin-top: 0.2rem;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--wf-ink);
+  background: color-mix(in srgb, var(--wf-accent) 6%, var(--wf-card));
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 32%, var(--wf-line));
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.modalAction:hover { background: color-mix(in srgb, var(--wf-accent) 10%, var(--wf-card)); }

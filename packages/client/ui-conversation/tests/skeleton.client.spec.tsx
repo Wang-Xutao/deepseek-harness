@@ -676,24 +676,35 @@ describe('ConversationRoot resident composer', () => {
     act(() => { b.store.actions.setView('removed-view') })
     expect(b.view.getByTestId('view-chat')).toBeTruthy()
 
-    viewTabs.unshift({ id: 'new-view', label: 'New view' })
+    viewTabs.unshift({ id: 'trace-graph', label: 'Trace graph' })
     b.rerender()
 
     expect(b.view.getByTestId('view-chat')).toBeTruthy()
-    expect(b.view.queryByTestId('view-new-view')).toBeNull()
+    expect(b.view.queryByTestId('view-trace-graph')).toBeNull()
     expect(b.view.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true')
-    expect(b.view.getByRole('tab', { name: 'New view' }).getAttribute('aria-selected')).toBe('false')
+    expect(b.view.getByRole('tab', { name: 'Trace graph' }).getAttribute('aria-selected')).toBe('false')
     // The browser drag lane anchors its header tab-strip probe on this marker.
     expect(b.view.getByRole('tablist').hasAttribute('data-conversation-tabs')).toBe(true)
   })
 
+  // 【变更】2026-10-25 (批次二十四 4): a View outside the primary five folds
+  // into the 更多会话视图 menu — it never takes a tab of its own.
+  it('folds a View outside the primary five into the More menu', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1000)
+    const viewTabs = ['chat', 'trajectory', 'timeline'].map(id => ({ id, label: id }))
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { viewTabs, entryActions: true })
+    expect(within(b.view.getByRole('tablist')).getAllByRole('tab').map(tab => tab.textContent)).toEqual(['chat', 'trajectory'])
+    fireEvent.click(b.view.getByRole('button', { name: zh['session.moreViews'] }))
+    expect(b.actionsOwner().entries.map(entry => entry.id)).toEqual(['timeline'])
+  })
+
   it('keeps Chat outside at the narrowest width even when it registers after other Views', () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(180)
-    const viewTabs = ['trajectory', 'timeline', 'chat', 'notes'].map(id => ({ id, label: id }))
+    const viewTabs = ['trajectory', 'trace-graph', 'chat', 'notes'].map(id => ({ id, label: id }))
     const b = mount(sessionSnapshotOf(), undefined, undefined, { viewTabs, entryActions: true })
     expect(within(b.view.getByRole('tablist')).getAllByRole('tab').map(tab => tab.textContent)).toEqual(['chat'])
     fireEvent.click(b.view.getByRole('button', { name: zh['session.moreViews'] }))
-    expect(b.actionsOwner().entries.map(entry => entry.id)).toEqual(['trajectory', 'timeline', 'notes'])
+    expect(b.actionsOwner().entries.map(entry => entry.id)).toEqual(['trajectory', 'trace-graph', 'notes'])
     act(() => { b.actionsOwner().onOpen('trajectory') })
     expect(b.view.getByRole('tab', { name: 'chat' })).toBeTruthy()
     expect(b.view.queryByRole('tab', { name: 'trajectory' })).toBeNull()
@@ -714,17 +725,15 @@ describe('ConversationRoot resident composer', () => {
     const viewTabs: ViewTab[] = [
       { id: 'chat', label: 'Chat' },
       { id: 'trajectory', label: 'Trajectory' },
-      { id: 'timeline', label: 'Timeline' },
+      { id: 'trace-graph', label: 'Trace graph' },
     ]
     const b = mount(sessionSnapshotOf(), undefined, undefined, { viewTabs, unpinnedViews: ['chat', 'trajectory', 'removed-view'] })
     act(() => { b.store.actions.setView('trajectory') })
     const tabs = (): HTMLElement[] => within(b.view.getByRole('tablist')).getAllByRole('tab')
     expect(tabs().map(tab => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([
-      ['Chat', 'false'], ['Timeline', 'false'],
+      ['Trace graph', 'false'],
     ])
     expect(b.view.getByTestId('view-trajectory')).toBeTruthy()
-    act(() => { b.store.actions.setView('chat') })
-    expect(tabs().map(tab => tab.textContent)).toEqual(['Chat', 'Timeline'])
   })
 
   it('keeps the tab row and More after the tabs while every other View is unpinned', () => {
@@ -743,27 +752,27 @@ describe('ConversationRoot resident composer', () => {
     const viewTabs: ViewTab[] = [
       { id: 'chat', label: 'Chat' },
       { id: 'trajectory', label: 'Trajectory' },
-      { id: 'timeline', label: 'Timeline' },
-      { id: 'inspector', label: 'Inspector' },
+      { id: 'trace-graph', label: 'Trace graph' },
+      { id: 'baf-workflow', label: 'Workflow' },
     ]
     const b = mount(sessionSnapshotOf(), undefined, undefined, { viewTabs, entryActions: true })
     const external = () => within(b.view.getByRole('tablist')).getAllByRole('tab').map(tab => tab.textContent)
-    expect(external()).toEqual(['Chat', 'Trajectory', 'Timeline'])
+    expect(external()).toEqual(['Chat', 'Trajectory', 'Trace graph'])
     fireEvent.click(b.view.getByRole('button', { name: zh['session.moreViews'] }))
-    expect(b.actionsOwner().entries.map(entry => entry.id)).toEqual(['inspector'])
-    act(() => { b.actionsOwner().onOpen('inspector') })
-    expect(external()).toEqual(['Chat', 'Trajectory', 'Timeline'])
-    expect(b.actionsOwner().entries.find(entry => entry.id === 'inspector')?.active).toBe(true)
-    expect(b.view.getByRole('button', { name: '更多会话视图 · Inspector' })).toBeTruthy()
+    expect(b.actionsOwner().entries.map(entry => entry.id)).toEqual(['baf-workflow'])
+    act(() => { b.actionsOwner().onOpen('baf-workflow') })
+    expect(external()).toEqual(['Chat', 'Trajectory', 'Trace graph'])
+    expect(b.actionsOwner().entries.find(entry => entry.id === 'baf-workflow')?.active).toBe(true)
+    expect(b.view.getByRole('button', { name: '更多会话视图 · Workflow' })).toBeTruthy()
     const reads = readWidth.mock.calls.length
     width = 1000
     fireEvent(window, new Event('resize'))
-    act(() => { b.store.actions.setView('timeline') })
+    act(() => { b.store.actions.setView('trajectory') })
     expect(readWidth).toHaveBeenCalledTimes(reads)
-    expect(external()).toEqual(['Chat', 'Trajectory', 'Timeline'])
+    expect(external()).toEqual(['Chat', 'Trajectory', 'Trace graph'])
     viewTabs.splice(1, 1)
     act(() => { b.store.actions.setView('chat') })
-    expect(external()).toEqual(['Chat', 'Timeline', 'Inspector'])
+    expect(external()).toEqual(['Chat', 'Trace graph', 'Workflow'])
     expect(readWidth).toHaveBeenCalledTimes(reads)
     expect(b.actionsOwner().entries).toEqual([])
     expect(b.setPinned).not.toHaveBeenCalled()
@@ -772,22 +781,22 @@ describe('ConversationRoot resident composer', () => {
   it('folds and restores Views on container resize without changing selection, and disconnects on unmount', () => {
     let width = 1000
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width)
-    const viewTabs = ['chat', 'trajectory', 'timeline', 'inspector', 'notes'].map(id => ({ id, label: id }))
+    const viewTabs = ['chat', 'trajectory', 'trace-graph', 'baf-workflow', 'baf-test-flow'].map(id => ({ id, label: id }))
     const b = mount(sessionSnapshotOf(), undefined, undefined, { viewTabs, entryActions: true })
     const row = b.view.getByRole('tablist').parentElement!
     const external = () => within(b.view.getByRole('tablist')).getAllByRole('tab').map(tab => tab.textContent)
     expect(external()).toEqual(viewTabs.map(tab => tab.label))
-    act(() => { b.store.actions.setView('notes') })
+    act(() => { b.store.actions.setView('baf-test-flow') })
     width = 300
     act(() => { fireResize(row) })
     expect(external()).toEqual(['chat', 'trajectory'])
-    fireEvent.click(b.view.getByRole('button', { name: '更多会话视图 · notes' }))
-    expect(b.actionsOwner().entries.map(entry => entry.id)).toEqual(['timeline', 'inspector', 'notes'])
-    expect(b.actionsOwner().entries.find(entry => entry.id === 'notes')?.active).toBe(true)
+    fireEvent.click(b.view.getByRole('button', { name: '更多会话视图 · baf-test-flow' }))
+    expect(b.actionsOwner().entries.map(entry => entry.id)).toEqual(['trace-graph', 'baf-workflow', 'baf-test-flow'])
+    expect(b.actionsOwner().entries.find(entry => entry.id === 'baf-test-flow')?.active).toBe(true)
     width = 1000
     act(() => { fireResize(row) })
     expect(external()).toEqual(viewTabs.map(tab => tab.label))
-    expect(b.view.getByRole('tab', { name: 'notes' }).getAttribute('aria-selected')).toBe('true')
+    expect(b.view.getByRole('tab', { name: 'baf-test-flow' }).getAttribute('aria-selected')).toBe('true')
     expect(b.actionsOwner().entries).toEqual([])
     expect(b.setPinned).not.toHaveBeenCalled()
     const observers = resizeObservers.filter(observer => observer.targets.includes(row))
@@ -798,7 +807,7 @@ describe('ConversationRoot resident composer', () => {
 
   it('keeps all five Views outside when the sampled width budget is sufficient', () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1000)
-    const viewTabs = ['chat', 'trajectory', 'timeline', 'inspector', 'notes'].map(id => ({ id, label: id }))
+    const viewTabs = ['chat', 'trajectory', 'trace-graph', 'baf-workflow', 'baf-test-flow'].map(id => ({ id, label: id }))
     const b = mount(sessionSnapshotOf(), undefined, undefined, { viewTabs, entryActions: true })
     expect(within(b.view.getByRole('tablist')).getAllByRole('tab').map(tab => tab.textContent))
       .toEqual(viewTabs.map(tab => tab.label))

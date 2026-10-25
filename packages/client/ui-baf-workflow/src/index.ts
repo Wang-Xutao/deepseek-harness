@@ -80,10 +80,13 @@ import type {
   WorkflowTabView,
 } from '@deepseek-ai/dsh-baf-core'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type {} from '@deepseek-ai/dsh-session'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { BlockAssembler } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, RequestMessage } from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-llm'
 import type {
   BafWorkflowChainRunRequest,
   BafWorkflowChainRunResult,
@@ -94,6 +97,8 @@ import type {
   BafWorkflowChangeOverviewResult,
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
+  BafWorkflowDraftFormatRequest,
+  BafWorkflowDraftFormatResult,
   BafWorkflowFileReadRequest,
   BafWorkflowFileReadResult,
   BafWorkflowGateOverview,
@@ -395,6 +400,183 @@ export const TEST_FLOW_STAGE_TIMEOUT_MS = 300_000
 export const WORKSPACE_FILE_PREVIEW_CAP = 256 * 1024
 
 /**
+ * 【变更】2026-10-25 (批次二十四 3): the「格式化输入」system prompt — the
+ * contract the auxiliary call runs under. The prompt is deliberately
+ * CONSERVATIVE: the arranger may re-shape the author's words into Markdown,
+ * never re-word them, never add a fact the draft does not carry, and never
+ * "fix" the author's code. A formatter that invents content is worse than no
+ * formatter, because the user cannot see what changed.
+ *
+ * 【变更】2026-10-25 (批次二十五 2): the prompt is no longer structure-only.
+ * Its rule 1 said "只调整结构与断句，不改写、不润色" and rule 5 said to return
+ * the draft unchanged when it already read clearly — together they made the
+ * model path a punctuation pass, which the user reported as "没有效果". The
+ * contract now asks for TWO things: structure the draft into a requirement
+ * brief, AND make the author's own words more precise, more specific and less
+ * ambiguous. The hard bans stay exactly as they were — the optimizer may not
+ * invent a fact, a requirement, a number or a path — so an optimized draft is
+ * still the user's own request, only readable.
+ */
+export const DRAFT_FORMAT_SYSTEM = [
+  '你是一个「需求输入优化」助手：把用户正在输入的草稿改写成一份结构清晰、逻辑完整、能被下游大模型一眼看懂的需求简报。',
+  '',
+  '你要同时做两件事：',
+  '1. 结构化：切分意图、归并同类项、区分目标 / 背景 / 需求明细 / 约束 / 交付与验收。',
+  '2. 内容优化：在不改变原意的前提下把话说得更准确、更具体、更无歧义——把作者写了但表达含糊的部分说清楚（例如「要快一点」要落到它约束的是哪个环节）。',
+  '',
+  '铁律（不可违背）：',
+  '1. 绝不添加草稿中不存在的事实、需求、结论、命令、路径、数值或示例。',
+  '2. 绝不改变作者的意图或扩大范围。确实无法从上下文判断的地方不要替作者做决定，用「（待确认：…）」标出，全篇最多 3 处。',
+  '3. 代码、命令、报错、路径、标识符、专有名词一律原样保留，不要「修正」或「翻译」它们。',
+  '4. 保留作者使用的语言（中文或英文）。',
+  '5. 作者已经写清楚的内容原样保留，不要为了改而改，也不要用空话填充篇幅。',
+  '',
+  '结构规则：',
+  '- 开头用一级标题写清「要做什么」——用作者自己的话凝练，不添加新信息。',
+  '- 用 ## 小标题切分：目标 / 背景与现状 / 需求明细 / 约束与边界 / 交付物与验收。作者没写的章节直接省略，不要凑数。',
+  '- 需求明细用有序列表，一条一个需求，动词开头。',
+  '- 并列要点用无序列表；有先后步骤用有序列表。',
+  '- 代码、命令、堆栈信息放进 ``` 代码块并标注语言。',
+  '- 引用原文、日志片段用 > 引用。',
+  '- 同一主题的多行合并成一段，段落之间空一行。',
+  '',
+  '只输出优化后的 Markdown 正文，不要写任何前言、说明、对比或结语。',
+].join('\n')
+
+/**
+ * 【变更】2026-10-25 (批次二十四 3): the output cap for one formatting call.
+ * A draft longer than this is not a draft; it is a document, and the arranger
+ * is not the tool for it.
+ */
+export const DRAFT_FORMAT_MAX_TOKENS = 4096
+
+/**
+ * Read one unknown value as a plain record, or undefined when it is not an
+ * object. The structural reads below cross plugin boundaries (the agent
+ * registry's public face is deliberately minimal), so they read defensively
+ * instead of casting a half-known shape.
+ * @param value - the value to read.
+ * @returns the record view, or undefined.
+ */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
+/**
+ * 【变更】2026-10-25 (批次二十五 2): one concrete provider/model pair — the
+ * route an auxiliary call runs on.
+ */
+export interface DraftRoute {
+  /** Registered provider route (must own an adapter). */
+  readonly provider: string
+  /** Model id the provider's adapter interprets. */
+  readonly model: string
+}
+
+/**
+ * 【变更】2026-10-25 (批次二十五 2): the session's OWN model selection — the
+ * route the user picked in the model selector.
+ *
+ * The authority is the `modelSelection` projection: its `next` view is the
+ * pending selection when one was recorded and the last used selection
+ * otherwise, which is exactly what the agent loop reads before a step. The
+ * projection is not composed in every deployment, so the read degrades to
+ * "no recorded selection" instead of throwing.
+ * @param ctx - host context.
+ * @param session - the session whose selection is read.
+ * @returns the recorded route, or undefined when none was recorded.
+ */
+function recordedSelectionFor(ctx: Context, session: Session): DraftRoute | undefined {
+  try {
+    const view = ctx.sessionProjections.snapshot(session).values.modelSelection
+    const selection = view?.next ?? view?.lastUsed
+    if (selection === undefined || selection === null) return undefined
+    return { provider: selection.provider, model: selection.model }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 【变更】2026-10-25 (批次二十五 2): map one recorded route through the
+ * deployment's per-step route resolver.
+ *
+ * A BAF session sitting on the「自动」pseudo entry records `{baf-route, auto}`,
+ * which is NOT a provider route: the agent loop maps it to the tier route the
+ * step runs on through the `stepRouteResolver` service. The formatter must use
+ * the SAME mapping, or it would call a provider that does not exist. The
+ * lookup is structural and best-effort — a deployment without a resolver keeps
+ * the recorded route unchanged.
+ * @param ctx - host context.
+ * @param session - the session the step belongs to.
+ * @param route - the recorded route.
+ * @returns the route the step would run on.
+ */
+function stepRouteFor(ctx: Context, session: Session, route: DraftRoute): DraftRoute {
+  const resolver = ctx.get('stepRouteResolver') as {
+    resolveStepRoute?: (session: Session, route: DraftRoute) => DraftRoute | undefined
+  } | undefined
+  if (resolver === undefined || typeof resolver.resolveStepRoute !== 'function') return route
+  try {
+    return resolver.resolveStepRoute(session, route) ?? route
+  } catch {
+    return route
+  }
+}
+
+/**
+ * 【变更】2026-10-25 (批次二十五 2): whether one route is the BAF auto pseudo
+ * entry — a routing placeholder, never a provider route.
+ * @param route - the route to judge.
+ * @returns whether the route is the auto pseudo entry.
+ */
+function isAutoRoute(route: DraftRoute): boolean {
+  return route.provider === AUTO_PROVIDER && route.model === AUTO_MODEL
+}
+
+/**
+ * 【变更】2026-10-25 (批次二十五 2): the agent's live route options — the
+ * route a fresh session starts on, before any selection is recorded.
+ *
+ * The options' route fields are live accessors over the deployment's default
+ * model, so the read is defensive: a missing agent, a missing provider or a
+ * throwing accessor all mean "no route here".
+ * @param ctx - host context.
+ * @param sessionId - the session whose agent is read.
+ * @returns the live route, or undefined when there is none.
+ */
+function agentRouteFor(ctx: Context, sessionId: SessionId): DraftRoute | undefined {
+  try {
+    const agent = ctx.agents.get(sessionId)
+    const options = asRecord(asRecord(agent)?.options)
+    const provider = typeof options?.provider === 'string' ? options.provider : undefined
+    const model = typeof options?.model === 'string' ? options.model : undefined
+    if (provider === undefined || model === undefined) return undefined
+    return { provider, model }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 【变更】2026-10-25 (批次二十五 2): the route the session's last request
+ * actually ran on — the header fold's current epoch.
+ * @param session - the live session, or undefined when none is live.
+ * @returns the logged route, or undefined when no request ran yet.
+ */
+function headerRouteFor(session: Session | undefined): DraftRoute | undefined {
+  try {
+    const config = session?.requestHeader()?.config
+    if (config === undefined) return undefined
+    return { provider: config.provider, model: config.model }
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * 【变更】2026-10-22 (批次十二 2.1 + 2.4): the baf-wrapped command one 测试流图
  * stage runs as — the `baf-quality` CLI's own subcommand contract (the wrapper
  * ships with the quality pack; `test` → ceedling test:all, `check` → gcov
@@ -692,6 +874,55 @@ export async function readTestFlowStatus(cwd: string): Promise<BafWorkflowTestFl
 }
 
 /**
+ * 【变更】2026-10-25 (批次二十五 2): the concrete route one formatting call
+ * runs on.
+ *
+ * 【变更】2026-10-25 (批次二十四 3): the resolver read the agent's live
+ * options first and the session's last request header second. That missed the
+ * session's ACTUAL selection (the model the user picked in the selector), and
+ * it could not answer a session sitting on the BAF「自动」pseudo entry at all.
+ * 【变更】2026-10-25 (批次二十五 2) resolves in the order the agent loop
+ * itself uses:
+ *   1. the RECORDED selection — the `modelSelection` projection's view
+ *      (`next`, else `lastUsed`), i.e. the user's own pick;
+ *   2. the agent's live route options — the route a fresh session starts on;
+ *   3. the session's last request header — the route that actually ran.
+ * Each candidate goes through the deployment's per-step route resolver first,
+ * so the「自动」pseudo entry maps to the tier route the step would use.
+ *
+ * The cold log's last header epoch is the last resort: a session whose agent
+ * is gone but whose log survives.
+ * @param ctx - host context.
+ * @param sessionId - the session whose route is resolved.
+ * @returns the route, or undefined when the session has none.
+ */
+export async function resolveDraftRoute(ctx: Context, sessionId: SessionId): Promise<DraftRoute | undefined> {
+  const session = ctx.sessions.get(sessionId)
+  const candidates: DraftRoute[] = []
+  if (session !== undefined) {
+    const recorded = recordedSelectionFor(ctx, session)
+    if (recorded !== undefined) candidates.push(recorded)
+  }
+  const live = agentRouteFor(ctx, sessionId)
+  if (live !== undefined) candidates.push(live)
+  const header = headerRouteFor(session)
+  if (header !== undefined) candidates.push(header)
+  for (const candidate of candidates) {
+    const route = session === undefined ? candidate : stepRouteFor(ctx, session, candidate)
+    if (isAutoRoute(route)) continue
+    return { provider: route.provider, model: route.model }
+  }
+  // Last resort: the cold log's own header epoch (a session whose agent is
+  // gone but whose log survives).
+  const scan = await readSessionRouteScan(ctx, sessionId)
+  const scanned = scan.sessionModel
+  if (scanned !== undefined && !scanned.auto) {
+    return { provider: scanned.provider, model: scanned.model }
+  }
+  return undefined
+}
+
+/**
  * Host Remote: assembles {@link WorkflowTabView} and applies semi-interactive mutations.
  */
 export class BafWorkflowTabRemote extends TypertRemoteService {
@@ -706,7 +937,11 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   // reason — the per-stage token attribution reads it via a structural cast,
   // the undeclared access threw, and {@link usagePointsFor} swallowed it into
   // an eternal empty list (node cards showed '—' beside a working totals row).
-  static inject = ['sessions', 'sessionPersistence', 'agents', 'sessionQuery']
+  // 【变更】2026-10-25 (批次二十五 2): `sessionProjections` joined — the
+  // formatter's route is the SESSION's recorded model selection, and the
+  // `modelSelection` projection is that selection's authority (the agent's
+  // live options only carry the deployment's default model).
+  static inject = ['sessions', 'sessionPersistence', 'agents', 'sessionQuery', 'sessionProjections', 'llm']
 
   /** §22.19 R5 — persistent per-cwd stores whose append bus feeds the push. */
   private readonly pool: ProjectionStorePool
@@ -1690,6 +1925,82 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       const reason = error instanceof Error ? error.message : String(error)
       return /ENOENT/i.test(reason) ? { status: 'missing', path: abs } : { status: 'unreadable', path: abs, reason }
     }
+  }
+
+  /**
+   * 【变更】2026-10-25 (批次二十四 3): arrange one composer draft with the
+   * session's OWN model — the「格式化输入」control's model path.
+   *
+   * The call is auxiliary, not a turn: `purpose: 'draft-format'` says so, the
+   * draft rides as one user message, and nothing is appended to the session
+   * log (the draft is the user's, and the arranged text is the user's too —
+   * the model only shaped it). The route is the session's current selection,
+   * so the user needs no second provider and no configuration.
+   *
+   * Every failure answers `unavailable` rather than throwing: the composer
+   * falls back to its local arranger, so a provider hiccup must not surface
+   * as an error the user has to dismiss.
+   *
+   * 【变更】2026-10-25 (批次二十五 2): the call now OPTIMIZES the draft's
+   * content, not just its structure (see {@link DRAFT_FORMAT_SYSTEM}), and it
+   * names the route it ran on in the answer so the composer can tell the user
+   * that the model really answered — a silent fallback reads as「没有效果」.
+   * @param request - session + the author's raw draft.
+   * @returns the arranged Markdown, or the reason the call could not run.
+   */
+  @Remote('formatDraft')
+  async formatDraft(request: BafWorkflowDraftFormatRequest): Promise<BafWorkflowDraftFormatResult> {
+    if (request.draft.trim() === '') return { status: 'unavailable', reason: 'empty' }
+    const route = await this.draftRouteFor(request.sessionId)
+    if (route === undefined) return { status: 'unavailable', reason: 'no-model' }
+    const messages: RequestMessage[] = [
+      { role: 'user', content: [{ type: 'text', text: request.draft }] },
+    ]
+    const options: GenerateOptions = {
+      provider: route.provider,
+      model: route.model,
+      messages,
+      system: DRAFT_FORMAT_SYSTEM,
+      maxTokens: DRAFT_FORMAT_MAX_TOKENS,
+      sessionId: request.sessionId,
+      purpose: 'draft-format',
+    }
+    try {
+      const assembler = new BlockAssembler()
+      for await (const chunk of this.ctx.llm.stream(options)) assembler.push(chunk)
+      const finish = assembler.finish
+      if (finish.kind === 'error' || finish.kind === 'aborted') {
+        return { status: 'unavailable', reason: 'failed' }
+      }
+      const text = assembler.blocks()
+        .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+        .map(block => block.text)
+        .join('')
+        .trim()
+      if (text === '') return { status: 'unavailable', reason: 'empty' }
+      return { status: 'ready', text, provider: route.provider, model: route.model }
+    } catch (error) {
+      this.ctx.logger.warn(
+        `bafWorkflowView.formatDraft failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return { status: 'unavailable', reason: 'failed' }
+    }
+  }
+
+  /**
+   * 【变更】2026-10-25 (批次二十四 3): the route one formatting call runs on.
+   *
+   * 【变更】2026-10-25 (批次二十五 2): the resolution moved into
+   * {@link resolveDraftRoute} — the same order the agent loop uses (the
+   * session's recorded selection first, then the live route options, then the
+   * last request header), with every candidate mapped through the
+   * deployment's per-step route resolver so the BAF「自动」pseudo entry
+   * resolves to the tier route the step would use.
+   * @param sessionId - the session whose route is resolved.
+   * @returns the route, or undefined when the session has none.
+   */
+  private async draftRouteFor(sessionId: SessionId): Promise<DraftRoute | undefined> {
+    return resolveDraftRoute(this.ctx, sessionId)
   }
 
   /**

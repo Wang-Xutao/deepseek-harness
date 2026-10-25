@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-/** Sidebar launcher pins stay in memory per panel id and ignore the fixed Plugins panel. */
+/**
+ * Sidebar launcher pins stay in memory per panel id and ignore the fixed Plugins panel.
+ * 【变更】2026-10-25 (批次二十四 3): 自动化任务 starts in the More menu, so the
+ * default unpinned list is not empty any more.
+ */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPanelPins } from '../src/client/panel-pins.ts'
 
@@ -12,16 +16,16 @@ describe('sidebar panel pins', () => {
     const listener = vi.fn()
     pins.unpinned.subscribe(listener)
     const initial = pins.unpinned.getSnapshot()
-    expect(initial).toEqual([])
+    expect(initial).toEqual(['schedules'])
     expect(pins.unpinned.getSnapshot()).toBe(initial)
     pins.setPinned('notes', false)
     pins.setPinned('tasks', false)
-    expect(pins.unpinned.getSnapshot()).toEqual(['notes', 'tasks'])
+    expect(pins.unpinned.getSnapshot()).toEqual(['schedules', 'notes', 'tasks'])
     expect(localStorage.getItem(KEY)).toBeNull()
     expect(listener).toHaveBeenCalledTimes(2)
-    expect(createPanelPins().unpinned.getSnapshot()).toEqual([])
+    expect(createPanelPins().unpinned.getSnapshot()).toEqual(['schedules'])
     pins.setPinned('notes', true)
-    expect(pins.unpinned.getSnapshot()).toEqual(['tasks'])
+    expect(pins.unpinned.getSnapshot()).toEqual(['schedules', 'tasks'])
     expect(localStorage.getItem(KEY)).toBeNull()
   })
 
@@ -42,16 +46,16 @@ describe('sidebar panel pins', () => {
     const pins = createPanelPins()
     pins.setPinned('removed-plugin', false)
     pins.setPinned('notes', false)
-    expect(pins.unpinned.getSnapshot()).toEqual(['removed-plugin', 'notes'])
+    expect(pins.unpinned.getSnapshot()).toEqual(['schedules', 'removed-plugin', 'notes'])
   })
 
   it('ignores a legacy stored list instead of restoring it', () => {
     localStorage.setItem(KEY, JSON.stringify({ unpinned: ['notes'] }))
     const pins = createPanelPins()
     const snapshot = pins.unpinned.getSnapshot()
-    expect(snapshot).toEqual([])
+    expect(snapshot).toEqual(['schedules'])
     expect(pins.unpinned.getSnapshot()).toBe(snapshot)
     pins.setPinned('notes', false)
-    expect(pins.unpinned.getSnapshot()).toEqual(['notes'])
+    expect(pins.unpinned.getSnapshot()).toEqual(['schedules', 'notes'])
   })
 })

@@ -301,6 +301,40 @@ export interface BafWorkflowFileReadResult {
 }
 
 /**
+ * 【变更】2026-10-25 (批次二十四 3): `formatDraft` request — the composer's raw
+ * draft plus the session whose model arranges it. The session is what names the
+ * route: the formatter runs on the conversation's OWN model, so the answer
+ * comes from the model the user is already talking to (no second provider, no
+ * config to pick).
+ */
+export interface BafWorkflowDraftFormatRequest {
+  readonly sessionId: SessionId
+  /** The author's raw draft text. */
+  readonly draft: string
+}
+
+/**
+ * `formatDraft` result — the model's arranged Markdown, or the reason the call
+ * could not run. `no-model` means the session has no routed model yet (a fresh
+ * session never sent a request); the caller then falls back to the local
+ * arranger instead of showing an error.
+ */
+export type BafWorkflowDraftFormatResult =
+  | {
+    readonly status: 'ready'
+    /** The arranged draft (the model's Markdown answer, sanitized). */
+    readonly text: string
+    /** The route that produced it. */
+    readonly provider: string
+    readonly model: string
+  }
+  | {
+    readonly status: 'unavailable'
+    /** Machine-readable cause: `no-model`, `failed` or `empty`. */
+    readonly reason: string
+  }
+
+/**
  * 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 payload — a read-only
  * projection of both gate layers (the confirm-gate registry and the per-stage
  * completion gates), declared here as the typert boundary contract.

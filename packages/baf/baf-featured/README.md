@@ -13,6 +13,8 @@ English | [中文](README.zh.md)
 
 Without a plugin manager every card degrades to read-only `unavailable`; the service never blocks a boot on one.
 
+The curated set baf-dsh ships names the plugin market, Feishu, and three capability plugins the product recommends by name: a code-base index, a C language LSP, and experience/memory. Each entry's package, version range, registry and peer-exemption shape are part of the manifest contract, and `packages/baf/baf-featured/tests/featured.spec.ts` pins the manifest's revision and entry list.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

@@ -21,6 +21,7 @@ import {
   ipcMain,
   Menu,
   net,
+  Notification,
   Tray,
   nativeImage,
   shell,
@@ -28,6 +29,7 @@ import {
 import { ensureDshModulesExpanded } from './ensure-dsh-modules.ts'
 import { findSupportedNode, isSupportedNodeBinary } from './find-node.ts'
 import { enableWrites as enableLaunchTimings, mark as markLaunch } from './launch-timings.ts'
+import { parseNotificationPayload, type DesktopNotificationPayload } from './notification.ts'
 import { bundledPnpmEntry, featuredManifestPath, packageManagerEnvJson } from './package-manager.ts'
 import { syncSkillTree } from './plugin-sync.ts'
 import { mergePrefs, parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './prefs.ts'
@@ -725,11 +727,51 @@ function watchUpdateRequests(): void {
 }
 
 /**
+ * 【变更】2026-10-25 (批次二十六 4): the update prompt is an IN-APP dialog.
+ *
+ * The operating system's message box put a Windows-styled panel in the middle
+ * of an app that draws every other surface itself. The split now follows the
+ * product's own grain: the shell owns the DECISION (which scope prompted,
+ * whether the update is required, what applying it means) and the renderer
+ * owns the DRAWING. The shell keeps the prompt until the next one, so a
+ * renderer that mounted late still finds it (`update:getPrompt`).
+ */
+export type UpdatePromptPayload = {
+  /** Prompt identity; the renderer shows the newest prompt only. */
+  id: string
+  /** Whether the shell refuses to keep running on the old version. */
+  required: boolean
+  /** One line naming the scopes and versions involved. */
+  summaryZh: string
+  /** The release notes — one point per line. */
+  notesZh: string
+  /** The version the update lands on. */
+  targetVersion: string
+}
+
+/** The prompt the renderer has not answered yet. */
+let pendingUpdatePrompt: UpdatePromptPayload | undefined
+
+/**
+ * Hand the update prompt to the renderer.
+ * @param payload - the prompt facts.
+ */
+function pushUpdatePrompt(payload: Omit<UpdatePromptPayload, 'id'>): void {
+  const full: UpdatePromptPayload = { id: `prompt-${Date.now().toString(36)}`, ...payload }
+  pendingUpdatePrompt = full
+  mainWindow?.webContents.send('update:prompt', full)
+}
+
+/**
  * After the main window is up, prompt if a background check found an update.
  * Failures / up-to-date are ignored here (settings page can re-check).
  * §11.7: the prompt decision is per scope — a REQUIRED harness installer
  * (forced security / minimum shell) blocks (立即更新/退出); anything else
  * (optional desktop installer, plugin/runtime hot update) offers 稍后.
+ * 【变更】2026-10-25 (批次二十六 4): the prompt is no longer an operating-system
+ * message box. The shell still decides to prompt here — a manual check on the
+ * settings page stays on the page — and hands the renderer the facts; the
+ * renderer draws the dialog and calls back through `update:start`.
  * @param checkPromise - in-flight check started during splash.
  */
 async function promptUpdateAfterReady(
@@ -751,39 +793,12 @@ async function promptUpdateAfterReady(
   const scoped = updateService.getLastScoped()
   const harness = scoped?.plans.find(p => p.scope === 'harness')
   const required = harness !== undefined && harness.action === 'installer' && harness.required
-  const buttons = required ? ['立即更新', '退出'] : ['立即更新', '稍后更新']
-  const { response } = await dialog.showMessageBox(mainWindow!, {
-    type: 'info',
-    title: APP_NAME,
-    message: required ? '必须更新后才能继续使用' : '发现新版本',
-    detail: result.plan.summaryZh + (result.plan.manifest.notesZh ? `\n\n${result.plan.manifest.notesZh}` : ''),
-    buttons,
-    defaultId: 0,
-    cancelId: 1,
-    noLink: true,
+  pushUpdatePrompt({
+    required,
+    summaryZh: result.plan.summaryZh,
+    notesZh: result.plan.manifest.notesZh ?? '',
+    targetVersion: result.plan.manifest.bafDsh,
   })
-
-  if (response === 1) {
-    if (required) {
-      quitting = true
-      app.quit()
-    }
-    return
-  }
-
-  const applied = await updateService.startUpdate()
-  if (!applied.ok) {
-    dialog.showErrorBox(APP_NAME, applied.error ?? '更新失败')
-    if (required) {
-      quitting = true
-      app.quit()
-    }
-    return
-  }
-  if (applied.launchedInstaller) {
-    quitting = true
-    app.quit()
-  }
 }
 
 /**
@@ -813,6 +828,35 @@ ipcMain.handle('prefs:set', (_event, raw: unknown) => {
   return prefs
 })
 
+/**
+ * 【变更】2026-10-25 (批次二十六 3): raise an OS notification for a Session
+ * that finished, failed, or blocks on the user. The renderer reports the
+ * event; the shell decides — the `desktopNotifications` pref is the switch,
+ * and owning it here means the setting takes effect without a reload.
+ * Clicking the toast reveals the window, which is the whole point of the
+ * reminder when the app sits in the tray.
+ * @param payload - the renderer-reported event.
+ * @returns whether the toast was shown.
+ */
+function showDesktopNotification(payload: DesktopNotificationPayload): boolean {
+  if (!Notification.isSupported()) return false
+  const notification = new Notification({
+    title: payload.title,
+    body: payload.body,
+    silent: false,
+  })
+  notification.on('click', () => { showMainWindow() })
+  notification.show()
+  return true
+}
+
+ipcMain.handle('notify:desktop', (_event, raw: unknown) => {
+  if (!prefs.desktopNotifications) return { shown: false }
+  const payload = parseNotificationPayload(raw)
+  if (payload === undefined) return { shown: false }
+  return { shown: showDesktopNotification(payload) }
+})
+
 ipcMain.handle('update:getVersions', () => updateService?.getVersions() ?? seedVersions())
 ipcMain.handle('update:check', async () => {
   if (updateService === undefined) updateService = createUpdateService()
@@ -824,10 +868,37 @@ ipcMain.handle('update:check', async () => {
 })
 ipcMain.handle('update:start', async () => {
   if (updateService === undefined) updateService = createUpdateService()
-  return updateService.startUpdate()
+  const result = await updateService.startUpdate()
+  // 【变更】2026-10-25 (批次二十六 4): the installer replaces the running files,
+  // so the app steps aside once it launched. The native prompt used to own
+  // that quit, which left the settings page's own update hanging in front of
+  // an installer that could not replace a live executable.
+  if (result.ok && result.launchedInstaller) {
+    quitting = true
+    setTimeout(() => { app.quit() }, 250)
+  }
+  return result
 })
 ipcMain.handle('update:lastCheck', () => updateService?.getLastCheck() ?? null)
 ipcMain.handle('update:lastScoped', () => updateService?.getLastScoped() ?? null)
+// 【变更】2026-10-25 (批次二十六 4): the pending update prompt, so a renderer
+// that mounted after the shell pushed it still finds it.
+ipcMain.handle('update:getPrompt', () => pendingUpdatePrompt ?? null)
+// 【变更】2026-10-25 (批次二十六 4): the user answered the prompt. The shell
+// forgets it, so a reloaded renderer does not raise a dialog the user already
+// dismissed.
+ipcMain.handle('update:dismissPrompt', () => {
+  pendingUpdatePrompt = undefined
+  return true
+})
+// 【变更】2026-10-25 (批次二十六 4): the in-app prompt's 「退出」 — a required
+// update refuses to let the app keep running on the old version, and the
+// renderer cannot end the process itself.
+ipcMain.handle('app:quit', () => {
+  quitting = true
+  app.quit()
+  return true
+})
 
 /**
  * 【变更】2026-10-20 (批次二 3.2): upstream DeepSeek Harness release notes for

@@ -12,6 +12,8 @@ description: "精选插件服务：在 profile plugin-manager 之上编排外部
 
 没有 plugin-manager 时所有卡片降级为只读 `unavailable`；服务不会因此阻塞任何启动。
 
+baf-dsh 随附的精选清单点名了插件市场、飞书，以及产品按名推荐的三个能力插件：代码库索引、C 语言 LSP、经验沉淀与记忆。每个条目的包名、版本范围、registry 与 peer 豁免形态都是清单契约的一部分，`packages/baf/baf-featured/tests/featured.spec.ts` 锁住清单的 revision 与条目清单。
+
 ## 目录
 
 - [使用](#use-this-package)

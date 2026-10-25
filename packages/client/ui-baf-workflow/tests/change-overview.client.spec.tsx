@@ -21,6 +21,7 @@ import { ChangeOverviewRow } from '../src/client/ChangeOverviewRow.tsx'
 import type {
   BafWorkflowChangeDetailResult, BafWorkflowChangeOverviewResult,
 } from '../src/client/tab-types.ts'
+import type { WorkflowTabFileReadResult } from '../src/client/tab-types.ts'
 
 function t(key: string): string {
   return key
@@ -148,6 +149,7 @@ function mount(
   loadChangeDetail: (changeId: string) => Promise<BafWorkflowChangeDetailResult> =
     async changeId => detailFixture(changeId),
   openArtifact?: (cwd: string, path: string) => boolean,
+  readArtifact?: (cwd: string, path: string) => Promise<WorkflowTabFileReadResult>,
 ) {
   return render(
     <ChangeOverviewRow
@@ -155,6 +157,7 @@ function mount(
       loadChangeOverview={loadChangeOverview}
       loadChangeDetail={loadChangeDetail}
       {...(openArtifact === undefined ? {} : { openArtifact })}
+      {...(readArtifact === undefined ? {} : { readArtifact })}
     />,
   )
 }
@@ -283,22 +286,50 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
     })
   })
 
-  // 【变更】2026-10-24 (批次二十 3): the artifact open channel resolves a live
-  // session of the same workspace; a refusal is reported in place.
-  it('opens an artifact through the injected opener and reports a refusal', async () => {
+  // 【变更】2026-10-25 (批次二十四 1): clicking a 文档产物 opens the PREVIEW
+  // window (the same one the 测试流图's config files use); the window's
+  // 在侧栏打开 button is what reaches the sidebar opener.
+  it('previews an artifact in the document window and opens it in the sidebar from there', async () => {
     const load = vi.fn().mockResolvedValue(readyFixture())
-    const openArtifact = vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false)
-    mount(load, undefined, openArtifact as never)
+    const openArtifact = vi.fn().mockReturnValue(true)
+    const readArtifact = vi.fn().mockResolvedValue({
+      status: 'ready', path: '/work/demo-project/openspec/changes/x/proposal.md', content: '# 提案\n正文',
+    } satisfies WorkflowTabFileReadResult)
+    mount(load, undefined, openArtifact as never, readArtifact as never)
 
     fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
     await screen.findByTestId('change-detail-left')
     const artifact = await screen.findByRole('button', { name: /proposal\.md/ })
     fireEvent.click(artifact)
-    expect(openArtifact).toHaveBeenCalledWith('/work/demo-project', 'openspec/changes/x/proposal.md')
 
+    // The preview window opens with the document's own text.
+    const preview = await screen.findByTestId('change-artifact-preview')
+    expect(preview).toBeDefined()
+    await waitFor(() => {
+      expect(screen.getByTestId('change-artifact-preview-body').textContent).toContain('# 提案')
+    })
+    expect(readArtifact).toHaveBeenCalledWith('/work/demo-project', 'openspec/changes/x/proposal.md')
+    expect(openArtifact).not.toHaveBeenCalled()
+
+    // 在侧栏打开 hands the artifact to the sidebar.
+    fireEvent.click(screen.getByTestId('change-artifact-preview-open'))
+    expect(openArtifact).toHaveBeenCalledWith('/work/demo-project', 'openspec/changes/x/proposal.md')
+  })
+
+  // 【变更】2026-10-25 (批次二十四 1): without a live session there is nothing
+  // to read the document through — the page says so instead of opening a
+  // window that cannot read anything.
+  it('says the artifacts cannot be read when the page has no live session', async () => {
+    const load = vi.fn().mockResolvedValue(readyFixture())
+    mount(load)
+
+    fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
+    await screen.findByTestId('change-detail-left')
+    const artifact = await screen.findByRole('button', { name: /proposal\.md/ })
     fireEvent.click(artifact)
+
     await waitFor(() => { expect(screen.getByTestId('change-detail-open-failed')).toBeDefined() })
-    expect(screen.getByTestId('change-detail-open-failed').textContent).toBe('ovw.detailOpenFailed')
+    expect(screen.getByTestId('change-detail-open-failed').textContent).toBe('ovw.detailNoSession')
   })
 
   it('says the artifacts are read-only when the page cannot open them', async () => {

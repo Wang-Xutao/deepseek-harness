@@ -2,6 +2,7 @@
 import type { PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { DesktopClosePrefs } from './DesktopClosePrefs.tsx'
 import { DesktopLaunchPrefs } from './DesktopLaunchPrefs.tsx'
+import { DesktopNotificationPrefs } from './DesktopNotificationPrefs.tsx'
 import css from './GeneralSection.module.css'
 
 /** Full component props: section owner share plus item render share and locale. */
@@ -21,6 +22,9 @@ export function GeneralSection({ renderSlot, t, ...rest }: GeneralSectionCompone
       {renderSlot('settings.general.item', {})}
       {/* 【变更】2026-10-06 (问题 2): 开机自启动 rides above the close pref —
           both rows render only inside Electron (bridge-gated). */}
+      {/* 【变更】2026-10-25 (批次二十六 3): 桌面通知 rides above 开机自启动 — the
+          notification is the more urgent of the two desktop behaviours. */}
+      <DesktopNotificationPrefs {...rest} t={t} />
       <DesktopLaunchPrefs {...rest} t={t} />
       <DesktopClosePrefs {...rest} t={t} />
     </div>

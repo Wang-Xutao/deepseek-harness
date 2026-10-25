@@ -4,6 +4,8 @@ English | [中文](README.zh.md)
 
 Desktop-oriented settings section that shows baf-dsh / open-source dsh / BAF plugin pack versions and drives check/update through `window.bafDesktop`. Outside Electron it only explains that updates require the desktop app.
 
+The available-update card lists the release notes **one point per paragraph**, so the reader scans a list instead of a wall of text.
+
 No runtime invariant companion is published because version facts and update state are owned by the desktop shell; this section only renders them.
 
 ## Model Experience

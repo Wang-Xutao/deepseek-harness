@@ -120,6 +120,22 @@
   white-space: pre-wrap;
 }
 
+/* 【变更】2026-10-25 (批次二十六 4): the update notes render one paragraph per
+   point, so the reader scans the list instead of a wall of text. */
+.updateNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.updateNote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
 .label {
   font-size: 14px;
   line-height: 22px;

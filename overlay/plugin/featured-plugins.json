@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": 2,
+  "revision": 3,
   "plugins": [
     {
       "id": "dsh-feishu",
@@ -28,6 +28,60 @@
       "registryFirst": "https://registry.npmmirror.com",
       "autoUpdateDefault": true,
       "peerExemptionExpected": true
+    },
+    {
+      "id": "dsh-codebase-memory",
+      "package": "@lovedolove/dsh-codebase-memory-mcp",
+      "version": "^0.1.4",
+      "nameZh": "代码库索引",
+      "nameEn": "Codebase Index",
+      "descriptionZh": "为工作区建立知识图谱式代码索引：按结构检索符号、代码片段与调用链，并给出架构概览，让智能体先读懂整个代码库再动手，提出更准确、更贴合现有实现的代码建议。",
+      "descriptionEn": "Builds a knowledge-graph index of the workspace: symbol and snippet search, call-path tracing and an architecture overview, so the agent understands the whole codebase before it changes anything and suggests code that fits what is already there.",
+      "homepage": "https://github.com/LoveDoLove/dsh-codebase-memory-mcp",
+      "registryFirst": "https://registry.npmmirror.com",
+      "autoUpdateDefault": true,
+      "verified": true
+    },
+    {
+      "id": "dsh-code-navigator",
+      "package": "dsh-code-navigator",
+      "version": "^0.1.0",
+      "nameZh": "C 语言 LSP 导航",
+      "nameEn": "C Language LSP",
+      "descriptionZh": "接入 clangd 的 C/C++ 语言服务：跳转定义、查找引用、查找实现与悬停信息，让 C 代码的定位和重构建立在编译器级事实之上，而不是靠猜测。",
+      "descriptionEn": "Wires clangd into the harness for C/C++: go-to-definition, find-references, implementations and hover, so locating and restructuring C code rests on compiler-grade facts instead of guesses.",
+      "homepage": "https://github.com/Islulua/dsh-code-navigator",
+      "registryFirst": "https://registry.npmmirror.com",
+      "autoUpdateDefault": true,
+      "peerExemptionExpected": true,
+      "verified": true
+    },
+    {
+      "id": "dsh-memory",
+      "package": "@openviking/dsh-memory-plugin",
+      "version": "^0.5.29",
+      "nameZh": "经验沉淀与记忆",
+      "nameEn": "Experience and Memory",
+      "descriptionZh": "社区用量最大的 dsh 记忆插件：把历次对话与结论沉淀为可检索的记忆与上下文，让智能体记得住项目背景与既有决策，不必每次从零开始。",
+      "descriptionEn": "The most-used DSH memory plugin in the community: turns past conversations and decisions into retrievable memory and context, so the agent remembers the project's background and earlier calls instead of starting from zero.",
+      "homepage": "https://github.com/volcengine/OpenViking",
+      "registryFirst": "https://registry.npmmirror.com",
+      "autoUpdateDefault": true,
+      "verified": true
+    },
+    {
+      "id": "dsh-memory-vault",
+      "package": "@jacklika/dsh-memory",
+      "version": "^0.1.7-rc.40",
+      "nameZh": "经验库沉淀（curator）",
+      "nameEn": "Curated Experience Vault",
+      "descriptionZh": "以「行动前回忆、关键工作后沉淀」的方式管理经验：Obsidian 兼容的 Markdown 经验库，带冲突检测与可选人工确认的沉淀流程——经验人可读、可版本管理、离线可用。",
+      "descriptionEn": "Manages experience the recall-before-act, capture-after-work way: an Obsidian-compatible Markdown vault with a capture flow that detects conflicts and can ask for human approval — readable, versionable and offline.",
+      "homepage": "https://github.com/JackLiKa/jacklika-agent-plugins-repo",
+      "registryFirst": "https://registry.npmmirror.com",
+      "autoUpdateDefault": true,
+      "peerExemptionExpected": true,
+      "verified": true
     }
   ]
 }

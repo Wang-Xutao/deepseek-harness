@@ -10,7 +10,61 @@
  * 【变更】2026-10-25 (批次二十二): new file. The rules are deliberately local and
  * deterministic — the user's constraint was "never rewrite the author's intent,
  * never add content on the side", and a model call can do neither.
+ *
+ * 【变更】2026-10-25 (批次二十四 3): the local arranger became the FALLBACK.
+ * The control now asks the session's own model to arrange the draft first (the
+ * model path lives on the Host — see `bafWorkflowView.formatDraft`); this
+ * module still owns the offline path, and it gained
+ * {@link sanitizeModelDraft}, which cleans the model's answer before it
+ * reaches the composer.
  */
+
+/**
+ * A leading courtesy line ("整理后的内容如下：") is not part of the draft.
+ * The alternation is one long expression, so it is assembled from parts to
+ * keep every line inside the width budget.
+ */
+const LEADING_COURTESY = new RegExp(
+  '^(?:以下是|下面是|整理后(?:的)?(?:内容|草稿)(?:如下)?'
+  + '|已(?:为你)?整理(?:好)?(?:如下)?'
+  + '|Here (?:is|are) the (?:formatted|organized) draft:?'
+  + '|Formatted draft:?)'
+  + '[：:]?\\s*\\n+',
+  'i',
+)
+
+/**
+ * 【变更】2026-10-25 (批次二十四 3): the model's answer, cleaned for the
+ * composer.
+ *
+ * A model asked to "output only the arranged Markdown" still answers with a
+ * fence around it, or a one-line preamble, or a closing courtesy line — none
+ * of which belong in the user's draft. The sanitizer removes exactly those
+ * wrappers and nothing else: every character that could be the author's own
+ * wording survives.
+ * @param raw - the model's raw answer.
+ * @returns the answer as a draft.
+ */
+export function sanitizeModelDraft(raw: string): string {
+  let text = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim()
+  if (text === '') return ''
+  // A whole answer wrapped in ONE fence is the model's Markdown carrier, not
+  // the author's code block — unwrap it.
+  const fenced = /^```[^\n]*\n([\s\S]*?)\n```$/.exec(text)
+  if (fenced !== null) {
+    const inner = fenced[1] ?? ''
+    // Only unwrap when the fence holds no fence of its own (a real code block
+    // inside the answer must keep its own fence).
+    if (!inner.includes('```')) text = inner.trim()
+  }
+  // A leading courtesy line ("整理后的内容如下：") is not part of the draft.
+  text = text.replace(LEADING_COURTESY, '')
+  // A trailing courtesy line ("希望对你有帮助！") is not part of the draft.
+  text = text.replace(/\n+\s*(?:希望(?:对(?:你|您))(?:有|能)?(?:帮助|用)[！!。.]?|以上。|Let me know if[^.\n]*\.?)\s*$/i, '')
+  // Three or more blank lines are one separator.
+  text = text.replace(/\n{3,}/g, '\n\n')
+  return text.trim()
+}
 
 /** Longest prose run that stays one output paragraph. */
 const MAX_PARAGRAPH_CHARS = 200

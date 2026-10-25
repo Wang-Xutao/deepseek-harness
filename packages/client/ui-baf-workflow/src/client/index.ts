@@ -213,6 +213,19 @@ export function apply(ctx: ClientContext): void {
         ctx.sidebarRight.openResource(fileAddressFor(owner.id, cwd, path))
         return true
       },
+      // 【变更】2026-10-25 (批次二十四 1): the artifact preview's reader. The
+      // page is PROJECT-scoped, so it borrows a LIVE session of the same
+      // workspace and reads the document through it (the same
+      // readWorkspaceFile remote the 测试流图's config preview uses).
+      readArtifact: async (cwd: string, path: string) => {
+        const sessions = Object.values(ctx.sessions.list.getSnapshot().byId)
+        const owner = sessions.find(session => session.cwd === cwd)
+        if (owner === undefined) return { status: 'unreadable', path, reason: 'no-session' }
+        return unwrap(await ctx.remote.bafWorkflowView.readWorkspaceFile({
+          sessionId: owner.id,
+          path,
+        })) as import('./tab-types.ts').WorkflowTabFileReadResult
+      },
     }),
   }, ChangeOverviewRow))
 

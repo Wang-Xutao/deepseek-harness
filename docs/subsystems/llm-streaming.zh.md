@@ -664,8 +664,13 @@ interface GenerateOptions {
    * Provider-neutral classification for an auxiliary model call. Adapters may
    * map the purpose to model-hidden transport metadata. Ordinary conversation
    * requests leave it unset.
+   *
+   * 【变更】2026-10-25 (批次二十四 3): `draft-format` joins the vocabulary —
+   * the composer's「格式化输入」runs one auxiliary call on the conversation's
+   * own route, and the classification says the request is NOT the user's turn
+   * (an adapter that routes by purpose must not treat it as one).
    */
-  purpose?: 'compaction' | 'session-title'
+  purpose?: 'compaction' | 'session-title' | 'draft-format'
 }
 ```
 

@@ -44,8 +44,41 @@ function content(overrides: Partial<ContentProps> = {}) {
 }
 
 describe('More menu rows', () => {
-  it.each(['sidebar', 'rightbar'] as const)('shows only discovery and creation in %s regardless of entries', (region) => {
-    const b = content({ region, entries: [
+  // 【变更】2026-10-25 (批次二十四 3): the sidebar's More menu carries the
+  // launchers held in More (the unpinned ones) and no longer the plugin
+  // discovery row — the fixed 插件 launcher already sits in the rail.
+  it('lists the launchers held in More and the creation action in the sidebar', () => {
+    const b = content({ region: 'sidebar', entries: [
+      { id: 'notes', label: 'Notes', pinned: true, active: true },
+      { id: 'tasks', label: 'Tasks', pinned: false },
+    ] })
+    expect(b.view.getAllByRole('menuitem').map(row => row.textContent)).toEqual(['Tasks', 'Create your plugin'])
+    expect(b.view.getAllByRole('separator')).toHaveLength(1)
+    fireEvent.click(b.view.getByRole('menuitem', { name: 'Tasks' }))
+    expect(b.onOpen).toHaveBeenCalledExactlyOnceWith('tasks')
+    expect(b.onDismiss.mock.invocationCallOrder[0]).toBeLessThan(b.onOpen.mock.invocationCallOrder[0]!)
+    fireEvent.click(b.view.getByRole('menuitem', { name: 'Create your plugin' }))
+    expect(b.createPlugin).toHaveBeenCalledExactlyOnceWith()
+    expect(b.onDismiss.mock.invocationCallOrder[1]).toBeLessThan(b.createPlugin.mock.invocationCallOrder[0]!)
+    expect(b.browsePlugins).not.toHaveBeenCalled()
+    expect(b.onPinnedChange).not.toHaveBeenCalled()
+  })
+
+  // 【变更】2026-10-25 (批次二十五 1): the More-menu row draws the launcher's
+  // own leading icon, so a launcher that moved out of the rail reads as the
+  // same object it was in the rail.
+  it('draws the launcher icon the shell hands the row', () => {
+    const b = content({ region: 'sidebar', entries: [
+      { id: 'tasks', label: 'Tasks', pinned: false, icon: () => <span data-testid="tasks-glyph" /> },
+    ] })
+    const row = b.view.getByRole('menuitem', { name: 'Tasks' })
+    expect(row.querySelector('[data-testid="tasks-glyph"]')).toBeTruthy()
+    // The creation row below keeps its own icon and stays the only other row.
+    expect(b.view.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Tasks', 'Create your plugin'])
+  })
+
+  it('shows only discovery and creation in the rightbar regardless of entries', () => {
+    const b = content({ region: 'rightbar', entries: [
       { id: 'notes', label: 'Notes', pinned: true, active: true },
       { id: 'tasks', label: 'Tasks', pinned: false },
     ] })
@@ -89,14 +122,22 @@ describe('More menu rows', () => {
     expect(b.view.queryByRole('separator')).toBeNull()
   })
 
-  it.each(['sidebar', 'rightbar'] as const)('keeps only creation in %s without plugin navigation', (region) => {
-    const b = content({ region, usePluginNavigation: select => select(false) })
+  it('keeps only creation in the rightbar without plugin navigation', () => {
+    const b = content({ region: 'rightbar', usePluginNavigation: select => select(false) })
     expect(b.view.getAllByRole('menuitem').map(row => row.textContent)).toEqual(['Create your plugin'])
     expect(b.view.queryByRole('separator')).toBeNull()
     fireEvent.click(b.view.getByRole('menuitem', { name: 'Create your plugin' }))
     expect(b.createPlugin).toHaveBeenCalledExactlyOnceWith()
     expect(b.onOpen).not.toHaveBeenCalled()
     expect(b.onPinnedChange).not.toHaveBeenCalled()
+  })
+
+  // 【变更】2026-10-25 (批次二十四 3): the sidebar's More menu never carries
+  // the discovery row, whatever the navigation service says.
+  it('keeps the sidebar free of the discovery row even with plugin navigation', () => {
+    const b = content({ region: 'sidebar', entries: [], usePluginNavigation: select => select(true) })
+    expect(b.view.getAllByRole('menuitem').map(row => row.textContent)).toEqual(['Create your plugin'])
+    expect(b.view.queryByRole('menuitem', { name: 'Browse other plugins' })).toBeNull()
   })
 })
 
@@ -149,11 +190,13 @@ async function bench(
 describe('More menu registrations', () => {
   it('shows plugin discovery only while the Plugins page navigation is present', async () => {
     const b = await bench('en', { navigation: false })
-    const sidebar = () => within(b.view.getByRole('menu', { name: 'sidebar.panellist.actions' }))
-    expect(sidebar().queryByRole('menuitem', { name: 'Browse other plugins' })).toBeNull()
-    expect(sidebar().getByRole('menuitem', { name: 'Create your plugin' })).toBeTruthy()
-    expect(sidebar().queryByRole('separator')).toBeNull()
-    const injected = b.runtime.slots.entries('sidebar.panellist.actions')[0]!.inject!() as { browsePlugins: () => void }
+    // 【变更】2026-10-25 (批次二十四 3): the sidebar region lost the discovery
+    // row; the conversation and rightbar regions keep it.
+    const conversation = () => within(b.view.getByRole('menu', { name: 'conversation.session.header.views.actions' }))
+    expect(conversation().queryByRole('menuitem', { name: 'Browse other plugins' })).toBeNull()
+    expect(conversation().getByRole('menuitem', { name: 'Create your plugin' })).toBeTruthy()
+    expect(conversation().queryByRole('separator')).toBeNull()
+    const injected = b.runtime.slots.entries('conversation.session.header.views.actions')[0]!.inject!() as { browsePlugins: () => void }
     expect(() => { injected.browsePlugins() }).not.toThrow()
 
     const navigation = await b.runtime.mount({
@@ -161,23 +204,30 @@ describe('More menu registrations', () => {
       apply(ctx: Context) { ctx.provide('pluginNavigation', { openList: b.openList } as never) },
     })
     await act(async () => { await Promise.resolve() })
-    fireEvent.click(sidebar().getByRole('menuitem', { name: 'Browse other plugins' }))
+    fireEvent.click(conversation().getByRole('menuitem', { name: 'Browse other plugins' }))
     expect(b.openList).toHaveBeenCalledExactlyOnceWith()
 
     await navigation.dispose()
     await act(async () => { await Promise.resolve() })
-    expect(sidebar().queryByRole('menuitem', { name: 'Browse other plugins' })).toBeNull()
+    expect(conversation().queryByRole('menuitem', { name: 'Browse other plugins' })).toBeNull()
   })
 
   it('registers one row set per region and removes all of them when the plugin unloads', async () => {
     const b = await bench()
     for (const seat of SEATS) {
       expect(b.runtime.slots.entries(seat).map(entry => entry.options.id)).toEqual(['entry-customization'])
+    }
+    // 【变更】2026-10-25 (批次二十四 3): the sidebar's More menu carries the
+    // launchers held in More and the creation action; the other two regions
+    // keep the discovery row.
+    const sidebar = within(b.view.getByRole('menu', { name: 'sidebar.panellist.actions' }))
+    expect(sidebar.getAllByRole('menuitem').map(row => row.textContent)).toEqual(['Create your plugin'])
+    for (const seat of SEATS.filter(seat => seat !== 'sidebar.panellist.actions')) {
       expect(within(b.view.getByRole('menu', { name: seat })).getAllByRole('menuitem').map(row => row.textContent))
         .toEqual(['Browse other plugins', 'Create your plugin'])
     }
-    const sidebar = within(b.view.getByRole('menu', { name: 'sidebar.panellist.actions' }))
-    fireEvent.click(sidebar.getByRole('menuitem', { name: 'Browse other plugins' }))
+    const rightbar = within(b.view.getByRole('menu', { name: 'sidebar.right.tab.guide.actions' }))
+    fireEvent.click(rightbar.getByRole('menuitem', { name: 'Browse other plugins' }))
     expect(b.openList).toHaveBeenCalledExactlyOnceWith()
     await b.plugin.dispose()
     for (const seat of SEATS) {
@@ -203,7 +253,6 @@ describe('More menu registrations', () => {
   })
 
   it.each([
-    ['sidebar.panellist.actions', 'sidebar'],
     ['conversation.session.header.views.actions', 'conversation'],
     ['sidebar.right.tab.guide.actions', 'rightbar'],
   ] as const)('reports both footer actions of %s as the %s region before acting', async (seat, region) => {

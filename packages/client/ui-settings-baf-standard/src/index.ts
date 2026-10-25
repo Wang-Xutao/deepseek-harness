@@ -203,6 +203,27 @@ const execShell = promisify(exec)
 /** Per-tool version-probe budget (missing tools fail fast on ENOENT). */
 const QUALITY_PROBE_TIMEOUT_MS = 4_000
 
+/**
+ * 【变更】2026-10-25 (批次二十四 6): the probe budget per tool.
+ *
+ * A Ruby-based member boots a whole VM and its gem before it answers, so the
+ * shared 4s budget cut a perfectly installed Ceedling off mid-boot on a busy
+ * machine and reported 「环境不完整：Ceedling」 — a false negative on a working
+ * toolchain. The slow members now carry their own budget.
+ */
+const QUALITY_PROBE_TIMEOUTS: Readonly<Record<string, number>> = {
+  ruby: 20_000,
+  ceedling: 30_000,
+}
+
+/**
+ * 【变更】2026-10-25 (批次二十四 6): how many times one probe runs before it
+ * gives up. A timeout or a spawn that never started (the OS was out of process
+ * slots) says nothing about the tool, so it is tried again; a tool that
+ * answered with a non-zero exit is a real answer and is never retried.
+ */
+const QUALITY_PROBE_ATTEMPTS = 2
+
 /** One gem/pip install's wall-clock budget (network-bound; no RPC timeout). */
 const QUALITY_INSTALL_TIMEOUT_MS = 300_000
 
@@ -228,18 +249,36 @@ function qualTimedOut(error: unknown): boolean {
 }
 
 /**
- * Pull the version token out of a `--version` banner — the first whitespace
- * token that looks like `N(.N)+`, so `gcc (Rev3, …) 13.2.0`, `ruby 3.2.2 (…)`,
- * `Cppcheck 2.13` all resolve without a per-tool parser.
- * 【变更】2026-10-22 (批次十三复核 3): the scan covers the first FOUR lines, not
- * just line 1 — Ceedling 1.x greets with a `Welcome to Ceedling!` banner and
- * only names its version (`Ceedling => 1.0.1-…`) on line 3, which read as
- *「未安装」even on a perfectly installed gem (the 复检-仍缺 false negative).
+ * Pull the version token out of a `--version` banner.
+ *
+ * A labelled version wins: the tool states it next to its own name
+ * (`Ceedling => 1.0.1`, `cppcheck 2.13`, `version: 3.2.2`). Otherwise the
+ * first plain version token on a line that is not a filesystem path is taken,
+ * so `gcc (Rev3, …) 13.2.0` and `ruby 3.2.2 (…)` resolve without a per-tool
+ * parser while a gem path (`…/gems/3.3.0/…`) cannot be mistaken for a version.
+ *
+ * 【变更】2026-10-22 (批次十三复核 3): the scan covers more than line 1 —
+ * Ceedling 1.x greets with a `Welcome to Ceedling!` banner and only names its
+ * version (`Ceedling => 1.0.1-…`) on line 3, which read as 「未安装」even on a
+ * perfectly installed gem (the 复检-仍缺 false negative).
+ * 【变更】2026-10-25 (批次二十四 6): the scan covers the first EIGHT lines (a
+ * Ruby warning above the banner pushes the version down) and the labelled form
+ * is read before the bare token, so the banner's own path no longer wins.
+ * @param stdout - the command's combined output.
+ * @returns the version token, or undefined when the output carries none.
  */
 export function readToolVersion(stdout: string): string | undefined {
-  const lines = stdout.trim().split(/\r?\n/, 4)
+  const lines = stdout.trim().split(/\r?\n/, 8)
   for (const line of lines) {
-    for (const token of (line ?? '').split(/\s+/)) {
+    const labelled = /(?:version|Version|VERSION)\s*[:=]?\s*v?(\d+(?:\.\d+)+)/.exec(line)
+      ?? /=>\s*v?(\d+(?:\.\d+)+)/.exec(line)
+    if (labelled !== null) return labelled[1]
+  }
+  for (const line of lines) {
+    // A path carries digits of its own (a Ruby gem path names the Ruby
+    // version); such a line never states the tool's version.
+    if (/[\\/]/.test(line)) continue
+    for (const token of line.split(/\s+/)) {
       const match = token.match(/\d+(?:\.\d+)+/)
       if (match !== null) return match[0]
     }
@@ -600,26 +639,57 @@ export async function readQualityConfiguration(
  * `.cmd`/`.bat`, which `execFile` refuses with `shell: false` (CVE-2024-27980);
  * the shell resolves them through PATHEXT. Timeout → `unknown` (§20.5: a slow
  * tool must not be reported as absent), ENOENT → `missing`.
+ *
+ * 【变更】2026-10-25 (批次二十四 6): the probe no longer decides on the FIRST
+ * attempt. A timeout or a spawn that never started says nothing about the tool,
+ * so the command runs again (the budget is the per-tool one, so the slow
+ * Ruby members get their own window). A tool that answered with a non-zero
+ * exit is a real answer and is never retried. The version is read from stdout
+ * AND stderr, because a shim may print its banner on either stream.
+ * @param tool - the member to probe.
+ * @param timeoutMs - the attempt's wall-clock budget (the per-tool default).
+ * @returns the member's probe row.
  */
 export async function probeQualityTool(
   tool: { key: string; cmd: string; required: boolean },
-  timeoutMs = QUALITY_PROBE_TIMEOUT_MS,
+  timeoutMs = QUALITY_PROBE_TIMEOUTS[tool.key] ?? QUALITY_PROBE_TIMEOUT_MS,
 ): Promise<BafQualityToolRow> {
-  try {
-    const { stdout } = await execShell(tool.cmd, { timeout: timeoutMs, windowsHide: true })
-    const version = readToolVersion(stdout)
-    return version === undefined
-      ? { key: tool.key, state: 'missing', required: tool.required }
-      : { key: tool.key, state: 'ok', version, required: tool.required }
-  } catch (error: unknown) {
-    if (qualTimedOut(error)) return { key: tool.key, state: 'unknown', required: tool.required }
-    // A CLI that prints its version then exits non-zero is still usable.
-    const stdout = (error as { stdout?: unknown }).stdout
-    const version = typeof stdout === 'string' ? readToolVersion(stdout) : undefined
-    return version === undefined
-      ? { key: tool.key, state: 'missing', required: tool.required }
-      : { key: tool.key, state: 'ok', version, required: tool.required }
+  for (let attempt = 1; attempt <= QUALITY_PROBE_ATTEMPTS; attempt += 1) {
+    try {
+      const { stdout, stderr } = await execShell(tool.cmd, { timeout: timeoutMs, windowsHide: true })
+      const version = readToolVersion(`${stdout}\n${stderr}`)
+      if (version !== undefined) return { key: tool.key, state: 'ok', version, required: tool.required }
+      return { key: tool.key, state: 'missing', required: tool.required }
+    } catch (error: unknown) {
+      if (qualTimedOut(error)) {
+        if (attempt < QUALITY_PROBE_ATTEMPTS) continue
+        return { key: tool.key, state: 'unknown', required: tool.required }
+      }
+      // A CLI that prints its version then exits non-zero is still usable.
+      const out = error as { stdout?: unknown; stderr?: unknown }
+      const printed = `${typeof out.stdout === 'string' ? out.stdout : ''}\n${typeof out.stderr === 'string' ? out.stderr : ''}`
+      const version = readToolVersion(printed)
+      if (version !== undefined) return { key: tool.key, state: 'ok', version, required: tool.required }
+      // A spawn that never started (the OS ran out of process slots) says
+      // nothing about the tool; anything else is the tool's own answer.
+      if (attempt < QUALITY_PROBE_ATTEMPTS && qualSpawnFailed(error)) continue
+      return { key: tool.key, state: 'missing', required: tool.required }
+    }
   }
+  /* v8 ignore next -- the loop always returns on its last attempt. */
+  return { key: tool.key, state: 'unknown', required: tool.required }
+}
+
+/**
+ * Whether one probe failure is a spawn that never started — the OS was out of
+ * process slots or the shell could not be created. Such a failure carries no
+ * information about the tool itself.
+ * @param error - the rejected shell error.
+ * @returns whether the spawn itself failed.
+ */
+function qualSpawnFailed(error: unknown): boolean {
+  const code = (error as { code?: unknown }).code
+  return code === 'EAGAIN' || code === 'ENOBUFS' || code === 'EMFILE' || code === 'ENFILE'
 }
 
 /** Probe every toolchain member in parallel (presentation order preserved). */

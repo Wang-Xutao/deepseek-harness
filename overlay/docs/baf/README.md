@@ -8,6 +8,7 @@
 | [error-codes.md](error-codes.md) | 稳定错误码与载荷 |
 | [compatibility-matrix.md](compatibility-matrix.md) | dsh / plugin / baseline 兼容矩阵模板 |
 | [checklist-phase0-4.md](checklist-phase0-4.md) | Phase 0–4 人工验收清单（开发用，不进用户帮助 site） |
+| [capability-plugins.md](capability-plugins.md) | 代码库索引 / C 语言 LSP / 经验沉淀与记忆：开源插件调研结论、推荐理由、落地要求与备用实现方案 |
 
 Schema 与 fixture（仓库路径）：
 

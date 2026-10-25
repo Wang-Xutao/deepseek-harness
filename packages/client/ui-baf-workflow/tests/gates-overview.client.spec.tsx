@@ -431,3 +431,50 @@ describe('GatesOverviewRow (2026-10-20 批次三 4.5 split canvas + selected det
     expect(load).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * 【变更】2026-10-25 (批次二十四 2): the page's own chrome — the hero band and
+ * the figure plates that make the 确认门 tab a sibling of the 变更总览 tab.
+ */
+describe('the confirmation-gate page chrome (2026-10-25 批次二十四 2)', () => {
+  it('opens with the hero band and the three figure plates', async () => {
+    const load = vi.fn().mockResolvedValue(overviewFixture())
+    mount(load, true)
+
+    const hero = await screen.findByTestId('baf-gates-hero')
+    expect(hero.textContent).toContain('gates.heroTitle')
+    expect(hero.textContent).toContain('gates.heroHelp')
+    expect(hero.textContent).toContain('gates.heroLabel')
+    expect(hero.textContent).toContain('view.brandBaf')
+
+    const tiles = screen.getByTestId('baf-gates-tiles')
+    expect(tiles.textContent).toContain('gates.sectionConfirm')
+    expect(tiles.textContent).toContain('gates.sectionStage')
+    expect(tiles.textContent).toContain('gates.tileStates')
+  })
+
+  it('counts the confirm gates the reader can see on the chart', async () => {
+    const load = vi.fn().mockResolvedValue(overviewFixture())
+    mount(load, true)
+
+    const tiles = await screen.findByTestId('baf-gates-tiles')
+    const confirm = tiles.querySelector('[data-tone="confirm"]')
+    // The plate counts the gates the READER sees — every gate pill on the
+    // chart, the reader-side twins and the one-shot entries excluded.
+    const pills = screen.getByTestId('baf-gates-flow')
+      .querySelectorAll('[data-testid^="baf-gates-gate-node-"]')
+    expect(confirm?.textContent).toContain(String(pills.length))
+    expect(tiles.querySelector('[data-tone="stage"]')?.textContent).toContain('6')
+  })
+
+  it('keeps the frame bar as the chart identity and moves the counts out of it', async () => {
+    const load = vi.fn().mockResolvedValue(overviewFixture())
+    mount(load, true)
+
+    const bar = await screen.findByTestId('baf-gates-console')
+    expect(bar.textContent).toContain('gates.canvasAria')
+    expect(bar.textContent).toContain('gates.canvasHint')
+    // The counts live in the plates now, so the bar carries none of them.
+    expect(bar.textContent).not.toContain('gates.sectionConfirm')
+  })
+})

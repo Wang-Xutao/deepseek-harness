@@ -1,4 +1,4 @@
-/** Folded Conversation Views, plugin discovery while reachable, and creation. */
+/** Folded Conversation Views, the panels held in More, and plugin creation. */
 import {
   IconCheckOutlineRegular, IconPluginPinwheelOutlineRegular, IconPlusOutlineRegular, MenuItemButton,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -28,17 +28,29 @@ type EntryMenuContentProps = PropsRuntime<'sidebar.panellist.actions'>
   & PropsLocale<'entryCustomization'> & InjectFace<EntryMenuInjected>
 
 /**
- * Render folded Conversation Views followed by discovery and Creator actions, without pin controls.
+ * Render the region's More-menu rows: the entries that live in More, then the
+ * Creator action.
+ *
+ * 【变更】2026-10-25 (批次二十四 3): the sidebar's More menu now carries the
+ * panel launchers that live there — 自动化任务 is one of them — so a launcher
+ * moved out of the rail is still one click away. The plugin-discovery row is
+ * gone from this region: 浏览更多插件 duplicated the fixed 插件 launcher, which
+ * the rail already shows.
  * @param props - Owner dismissal callback, injected actions, and localized copy.
  * @returns Menu rows for the region's More menu.
  */
 export function EntryMenuContent({
   entries, onOpen, region, onDismiss, usePluginNavigation, browsePlugins, createPlugin, t,
 }: EntryMenuContentProps) {
-  const moreEntries = region === 'conversation' ? entries : []
-  const browsable = usePluginNavigation(present => present)
+  // The sidebar lists the launchers held in More (unpinned ones); the
+  // conversation lists the Views its header folded into More.
+  const moreEntries = region === 'sidebar'
+    ? entries.filter(entry => entry.pinned !== true)
+    : region === 'conversation' ? entries : []
+  const browsable = region !== 'sidebar' && usePluginNavigation(present => present)
   return <>
     {moreEntries.map(entry => <MenuItemButton key={entry.id} current={entry.active === true}
+      icon={entry.icon?.()}
       onSelect={() => { onDismiss(); onOpen(entry.id) }}>
       <span className={css.entryName}>
         <span className={css.entryTitle}>{entry.label}</span>

@@ -13,6 +13,68 @@
   margin: 8px 0 10px;
 }
 
+/* 【变更】2026-10-25 (批次二十六 4): the Settings trigger and the update tag
+   share one flex group, so the tag lands at the button's end instead of
+   drifting to the row's edge past the status indicators. */
+.triggerGroup {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.triggerGroup.railGroup {
+  flex: none;
+  width: 36px;
+}
+
+/* The update tag: a danger-tinted chip at the Settings button's end. It is the
+   one loud thing in the sidebar foot, because a pending update is the one
+   thing the user can act on from there. */
+.updateTag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  margin-left: 8px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-text-danger) 45%, transparent);
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in srgb, var(--dsw-alias-text-danger) 16%, transparent);
+  color: var(--dsw-alias-text-danger);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.updateTag:hover {
+  background: color-mix(in srgb, var(--dsw-alias-text-danger) 26%, transparent);
+}
+
+.updateTagIcon {
+  flex: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .updateTag {
+    animation: baf-update-tag-halo 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes baf-update-tag-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-text-danger) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-text-danger) 0%, transparent);
+  }
+}
+
 .trigger {
   flex: 1;
   min-width: 0;

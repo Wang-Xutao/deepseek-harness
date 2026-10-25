@@ -9,7 +9,7 @@ import type {
   ConversationSessionHeaderSlotProps, ConversationSessionSlotProps, ConversationViewActionsOwnerProps,
 } from '../contract/slots.ts'
 import { resolveActiveView } from '../view-selection.ts'
-import { FIXED_VIEW_ID } from '../view-pins.ts'
+import { FIXED_VIEW_ID, PRIMARY_VIEW_IDS } from '../view-pins.ts'
 import { DefaultConversationViews } from './DefaultConversationViews.tsx'
 import css from './ConversationRoot.module.css'
 
@@ -109,9 +109,14 @@ export function ConversationSessionHeader({
     return () => { observer.disconnect() }
   }, [showTabs, hasEntryActions])
   const { visibleTabs, moreTabs } = useMemo(() => {
+    // 【变更】2026-10-25 (批次二十四 4): the strip keeps the PRIMARY views only
+    // (对话 / 轨迹 / 轨迹图 / 工作流图 / 测试流图); every other View folds into
+    // the 更多会话视图 menu, so a plugin View no longer widens the header. The
+    // fixed Chat view leads the strip, and the width budget still folds a
+    // primary View into More when the row is narrow.
     const preferred = [
-      ...tabs.filter(tab => tab.id === FIXED_VIEW_ID),
-      ...tabs.filter(tab => tab.id !== FIXED_VIEW_ID && !unpinned.includes(tab.id)),
+      ...tabs.filter(tab => tab.id === FIXED_VIEW_ID && !unpinned.includes(tab.id)),
+      ...tabs.filter(tab => tab.id !== FIXED_VIEW_ID && PRIMARY_VIEW_IDS.includes(tab.id) && !unpinned.includes(tab.id)),
     ]
     const visibleTabs = hasEntryActions ? preferred.slice(0, visibleViewLimit) : preferred
     const visibleIds = new Set(visibleTabs.map(tab => tab.id))
@@ -205,7 +210,11 @@ export function ConversationSessionHeader({
                 className={clsx(css.tab, viewTab.id === active?.id && css.tabActive)}
                 onClick={() => { selectView(viewTab.id) }}
               >
-                <Tooltip label={viewTab.label} portal><span className={css.tabLabel}>{viewTab.label}</span></Tooltip>
+                {/* 【变更】2026-10-25 (批次二十六 1): a View tab carries no hover
+                    tooltip — the label is already the tab's whole content, so the
+                    bubble only repeated it. The More button keeps its tooltip
+                    because it names the View folded away from the strip. */}
+                <span className={css.tabLabel}>{viewTab.label}</span>
               </button>
             ))}
           </div>
