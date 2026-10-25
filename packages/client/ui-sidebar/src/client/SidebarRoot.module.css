@@ -245,7 +245,7 @@
    emphasis only). A button only in behavior (New Session shortcut): the
    pointer cursor is the sole affordance — no hover chrome on the mark. */
 .brand {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -255,6 +255,21 @@
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+/* The brand GROUP: the brand itself plus the brand row's trailing seat.
+   The group takes the free width the brand used to take, so the collapse
+   toggle stays at the row's far edge, while a trailing occupant lands right
+   of the brand name and its version capsule instead of drifting to the row's
+   edge. The brand inside shrinks first, so the trailing seat keeps its width
+   when the column narrows. */
+.brandRow {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
 }
 
 /* On macOS the brand is a window-drag surface, not a New Session button;

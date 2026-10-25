@@ -1,0 +1,44 @@
+/* 【变更】2026-10-26 (批次二十七 1): the update chip in the sidebar's brand
+   row, right of the version capsule. It keeps the danger tint it had at the
+   Settings trigger: a pending update is the one thing the user can act on
+   from the sidebar, and the brand row is where the version it replaces is
+   written. The label alone — the brand row is a narrow column, and the
+   version capsule beside it already says what the chip talks about. */
+.tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-text-danger) 45%, transparent);
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in srgb, var(--dsw-alias-text-danger) 16%, transparent);
+  color: var(--dsw-alias-text-danger);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tag:hover {
+  background: color-mix(in srgb, var(--dsw-alias-text-danger) 26%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tag {
+    animation: baf-update-tag-halo 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes baf-update-tag-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-text-danger) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-text-danger) 0%, transparent);
+  }
+}

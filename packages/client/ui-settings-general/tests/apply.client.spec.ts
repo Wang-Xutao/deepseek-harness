@@ -20,6 +20,7 @@ import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocumentAction.tsx'
+import { SidebarUpdateTag } from '../src/client/SidebarUpdateTag.tsx'
 
 const SELF = '@deepseek-ai/dsh-client-ui-settings-general'
 const SIDEBAR = '@deepseek-ai/dsh-client-ui-sidebar'
@@ -124,6 +125,11 @@ describe('ui-settings-general apply', () => {
     for (const [name, component] of SEATS) {
       expect(c.ctx.slots.entries(name).find(row => row.component === component)!.locale).toBe(NS)
     }
+    /* 【变更】2026-10-26 (批次二十七 1): the update tag rides the sidebar's
+       brand-row trailing seat and shares the shell's store — the chip opens
+       版本与更新 through the same section selection the panel reads. */
+    expect(c.ctx.slots.entries('sidebar.brand.trailing').map(entry => entry.component)).toEqual([SidebarUpdateTag])
+    expect(c.ctx.slots.entries('sidebar.brand.trailing')[0]!.locale).toBe(NS)
   }, COLD_BOOT_TIMEOUT_MS)
 
   it('reports a Coding Tools toggle only when a known value changes to the requested one', async ({ mock, start }) => {
@@ -339,6 +345,8 @@ describe('ui-settings-general apply', () => {
     for (const [name] of SEATS) expect(ownEntries(c, name)).toHaveLength(0)
     expect(c.ctx.slots.entries('settings.general.item').filter(row => row.locale === NS)).toEqual([])
     expect(c.ctx.slots.spec('settings.general.item')).toBeUndefined()
+    // The brand-row tag leaves with the plugin.
+    expect(c.ctx.slots.entries('sidebar.brand.trailing')).toEqual([])
   })
 
   it('asks about another Host release in the shell overlay and stops asking once dismissed', async ({ mock, start }) => {

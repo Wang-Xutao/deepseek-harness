@@ -63,6 +63,7 @@ The request carries a fixed system prompt and one user message with no session p
 ## Known Limitations and Deferred Work
 
 - **Branded title overrides upstream wordmark** — `ui-brand-official` registers "DeepSeek Harness" under `sidebar.brand.name`; baf-desktop activates after it and registers `baf-dsh v0.0.14` so the title row reads correctly. Bump `overlay/desktop/VERSION` in lockstep.
+- **The brand row yields the width, not the version capsule** — the sidebar's brand row is narrow (256px of content at the default column), so the wordmark ellipsizes first; the version capsule beside it keeps its full width, because that capsule is the fact the update tag talks about.
 - **Help site needs static artifacts** — sync `overlay/site` into `apps/web/dist/help/` (`npm run docs:build` or `brand-web` under `overlay`).
 - **Open in browser** — desktop uses `window.bafDesktop.openExternal`; plain browser uses `window.open`.
 - **A draft with @ file references is left alone** — the composer writes the draft as plain text, which would drop the reference chips the author attached. The control stays visible but refuses the draft and says why.

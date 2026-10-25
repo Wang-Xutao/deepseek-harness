@@ -33,6 +33,7 @@ import type {
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { createSettingsShellStore } from './shell-store.ts'
 import { SettingsRoot } from './SettingsRoot.tsx'
+import { SidebarUpdateTag } from './SidebarUpdateTag.tsx'
 import { DesktopUpdateBadge } from './DesktopUpdateIndicator.tsx'
 import type { DesktopUpdateBridge } from '../types.ts'
 import { DesktopUpdateSource } from './desktop-update-source.ts'
@@ -188,11 +189,18 @@ export function apply(ctx: ClientContext): void {
     },
   })
   // The settings shell reads this host's configuration, so it follows access to its description.
-  ctx.remoteAccess.whenAccess('settings/describe', () =>
-    ctx.slots.inject('sidebar.settings', () => {
-      const shellHandle = createSettingsShellStore()
-      const shellInstance = shellHandle.create()
-      const shellStore: typeof shellHandle = { ...shellHandle, create: () => shellInstance }
+  ctx.remoteAccess.whenAccess('settings/describe', () => {
+    const shellHandle = createSettingsShellStore()
+    const shellInstance = shellHandle.create()
+    const shellStore: typeof shellHandle = { ...shellHandle, create: () => shellInstance }
+    /* 【变更】2026-10-26 (批次二十七 1): the update tag in the sidebar's brand
+       row. It shares the shell's store, so the chip opens 版本与更新 through the
+       same section selection the panel reads — one source, one reading. It
+       rides the same access gate as the shell: without the panel there is
+       nothing for the chip to open. */
+    const disposeTag = ctx.slots.inject('sidebar.brand.trailing', () =>
+      ctx.slots.register({ name: 'sidebar.brand.trailing', locale: NS, store: shellStore }, SidebarUpdateTag))
+    const disposeSettings = ctx.slots.inject('sidebar.settings', () => {
       const disposeCommand = ctx.shortcuts.register({
         id: 'settings.open' as ShortcutCommandId, label: () => t('shortcut.open'), aliases: ['settings', 'preferences'],
         defaults: {
@@ -228,7 +236,9 @@ export function apply(ctx: ClientContext): void {
         inject: shellInjected,
       }, SettingsRoot)
       return () => { disposeCommand(); disposeSlot() }
-    }))
+    })
+    return () => { disposeTag(); disposeSettings() }
+  })
 
   ctx.slots.inject('settings.trigger', () =>
     ctx.slots.register({ name: 'settings.trigger', locale: NS }, TriggerContent))

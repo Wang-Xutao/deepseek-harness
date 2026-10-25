@@ -49,6 +49,7 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
   let footerActionOwner: SidebarFooterActionOwnerProps | undefined
   const brandMark = <span data-testid="custom-brand-mark">M</span>
   const brandName = <span data-testid="custom-brand-name">Custom Brand</span>
+  const brandTrailing = <span data-testid="custom-brand-trailing">U</span>
   let current = { collapsed, width }
   const root = () => (
     <SidebarRoot
@@ -66,6 +67,7 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
       ) => {
         if (key === 'sidebar.brand.mark') return brandMark
         if (key === 'sidebar.brand.name') return brandName
+        if (key === 'sidebar.brand.trailing') return brandTrailing
         if (key === 'sidebar.toggle.badge') return null
         if (key === 'sidebar.settings') {
           settingsOwner = owner
@@ -148,6 +150,20 @@ describe('SidebarRoot shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
     expect(b.toggleSidebar).toHaveBeenCalledOnce()
     expect(b.trackEntryClick).toHaveBeenCalledTimes(2)
+  })
+
+  // 【变更】2026-10-26 (批次二十七 1): the brand row's trailing seat renders
+  // beside the brand — OUTSIDE the brand's own button, because the brand
+  // doubles as a New Session shortcut and one button may not nest another.
+  it('renders the brand row trailing seat beside the brand, outside the brand button', () => {
+    mountShell()
+    const trailing = screen.getByTestId('custom-brand-trailing')
+    const brand = screen.getAllByRole('button', { name: 'New session' })
+      .find(button => button.querySelector('[data-testid="custom-brand-name"]') !== null)!
+    expect(trailing.closest('button')).toBeNull()
+    // Same group, after the brand: the seat lands right of the wordmark.
+    expect(trailing.parentElement).toBe(brand.parentElement)
+    expect(brand.compareDocumentPosition(trailing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('reports the collapsed rail New Session as a sidebar click outside the Windows caption', () => {

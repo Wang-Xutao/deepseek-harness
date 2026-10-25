@@ -211,9 +211,10 @@ describe('SettingsRoot trigger', () => {
     expect(screen.getByRole('button', { name, expanded: true })).toBeTruthy()
   })
 
-  // 【变更】2026-10-25 (批次二十六 4): a pending update grows a tag at the end
-  // of the Settings trigger, and the tag opens the 版本与更新 page directly.
-  it('shows the update tag at the end of the Settings button and opens 版本与更新', async () => {
+  // 【变更】2026-10-26 (批次二十七 1): the update tag left the Settings
+  // trigger — it rides the sidebar's brand row now (SidebarUpdateTag). The
+  // panel keeps the red dot, so the news still reaches the user here.
+  it('keeps the update tag out of the Settings trigger row', () => {
     const holder = window as Window & { bafDesktop?: unknown }
     const original = holder.bafDesktop
     holder.bafDesktop = {
@@ -223,10 +224,8 @@ describe('SettingsRoot trigger', () => {
     }
     try {
       mount({ dictionary: zh, rows: [{ id: 'version-updates', order: 0, label: '版本与更新' }] })
-      const tag = await screen.findByTestId('settings-update-tag')
-      expect(tag.textContent).toContain('更新')
-      fireEvent.click(tag)
-      expect(await screen.findByTestId('section-version-updates')).toBeTruthy()
+      expect(screen.queryByTestId('sidebar-update-tag')).toBeNull()
+      expect(screen.queryByTestId('settings-update-tag')).toBeNull()
     } finally {
       holder.bafDesktop = original
     }

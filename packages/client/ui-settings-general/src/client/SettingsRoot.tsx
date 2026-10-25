@@ -174,8 +174,8 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const connectionState = useConnectionState(state => state)
   // 【变更】2026-10-04 (用户问题 3): red dot on the 版本与更新 nav row while
   // the baf-dsh shell reports an available update (retained check + push).
-  // 【变更】2026-10-25 (批次二十六 4): the same fact drives the update tag at
-  // the end of the Settings trigger — one source, one reading.
+  // 【变更】2026-10-26 (批次二十七 1): the same fact drives the update tag in
+  // the sidebar's brand row (SidebarUpdateTag) — one source, one reading.
   const updateAvailable = useBafUpdateAvailable()
   const previousConnectionState = useRef(connectionState)
   const onboardingSteps = useOnboardingSteps(s => s)
@@ -287,25 +287,6 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
               )}
             </button>
           </Tooltip> })}
-          {/* 【变更】2026-10-25 (批次二十六 4): the update tag. It sits at the
-              Settings button's end and opens the 版本与更新 page directly, so
-              the user can apply the update without hunting for the section.
-              The rail (collapsed sidebar) has no room for a label, so the tag
-              stays out of it — the panel's red dot still carries the news. */}
-          {updateAvailable && wide ? (
-            <Tooltip label={t('update.tagHint')} side="top">
-              <button
-                type="button"
-                className={css.updateTag}
-                data-testid="settings-update-tag"
-                aria-label={t('update.tagHint')}
-                onClick={() => { openSection('version-updates') }}
-              >
-                <IconDownloadOutlineMedium className={css.updateTagIcon} size={12} />
-                <span>{t('update.tag')}</span>
-              </button>
-            </Tooltip>
-          ) : null}
         </div>
         <ConnectionIndicator
           state={wide && desktopUpdate.presentation?.phase !== 'installing' ? connectionIndicator : undefined}

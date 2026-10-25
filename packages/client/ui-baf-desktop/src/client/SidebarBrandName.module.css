@@ -3,13 +3,22 @@
    wordmark type and the 6px gutter, so these two spans only carry what the
    wordmark itself does not. */
 
+/* 【变更】2026-10-26 (批次二十七 1): the wordmark is the flexible part of the
+   brand row. The version capsule keeps its width (it is the fact the update
+   tag talks about) and the wordmark yields first, with an ellipsis instead
+   of the hard clip the row used to draw over the capsule. */
 .name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 /* Mirrors BrandWordmark's build-label pill: 14px tall, 2px radius, filled with
    the label ink and the glyphs knocked out in the inverted label colour. */
 .version {
+  flex: none;
   display: inline-flex;
   align-items: center;
   height: 14px;

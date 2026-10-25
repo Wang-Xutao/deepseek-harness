@@ -31,6 +31,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.brand.name': { kind: 'single'; scope: 'root'; owner: SidebarBrandNameOwnerProps }
     /**
+     * Trailing content in the expanded brand row, right of the brand name and
+     * its version capsule. Declared by this package's 'sidebar' entry so a
+     * deployment can put its own badge there without replacing the brand. The
+     * slot renders OUTSIDE the brand's own button (the brand doubles as a
+     * New Session shortcut, so an interactive occupant cannot live inside it).
+     */
+    'sidebar.brand.trailing': { kind: 'single'; scope: 'root'; owner: Record<never, never> }
+    /**
      * Global panel icons. Each list id addresses the matching main panel;
      * the sidebar owns the button and resolves its label from list metadata.
      */
@@ -203,6 +211,7 @@ export type SidebarRootComponentProps =
   & PropsRenderSlots<
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
+    | 'sidebar.brand.trailing'
     | 'sidebar.toggle.badge'
     | 'sidebar.panellist'
     | 'sidebar.panellist.actions'

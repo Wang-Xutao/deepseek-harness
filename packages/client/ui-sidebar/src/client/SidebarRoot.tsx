@@ -314,12 +314,12 @@ export function SidebarRoot({
               </span>
             </span>
           )
-          return darwinDesktop || !canStartSession
-            ? <span className={clsx(css.brand, css.wide)}>{identity}</span>
+          const brand = darwinDesktop || !canStartSession
+            ? <span className={css.brand}>{identity}</span>
             : (
               <button
                 type="button"
-                className={clsx(css.brand, css.wide)}
+                className={css.brand}
                 aria-label={t('session.new.label')}
                 aria-keyshortcuts={newShortcut?.aria}
                 onClick={(event) => {
@@ -330,6 +330,19 @@ export function SidebarRoot({
                 {identity}
               </button>
             )
+          /* 【变更】2026-10-26 (批次二十七 1): the brand row's trailing seat. It
+             renders OUTSIDE the brand's own button — the brand doubles as a
+             New Session shortcut, so an interactive occupant (the update tag)
+             cannot live inside it without nesting one button in another. The
+             seat rides the brand GROUP rather than the row, so an occupant
+             lands right of the brand name and its version capsule instead of
+             at the row's far edge, next to the collapse toggle. */
+          return (
+            <span className={clsx(css.brandRow, css.wide)}>
+              {brand}
+              {renderSlot('sidebar.brand.trailing', {})}
+            </span>
+          )
         })()}
         {!darwinDesktop && toggle}
       </div>

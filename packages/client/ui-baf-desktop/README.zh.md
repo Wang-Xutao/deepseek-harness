@@ -61,6 +61,7 @@
 ## Known Limitations and Deferred Work
 
 - **品牌字覆盖上游 wordmark** — `ui-brand-official` 在 `sidebar.brand.name` 注册 "DeepSeek Harness"；baf-desktop 之后挂载并注册 `baf-dsh v0.0.14` 让标题行展示正确品牌。需要随 `overlay/desktop/VERSION` 一起 bump。
+- **品牌行让位的是品牌名，不是版本胶囊** — 侧栏品牌行的内容列很窄（默认列宽下只有 256px），所以先被省略的是品牌名；旁边的版本胶囊保持完整宽度，因为那枚胶囊正是「更新」标签要说的那个事实。
 - **帮助站依赖静态产物** — 需将 `overlay/site` 同步到 `apps/web/dist/help/`（`overlay` 下 `npm run docs:build` 或 `brand-web`）。
 - **「在浏览器中打开」** — 桌面壳走 `window.bafDesktop.openExternal`；纯浏览器则用 `window.open`。
 - **含 @ 文件引用的草稿不动** — 会话框以纯文本回写草稿，那会丢掉作者挂上的引用 chip。控件保持可见但拒绝处理这份草稿，并说明原因。

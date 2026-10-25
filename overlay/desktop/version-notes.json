@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "会话标签不再重复提示：标签本身就是这一格的全部内容。\n更新提示改为应用内弹窗，与应用风格统一，不再使用系统消息框。\n有可用更新时，「设置」按钮末尾出现醒目的「更新」标签，点击直达版本与更新页。\n更新内容只保留重要变化，每一点单独成段。\n新增桌面通知：任务完成、出错、需要你审批时各提醒一次，点击通知可唤起窗口。\n桌面通知开关在「设置 → 通用」里，默认关闭。",
-    "notesEn": "Session tabs stop repeating themselves: the label IS the whole cell.\nThe update prompt is now an in-app dialog, styled like the app instead of a system message box.\nWhen an update is available, the Settings button grows an eye-catching 「更新」 tag that opens the 版本与更新 page.\nRelease notes keep only the important changes, one point per paragraph.\nDesktop notifications: a finished task, a failure, or a pending approval each raise one system notification; clicking it brings the window forward.\nThe desktop-notification switch lives in 「设置 → 通用」 and starts off."
+    "notesZh": "「更新」标签移到左侧栏顶部，紧挨版本号签：当前跑的版本和「有新版本」读作同一行。\n点击标签直达「版本与更新」页，行为不变；收起成窄轨时不放标签，靠设置面板红点报信。\n收起侧栏时标签自动隐藏，侧栏底部「设置」按钮回到原来的样子。",
+    "notesEn": "The 「更新」 tag moved to the top of the sidebar, right next to the version capsule: the running version and the news of a newer one now read as one line.\nClicking the tag still opens the Version & updates page; the collapsed rail keeps no label and relies on the settings panel's red dot.\nCollapsing the sidebar hides the tag, and the Settings button at the foot is back to its plain look."
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",

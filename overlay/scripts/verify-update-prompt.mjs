@@ -521,8 +521,8 @@ if (variant === 'forced') {
   check(closers.hasQuit === true, 'the required prompt offers the quit action', closers)
   // The prompt holds the window, so the tag cannot be clicked — but it is
   // there, and the user sees it as soon as the update is dealt with.
-  const tagPresent = await run(`return !!document.querySelector('[data-testid="settings-update-tag"]')`)
-  check(tagPresent === true, 'the Settings button carries the update tag', tagPresent)
+  const tagPresent = await run(`return !!document.querySelector('[data-testid="sidebar-update-tag"]')`)
+  check(tagPresent === true, 'the brand row carries the update tag', tagPresent)
 }
 
 // ── 6) the optional update really lands (plugin hot replacement) ──────────
@@ -571,26 +571,53 @@ if (variant === 'optional') {
   check(dismissed === true, '「稍后更新」 closes the optional prompt', dismissed)
 }
 
-// ── 8) the Settings button carries the update tag ─────────────────────────
+// ── 8) the brand row carries the update tag, right of the version capsule ──
 // The apply variant restarts the dsh child, and the page reloads with it —
 // the tag assertions belong to the variants whose page stays put.
 const tag = await run(`
-  const el=document.querySelector('[data-testid="settings-update-tag"]')
+  const el=document.querySelector('[data-testid="sidebar-update-tag"]')
   if(!el) return {present:false}
-  const trigger=[...document.querySelectorAll('button[aria-label="设置"]')][0]
+  const isVersion=(s)=>{
+    if(!s.startsWith('v')) return false
+    const parts=s.slice(1).split('.')
+    return parts.length===3 && parts.every(p=>p.length>0 && [...p].every(ch=>ch>='0' && ch<='9'))
+  }
+  const brand=document.querySelector('[class*="brandName"]')
+  const spans=[...(brand?.querySelectorAll('span')??[])]
+  const capsule=spans.find(s=>isVersion((s.textContent||'').trim()))
+  const name=spans.find(s=>s!==capsule && (s.textContent||'').trim().length>0)
+  const row=document.querySelector('[class*="logoRow"]')
+  const buttons=[...(row?.querySelectorAll('button')??[])]
+  const toggle=buttons[buttons.length-1]
   const r=el.getBoundingClientRect()
-  const tr=trigger?.getBoundingClientRect()
-  return {present:true, text:(el.textContent||'').trim(), rect:{x:Math.round(r.left),y:Math.round(r.top)},
-    trigger: tr?{x:Math.round(tr.left),y:Math.round(tr.top),right:Math.round(tr.right)}:null}
+  const cr=capsule?.getBoundingClientRect()
+  const nr=name?.getBoundingClientRect()
+  const rr=row?.getBoundingClientRect()
+  const tr=toggle?.getBoundingClientRect()
+  const box=(x)=>x?{text:(x.textContent||'').trim(),x:Math.round(x.left),y:Math.round(x.top),right:Math.round(x.right),width:Math.round(x.width)}:null
+  return {present:true, text:(el.textContent||'').trim(),
+    rect:box(r), capsule:box(cr), name:box(nr), row:box(rr), toggle:box(tr),
+    nameFits: name ? name.scrollWidth <= name.clientWidth + 1 : null}
 `)
 out.info.tag = tag
 if (variant !== 'apply') {
-  check(tag.present === true, 'the Settings button carries the update tag', tag)
+  check(tag.present === true, 'the brand row carries the update tag', tag)
   check(tag.text === '更新', 'the update tag reads 更新', tag.text)
+  check(tag.capsule !== null && tag.capsule !== undefined, 'the version capsule sits beside the tag', tag)
   check(
-    tag.trigger !== undefined && tag.trigger !== null && tag.rect.x >= tag.trigger.x && tag.rect.x <= tag.trigger.right + 24,
-    'the update tag sits at the end of the Settings button',
-    { tag, trigger: tag.trigger },
+    tag.capsule !== null && tag.capsule !== undefined
+      && tag.rect.x >= tag.capsule.right
+      && tag.rect.x - tag.capsule.right <= 24,
+    'the update tag sits right of the version capsule',
+    { tag, capsule: tag.capsule },
+  )
+  // The wordmark yields first when the column narrows; the version capsule
+  // and the tag must never be the ones that lose pixels.
+  check(tag.nameFits === true, 'the brand wordmark is whole (the capsule never takes the clip)', tag)
+  check(
+    tag.toggle !== null && tag.toggle !== undefined && tag.rect.right <= tag.toggle.x,
+    'the update tag stays in the brand row, left of the collapse toggle',
+    { tag, toggle: tag.toggle },
   )
 }
 
@@ -604,7 +631,7 @@ if (variant === 'optional') {
   let cardNotes = []
   for (let attempt = 0; attempt < 6 && cardNotes.length === 0; attempt++) {
     await runAsync(`
-      const el=document.querySelector('[data-testid="settings-update-tag"]')
+      const el=document.querySelector('[data-testid="sidebar-update-tag"]')
       if(el) el.click()
       await new Promise(r=>setTimeout(r,1400))
       return true
