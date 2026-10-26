@@ -68,18 +68,40 @@ export interface BafStandardSummaryResult {
   readonly commitGuardHookInstalled?: boolean
   /**
    * 【变更】2026-10-19 (六问题批 4.1b): the per-node custom-script map
-   * (baseline `hooks.nodes.<node>.enter/exit`) for the 项目工程 状态脚本
+   * (baseline `hooks.nodes.<node>.enter/exit`) for the 项目工程 状态进出hook
    * editor. Only configured nodes ride the wire; absent block = `{}`.
    */
   readonly nodeHooks?: BafStandardNodeHooks
+  /**
+   * 【变更】2026-10-26 (批次二十八 2): the baseline's hooks block carries a
+   * tolerated script that the same node does NOT configure — dead config the
+   * editor cannot show. The line rides the wire so the card says so instead of
+   * dropping the entry without a word; the next hooks save cleans the file.
+   */
+  readonly hooksNotice?: string
   /** Technical one-liner for `failed` only; never shown for the empty states. */
   readonly error?: string
 }
 
+/**
+ * 【变更】2026-10-26 (批次二十八 2): one script entry on the wire — its path
+ * and whether a failure of THIS script stops the workflow.
+ */
+export interface BafStandardNodeHookEntry {
+  /** Workspace-relative script path. */
+  readonly path: string
+  /**
+   * True (the default) — a failure of this script stops the workflow; false —
+   * the failure is tolerated and the workflow continues (the per-script
+   * 「失败中止」 switch is off).
+   */
+  readonly fatal: boolean
+}
+
 /** One node's script lists on the wire (六问题批 4.1b). */
 export interface BafStandardNodeHookLists {
-  readonly enter?: readonly string[]
-  readonly exit?: readonly string[]
+  readonly enter?: readonly BafStandardNodeHookEntry[]
+  readonly exit?: readonly BafStandardNodeHookEntry[]
 }
 
 /** node id → hook lists; only configured nodes present. */

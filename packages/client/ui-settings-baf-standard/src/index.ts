@@ -28,7 +28,8 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
   BAF_VERSION, BafError, loadBaselineFile, parseBaselineManifest,
   rewriteBaselineNodeHooks, rewriteBaselineProtectedPaths,
-  validateNodeHooks, validateProtectedPaths, type BaselineManifest,
+  normalizeHookEntry, validateNodeHooks, validateProtectedPaths, validateToleratedHooks,
+  type BaselineManifest,
 } from '@deepseek-ai/dsh-baf-core'
 import { commitGuardHookInstalled, installCommitGuardHook } from '@deepseek-ai/dsh-baf-guard/commit-hook'
 import { scaffoldWorkspace } from '@deepseek-ai/dsh-baf-scaffold'
@@ -41,7 +42,7 @@ import {
 import type {} from '@deepseek-ai/dsh-session'
 import type {
   BafEnterpriseDocResult, BafStandardGenerateResult,
-  BafStandardNodeHooks, BafStandardSaveNodeHooksResult,
+  BafStandardNodeHookEntry, BafStandardNodeHooks, BafStandardSaveNodeHooksResult,
   BafStandardSaveProtectedResult,
   BafStandardFieldRow, BafStandardFieldState, BafStandardPackageCard,
   BafStandardRulesDocResult, BafStandardStatPathResult, BafStandardSummaryResult,
@@ -81,13 +82,73 @@ function row(field: string, value: unknown): BafStandardFieldRow {
 /**
  * 【变更】2026-10-19 (六问题批 4.1b): project a manifest's hooks block into
  * the wire map (only configured nodes, plain arrays). Absent block → `{}`.
+ *
+ * 【变更】2026-10-26 (批次二十八 2): each entry now carries its fail-stop
+ * policy — `fatal: false` for the scripts the baseline lists in
+ * `tolerateFailure` (the per-script 「失败中止」 switch is off for them).
  */
 export function projectNodeHooks(manifest: BaselineManifest): BafStandardNodeHooks {
-  const out: Record<string, { enter?: string[]; exit?: string[] }> = {}
+  const out: Record<string, { enter?: BafStandardNodeHookEntry[]; exit?: BafStandardNodeHookEntry[] }> = {}
   for (const [node, lists] of Object.entries(manifest.hooks?.nodes ?? {})) {
-    const mapped: { enter?: string[]; exit?: string[] } = {}
-    if (lists.enter !== undefined && lists.enter.length > 0) mapped.enter = [...lists.enter]
-    if (lists.exit !== undefined && lists.exit.length > 0) mapped.exit = [...lists.exit]
+    // 【变更】2026-10-26 (批次二十八 2): both sides of the comparison use the
+    // canonical path form — a baseline that writes `.\a.sh` in the list and
+    // `a.sh` in `tolerateFailure` still marks that script as tolerated.
+    const tolerated = new Set((lists.tolerateFailure ?? []).map(entry => normalizeHookEntry(entry.trim())))
+    const mapped: { enter?: BafStandardNodeHookEntry[]; exit?: BafStandardNodeHookEntry[] } = {}
+    const enter = (lists.enter ?? []).map(path => ({ path, fatal: !tolerated.has(normalizeHookEntry(path.trim())) }))
+    const exit = (lists.exit ?? []).map(path => ({ path, fatal: !tolerated.has(normalizeHookEntry(path.trim())) }))
+    if (enter.length > 0) mapped.enter = enter
+    if (exit.length > 0) mapped.exit = exit
+    if (Object.keys(mapped).length > 0) out[node] = mapped
+  }
+  return out
+}
+
+/**
+ * 【变更】2026-10-26 (批次二十八 2): the wire's per-entry form → baf-core's
+ * string lists plus the `tolerateFailure` list (the scripts whose failure the
+ * workflow tolerates). The baseline keeps its string lists, so an existing
+ * baseline file reads exactly as before.
+ * @param hooks - the wire map.
+ * @returns the baf-core draft shape.
+ */
+export function toBaselineNodeHooks(
+  hooks: BafStandardNodeHooks,
+): Record<string, { enter?: string[]; exit?: string[]; tolerateFailure?: string[] }> {
+  const out: Record<string, { enter?: string[]; exit?: string[]; tolerateFailure?: string[] }> = {}
+  for (const [node, lists] of Object.entries(hooks)) {
+    const enter = (lists.enter ?? []).map(entry => entry.path)
+    const exit = (lists.exit ?? []).map(entry => entry.path)
+    const tolerated = [...(lists.enter ?? []), ...(lists.exit ?? [])]
+      .filter(entry => !entry.fatal)
+      .map(entry => entry.path)
+    out[node] = {
+      ...(enter.length > 0 ? { enter } : {}),
+      ...(exit.length > 0 ? { exit } : {}),
+      ...(tolerated.length > 0 ? { tolerateFailure: tolerated } : {}),
+    }
+  }
+  return out
+}
+
+/**
+ * 【变更】2026-10-26 (批次二十八 2): baf-core's draft shape → the wire's
+ * per-entry form (the inverse of {@link toBaselineNodeHooks}).
+ * @param hooks - the baf-core draft shape.
+ * @returns the wire map.
+ */
+export function fromBaselineNodeHooks(
+  hooks: Readonly<Record<string, { enter?: readonly string[]; exit?: readonly string[]; tolerateFailure?: readonly string[] }>>,
+): BafStandardNodeHooks {
+  const out: Record<string, { enter?: BafStandardNodeHookEntry[]; exit?: BafStandardNodeHookEntry[] }> = {}
+  for (const [node, lists] of Object.entries(hooks)) {
+    // 【变更】2026-10-26 (批次二十八 2): canonical path form on both sides.
+    const tolerated = new Set((lists.tolerateFailure ?? []).map(entry => normalizeHookEntry(entry.trim())))
+    const mapped: { enter?: BafStandardNodeHookEntry[]; exit?: BafStandardNodeHookEntry[] } = {}
+    const enter = (lists.enter ?? []).map(path => ({ path, fatal: !tolerated.has(normalizeHookEntry(path.trim())) }))
+    const exit = (lists.exit ?? []).map(path => ({ path, fatal: !tolerated.has(normalizeHookEntry(path.trim())) }))
+    if (enter.length > 0) mapped.enter = enter
+    if (exit.length > 0) mapped.exit = exit
     if (Object.keys(mapped).length > 0) out[node] = mapped
   }
   return out
@@ -755,6 +816,11 @@ export class BafStandardConfigRemote extends TypertRemoteService {
       }
     }
     const standard = summarizeStandard(manifest)
+    // 【变更】2026-10-26 (批次二十八 2): a baseline that tolerates a script the
+    // same node does not configure carries dead config — the editor cannot
+    // show it, so the line rides the wire and the card says so rather than
+    // dropping the entry without a word. The next hooks save cleans the file.
+    const tolerated = validateToleratedHooks(manifest.hooks?.nodes ?? {})
     return {
       status: 'ready',
       cwd,
@@ -778,8 +844,9 @@ export class BafStandardConfigRemote extends TypertRemoteService {
       guardProtectedPaths: [...manifest.guard.protectedPaths],
       commitGuardHookInstalled: await commitGuardHookInstalled(cwd),
       // 【变更】2026-10-19 (六问题批 4.1b): per-node custom scripts for the
-      // 项目工程 状态脚本 editor.
+      // 项目工程 状态进出hook editor.
       nodeHooks: projectNodeHooks(manifest),
+      ...(tolerated.ok ? {} : { hooksNotice: tolerated.message }),
     }
   }
 
@@ -941,7 +1008,7 @@ export class BafStandardConfigRemote extends TypertRemoteService {
     } catch {
       return { status: 'no-baseline' }
     }
-    const validation = validateNodeHooks(hooks)
+    const validation = validateNodeHooks(toBaselineNodeHooks(hooks))
     if (!validation.ok) return { status: 'invalid', message: validation.message }
 
     let original: string
@@ -983,13 +1050,10 @@ export class BafStandardConfigRemote extends TypertRemoteService {
     }
     return {
       status: 'ready',
-      hooks: Object.fromEntries(Object.entries(validation.hooks).map(([node, lists]) => [
-        node,
-        {
-          ...(lists.enter === undefined ? {} : { enter: [...lists.enter] }),
-          ...(lists.exit === undefined ? {} : { exit: [...lists.exit] }),
-        },
-      ])),
+      // 【变更】2026-10-26 (批次二十八 2): the answer carries the wire's
+      // per-entry form (each entry with its fail-stop policy), the inverse of
+      // the conversion the request went through.
+      hooks: fromBaselineNodeHooks(validation.hooks),
     }
   }
 

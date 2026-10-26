@@ -345,6 +345,29 @@ export type WorkflowTabKey =
   | 'ovw.ledgerLabel'
   // 【变更】2026-10-25 (批次二十四 2): the ledger's list section head.
   | 'ovw.listLabel'
+  // 【变更】2026-10-26 (批次二十八 5): the ledger's view controls — the
+  // category segments, the sort and mode dropdowns, the search box, the
+  // visible-count line and the empty-match notice.
+  | 'ovw.categoryLabel'
+  | 'ovw.sortLabel'
+  | 'ovw.modeLabel'
+  | 'ovw.searchPlaceholder'
+  | 'ovw.filteredCount'
+  | 'ovw.noMatch'
+  | 'ovw.externalFailed'
+  | 'ovw.category.all'
+  | 'ovw.category.active'
+  | 'ovw.category.completed'
+  | 'ovw.category.abandoned'
+  | 'ovw.sort.default'
+  | 'ovw.sort.durationDesc'
+  | 'ovw.sort.durationAsc'
+  | 'ovw.sort.tasksDesc'
+  | 'ovw.sort.idAsc'
+  | 'ovw.mode.all'
+  | 'ovw.mode.fullGoPath'
+  | 'ovw.mode.bugFixPath'
+  | 'ovw.mode.clarify'
   | 'ovw.detailGraph'
   | 'ovw.detailGraphHint'
   | 'ovw.detailStageHead'
@@ -857,6 +880,27 @@ export const en: Record<WorkflowTabKey, string> = {
   'ovw.ledgerLabel': 'Change ledger',
   // 【变更】2026-10-25 (批次二十四 2): the ledger's list section head.
   'ovw.listLabel': 'Change records',
+  // 【变更】2026-10-26 (批次二十八 5): the ledger's view controls.
+  'ovw.categoryLabel': 'Category',
+  'ovw.sortLabel': 'Sort',
+  'ovw.modeLabel': 'Flow',
+  'ovw.searchPlaceholder': 'Search change id',
+  'ovw.filteredCount': '{shown} of {total} shown',
+  'ovw.noMatch': 'No change matches the current filters.',
+  'ovw.externalFailed': 'The board could not be opened in a browser.',
+  'ovw.category.all': 'All',
+  'ovw.category.active': 'Active',
+  'ovw.category.completed': 'Done',
+  'ovw.category.abandoned': 'Abandoned',
+  'ovw.sort.default': 'Default order',
+  'ovw.sort.durationDesc': 'Longest first',
+  'ovw.sort.durationAsc': 'Shortest first',
+  'ovw.sort.tasksDesc': 'Task completion',
+  'ovw.sort.idAsc': 'Change id',
+  'ovw.mode.all': 'All flows',
+  'ovw.mode.fullGoPath': 'Full flow',
+  'ovw.mode.bugFixPath': 'Bug fix path',
+  'ovw.mode.clarify': 'Needs clarification',
   'ovw.detailGraph': 'Workflow graph',
   'ovw.detailGraphHint': 'Scroll to pan · Ctrl + wheel to zoom · click a node for its stage',
   'ovw.detailStageHead': 'Stage',
@@ -1346,6 +1390,27 @@ export const zh: Record<WorkflowTabKey, string> = {
   'ovw.ledgerLabel': '变更台账',
   // 【变更】2026-10-25 (批次二十四 2): the ledger's list section head.
   'ovw.listLabel': '变更记录',
+  // 【变更】2026-10-26 (批次二十八 5): 变更记录视图控件。
+  'ovw.categoryLabel': '分类',
+  'ovw.sortLabel': '排序',
+  'ovw.modeLabel': '流程',
+  'ovw.searchPlaceholder': '搜索变更编号',
+  'ovw.filteredCount': '显示 {shown} / {total} 条',
+  'ovw.noMatch': '没有符合当前筛选条件的变更。',
+  'ovw.externalFailed': '看板未能在浏览器中打开。',
+  'ovw.category.all': '全部',
+  'ovw.category.active': '进行中',
+  'ovw.category.completed': '已完成',
+  'ovw.category.abandoned': '已放弃',
+  'ovw.sort.default': '默认顺序',
+  'ovw.sort.durationDesc': '耗时最长',
+  'ovw.sort.durationAsc': '耗时最短',
+  'ovw.sort.tasksDesc': '任务完成率',
+  'ovw.sort.idAsc': '变更编号',
+  'ovw.mode.all': '全部流程',
+  'ovw.mode.fullGoPath': '完整流程',
+  'ovw.mode.bugFixPath': 'Bug 修复路径',
+  'ovw.mode.clarify': '待澄清',
   'ovw.detailGraph': '工作流图',
   'ovw.detailGraphHint': '滚轮平移 · Ctrl + 滚轮缩放 · 点击节点查看该阶段',
   'ovw.detailStageHead': '阶段详情',

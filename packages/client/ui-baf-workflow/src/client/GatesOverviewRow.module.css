@@ -53,6 +53,9 @@
      every raised surface wears, the top highlight that reads as a lit edge,
      and the two shadow depths the console's layers share. */
   --wf-gold-line: color-mix(in srgb, var(--wf-accent) 34%, var(--wf-line));
+  /* 【变更】2026-10-26 (批次二十八 3): the QUIET edge — a hairline that carries
+     a whisper of gold instead of the gold-lined plate the hero used to be. */
+  --wf-hairline: color-mix(in srgb, var(--wf-accent) 13%, var(--wf-line));
   --wf-lift: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
   --wf-shadow-sm: 0 8px 18px -14px color-mix(in srgb, #000 42%, transparent);
   --wf-shadow-md: 0 18px 40px -30px color-mix(in srgb, #000 46%, transparent);
@@ -562,11 +565,16 @@
  * legend all mirror ModelRoutingRow.module.css's values; the 详-mode 门禁明细
  * section lives inside the same frame under the canvas. */
 
+/* 【变更】2026-10-26 (批次二十八 1): the flow's own top margin is GONE. The
+ * 确认门 tab is the only one whose content used to start 12px lower than its
+ * siblings — every other tab's first element sits 16px under the tab strip
+ * (`.block`'s padding), this one sat 16 + 12. The rhythm between the hero
+ * band and the figure plates below it is the stack's own `gap`. */
 .flow {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .connectorCondition {
@@ -688,41 +696,44 @@
 
 /* ── the page's own chrome (批次二十四 2) ──────────────────────────────── */
 
-/* 【变更】2026-10-25 (批次二十四 2): the hero band — the SAME material as the
-   变更总览 ledger's hero (a gold hairline, a gold wash from the left, a lit
-   top edge, a deep floor shadow), so the two pages of the 工作流 surface read
-   as siblings instead of as two different products. */
+/* 【变更】2026-10-26 (批次二十八 3): the hero band sheds its gold COVERAGE and
+   its heavy plate. It was a gold-lined slab: a 34% gold border, a gold wash
+   blooming out of the top-left corner, a 46% floor shadow and a dark gold
+   brand chip — on the dark floor that read as a dark plate rather than as the
+   page's header, which is what the customer reported. The band is now a quiet
+   sheet: a hairline edge that carries a whisper of gold, one soft wash that
+   fades out by the middle, a lift instead of a drop shadow, and the brand mark
+   as a light gold chip. The page's first impression is air, not metal. */
 .hero {
   position: relative;
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 18px 20px;
   overflow: hidden;
-  border-radius: 16px;
-  border: 1px solid var(--wf-gold-line);
+  border-radius: 14px;
+  border: 1px solid var(--wf-hairline);
   background:
-    radial-gradient(520px 140px at 8% -40%, color-mix(in srgb, var(--wf-accent) 11%, transparent), transparent 70%),
-    linear-gradient(120deg, color-mix(in srgb, var(--wf-accent) 5%, transparent), transparent 58%),
+    linear-gradient(158deg, color-mix(in srgb, var(--wf-accent) 4.5%, transparent), transparent 52%),
     var(--wf-surface);
-  box-shadow: var(--wf-lift), var(--wf-shadow-md);
+  box-shadow: var(--wf-lift), 0 10px 26px -24px color-mix(in srgb, #000 40%, transparent);
   animation: gatesFadeUp 320ms ease both;
 }
 
-/* The BAF mark — the same wordmark the 变更总览 ledger carries. */
+/* The BAF mark — the same wordmark the 变更总览 ledger carries. A light gold
+   chip now, not a dark gold slab: the mark states the page's owner without
+   becoming the page's loudest object. */
 .heroBrand {
   flex: none;
   align-self: center;
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.14em;
-  color: #fff;
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--wf-accent) 36%, #241a08),
-    color-mix(in srgb, var(--wf-accent) 44%, #241a08));
-  border-radius: 5px;
-  padding: 0.22rem 0.44rem;
-  box-shadow: 0 6px 14px -10px color-mix(in srgb, #000 70%, transparent);
+  color: var(--wf-accent-text);
+  background: color-mix(in srgb, var(--wf-accent) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 24%, transparent);
+  border-radius: 6px;
+  padding: 0.2rem 0.42rem;
 }
 
 .heroText {
@@ -767,19 +778,22 @@
   margin-top: 0;
 }
 
+/* 【变更】2026-10-26 (批次二十八 3): the figure plates follow the hero into
+   the lighter register — the same hairline edge, the same soft lift. The gold
+   border read as a second frame around every number. */
 .tile {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 12px 14px;
+  padding: 11px 14px;
   overflow: hidden;
-  border-radius: 13px;
-  border: 1px solid var(--wf-gold-line);
+  border-radius: 12px;
+  border: 1px solid var(--wf-hairline);
   background:
-    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 4%, transparent), transparent 62%),
+    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 3%, transparent), transparent 60%),
     var(--wf-surface);
-  box-shadow: var(--wf-lift), 0 14px 30px -26px color-mix(in srgb, #000 55%, transparent);
+  box-shadow: var(--wf-lift), 0 10px 24px -24px color-mix(in srgb, #000 44%, transparent);
   animation: gatesFadeUp 360ms ease both;
 }
 

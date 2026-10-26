@@ -35,12 +35,14 @@
  * Tooltip (nothing to detail — configured cards keep theirs).
  */
 import { Fragment, useRef, useState, type ChangeEvent } from 'react'
-import { InlineEditor, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { BafStandardNodeHooks, BafStandardNodeHookLists, BafStandardSummaryResult } from '../types.ts'
+import { InlineEditor, Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import type {
+  BafStandardNodeHookEntry, BafStandardNodeHookLists, BafStandardNodeHooks, BafStandardSummaryResult,
+} from '../types.ts'
 import type { StandardsOverviewFace, StandardsOverviewState } from './standards-store.ts'
 import type { BafStandardKey } from './locales.ts'
 import type { StandardsPanelProps } from './StandardsOverview.tsx'
-import { joinEntry, toRelativeEntry } from './StandardsOverview.tsx'
+import { CardHead, joinEntry, toRelativeEntry } from './StandardsOverview.tsx'
 import css from './StandardsOverview.module.css'
 
 /** Main-chain order the engine enforces (WORKFLOW_NODES minus drift). */
@@ -129,7 +131,8 @@ function nodePathsText(label: string, lists: BafStandardNodeHookLists | undefine
   const lines = [label]
   for (const kind of ['enter', 'exit'] as const) {
     const entries = kind === 'enter' ? lists?.enter ?? [] : lists?.exit ?? []
-    lines.push(`${t(KIND_LABEL_KEYS[kind])}: ${entries.length > 0 ? entries.join(', ') : t('hooksEmpty')}`)
+    const paths = entries.map(entry => entry.path).join(', ')
+    lines.push(`${t(KIND_LABEL_KEYS[kind])}: ${entries.length > 0 ? paths : t('hooksEmpty')}`)
   }
   return lines.join('\n')
 }
@@ -142,10 +145,20 @@ interface EditTarget {
   readonly value: string
 }
 
-/** One script entry row: clickable mono path (default-app open) + edit/delete
- * (an InlineEditor while editing). */
-function HookEntryRow({ entry, cwd, editingValue, onEditChange, onCommitEdit, onCancelEdit, onBeginEdit, onRemove, onOpen, t }: {
-  entry: string
+/**
+ * One script entry row: clickable mono path (default-app open) + the
+ * per-script 「失败中止」 switch + edit/delete (an InlineEditor while editing).
+ *
+ * 【变更】2026-10-26 (批次二十八 2): the switch is the script's fail-stop
+ * policy. ON (the default) — a failure of THIS script stops the workflow; OFF
+ * — the failure is tolerated and the workflow continues. The switch rides the
+ * row, not the card, because the policy is per script.
+ */
+function HookEntryRow({
+  entry, cwd, editingValue, onEditChange, onCommitEdit, onCancelEdit,
+  onBeginEdit, onRemove, onOpen, onToggleFatal, t,
+}: {
+  entry: BafStandardNodeHookEntry
   cwd: string
   editingValue: string | undefined
   onEditChange: (value: string) => void
@@ -154,6 +167,8 @@ function HookEntryRow({ entry, cwd, editingValue, onEditChange, onCommitEdit, on
   onBeginEdit: () => void
   onRemove: () => void
   onOpen: () => void
+  /** Flip the script's fail-stop policy. */
+  onToggleFatal: (fatal: boolean) => void
   t: StandardsPanelProps['t']
 }) {
   if (editingValue !== undefined) {
@@ -173,11 +188,20 @@ function HookEntryRow({ entry, cwd, editingValue, onEditChange, onCommitEdit, on
       <button
         type="button"
         className={css.hooksEntryButton}
-        title={joinEntry(cwd, entry)}
+        title={joinEntry(cwd, entry.path)}
         onClick={onOpen}
       >
-        {entry}
+        {entry.path}
       </button>
+      <span className={css.hooksEntryFatal}>
+        <Switch
+          checked={entry.fatal}
+          label={`${t('hooksFatalLabel')} · ${entry.path}`}
+          title={entry.fatal ? t('hooksFatalOn') : t('hooksFatalOff')}
+          size="sm"
+          onChange={(next) => { onToggleFatal(next) }}
+        />
+      </span>
       <span className={css.pathActions}>
         <button type="button" className={css.miniButton} onClick={onBeginEdit}>{t('editLabel')}</button>
         <button type="button" className={css.miniButton} onClick={onRemove}>{t('deleteLabel')}</button>
@@ -222,7 +246,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
     const entry = normalizeEntry(raw)
     if (entry === '') return
     const existing = kind === 'enter' ? lists.enter ?? [] : lists.exit ?? []
-    if (existing.includes(entry)) {
+    if (existing.some(item => item.path === entry)) {
       setLocalMessage(t('protectedDuplicate'))
       return
     }
@@ -233,9 +257,12 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
         setLocalMessage(t('hooksPathMissing'))
         return
       }
+      // 【变更】2026-10-26 (批次二十八 2): a new script is fatal by default —
+      // its failure stops the workflow until the customer turns the switch off.
+      const added: BafStandardNodeHookEntry = { path: entry, fatal: true }
       const next: BafStandardNodeHookLists = kind === 'enter'
-        ? { ...lists, enter: [...existing, entry] }
-        : { ...lists, exit: [...existing, entry] }
+        ? { ...lists, enter: [...existing, added] }
+        : { ...lists, exit: [...existing, added] }
       updateDraft({ ...draft, [node]: next })
       setKindInput(kind, '')
       setLocalMessage(undefined)
@@ -294,17 +321,31 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
       return
     }
     const list = editing.kind === 'enter' ? lists.enter ?? [] : lists.exit ?? []
-    if (list.some((existing, index) => index !== editing.index && existing === entry)) {
+    if (list.some((item, index) => index !== editing.index && item.path === entry)) {
       setLocalMessage(t('protectedDuplicate'))
       return
     }
-    const nextList = list.map((existing, index) => (index === editing.index ? entry : existing))
+    const nextList = list.map((item, index) => (index === editing.index ? { ...item, path: entry } : item))
     const next: BafStandardNodeHookLists = editing.kind === 'enter'
       ? { ...lists, enter: nextList }
       : { ...lists, exit: nextList }
     updateDraft({ ...draft, [editing.node]: next })
     setEditing(null)
     setLocalMessage(undefined)
+  }
+
+  /**
+   * 【变更】2026-10-26 (批次二十八 2): flip one script's fail-stop policy.
+   * The flag lives on the entry, so the rest of the list keeps its order and
+   * its scripts' own policies.
+   */
+  const toggleFatal = (kind: 'enter' | 'exit', index: number, fatal: boolean): void => {
+    const list = kind === 'enter' ? lists.enter ?? [] : lists.exit ?? []
+    const nextList = list.map((item, itemIndex) => (itemIndex === index ? { ...item, fatal } : item))
+    const next: BafStandardNodeHookLists = kind === 'enter'
+      ? { ...lists, enter: nextList }
+      : { ...lists, exit: nextList }
+    updateDraft({ ...draft, [node]: next })
   }
 
   return (
@@ -324,7 +365,7 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                   <span className={css.hooksEmpty}>{t('hooksEmpty')}</span>
                 ) : entries.map((entry, index) => (
                   <HookEntryRow
-                    key={`${node}-${kind}-${String(index)}-${entry}`}
+                    key={`${node}-${kind}-${String(index)}-${entry.path}`}
                     entry={entry}
                     cwd={cwd}
                     editingValue={editing !== null
@@ -336,8 +377,9 @@ function HookNodeEditor({ node, lists, editing, setEditing, draft, updateDraft, 
                     onEditChange={(value) => { setEditing({ node, kind, index, value }) }}
                     onCommitEdit={commitEdit}
                     onCancelEdit={() => { setEditing(null) }}
-                    onBeginEdit={() => { setEditing({ node, kind, index, value: entry }) }}
-                    onOpen={() => { onPreviewFile(entry) }}
+                    onBeginEdit={() => { setEditing({ node, kind, index, value: entry.path }) }}
+                    onOpen={() => { onPreviewFile(entry.path) }}
+                    onToggleFatal={(fatal) => { toggleFatal(kind, index, fatal) }}
                     onRemove={() => {
                       setEditing(null)
                       const nextList = entries.filter((_, index2) => index2 !== index)
@@ -467,33 +509,40 @@ export function NodeHooksCard({ state, summary, t, onPreviewFile, statWorkspaceP
   return (
     <div className={css.card} data-testid="baf-standard-hooks-card">
       {/* 【变更】2026-10-20 (批次四 3.4): save/cancel at the title row's end
-          (取消 quiet / 保存 brand-filled), same anatomy as 受保护路径. */}
-      <div className={css.cardTitleRow}>
-        <span className={css.cardTitle}>{t('hooksTitle')}</span>
-        <span className={css.titleActions}>
-          <button
-            type="button"
-            className={css.titleCancel}
-            data-testid="baf-standard-hooks-cancel"
-            disabled={state.hooksSaving || !dirty}
-            onClick={() => {
-              setEditing(null)
-              updateHooksDraft(persisted)
-            }}
-          >
-            {t('hooksCancel')}
-          </button>
-          <button
-            type="button"
-            className={css.titleSave}
-            data-testid="baf-standard-hooks-save"
-            disabled={state.hooksSaving || !dirty}
-            onClick={() => { void saveNodeHooks() }}
-          >
-            {state.hooksSaving ? t('hooksSaving') : t('hooksSave')}
-          </button>
-        </span>
-      </div>
+          (取消 quiet / 保存 brand-filled), same anatomy as 受保护路径.
+          【变更】2026-10-26 (批次二十八 2): the head gains a glyph and a line of
+          guidance — the card says what it is (the scripts that run when the
+          workflow enters or leaves a state) before the canvas says which. */}
+      <CardHead
+        glyph="hook"
+        title={t('hooksTitle')}
+        description={t('hooksDesc')}
+        actions={(
+          <span className={css.titleActions}>
+            <button
+              type="button"
+              className={css.titleCancel}
+              data-testid="baf-standard-hooks-cancel"
+              disabled={state.hooksSaving || !dirty}
+              onClick={() => {
+                setEditing(null)
+                updateHooksDraft(persisted)
+              }}
+            >
+              {t('hooksCancel')}
+            </button>
+            <button
+              type="button"
+              className={css.titleSave}
+              data-testid="baf-standard-hooks-save"
+              disabled={state.hooksSaving || !dirty}
+              onClick={() => { void saveNodeHooks() }}
+            >
+              {state.hooksSaving ? t('hooksSaving') : t('hooksSave')}
+            </button>
+          </span>
+        )}
+      />
       <div className={css.hooksFlowWrap}>
         {/* 【变更】2026-10-22 (批次十四 2): the legend row (已配置脚本 / 未配置
             脚本) is DELETED — the canvas cards state it themselves, no legend. */}

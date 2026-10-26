@@ -118,6 +118,152 @@ export function historyKeyOf(type: string): string {
 }
 
 /**
+ * 【变更】2026-10-26 (批次二十八 5): the ledger's category filter — which
+ * change states the record list shows.
+ */
+export type ChangeCategory = 'all' | 'active' | 'completed' | 'abandoned'
+
+/**
+ * 【变更】2026-10-26 (批次二十八 5): the ledger's sort order.
+ */
+export type ChangeSort = 'default' | 'durationDesc' | 'durationAsc' | 'tasksDesc' | 'idAsc'
+
+/**
+ * 【变更】2026-10-26 (批次二十八 5): the ledger's workflow-mode filter. The
+ * ids are the locale keys' own suffix, so the dropdown label and the filter
+ * value never drift apart; the wire value each one selects rides
+ * {@link CHANGE_MODE_WIRE}.
+ */
+export type ChangeMode = 'all' | 'fullGoPath' | 'bugFixPath' | 'clarify'
+
+/** 【变更】2026-10-26 (批次二十八 5): the wire mode each filter id selects. */
+const CHANGE_MODE_WIRE: Readonly<Record<ChangeMode, string>> = {
+  all: '',
+  fullGoPath: 'full-go-path',
+  bugFixPath: 'bug-fix-path',
+  clarify: 'clarify-required',
+}
+
+/** 【变更】2026-10-26 (批次二十八 5): the ledger's four view controls. */
+export interface ChangeLedgerView {
+  readonly category: ChangeCategory
+  readonly mode: ChangeMode
+  readonly sort: ChangeSort
+  readonly query: string
+}
+
+/** 【变更】2026-10-26 (批次二十八 5): every category, in display order. */
+export const CHANGE_CATEGORIES: readonly ChangeCategory[] = ['all', 'active', 'completed', 'abandoned']
+
+/** 【变更】2026-10-26 (批次二十八 5): every sort order, in display order. */
+export const CHANGE_SORTS: readonly ChangeSort[] = ['default', 'durationDesc', 'durationAsc', 'tasksDesc', 'idAsc']
+
+/** 【变更】2026-10-26 (批次二十八 5): every workflow mode, in display order. */
+export const CHANGE_MODES: readonly ChangeMode[] = ['all', 'fullGoPath', 'bugFixPath', 'clarify']
+
+/**
+ * One change's task-completion ratio (0 … 1). A change with no readable plan
+ * ledger scores 0 — it has no tasks to complete.
+ * @param row - one dashboard row.
+ * @returns the ratio.
+ */
+function taskRatioOf(row: WorkflowDashboardRow): number {
+  const total = row.tasks?.total ?? 0
+  if (total <= 0) return 0
+  return (row.tasks?.done ?? 0) / total
+}
+
+/**
+ * 【变更】2026-10-26 (批次二十八 5): apply the ledger's filters, then its sort.
+ *
+ * The filters narrow first (category, then workflow mode, then the search
+ * text); the sort then reorders what survived. `default` keeps the host's own
+ * order — the projection reads newest change first, and no client-side guess
+ * reproduces that order for the rows that carry no timestamp.
+ * @param rows - every change row of the project.
+ * @param view - the four view controls.
+ * @returns the rows the ledger shows, in display order.
+ */
+export function selectChangeRows(
+  rows: readonly WorkflowDashboardRow[],
+  view: ChangeLedgerView,
+): readonly WorkflowDashboardRow[] {
+  const query = view.query.trim().toLowerCase()
+  const filtered = rows.filter((row) => {
+    if (view.category !== 'all' && changeStateOf(row) !== view.category) return false
+    if (view.mode !== 'all' && row.mode !== CHANGE_MODE_WIRE[view.mode]) return false
+    if (query !== '' && !row.changeId.toLowerCase().includes(query)) return false
+    return true
+  })
+  if (view.sort === 'default') return filtered
+  const sorted = [...filtered]
+  switch (view.sort) {
+    case 'durationDesc':
+      sorted.sort((left, right) => (right.durationMs ?? -1) - (left.durationMs ?? -1))
+      break
+    case 'durationAsc':
+      sorted.sort((left, right) => {
+        // A change with no measured duration sorts LAST in both directions —
+        // an unknown duration is not the shortest one.
+        if (left.durationMs === undefined && right.durationMs === undefined) return 0
+        if (left.durationMs === undefined) return 1
+        if (right.durationMs === undefined) return -1
+        return left.durationMs - right.durationMs
+      })
+      break
+    case 'tasksDesc':
+      sorted.sort((left, right) => taskRatioOf(right) - taskRatioOf(left))
+      break
+    case 'idAsc':
+      sorted.sort((left, right) => left.changeId.localeCompare(right.changeId))
+      break
+    default:
+      break
+  }
+  return sorted
+}
+
+/**
+ * 【变更】2026-10-26 (批次二十八 5): the desktop bridge the ledger hands its
+ * rendered page to.
+ *
+ * The desktop shell's window-open handler forwards only http(s)/file URLs to
+ * the system browser, so the ledger's `blob:` page never left the renderer —
+ * the button did nothing. The shell instead writes the page to a temp file
+ * and opens THAT.
+ */
+type DesktopBridge = {
+  readonly isDesktop?: boolean
+  readonly openHtml?: (html: string, name: string) => Promise<{ ok: boolean; error?: string }>
+}
+
+/**
+ * @returns the desktop bridge when running inside baf-dsh Electron.
+ */
+function readDesktopBridge(): DesktopBridge | undefined {
+  if (typeof window === 'undefined') return undefined
+  const bridge = (globalThis as { bafDesktop?: DesktopBridge }).bafDesktop
+  if (bridge === undefined || bridge.isDesktop !== true) return undefined
+  return bridge
+}
+
+/**
+ * 【变更】2026-10-26 (批次二十八 5): the loading plate — a spinning ring beside
+ * the label, inside the page's own card vocabulary. The bare「正在加载…」 line
+ * read as a frozen page; the ring says the round is running.
+ * @param props - the label and the optional test id.
+ * @returns the plate element tree.
+ */
+function LoadingPlate({ label, testid }: { label: string; testid?: string }) {
+  return (
+    <div className={css.loading} data-testid={testid} role="status" aria-live="polite">
+      <span className={css.spinner} aria-hidden="true" />
+      <span className={css.loadingLabel}>{label}</span>
+    </div>
+  )
+}
+
+/**
  * Render the 工作流 page's 变更总览 row — the project's change ledger.
  * @param props - composed slot props.
  * @returns the row element tree.
@@ -132,6 +278,26 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
   const [openChangeId, setOpenChangeId] = useState<string | undefined>(undefined)
   const [detail, setDetail] = useState<BafWorkflowChangeDetailResult | undefined>(undefined)
   const [detailLoading, setDetailLoading] = useState(false)
+  // 【变更】2026-10-26 (批次二十八 5): the ledger's four view controls — the
+  // category (change state), the workflow mode, the sort order and the search
+  // text. They narrow the record list without touching the projection.
+  const [category, setCategory] = useState<ChangeCategory>('all')
+  const [mode, setMode] = useState<ChangeMode>('all')
+  const [sort, setSort] = useState<ChangeSort>('default')
+  const [query, setQuery] = useState('')
+  // 【变更】2026-10-26 (批次二十八 5): why the board did not open in the
+  // browser — the desktop shell's answer when the temp file could not be
+  // written or handed to the browser.
+  const [externalError, setExternalError] = useState<string | undefined>(undefined)
+
+  /**
+   * The record list the ledger shows: the projection's own rows, narrowed by
+   * the view controls and reordered by the sort.
+   */
+  const visibleRows = useMemo(() => {
+    if (result?.status !== 'ready') return []
+    return selectChangeRows(result.rows, { category, mode, sort, query })
+  }, [result, category, mode, sort, query])
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -155,6 +321,13 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
    * is gone); the click-originated window.open keeps popup blockers happy and
    * the URL is revoked a minute later (the page outlives it — nothing is
    * fetched back).
+   *
+   * 【变更】2026-10-26 (批次二十八 5): the desktop shell's window-open handler
+   * forwards only http(s)/file URLs to the system browser, so the `blob:` page
+   * never left the renderer and the button did nothing. On desktop the page
+   * now goes through the shell, which writes it to a temp file and opens
+   * THAT; a browser keeps the Blob URL. Either way the customer gets the
+   * board in a real browser window.
    */
   const openExternal = useCallback(() => {
     if (result?.status !== 'ready') return
@@ -194,6 +367,19 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
       },
     }
     const html = buildDashboardHtml({ rows: result.rows, summary: result.summary }, labels)
+    const bridge = readDesktopBridge()
+    if (bridge?.openHtml !== undefined) {
+      void bridge.openHtml(html, 'baf-dsh-change-overview.html').then((answer) => {
+        if (answer.ok) {
+          setExternalError(undefined)
+          return
+        }
+        setExternalError(answer.error ?? t('ovw.externalFailed'))
+      }).catch((err: unknown) => {
+        setExternalError(err instanceof Error ? err.message : String(err))
+      })
+      return
+    }
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
     window.open(url, '_blank', 'noopener,noreferrer')
     window.setTimeout(() => { URL.revokeObjectURL(url) }, 60_000)
@@ -315,8 +501,19 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           {t('dashboard.loadFailed')} {error}
         </div>
       )}
+      {/* 【变更】2026-10-26 (批次二十八 5): the board could not be opened — the
+          desktop shell's answer. The page says so instead of the button
+          failing silently. */}
+      {externalError !== undefined && (
+        <div className={css.statusError} data-testid="change-overview-external-error">
+          {t('ovw.externalFailed')} {externalError}
+        </div>
+      )}
+      {/* 【变更】2026-10-26 (批次二十八 5): the loading view is a spinner in a
+          plate, not a bare line of text — a slow projection round reads as
+          work in progress. */}
       {result === undefined && error === undefined && (
-        <div className={css.status}>{t('ovw.loading')}</div>
+        <LoadingPlate label={t('ovw.loading')} testid="change-overview-loading" />
       )}
       {result?.status === 'no-workspace' && (
         <div className={css.status} data-testid="change-overview-empty">{t('ovw.noWorkspace')}</div>
@@ -357,13 +554,74 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           <section className={css.section}>
             <div className={css.sectionHead}>
               <span className={css.sectionLabel}>{t('ovw.listLabel')}</span>
-              <span className={css.sectionCount}>{result.rows.length}</span>
+              <span className={css.sectionCount} data-testid="change-overview-count">{result.rows.length}</span>
               <span className={css.sectionHint}>{t('ovw.clickHint')}</span>
             </div>
+
+            {/* 【变更】2026-10-26 (批次二十八 5): the view controls — the
+                category (which change states), the workflow mode, the sort
+                order and the search text. A project with dozens of changes
+                cannot be read from one flat list. */}
+            <div className={css.toolbar} data-testid="change-overview-toolbar">
+              <div className={css.segGroup} role="group" aria-label={t('ovw.categoryLabel')}>
+                {CHANGE_CATEGORIES.map(item => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={css.seg}
+                    data-active={category === item ? 'true' : undefined}
+                    aria-pressed={category === item}
+                    data-testid={`change-overview-category-${item}`}
+                    onClick={() => { setCategory(item) }}
+                  >
+                    {t(`ovw.category.${item}`)}
+                  </button>
+                ))}
+              </div>
+              <label className={css.selectWrap}>
+                <span className={css.selectLabel}>{t('ovw.sortLabel')}</span>
+                <select
+                  className={css.select}
+                  value={sort}
+                  data-testid="change-overview-sort"
+                  onChange={(event) => { setSort(event.currentTarget.value as ChangeSort) }}
+                >
+                  {CHANGE_SORTS.map(item => (
+                    <option key={item} value={item}>{t(`ovw.sort.${item}`)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={css.selectWrap}>
+                <span className={css.selectLabel}>{t('ovw.modeLabel')}</span>
+                <select
+                  className={css.select}
+                  value={mode}
+                  data-testid="change-overview-mode"
+                  onChange={(event) => { setMode(event.currentTarget.value as ChangeMode) }}
+                >
+                  {CHANGE_MODES.map(item => (
+                    <option key={item} value={item}>{t(`ovw.mode.${item}`)}</option>
+                  ))}
+                </select>
+              </label>
+              <input
+                type="search"
+                className={css.search}
+                value={query}
+                placeholder={t('ovw.searchPlaceholder')}
+                aria-label={t('ovw.searchPlaceholder')}
+                data-testid="change-overview-search"
+                onChange={(event) => { setQuery(event.currentTarget.value) }}
+              />
+              <span className={css.resultCount} data-testid="change-overview-result-count">
+                {t('ovw.filteredCount', { shown: visibleRows.length, total: result.rows.length })}
+              </span>
+            </div>
+
             <div className={css.cards} data-testid="change-overview-cards">
-              {result.rows.map(card)}
-              {result.rows.length === 0 && (
-                <div className={css.empty}>{t('ovw.empty')}</div>
+              {visibleRows.map(card)}
+              {visibleRows.length === 0 && (
+                <div className={css.empty} data-testid="change-overview-no-match">{t('ovw.noMatch')}</div>
               )}
             </div>
           </section>
@@ -588,7 +846,7 @@ function ChangeDetailWorkspace(props: {
           <div className={css.wsBody}>
             {/* ── 左侧 · classification + artifacts ───────────────────────── */}
             <aside className={css.wsLeft} data-testid="change-detail-left">
-              {loading && <div className={css.status}>{t('ovw.detailLoading')}</div>}
+              {loading && <LoadingPlate label={t('ovw.detailLoading')} testid="change-detail-loading" />}
               {!loading && detail === undefined && (
                 <div className={css.statusError}>{t('ovw.detailFailed')}</div>
               )}

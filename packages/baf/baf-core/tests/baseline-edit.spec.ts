@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BAF_VERSION, BafError, parseBaselineManifest, rewriteBaselineNodeHooks,
   rewriteBaselineProtectedPaths, validateNodeHooks, validateProtectedPaths,
+  validateToleratedHooks,
 } from '../src/index.ts'
 
 /** A schema-valid baseline whose guard block carries an INLINE list. */
@@ -207,6 +208,57 @@ describe('validateNodeHooks (状态脚本 提案 → 规范清单)', () => {
     // drift is a workflow node — configuring it is legal vocabulary even
     // though the engine never fires hooks on the parking lot.
     expect(validateNodeHooks({ drift: { enter: ['d.sh'] } }).ok).toBe(true)
+  })
+
+  // 【变更】2026-10-26 (批次二十八 2): the tolerated scripts must be scripts
+  // of the SAME node — an entry that belongs to no list is dead config.
+  it('rejects a tolerated script the node does not configure', () => {
+    expect(validateNodeHooks({
+      implement: { exit: ['scripts/build.sh'], tolerateFailure: ['scripts/ghost.sh'] },
+    })).toMatchObject({
+      ok: false,
+      message: '失败放行的脚本必须是该状态已配置的脚本：scripts/ghost.sh',
+    })
+  })
+
+  it('accepts a tolerated script the node does configure, in either separator form', () => {
+    expect(validateNodeHooks({
+      implement: { exit: ['scripts/build.sh'], tolerateFailure: ['scripts/build.sh'] },
+    })).toEqual({
+      ok: true,
+      hooks: { implement: { exit: ['scripts/build.sh'], tolerateFailure: ['scripts/build.sh'] } },
+    })
+    // The canonical form on both sides — `.\scripts\build.sh` in the list and
+    // `scripts/build.sh` in the tolerated list is ONE script, not two.
+    expect(validateNodeHooks({
+      implement: { exit: ['.\\scripts\\build.sh'], tolerateFailure: ['scripts/build.sh'] },
+    })).toEqual({
+      ok: true,
+      hooks: { implement: { exit: ['scripts/build.sh'], tolerateFailure: ['scripts/build.sh'] } },
+    })
+  })
+})
+
+describe('validateToleratedHooks (死配置检查)', () => {
+  it('passes when every tolerated script belongs to the node', () => {
+    expect(validateToleratedHooks({
+      implement: { exit: ['a.sh'], enter: ['b.sh'], tolerateFailure: ['a.sh', 'b.sh'] },
+    })).toEqual({ ok: true })
+  })
+
+  it('reports the first tolerated script no list names', () => {
+    expect(validateToleratedHooks({
+      implement: { exit: ['a.sh'], tolerateFailure: ['ghost.sh'] },
+    })).toEqual({
+      ok: false,
+      message: '失败放行的脚本必须是该状态已配置的脚本：ghost.sh',
+    })
+  })
+
+  it('compares the canonical path form on both sides', () => {
+    expect(validateToleratedHooks({
+      implement: { exit: ['.\\scripts\\build.sh'], tolerateFailure: ['scripts/build.sh'] },
+    })).toEqual({ ok: true })
   })
 })
 

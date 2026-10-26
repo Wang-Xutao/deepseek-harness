@@ -15,7 +15,7 @@
  * (reveal folder / open with default app), and the AI 禁改路径 card edits
  * `guard.protectedPaths` through the ONE write the Remote owns.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type {
   InjectFace, PropsLocale, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
@@ -27,10 +27,90 @@ import { EnterpriseDocViewer, viewerOf } from './EnterpriseDocViewer.tsx'
 import { QualityEnvironmentCard } from './QualityEnvironmentCard.tsx'
 import { AssetModal, QualityFlowCard } from './QualityFlowCard.tsx'
 import { CommandsCard } from './CommandsCard.tsx'
+import { BAF_COMMANDS, BAF_GLOBAL_COMMANDS, commandsAt } from './baf-commands-catalog.ts'
+import { ENTERPRISE_DOC_ROWS, type EnterpriseDocNode } from './enterprise-docs-catalog.ts'
 import { type BafStandardKey } from './locales.ts'
 import css from './StandardsOverview.module.css'
 
 const identity = <T,>(value: T): T => value
+
+/**
+ * 【变更】2026-10-26 (批次二十八 4): the main-chain states the 指令集 page
+ * counts — the same order the commands catalog binds to.
+ */
+const COMMAND_NODES: readonly EnterpriseDocNode[] = [
+  'intake',
+  'open',
+  'clarify',
+  'design',
+  'plan',
+  'implement',
+  'verify',
+  'archive',
+]
+
+/**
+ * 【变更】2026-10-26 (批次二十八 2): the glyph a card's head carries — a small
+ * line drawing, drawn inline so no card needs an asset.
+ */
+export type CardGlyph = 'info' | 'shield' | 'hook'
+
+/**
+ * 【变更】2026-10-26 (批次二十八 2): one card head — the glyph, the title, one
+ * line of guidance and (optionally) the head-row actions. The three 项目工程
+ * cards used to carry a bare title, which read as three identical labels
+ * rather than as three named things.
+ * @param props - the glyph, the title, the description and the actions.
+ * @returns the head element tree.
+ */
+export function CardHead({ glyph, title, description, actions }: {
+  glyph: CardGlyph
+  title: string
+  description: string
+  actions?: ReactNode
+}) {
+  return (
+    <div className={css.cardHead}>
+      <span className={css.cardGlyph} aria-hidden="true">
+        <svg viewBox="0 0 16 16" width="15" height="15" focusable="false">
+          {glyph === 'info' ? (
+            <>
+              <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M8 7.3v3.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <circle cx="8" cy="4.9" r="0.8" fill="currentColor" />
+            </>
+          ) : null}
+          {glyph === 'shield' ? (
+            <path
+              d="M8 1.9 13.2 4v4c0 3.1-2.2 5.2-5.2 6.1C5.2 13.2 2.8 11.1 2.8 8V4Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinejoin="round"
+            />
+          ) : null}
+          {glyph === 'hook' ? (
+            <>
+              <path
+                d="M3.2 4h3.3a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2.3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
+              <circle cx="3.2" cy="4" r="1.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+            </>
+          ) : null}
+        </svg>
+      </span>
+      <span className={css.cardHeadText}>
+        <span className={css.cardTitle}>{title}</span>
+        <span className={css.cardDesc}>{description}</span>
+      </span>
+      {actions}
+    </div>
+  )
+}
 
 /** Notice markers {@link StandardsController.pathGesture} sets verbatim. */
 const NOTICE_TEXT: Record<string, BafStandardKey> = {
@@ -39,7 +119,55 @@ const NOTICE_TEXT: Record<string, BafStandardKey> = {
 }
 
 /**
- * 【变更】2026-10-18 (项目工程 1.3): fold one picked ABSOLUTE folder into the
+ * 【变更】2026-10-26 (批次二十八 4): one figure plate of a page's header.
+ */
+export interface PageFigure {
+  readonly value: string
+  readonly label: string
+  readonly tone?: 'accent' | 'plain' | 'quiet'
+}
+
+/**
+ * 【变更】2026-10-26 (批次二十八 4): the page header band + the row of figure
+ * plates. The 测试流 / 指令集 / 企业规范 tabs now open the way the 确认门 and
+ * 变更总览 tabs do — a brand mark, the page's identity, what it shows, and
+ * the numbers behind it — so the 工作流 page reads as one family of pages
+ * instead of three tabs that start with a bare card.
+ * @param props - the brand mark, the eyebrow, the title, the description and
+ * the figures.
+ * @returns the header band and the figure row.
+ */
+export function PageHeader({ brand, label, title, description, figures }: {
+  brand: string
+  label: string
+  title: string
+  description: string
+  figures: readonly PageFigure[]
+}) {
+  return (
+    <>
+      <header className={css.pageHero} data-testid="baf-standard-page-hero">
+        <span className={css.pageHeroBrand}>{brand}</span>
+        <div className={css.pageHeroText}>
+          <span className={css.pageHeroLabel}>{label}</span>
+          <h2 className={css.pageHeroTitle}>{title}</h2>
+          <p className={css.pageHeroDesc}>{description}</p>
+        </div>
+      </header>
+      <div className={css.pageFigures} data-testid="baf-standard-page-figures">
+        {figures.map(figure => (
+          <div key={figure.label} className={css.pageFigure} data-tone={figure.tone ?? 'plain'}>
+            <span className={css.pageFigureValue}>{figure.value}</span>
+            <span className={css.pageFigureLabel}>{figure.label}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+/**
+ * 【变更】2026-10-26 (批次二十八 2): fold one picked ABSOLUTE folder into the
  * relative vocabulary `guard.protectedPaths` speaks. Pure, separator-agnostic,
  * drive-compared case-insensitively (Windows). Anything outside the workspace
  * root — or the root itself — is not expressible (the server-side validation
@@ -326,35 +454,42 @@ function ProtectedPathsCard({ state, summary, t, updateProtectedDraft, saveProte
     <div className={css.card} data-testid="baf-standard-protected-card">
       {/* 【变更】2026-10-20 (批次四 3.4): save/cancel move to the title row's
           end (取消 quiet / 保存 brand-filled) — the bottom footer and the
-          提交防线 hook line are gone. */}
-      <div className={css.cardTitleRow}>
-        <span className={css.cardTitle}>{t('protectedTitle')}</span>
-        <span className={css.titleActions}>
-          <button
-            type="button"
-            className={css.titleCancel}
-            data-testid="baf-standard-protected-cancel"
-            disabled={state.protectedSaving || !dirty}
-            onClick={() => {
-              setEditing(null)
-              setEntryInput('')
-              setLocalMessage(undefined)
-              updateProtectedDraft([...persisted])
-            }}
-          >
-            {t('protectedCancel')}
-          </button>
-          <button
-            type="button"
-            className={css.titleSave}
-            data-testid="baf-standard-protected-save"
-            disabled={state.protectedSaving || !dirty}
-            onClick={() => { void saveProtectedPaths() }}
-          >
-            {state.protectedSaving ? t('protectedSaving') : t('protectedSave')}
-          </button>
-        </span>
-      </div>
+          提交防线 hook line are gone.
+          【变更】2026-10-26 (批次二十八 2): the head gains a glyph and a line of
+          guidance, so the card says what it is before the list says what is
+          in it. */}
+      <CardHead
+        glyph="shield"
+        title={t('protectedTitle')}
+        description={t('protectedDesc')}
+        actions={(
+          <span className={css.titleActions}>
+            <button
+              type="button"
+              className={css.titleCancel}
+              data-testid="baf-standard-protected-cancel"
+              disabled={state.protectedSaving || !dirty}
+              onClick={() => {
+                setEditing(null)
+                setEntryInput('')
+                setLocalMessage(undefined)
+                updateProtectedDraft([...persisted])
+              }}
+            >
+              {t('protectedCancel')}
+            </button>
+            <button
+              type="button"
+              className={css.titleSave}
+              data-testid="baf-standard-protected-save"
+              disabled={state.protectedSaving || !dirty}
+              onClick={() => { void saveProtectedPaths() }}
+            >
+              {state.protectedSaving ? t('protectedSaving') : t('protectedSave')}
+            </button>
+          </span>
+        )}
+      />
       {draft.length === 0 ? (
         <div className={css.protectedEmpty} data-testid="baf-standard-protected-empty">
           {t('protectedEmpty')}
@@ -468,7 +603,13 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
           轨迹图 row anatomy — label left, mono value right, click opens. */}
       {summary?.cwd !== undefined || summary?.baselinePath !== undefined ? (
         <div className={css.card} data-testid="baf-standard-project-info">
-          <div className={css.cardTitle}>{t('projectInfoTitle')}</div>
+          {/* 【变更】2026-10-26 (批次二十八 2): the head gains a glyph and a
+              line of guidance — the card says what it holds. */}
+          <CardHead
+            glyph="info"
+            title={t('projectInfoTitle')}
+            description={t('projectInfoDesc')}
+          />
           <div className={css.projectInfoRows}>
             <ProjectPathRows
               summary={summary}
@@ -583,9 +724,28 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
     probeQualityEnvironment, loadQualityConfiguration, loadQualityAssets, loadQualityFlowConfig,
   ])
 
+  // 【变更】2026-10-26 (批次二十八 4): the page's figures — the pipeline's shape
+  // read off the stage map the Remote loaded.
+  const stages = Object.values(state.qualityFlow?.stages ?? {})
+  const enabledStages = stages.filter(stage => stage.enabled).length
+  const haltStages = stages.filter(stage => stage.haltOnError).length
+
   return (
     <section className={css.blockQuality} data-testid="baf-standard-quality">
       <StatusSurface state={state} summary={summary} t={t} />
+      {/* 【变更】2026-10-26 (批次二十八 4): the page header + the figure row —
+          the 测试流 tab opens like the 确认门 and 变更总览 tabs. */}
+      <PageHeader
+        brand={t('brandBaf')}
+        label={t('qolPageLabel')}
+        title={t('qolPageTitle')}
+        description={t('qolPageHelp')}
+        figures={[
+          { value: String(stages.length === 0 ? 8 : stages.length), label: t('qolFigureStages'), tone: 'accent' },
+          { value: String(enabledStages), label: t('qolFigureEnabled') },
+          { value: String(haltStages), label: t('qolFigureHalt'), tone: 'quiet' },
+        ]}
+      />
       <div className={css.stack}>
         <QualityEnvironmentCard
           state={state}
@@ -635,9 +795,25 @@ export function StandardsQualityOverview(props: StandardsPanelProps) {
 export function StandardsCommandsOverview(props: StandardsPanelProps) {
   const { state } = usePanelState(props)
   const { t } = props
+  // 【变更】2026-10-26 (批次二十八 4): the page's figures — how many commands
+  // the product ships, how many states they bind to, and how many run in any
+  // state.
+  const stateBound = COMMAND_NODES.filter(node => commandsAt(node).length > 0).length
   return (
     <section className={css.block} data-testid="baf-standard-commands">
       <StatusSurface state={state} summary={state.summary} t={t} suppressNoBaseline />
+      {/* 【变更】2026-10-26 (批次二十八 4): the page header + the figure row. */}
+      <PageHeader
+        brand={t('brandBaf')}
+        label={t('cmdPageLabel')}
+        title={t('cmdPageTitle')}
+        description={t('cmdPageHelp')}
+        figures={[
+          { value: String(BAF_COMMANDS.length), label: t('cmdFigureTotal'), tone: 'accent' },
+          { value: String(stateBound), label: t('cmdFigureStates') },
+          { value: String(BAF_GLOBAL_COMMANDS.length), label: t('cmdFigureGlobal'), tone: 'quiet' },
+        ]}
+      />
       <CommandsCard t={t} />
     </section>
   )
@@ -647,6 +823,9 @@ export function StandardsCommandsOverview(props: StandardsPanelProps) {
 export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
   const { state, summary } = usePanelState(props)
   const { openEnterpriseDoc, closeEnterpriseDoc, t } = props
+  // 【变更】2026-10-26 (批次二十八 4): the page's figures — the standards the
+  // product ships, and how many workflow states they cover.
+  const coveredStates = new Set(ENTERPRISE_DOC_ROWS.flatMap(row => row.nodes)).size
 
   return (
     <section className={css.block} data-testid="baf-standard-overview">
@@ -655,6 +834,19 @@ export function StandardsEnterpriseOverview(props: StandardsPanelProps) {
           and the content below (a product constant) renders regardless of
           baseline state instead of explaining itself. */}
       <StatusSurface state={state} summary={summary} t={t} suppressNoBaseline />
+
+      {/* 【变更】2026-10-26 (批次二十八 4): the page header + the figure row. */}
+      <PageHeader
+        brand={t('brandBaf')}
+        label={t('stdPageLabel')}
+        title={t('stdPageTitle')}
+        description={t('stdPageHelp')}
+        figures={[
+          { value: String(ENTERPRISE_DOC_ROWS.length), label: t('stdFigureDocs'), tone: 'accent' },
+          { value: String(coveredStates), label: t('stdFigureStates') },
+          { value: String(ENTERPRISE_DOC_ROWS.length), label: t('stdFigureDomains'), tone: 'quiet' },
+        ]}
+      />
 
       {/* 【变更】2026-10-20 (批次六 5, 客户决策): the placeholder-driven rules
           digest + rules-doc viewer are REPLACED by the REAL enterprise

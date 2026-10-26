@@ -2,9 +2,24 @@
  * 【变更】2026-10-18 (项目工程 1.1–1.3): the ONE input surface is the AI 禁改
  * path card — everything else stays tables and text. */
 
-.block {
+.block,
+.blockQuality {
+  /* 【变更】2026-10-26 (批次二十八 2): the BAF accent, stated outright in both
+     themes — the design platform has no brand hue of its own. The card heads
+     and the page hero use it, so the whole 工作流 surface reads as one system.
+     The dark half is a touch brighter, so the foil keeps its metal read. */
+  --wf-accent: #c9a227;
+  --wf-accent-text: color-mix(in srgb, var(--wf-accent) 60%, var(--dsw-alias-label-primary));
+  --wf-surface: var(--dsw-alias-bg-layer-2);
+  --wf-hairline: color-mix(in srgb, var(--wf-accent) 13%, var(--dsw-alias-border-l2));
   padding: 16px 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* 【变更】2026-10-26 (批次二十八 2): the dark half of the BAF accent. */
+:global(body[data-ds-dark-theme]) .block,
+:global(body[data-ds-dark-theme]) .blockQuality {
+  --wf-accent: #d9b64c;
 }
 
 .head {
@@ -35,6 +50,105 @@
    * 测试流 tab's first card sits exactly as far from the tab strip as every
    * other tab's first element. */
   padding: 16px 0 16px;
+}
+
+/* 【变更】2026-10-26 (批次二十八 4): the page header band + the figure row —
+   the 测试流 / 指令集 / 企业规范 tabs now open the way the 确认门 and 变更总览
+   tabs do. Same light register as those two pages: a hairline edge with a
+   whisper of gold, one soft wash, a lift instead of a drop shadow. */
+.pageHero {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 18px 20px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--wf-hairline);
+  background:
+    linear-gradient(158deg, color-mix(in srgb, var(--wf-accent) 4.5%, transparent), transparent 52%),
+    var(--wf-surface);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+}
+
+.pageHeroBrand {
+  flex: none;
+  align-self: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--wf-accent-text);
+  background: color-mix(in srgb, var(--wf-accent) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 24%, transparent);
+  border-radius: 6px;
+  padding: 0.2rem 0.42rem;
+}
+
+.pageHeroText {
+  min-width: 0;
+  flex: 1;
+}
+
+.pageHeroLabel {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wf-accent-text);
+}
+
+.pageHeroTitle {
+  margin: 2px 0 0;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--dsw-alias-label-primary);
+}
+
+.pageHeroDesc {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pageFigures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pageFigure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--wf-hairline);
+  background: var(--wf-surface);
+}
+
+.pageFigureValue {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pageFigure[data-tone='accent'] .pageFigureValue { color: var(--wf-accent-text); }
+.pageFigure[data-tone='quiet'] .pageFigureValue { color: var(--dsw-alias-label-secondary); }
+
+.pageFigureLabel {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  letter-spacing: 0.02em;
 }
 
 .qualityGrid {
@@ -89,14 +203,48 @@
 
 .card {
   position: relative;
-  padding: 12px;
+  padding: 14px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: 12px;
+}
+
+/* 【变更】2026-10-26 (批次二十八 2): the card head — a glyph, the title, one
+   line of guidance and the head-row actions. The three 项目工程 cards used to
+   carry a bare title, which read as three identical labels rather than as
+   three named things. */
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cardGlyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--wf-accent) 9%, transparent);
+  color: var(--wf-accent-text);
+}
+
+.cardHeadText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .cardTitle {
-  font-size: 13px;
-  line-height: 19px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
 }
 
 .cardDesc {
@@ -929,6 +1077,15 @@
 .hooksEntryButton:hover {
   color: var(--dsw-alias-interactive-label-hover, var(--dsw-alias-label-primary));
   text-decoration-color: currentColor;
+}
+
+/* 【变更】2026-10-26 (批次二十八 2): the per-script 「失败中止」 switch. It
+   rides the row between the path and the row actions, with the policy's
+   meaning in its hover text. */
+.hooksEntryFatal {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 .hooksEmpty {

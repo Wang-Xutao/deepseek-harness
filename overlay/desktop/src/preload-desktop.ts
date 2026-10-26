@@ -74,6 +74,11 @@ contextBridge.exposeInMainWorld('bafDesktop', {
   quitApp: () => ipcRenderer.invoke('app:quit') as Promise<boolean>,
   getDshReleaseNotes: () => ipcRenderer.invoke('update:dshReleaseNotes') as Promise<DshReleaseNotes>,
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  // 【变更】2026-10-26 (批次二十八 5): hand a rendered HTML page to the system
+  // browser. The 变更总览 ledger's board is a self-contained page the renderer
+  // builds; a blob: URL cannot leave the renderer, so the shell writes it to a
+  // temp file and opens that.
+  openHtml: (html: string, name: string) => ipcRenderer.invoke('shell:openHtml', { html, name }) as Promise<{ ok: boolean; error?: string }>,
   onUpdateProgress: (cb: (payload: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
       cb(payload)

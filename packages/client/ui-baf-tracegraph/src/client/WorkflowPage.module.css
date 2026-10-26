@@ -27,10 +27,15 @@
   --dsh-scrollbar-thumb-border: 2px;
 }
 
-/* The centered column: the same 960px cap and clamp(24-48px) inline / 48px
-   bottom inset as the sibling first-level pages. */
+/* The centered column: the clamp(24-48px) inline / 48px bottom inset is the
+   sibling first-level pages' own, but the CAP is the workflow surface's:
+   1180px instead of the plugins/schedules 960px. The 工作流 page carries the
+   widest content in the product — the 确认门 canvas + its 门禁明细 column
+   side by side, the 变更总览 ledger's four figure plates, and the 测试流 /
+   指令集 / 企业规范 flow canvases with their detail columns — and the old 960px
+   cap squeezed them into a column narrower than they need. */
 .pageContent {
-  max-width: 960px;
+  max-width: 1180px;
   margin: 0 auto;
   /* Inline and bottom insets only: the 28px top inset belongs to the heading
      row, which starts at the window's top edge. */

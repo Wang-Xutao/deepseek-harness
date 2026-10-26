@@ -45,6 +45,9 @@
   --wf-warn: var(--dsw-alias-text-warning);
   --wf-danger: var(--dsw-alias-text-danger);
   --wf-idle: var(--dsw-alias-state-idle-primary);
+  /* 【变更】2026-10-26 (批次二十八 3): the QUIET edge — a hairline that carries
+     a whisper of gold instead of the gold-lined plate the hero used to be. */
+  --wf-hairline: color-mix(in srgb, var(--wf-accent) 13%, var(--wf-line));
   padding: 16px 0;
   border-bottom: 1px solid var(--wf-line);
 }
@@ -63,43 +66,43 @@
 
 /* ── hero ──────────────────────────────────────────────────────────────── */
 
-/* 【变更】2026-10-24 (批次二十 1): the header is a lit console band — a gold
-   hairline, a gold wash from the left, and a hairline highlight along the
-   top edge, so the page opens with a clear focal point. */
+/* 【变更】2026-10-26 (批次二十八 3): the ledger's header sheds its gold
+   COVERAGE and its heavy plate — the same lighter register the 确认门 hero
+   takes (批次二十八 3), so the two pages of the 工作流 surface still read as
+   siblings. A hairline edge with a whisper of gold, one soft wash that fades
+   out by the middle, a lift instead of a drop shadow. */
 .hero {
   position: relative;
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 18px 20px;
   overflow: hidden;
-  border-radius: 16px;
-  border: 1px solid var(--wf-accent-line);
+  border-radius: 14px;
+  border: 1px solid var(--wf-hairline);
   background:
-    radial-gradient(520px 140px at 8% -40%, var(--wf-accent-glow), transparent 70%),
-    linear-gradient(120deg, color-mix(in srgb, var(--wf-accent) 5%, transparent), transparent 58%),
+    linear-gradient(158deg, color-mix(in srgb, var(--wf-accent) 4.5%, transparent), transparent 52%),
     var(--wf-surface);
   box-shadow:
-    0 18px 38px -30px color-mix(in srgb, #000 55%, transparent),
+    0 10px 26px -24px color-mix(in srgb, #000 40%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
   animation: ovwFadeUp 320ms ease both;
 }
 
 /* The BAF mark — the same wordmark the session's 工作流图 / 测试流图 tabs
-   carry, so the page says which product it belongs to. */
+   carry, so the page says which product it belongs to. A light gold chip
+   now, not a dark gold slab. */
 .heroBrand {
   flex: none;
   align-self: center;
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.14em;
-  color: #fff;
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--wf-accent) 36%, #241a08),
-    color-mix(in srgb, var(--wf-accent) 44%, #241a08));
-  border-radius: 5px;
-  padding: 0.22rem 0.44rem;
-  box-shadow: 0 6px 14px -10px color-mix(in srgb, #000 70%, transparent);
+  color: var(--wf-accent-text);
+  background: color-mix(in srgb, var(--wf-accent) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 24%, transparent);
+  border-radius: 6px;
+  padding: 0.2rem 0.42rem;
 }
 
 .heroText {
@@ -177,21 +180,26 @@
   outline-offset: 2px;
 }
 
-/* The gold primary — the one action the ledger exists to offer. */
+/* The gold primary — the one action the ledger exists to offer.
+   【变更】2026-10-26 (批次二十八 5): its label is WHITE. The fill deepens to
+   carry white text (the old 62% gold with dark ink read as a light button, and
+   white on it would have been 3.4:1); the deep gold keeps 6.6:1 … 8.5:1
+   against white across the gradient, so the label stays legible in both
+   themes. */
 .refreshPrimary {
   flex: none;
   padding: 0 16px;
   height: 32px;
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 46%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-accent) 34%, transparent);
   border-radius: 16px;
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--wf-accent) 62%, #241a08),
-    color-mix(in srgb, var(--wf-accent) 72%, #241a08));
+    color-mix(in srgb, var(--wf-accent) 44%, #241a08),
+    color-mix(in srgb, var(--wf-accent) 32%, #241a08));
   font: inherit;
   font-size: 12px;
   line-height: 20px;
   font-weight: 700;
-  color: #1a1406;
+  color: #fff;
   cursor: pointer;
   box-shadow: 0 10px 22px -14px var(--wf-accent-glow);
   transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
@@ -247,20 +255,23 @@
   margin-top: 14px;
 }
 
+/* 【变更】2026-10-26 (批次二十八 3): the figure plates follow the hero into
+   the lighter register — the same hairline edge, the same soft lift. The gold
+   border read as a second frame around every number. */
 .tile {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 12px 14px;
+  padding: 11px 14px;
   overflow: hidden;
-  border-radius: 13px;
-  border: 1px solid var(--wf-accent-line);
+  border-radius: 12px;
+  border: 1px solid var(--wf-hairline);
   background:
-    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 4%, transparent), transparent 62%),
+    linear-gradient(165deg, color-mix(in srgb, var(--wf-accent) 3%, transparent), transparent 60%),
     var(--wf-surface);
   box-shadow:
-    0 14px 30px -26px color-mix(in srgb, #000 55%, transparent),
+    0 10px 24px -24px color-mix(in srgb, #000 44%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
   animation: ovwFadeUp 360ms ease both;
 }
@@ -317,6 +328,145 @@
 }
 
 /* ── the records section ───────────────────────────────────────────────── */
+
+/* 【变更】2026-10-26 (批次二十八 5): the VIEW CONTROLS — the category
+   segments, the two dropdowns and the search box. A project with dozens of
+   changes cannot be read from one flat list, so the ledger gains the three
+   axes a reader actually navigates by: which changes (category), which flow
+   (mode), and in what order (sort) — plus a text search on the change id.
+   The controls sit on one quiet row between the section head and the cards;
+   the count on the right says how much of the ledger they leave visible. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.segGroup {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 9px;
+  border: 1px solid var(--wf-hairline);
+  background: color-mix(in srgb, var(--wf-ink) 4%, transparent);
+}
+
+.seg {
+  border: 0;
+  padding: 3px 10px;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--wf-ink-3);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.seg:hover {
+  color: var(--wf-ink);
+}
+
+.seg[data-active='true'] {
+  background: var(--wf-surface);
+  color: var(--wf-accent-text);
+  font-weight: 700;
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 18%, transparent);
+}
+
+.selectWrap {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.selectLabel {
+  color: var(--wf-ink-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.select {
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid var(--wf-hairline);
+  background: var(--wf-surface);
+  color: var(--wf-ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.search {
+  flex: 1 1 160px;
+  min-width: 140px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--wf-hairline);
+  background: var(--wf-surface);
+  color: var(--wf-ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.search::placeholder {
+  color: var(--wf-ink-3);
+}
+
+.resultCount {
+  flex: none;
+  color: var(--wf-ink-3);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 【变更】2026-10-26 (批次二十八 5): the loading plate — a spinning ring
+   beside the label, in the page's own card vocabulary. The bare「正在加载…」
+   line read as a frozen page; the ring says the round is running. */
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--wf-hairline);
+  background: var(--wf-surface);
+  color: var(--wf-ink-2);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.loadingLabel {
+  min-width: 0;
+}
+
+.spinner {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--wf-accent) 22%, transparent);
+  border-top-color: var(--wf-accent);
+  animation: ovwSpin 760ms linear infinite;
+}
+
+@keyframes ovwSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
 
 /* 【变更】2026-10-25 (批次二十四 2): the list owns a section head — an
    eyebrow, the record count and the click hint over one hairline rule. The

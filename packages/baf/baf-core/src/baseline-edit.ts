@@ -173,10 +173,16 @@ export function rewriteBaselineProtectedPaths(text: string, paths: readonly stri
 export interface NodeHookLists {
   readonly enter?: readonly string[]
   readonly exit?: readonly string[]
+  /**
+   * 【变更】2026-10-26 (批次二十八 2): the scripts whose failure is TOLERATED
+   * — the workflow continues past them. Every script not listed here stops
+   * the workflow when it fails (the fail-closed default).
+   */
+  readonly tolerateFailure?: readonly string[]
 }
 
 /** Canonical form of one hook entry: forward slashes, no `./`, no trailing `/`. */
-function normalizeHookEntry(entry: string): string {
+export function normalizeHookEntry(entry: string): string {
   return entry.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '')
 }
 
@@ -186,9 +192,53 @@ export type NodeHooksValidation =
   | { readonly ok: false; readonly message: string }
 
 /**
+ * 【变更】2026-10-26 (批次二十八 2): the tolerated scripts of a hooks block
+ * must be scripts the SAME node configures.
+ *
+ * A hand-edited baseline can list a tolerated script that no `enter` / `exit`
+ * list names. The workflow would never reach that script, so the entry is dead
+ * config — dropping it silently would hide the mistake, so it is reported.
+ *
+ * Both sides are compared in their canonical form (forward slashes, no `./`),
+ * so a baseline that writes `.\scripts\build.sh` in one list and
+ * `scripts/build.sh` in the other is not mistaken for dead config.
+ * @param nodes - a `hooks.nodes` block (raw or normalized — the comparison is
+ * on the canonical paths).
+ * @returns `{ ok: true }`, or the first problem as a customer-readable line.
+ */
+export function validateToleratedHooks(
+  // The parameter is wider than {@link NodeHookLists}: a parsed baseline's
+  // lists carry `| undefined` on their optional keys (zod's optional output),
+  // and `exactOptionalPropertyTypes` would reject them otherwise.
+  nodes: Readonly<Record<string, {
+    readonly enter?: readonly string[] | undefined
+    readonly exit?: readonly string[] | undefined
+    readonly tolerateFailure?: readonly string[] | undefined
+  }>>,
+): { readonly ok: true } | { readonly ok: false; readonly message: string } {
+  for (const lists of Object.values(nodes)) {
+    const configured = new Set(
+      [...(lists.enter ?? []), ...(lists.exit ?? [])].map(entry => normalizeHookEntry(entry.trim())),
+    )
+    const unknown = (lists.tolerateFailure ?? [])
+      .map(entry => normalizeHookEntry(entry.trim()))
+      .find(entry => !configured.has(entry))
+    if (unknown !== undefined) {
+      return { ok: false, message: `失败放行的脚本必须是该状态已配置的脚本：${unknown}` }
+    }
+  }
+  return { ok: true }
+}
+
+/**
  * Validate a proposed hooks map: known workflow nodes only, non-empty
  * workspace-relative file paths (no drive / leading slash, no `..`, no
  * wildcards — a hook points at ONE file), deduplicated per list.
+ *
+ * 【变更】2026-10-26 (批次二十八 2): the `tolerateFailure` list names the
+ * scripts whose failure the workflow TOLERATES. Every entry must be a script
+ * of the same node — an entry that belongs to no list is dead config and is
+ * rejected rather than silently dropped (see {@link validateToleratedHooks}).
  * @param raw - the UI draft (node → enter/exit lists).
  * @returns the normalized map (empty lists dropped; an all-empty map is `{}`),
  * or the first problem as a customer-readable line.
@@ -235,9 +285,22 @@ export function validateNodeHooks(
     if (enter.error !== undefined) return { ok: false, message: enter.error }
     const exit = build(node, 'exit', lists.exit)
     if (exit.error !== undefined) return { ok: false, message: exit.error }
+    const tolerate = build(node, 'tolerateFailure', lists.tolerateFailure)
+    if (tolerate.error !== undefined) return { ok: false, message: tolerate.error }
+    // Every tolerated script must be one of the node's own scripts.
+    const tolerated = validateToleratedHooks({
+      [node]: {
+        ...(enter.entries !== undefined ? { enter: enter.entries } : {}),
+        ...(exit.entries !== undefined ? { exit: exit.entries } : {}),
+        ...(tolerate.entries !== undefined ? { tolerateFailure: tolerate.entries } : {}),
+      },
+    })
+    if (!tolerated.ok) return { ok: false, message: tolerated.message }
+    const toleratedEntries = tolerate.entries ?? []
     const cleaned: NodeHookLists = {
       ...(enter.entries !== undefined && enter.entries.length > 0 ? { enter: enter.entries } : {}),
       ...(exit.entries !== undefined && exit.entries.length > 0 ? { exit: exit.entries } : {}),
+      ...(toleratedEntries.length > 0 ? { tolerateFailure: toleratedEntries } : {}),
     }
     if (Object.keys(cleaned).length > 0) hooks[node as WorkflowNode] = cleaned
   }
@@ -257,7 +320,11 @@ function renderHooksBlock(
     if (lists === undefined) continue
     const hasEnter = lists.enter !== undefined && lists.enter.length > 0
     const hasExit = lists.exit !== undefined && lists.exit.length > 0
-    out.push({ body: `    ${node}:${!hasEnter && !hasExit ? ' {}' : ''}`, eol })
+    const hasTolerated = lists.tolerateFailure !== undefined && lists.tolerateFailure.length > 0
+    out.push({
+      body: `    ${node}:${!hasEnter && !hasExit && !hasTolerated ? ' {}' : ''}`,
+      eol,
+    })
     if (hasEnter) {
       out.push({ body: '      enter:', eol })
       for (const entry of lists.enter ?? []) out.push({ body: `        - ${entry}`, eol })
@@ -265,6 +332,12 @@ function renderHooksBlock(
     if (hasExit) {
       out.push({ body: '      exit:', eol })
       for (const entry of lists.exit ?? []) out.push({ body: `        - ${entry}`, eol })
+    }
+    // 【变更】2026-10-26 (批次二十八 2): the scripts whose failure the
+    // workflow tolerates — the per-script 「失败中止」 switch's OFF state.
+    if (hasTolerated) {
+      out.push({ body: '      tolerateFailure:', eol })
+      for (const entry of lists.tolerateFailure ?? []) out.push({ body: `        - ${entry}`, eol })
     }
   }
   return out

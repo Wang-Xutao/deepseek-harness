@@ -50,9 +50,29 @@ describe('planNodeHooks (transition → script plan)', () => {
       },
     })
     expect(planNodeHooks(statusAt('implement'), 'verify', baseline)).toEqual([
-      { kind: 'exit', node: 'implement', entry: 'scripts/build.sh' },
-      { kind: 'exit', node: 'implement', entry: 'scripts/lint.ps1' },
-      { kind: 'enter', node: 'verify', entry: 'scripts/enter-verify.mjs' },
+      { kind: 'exit', node: 'implement', entry: 'scripts/build.sh', fatal: true },
+      { kind: 'exit', node: 'implement', entry: 'scripts/lint.ps1', fatal: true },
+      { kind: 'enter', node: 'verify', entry: 'scripts/enter-verify.mjs', fatal: true },
+    ])
+  })
+
+  // 【变更】2026-10-26 (批次二十八 2): the scripts of one list keep the
+  // CONFIGURED ORDER, and each script carries its own fail-stop policy — the
+  // ones the baseline lists in `tolerateFailure` may fail without stopping
+  // the workflow.
+  it('keeps the configured order and marks the tolerated scripts non-fatal', async () => {
+    const baseline = await baselineWithHooks({
+      nodes: {
+        implement: {
+          exit: ['scripts/first.sh', 'scripts/second.sh', 'scripts/third.sh'],
+          tolerateFailure: ['scripts/second.sh'],
+        },
+      },
+    })
+    expect(planNodeHooks(statusAt('implement'), 'verify', baseline)).toEqual([
+      { kind: 'exit', node: 'implement', entry: 'scripts/first.sh', fatal: true },
+      { kind: 'exit', node: 'implement', entry: 'scripts/second.sh', fatal: false },
+      { kind: 'exit', node: 'implement', entry: 'scripts/third.sh', fatal: true },
     ])
   })
 
@@ -64,7 +84,7 @@ describe('planNodeHooks (transition → script plan)', () => {
       },
     })
     expect(planNodeHooks(statusAt('verify'), 'implement', baseline))
-      .toEqual([{ kind: 'enter', node: 'implement', entry: 'scripts/re-enter.ps1' }])
+      .toEqual([{ kind: 'enter', node: 'implement', entry: 'scripts/re-enter.ps1', fatal: true }])
   })
 
   it('fires nothing into drift, and enter(to) when resuming OUT of drift', async () => {
@@ -75,7 +95,7 @@ describe('planNodeHooks (transition → script plan)', () => {
     // T13 resume drift → intake: drift's own lists are ignored (not a
     // main-chain FROM), the restored node's enter hooks run.
     expect(planNodeHooks(statusAt('drift'), 'intake', baseline))
-      .toEqual([{ kind: 'enter', node: 'intake', entry: 'i.sh' }])
+      .toEqual([{ kind: 'enter', node: 'intake', entry: 'i.sh', fatal: true }])
   })
 
   it('returns an empty plan without a hooks block', async () => {
@@ -120,14 +140,34 @@ describe('runNodeHooks (sequential execution, fail-closed)', () => {
     const { executor, commands } = scripted([pass('ok1'), pass('ok2')])
     const outcome = await runNodeHooks(
       [
-        { kind: 'exit', node: 'implement', entry: 'a.sh' },
-        { kind: 'enter', node: 'verify', entry: 'b.ps1' },
+        { kind: 'exit', node: 'implement', entry: 'a.sh', fatal: true },
+        { kind: 'enter', node: 'verify', entry: 'b.ps1', fatal: true },
       ],
       { workspaceRoot: root, executor },
     )
     expect(outcome.failure).toBeUndefined()
     expect(outcome.executed.map(run => run.passed)).toEqual([true, true])
     expect(commands).toEqual([hookCommand('a.sh', root), hookCommand('b.ps1', root)])
+  })
+
+  // 【变更】2026-10-26 (批次二十八 2): a TOLERATED script's failure is recorded
+  // and the plan CONTINUES; a FATAL one still stops the plan.
+  it('continues past a tolerated failure and stops at a fatal one', async () => {
+    const { executor, commands } = scripted([
+      { ...pass(), exitCode: 2, stdout: 'notify failed', stderr: '' },
+      pass('ok'),
+    ])
+    const outcome = await runNodeHooks(
+      [
+        { kind: 'exit', node: 'implement', entry: 'notify.sh', fatal: false },
+        { kind: 'exit', node: 'implement', entry: 'build.sh', fatal: true },
+      ],
+      { workspaceRoot: root, executor },
+    )
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.tolerated).toMatchObject([{ entry: 'notify.sh', reasonCode: 'exit_code', exitCode: 2 }])
+    expect(outcome.executed.map(run => run.passed)).toEqual([false, true])
+    expect(commands).toEqual([hookCommand('notify.sh', root), hookCommand('build.sh', root)])
   })
 
   it('stops at the first failing script and reports a redacted, truncated payload', async () => {
@@ -139,8 +179,8 @@ describe('runNodeHooks (sequential execution, fail-closed)', () => {
     ])
     const outcome = await runNodeHooks(
       [
-        { kind: 'exit', node: 'implement', entry: 'a.sh' },
-        { kind: 'enter', node: 'verify', entry: 'b.ps1' },
+        { kind: 'exit', node: 'implement', entry: 'a.sh', fatal: true },
+        { kind: 'enter', node: 'verify', entry: 'b.ps1', fatal: true },
       ],
       { workspaceRoot: root, executor },
     )
@@ -162,7 +202,7 @@ describe('runNodeHooks (sequential execution, fail-closed)', () => {
     ] as const) {
       const { executor } = scripted([result])
       const outcome = await runNodeHooks(
-        [{ kind: 'enter', node: 'plan', entry: 'a.sh' }],
+        [{ kind: 'enter', node: 'plan', entry: 'a.sh', fatal: true }],
         { workspaceRoot: root, executor },
       )
       expect(outcome.failure?.reasonCode).toBe(reasonCode)
@@ -252,6 +292,43 @@ describe('enterStage enforcement (scripts gate the transition)', () => {
       expect((await store.readStatus(changeId)).current).toBe('clarify')
       const events = (await store.readEvents(changeId)).events
       expect(events.some(event => event.type === 'stage-entered' && event.node === 'clarify')).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // 【变更】2026-10-26 (批次二十八 2): a script whose failure the baseline
+  // TOLERATES does not stop the workflow — the transition is recorded and the
+  // change advances.
+  it('advances the workflow past a tolerated script failure', async () => {
+    const commands: string[] = []
+    const executor: QualityExecutor = async (command) => {
+      commands.push(command)
+      // Only the TOLERATED script fails; the fatal one still passes.
+      if (command.includes('notify.sh')) {
+        return { ...pass(), command, exitCode: 3, stdout: 'notify failed' }
+      }
+      return { ...pass('ok'), command }
+    }
+    const { root, store, pipeline, changeId } = await setup(
+      {
+        nodes: {
+          open: { exit: ['scripts/notify.sh'], tolerateFailure: ['scripts/notify.sh'] },
+          clarify: { enter: ['scripts/enter-clarify.mjs'] },
+        },
+      },
+      executor,
+    )
+    try {
+      await driveClarify(pipeline, changeId)
+      expect((await store.readStatus(changeId)).current).toBe('clarify')
+      const events = (await store.readEvents(changeId)).events
+      expect(events.some(event => event.type === 'stage-entered' && event.node === 'clarify')).toBe(true)
+      // The tolerated script still RAN — it is tolerated, not skipped.
+      expect(commands).toEqual([
+        hookCommand('scripts/notify.sh', root),
+        hookCommand('scripts/enter-clarify.mjs', root),
+      ])
     } finally {
       await rm(root, { recursive: true, force: true })
     }

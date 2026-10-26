@@ -120,6 +120,14 @@ export const baselineManifestSchema = z.object({
       z.object({
         enter: z.array(z.string().min(1)).optional(),
         exit: z.array(z.string().min(1)).optional(),
+        /**
+         * 【变更】2026-10-26 (批次二十八 2): the scripts whose failure is
+         * TOLERATED — the workflow continues past them. Every script NOT
+         * listed here stops the workflow when it fails (fail-closed, the
+         * default), which is what the 状态进出hook editor's per-script
+         * 「失败中止」 switch writes.
+         */
+        tolerateFailure: z.array(z.string().min(1)).optional(),
       }),
     ),
   }).optional(),

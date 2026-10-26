@@ -8,6 +8,27 @@
 export const NS = 'baf.standard'
 
 const zh = {
+  // 【变更】2026-10-26 (批次二十八 4): the page header band + the figure
+  // plates the 测试流 / 指令集 / 企业规范 tabs now open with (批次二十八 4).
+  brandBaf: 'BAF',
+  qolPageLabel: '测试流台账',
+  qolPageTitle: '质量验证流水线',
+  qolPageHelp: '编译、测试、插桩、覆盖率、静态分析与格式化 —— 八个阶段按序执行，每个阶段都可单独开关。',
+  qolFigureStages: '阶段',
+  qolFigureEnabled: '已启用',
+  qolFigureHalt: '失败中止',
+  cmdPageLabel: '指令集台账',
+  cmdPageTitle: '工作流指令',
+  cmdPageHelp: '每个状态可用的指令，以及任意状态都能调用的全局指令。',
+  cmdFigureTotal: '指令',
+  cmdFigureStates: '覆盖状态',
+  cmdFigureGlobal: '全局指令',
+  stdPageLabel: '企业规范台账',
+  stdPageTitle: '企业规范地图',
+  stdPageHelp: '工程规范按状态铺开 —— 点击节点即可读出它在该阶段生效的规范文档。',
+  stdFigureDocs: '规范文档',
+  stdFigureStates: '覆盖状态',
+  stdFigureDomains: '规范域',
   rowTitle: 'BAF 工程规范（规范总览 · 只读）',
   rowDescription: '七个 BAF 插件包各自的规则当前值、作用与配置位置。要改规则：直接编辑工作区里的 .baf/baseline.yml（改完这里刷新可见），工程规则内容改规则文档。',
   // 【变更】2026-10-21 (质量监控重构 1.1–1.5): the tab head (title + description)
@@ -141,6 +162,8 @@ const zh = {
   // 【变更】2026-10-18 (项目工程 1.1–1.3): clickable path rows + AI 禁改路径 card.
   // 【变更】2026-10-20 (批次四 3.7): the two path rows live inside a 项目信息 card.
   projectInfoTitle: '项目信息',
+  // 【变更】2026-10-26 (批次二十八 2): the card head's guidance line.
+  projectInfoDesc: '项目路径与基线配置文件。',
   projectPathLabel: '项目路径',
   // 【变更】2026-10-20 (批次四 3.5): copy/open row buttons retire (path click
   // already opens); only 编辑/删除 remain, so their labels retire too.
@@ -157,6 +180,8 @@ const zh = {
   // 【变更】2026-10-20 (批次三 4.3): the card renames to 受保护路径, drops its
   // long description, and its save/cancel pair replaces 保存到基线.
   protectedTitle: '受保护路径',
+  // 【变更】2026-10-26 (批次二十八 2): the card head's guidance line.
+  protectedDesc: 'AI 禁改路径：命中即拒绝提交。',
   protectedEmpty: '暂无禁改路径，待添加。',
   protectedEditLabel: '编辑禁改路径',
   protectedAddPlaceholder: '相对路径，如 docs 或 src/generated/**',
@@ -170,9 +195,17 @@ const zh = {
   protectedPickOutside: '所选文件夹不在当前工作区内，无法换算为相对路径。',
   // 【变更】2026-10-20 (批次四 3.3): the 提交防线 hook status line is deleted
   // from the card footer (save/cancel moved to the title row) — both keys retire.
-  // 【变更】2026-10-19 (六问题批 4.1b): 状态脚本 card — per-node enter/exit
+  // 【变更】2026-10-19 (六问题批 4.1b): 状态进出hook card — per-node enter/exit
   // custom scripts, edited here and enforced at every workflow transition.
-  hooksTitle: '状态脚本',
+  // 【变更】2026-10-26 (批次二十八 2): the card renames 状态脚本 → 状态进出hook
+  // (the scripts hang on ENTERING and LEAVING a state, not on "a state"),
+  // and the head gains a guidance line.
+  hooksTitle: '状态进出hook',
+  hooksDesc: '进入 / 退出状态时执行的脚本，按配置先后顺序执行。',
+  // 【变更】2026-10-26 (批次二十八 2): the per-script fail-stop switch.
+  hooksFatalLabel: '失败中止',
+  hooksFatalOn: '脚本失败时中止工作流',
+  hooksFatalOff: '脚本失败时继续执行（不中止工作流）',
   // 【变更】2026-10-20 (批次三 4.4): the .baf/baseline.yml 说明 is deleted — the
   // canvas + editor carry the meaning; pick/validation keys join the card.
   hooksEnterLabel: '进入状态',
@@ -185,7 +218,7 @@ const zh = {
   hooksEnterShort: '进',
   hooksExitShort: '出',
   hooksEmptyShort: '未配置',
-  hooksFlowAria: '工作流状态脚本流程图',
+  hooksFlowAria: '工作流状态进出hook流程图',
   hooksEditLabel: '编辑脚本路径',
   hooksSave: '保存',
   hooksCancel: '取消',
@@ -260,6 +293,27 @@ const zh = {
 }
 
 const en = {
+  // 【变更】2026-10-26 (批次二十八 4): the page header band + the figure
+  // plates the 测试流 / 指令集 / 企业规范 tabs now open with (批次二十八 4).
+  brandBaf: 'BAF',
+  qolPageLabel: 'Test-flow ledger',
+  qolPageTitle: 'Quality verification pipeline',
+  qolPageHelp: 'Compile, test, instrument, coverage, static analysis and format — eight stages in order, each one switchable on its own.',
+  qolFigureStages: 'Stages',
+  qolFigureEnabled: 'Enabled',
+  qolFigureHalt: 'Stop on error',
+  cmdPageLabel: 'Command-set ledger',
+  cmdPageTitle: 'Workflow commands',
+  cmdPageHelp: 'The commands each state offers, plus the global commands every state accepts.',
+  cmdFigureTotal: 'Commands',
+  cmdFigureStates: 'States covered',
+  cmdFigureGlobal: 'Global commands',
+  stdPageLabel: 'Enterprise standards ledger',
+  stdPageTitle: 'Enterprise standards map',
+  stdPageHelp: 'The engineering standards laid out by state — click a node to read the documents that apply there.',
+  stdFigureDocs: 'Documents',
+  stdFigureStates: 'States covered',
+  stdFigureDomains: 'Domains',
   rowTitle: 'BAF standards (read-only overview)',
   rowDescription: 'Current rule values, purpose, and config location for each of the seven BAF plugin packages. To change a rule: edit .baf/baseline.yml in the workspace (refresh here to see it); rule CONTENT lives in the rules document.',
   // (质量监控重构 1.1–1.5): the tab head + old UT/toolchain card keys retire —
@@ -374,6 +428,8 @@ const en = {
   configFileLabel: 'Config file',
   // 2026-10-18 (项目工程 1.1–1.3): clickable path rows + AI-protected paths card.
   projectInfoTitle: 'Project info',
+  // 【变更】2026-10-26 (批次二十八 2): the card head's guidance line.
+  projectInfoDesc: 'The project path and the baseline config file.',
   projectPathLabel: 'Project path',
   editLabel: 'Edit',
   deleteLabel: 'Delete',
@@ -385,6 +441,8 @@ const en = {
   generatingBaseline: 'Generating…',
   generatedNotice: 'Config file generated: baseline + default rules document + the openspec directory.',
   protectedTitle: 'Protected paths',
+  // 【变更】2026-10-26 (批次二十八 2): the card head's guidance line.
+  protectedDesc: 'Paths the AI may not change — a matching commit is refused.',
   protectedEmpty: 'No protected paths yet.',
   protectedEditLabel: 'Edit protected path',
   protectedAddPlaceholder: 'Relative path, e.g. docs or src/generated/**',
@@ -398,7 +456,13 @@ const en = {
   protectedPickOutside: 'The chosen folder is outside the current workspace and cannot become a relative path.',
   // 2026-10-20 (批次四 3.3): hook status line deleted; both keys retire.
   // 2026-10-19 (六问题批 4.1b): per-node enter/exit custom scripts card.
-  hooksTitle: 'State scripts',
+  // 【变更】2026-10-26 (批次二十八 2): renamed 状态脚本 → 状态进出hook, with a
+  // guidance line and the per-script fail-stop switch.
+  hooksTitle: 'State enter/exit hooks',
+  hooksDesc: 'Scripts that run when the workflow enters or leaves a state, in the order you list them.',
+  hooksFatalLabel: 'Stop on failure',
+  hooksFatalOn: 'A failure of this script stops the workflow',
+  hooksFatalOff: 'A failure of this script is tolerated; the workflow continues',
   hooksEnterLabel: 'Enter state',
   hooksExitLabel: 'Exit state',
   hooksAddPlaceholder: 'script relative path, e.g. scripts/build.sh',
@@ -407,7 +471,7 @@ const en = {
   hooksEnterShort: 'in',
   hooksExitShort: 'out',
   hooksEmptyShort: 'none',
-  hooksFlowAria: 'Workflow state-script flow chart',
+  hooksFlowAria: 'Workflow state enter/exit hook flow chart',
   hooksEditLabel: 'Edit script path',
   hooksSave: 'Save',
   hooksCancel: 'Cancel',

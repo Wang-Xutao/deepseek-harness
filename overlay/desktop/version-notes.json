@@ -1,7 +1,7 @@
 {
   "desktop": {
-    "notesZh": "「更新」标签移到左侧栏顶部，紧挨版本号签：当前跑的版本和「有新版本」读作同一行。\n点击标签直达「版本与更新」页，行为不变；收起成窄轨时不放标签，靠设置面板红点报信。\n收起侧栏时标签自动隐藏，侧栏底部「设置」按钮回到原来的样子。",
-    "notesEn": "The 「更新」 tag moved to the top of the sidebar, right next to the version capsule: the running version and the news of a newer one now read as one line.\nClicking the tag still opens the Version & updates page; the collapsed rail keeps no label and relies on the settings panel's red dot.\nCollapsing the sidebar hides the tag, and the Settings button at the foot is back to its plain look."
+    "notesZh": "工作流页七个标签的顶部间距统一了，页面最大宽度加宽到 1180px。\n确认门与变更总览的顶部栏改成清淡的金箔边，不再是一整块深金色。\n测试流、指令集、企业规范也都有了同样的顶部标题栏和统计栏。\n项目工程的三张卡片有了自己的图标与说明，「状态脚本」改名为「状态进出hook」。\n每个进出脚本都带一个「失败中止」开关：关掉的脚本失败时工作流继续，其余脚本失败即中止。\n脚本按配置的先后顺序执行；被放行的脚本写进 baseline 的 tolerateFailure 列表。\n变更总览的「在浏览器中打开」修好了：桌面端把看板写到临时文件，再交给系统浏览器打开。\n「在浏览器中打开」的文字改成白色，加载时是一个转动的进度环。\n变更记录卡片支持按状态分类、按流程筛选、按耗时或任务数排序，还能搜索变更编号。",
+    "notesEn": "The 工作流 page’s seven tabs now share one top spacing, and the page column widens to 1180px.\nThe 确认门 and 变更总览 headers turn light — a hairline gold edge instead of a dark gold slab.\n测试流, 指令集 and 企业规范 open with the same header band and figure row.\nThe three 项目工程 cards carry their own glyph and a one-line description; 「状态脚本」 is now 「状态进出hook」.\nEvery enter/exit script has a 「失败中止」 switch: a script with the switch off may fail without stopping the workflow; every other script stops it.\nScripts run in the order they were configured, and the tolerated ones are written to the baseline’s tolerateFailure list.\nThe 「在浏览器中打开」 button works again — on desktop the board goes to a temp file and the system browser opens that.\nIts label is white, and the loading view is a spinning ring.\nThe change cards filter by state and by workflow mode, sort by duration or task count, and search by change id."
   },
   "dsh": {
     "notesZh": "上游 DeepSeek Harness 运行时（会话、工具、Web GUI）",

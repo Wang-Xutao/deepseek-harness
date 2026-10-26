@@ -254,11 +254,13 @@ describe('StandardsProjectOverview · ready branch layout (批次三 4.2)', () =
     expect(screen.queryByTestId('baf-standard-card-scaffold')).toBeNull()
     expect(screen.getByTestId('baf-standard-protected-card')).toBeDefined()
     expect(screen.getByTestId('baf-standard-hooks-card')).toBeDefined()
-    // 4.3: the card is 受保护路径 now, without its long description line;
-    // 4.4: the 状态脚本 card drops its .baf/baseline.yml 说明 too.
+    // 【变更】2026-10-26 (批次二十八 2): the two cards own a card head now —
+    // a glyph, the title AND a one-line description (the card names itself
+    // instead of reading as three bare labels).
     expect(screen.getByTestId('baf-standard-protected-card').textContent).toContain('protectedTitle')
-    expect(screen.getByTestId('baf-standard-protected-card').textContent).not.toContain('protectedDesc')
-    expect(screen.getByTestId('baf-standard-hooks-card').textContent).not.toContain('hooksDesc')
+    expect(screen.getByTestId('baf-standard-protected-card').textContent).toContain('protectedDesc')
+    expect(screen.getByTestId('baf-standard-hooks-card').textContent).toContain('hooksTitle')
+    expect(screen.getByTestId('baf-standard-hooks-card').textContent).toContain('hooksDesc')
   })
 
   it('renders no archive card before the summary is ready', () => {
@@ -1631,7 +1633,7 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     fireEvent.change(inputs[1] as HTMLElement, { target: { value: './scripts/build.sh' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-implement-exit'))
     await tick()
-    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/build.sh'] } })
+    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] } })
     // The canvas accent reflects the counts; the add input cleared and the
     // draft is dirty → save enabled.
     expect(screen.getByTestId('baf-standard-hooks-node-implement').textContent).toContain('hooksExitShort')
@@ -1645,14 +1647,14 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     fireEvent.change(inputs[1] as HTMLElement, { target: { value: 'scripts/build.sh' } })
     fireEvent.click(screen.getByTestId('baf-standard-hooks-add-implement-exit'))
     await tick()
-    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/build.sh'] } })
+    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] } })
     expect(editor.textContent).toContain('protectedDuplicate')
     // Edit in place: the only entry row's 编辑 swaps in an InlineEditor.
     fireEvent.click(withinRow('baf-standard-hooks-editor', 'editLabel'))
     const inline = screen.getByLabelText('hooksEditLabel')
     fireEvent.change(inline, { target: { value: 'scripts/lint.ps1' } })
     fireEvent.keyDown(inline, { key: 'Enter' })
-    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/lint.ps1'] } })
+    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: [{ path: 'scripts/lint.ps1', fatal: true }] } })
     // Deleting the last entry of BOTH-empty lists drops the node entirely.
     fireEvent.click(withinRow('baf-standard-hooks-editor', 'deleteLabel'))
     expect(store.getSnapshot().hooksDraft).toEqual({})
@@ -1686,7 +1688,7 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     const exitDelete = [...(exitRow?.querySelectorAll('button') ?? [])]
       .find(button => button.textContent === 'deleteLabel') as HTMLElement
     fireEvent.click(exitDelete)
-    expect(store.getSnapshot().hooksDraft).toEqual({ verify: { enter: ['e.mjs'] } })
+    expect(store.getSnapshot().hooksDraft).toEqual({ verify: { enter: [{ path: 'e.mjs', fatal: true }] } })
   })
 
   it('labels the in-flight save and renders the notice line', () => {
@@ -1786,9 +1788,9 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
 
   it('previews an existing entry (批次十五 2) and cancels a dirty draft (批次三 4.4)', async () => {
     const openQualityAsset = vi.fn()
-    const summary = readySummary({ nodeHooks: { implement: { exit: ['scripts/build.sh'] } } })
+    const summary = readySummary({ nodeHooks: { implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] } } })
     const { props, store } = harness(
-      readyState({ summary, hooksDraft: { implement: { exit: ['scripts/build.sh'] } } }),
+      readyState({ summary, hooksDraft: { implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] } } }),
       { openQualityAsset },
     )
     render(<StandardsProjectOverview {...props} />)
@@ -1808,7 +1810,7 @@ describe('StandardsProjectOverview · NodeHooksCard 状态脚本 (2026-10-19 流
     const cancel = screen.getByTestId('baf-standard-hooks-cancel') as HTMLButtonElement
     expect(cancel.disabled).toBe(false)
     fireEvent.click(cancel)
-    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: ['scripts/build.sh'] } })
+    expect(store.getSnapshot().hooksDraft).toEqual({ implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] } })
     // Clean again → both footer buttons disable.
     expect((screen.getByTestId('baf-standard-hooks-save') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByTestId('baf-standard-hooks-cancel') as HTMLButtonElement).disabled).toBe(true)
@@ -1838,13 +1840,13 @@ describe('StandardsController · 状态脚本 save + 生成配置文件 (六问�
     const seeded = hooksControllerCtx({
       summary: () => Promise.resolve({
         ok: true,
-        value: readySummary({ nodeHooks: { implement: { exit: ['scripts/build.sh'] } } }),
+        value: readySummary({ nodeHooks: { implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] } } }),
       }),
     })
     const c = new StandardsController(seeded.ctx as never)
     await tick()
     expect(c.face().hooks.standards.getSnapshot().hooksDraft)
-      .toEqual({ implement: { exit: ['scripts/build.sh'] } })
+      .toEqual({ implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] } })
     const flip = hooksControllerCtx({ summary: () => Promise.resolve({ ok: true, value: { status: 'no-baseline' } }) })
     const c2 = new StandardsController(flip.ctx as never)
     await tick()
@@ -1857,9 +1859,9 @@ describe('StandardsController · 状态脚本 save + 生成配置文件 (六问�
     })
     const c = new StandardsController(ctx as never)
     await tick()
-    c.updateHooksDraft({ verify: { enter: ['v.mjs'] } })
+    c.updateHooksDraft({ verify: { enter: [{ path: 'v.mjs', fatal: true }] } })
     await c.saveNodeHooks()
-    expect(remote.bafStandardConfig.saveNodeHooks).toHaveBeenCalledWith({ verify: { enter: ['v.mjs'] } })
+    expect(remote.bafStandardConfig.saveNodeHooks).toHaveBeenCalledWith({ verify: { enter: [{ path: 'v.mjs', fatal: true }] } })
     const state = c.face().hooks.standards.getSnapshot()
     expect(state.hooksSaving).toBe(false)
     expect(state.hooksNotice).toBeUndefined()
@@ -1874,7 +1876,7 @@ describe('StandardsController · 状态脚本 save + 生成配置文件 (六问�
       const failing = hooksControllerCtx({ saveHooks: () => Promise.resolve(answer) })
       const c2 = new StandardsController(failing.ctx as never)
       await tick()
-      c2.updateHooksDraft({ open: { enter: ['a.sh'] } })
+      c2.updateHooksDraft({ open: { enter: [{ path: 'a.sh', fatal: true }] } })
       await c2.saveNodeHooks()
       expect(c2.face().hooks.standards.getSnapshot().hooksNotice).toBe(expected)
       c2.clearHooksNotice()
@@ -1883,7 +1885,7 @@ describe('StandardsController · 状态脚本 save + 生成配置文件 (六问�
     const thrown = hooksControllerCtx({ saveHooks: () => Promise.reject(new Error('rpc down')) })
     const c3 = new StandardsController(thrown.ctx as never)
     await tick()
-    c3.updateHooksDraft({ open: { enter: ['a.sh'] } })
+    c3.updateHooksDraft({ open: { enter: [{ path: 'a.sh', fatal: true }] } })
     await c3.saveNodeHooks()
     expect(c3.face().hooks.standards.getSnapshot().hooksNotice).toBe('rpc down')
     // No draft yet (summary still loading) → silent no-op.
@@ -1950,16 +1952,16 @@ describe('StandardsController · refreshIfClean (六问题批 4.1 web 验证修�
   it('skips the mount-refresh while a draft is mid-edit', async () => {
     const { ctx, remote } = ctxWith(() => Promise.resolve({
       ok: true,
-      value: readySummary({ nodeHooks: { implement: { exit: ['scripts/build.sh'] } } }),
+      value: readySummary({ nodeHooks: { implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] } } }),
     }))
     const c = new StandardsController(ctx as never)
     await tick()
-    c.updateHooksDraft({ implement: { exit: ['scripts/build.sh', 'scripts/lint.ps1'] } })
+    c.updateHooksDraft({ implement: { exit: [{ path: 'scripts/build.sh', fatal: true }, { path: 'scripts/lint.ps1', fatal: true }] } })
     c.refreshIfClean()
     await tick()
     expect(remote.bafStandardConfig.summary).toHaveBeenCalledTimes(1)
     expect(c.face().hooks.standards.getSnapshot().hooksDraft)
-      .toEqual({ implement: { exit: ['scripts/build.sh', 'scripts/lint.ps1'] } })
+      .toEqual({ implement: { exit: [{ path: 'scripts/build.sh', fatal: true }, { path: 'scripts/lint.ps1', fatal: true }] } })
   })
 
   it('preserves a draft that went dirty during a reload roundtrip', async () => {
@@ -1969,11 +1971,11 @@ describe('StandardsController · refreshIfClean (六问题批 4.1 web 验证修�
     const c = new StandardsController(ctx as never)
     await tick()
     // The user starts editing while the (clean-started) refresh is in flight…
-    c.updateHooksDraft({ verify: { enter: ['e.mjs'] } })
+    c.updateHooksDraft({ verify: { enter: [{ path: 'e.mjs', fatal: true }] } })
     release?.({ ok: true, value: readySummary({ nodeHooks: {} }) })
     await tick()
     const state = c.face().hooks.standards.getSnapshot()
-    expect(state.hooksDraft).toEqual({ verify: { enter: ['e.mjs'] } })
+    expect(state.hooksDraft).toEqual({ verify: { enter: [{ path: 'e.mjs', fatal: true }] } })
     expect(state.summary?.status).toBe('ready')
   })
 })

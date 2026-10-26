@@ -378,11 +378,15 @@ export class StandardsController {
             .filter(entry => entry.trim() !== '<enterprise-tbd>')
           state.protectedNotice = undefined
         }
-        // 【变更】2026-10-19 (六问题批 4.1b): seed the 状态脚本 draft the same
-        // way (a saved map re-reads as itself).
+        // 【变更】2026-10-19 (六问题批 4.1b): seed the 状态进出hook draft the
+        // same way (a saved map re-reads as itself).
         if (hooksClean) {
           state.hooksDraft = summary.nodeHooks ?? {}
-          state.hooksNotice = undefined
+          // 【变更】2026-10-26 (批次二十八 2): the server's dead-config line
+          // (a tolerated script the node does not configure) rides the
+          // summary — it replaces the transient save problem until the next
+          // save clears it.
+          state.hooksNotice = summary.hooksNotice
         }
       } else {
         // A different workspace story invalidates the editable drafts. The

@@ -600,26 +600,111 @@ describe('BafStandardConfigRemote (mounted)', () => {
     const commented = `${BASELINE_YAML}# 客户注释（必须原样保留）\nhooks:\n  nodes:\n    implement:\n      exit:\n        - scripts/old-build.sh\n`
     const remote = await customWorkspace(commented, false)
     const result = await remote.saveNodeHooks({
-      implement: { exit: ['scripts/build.sh', 'scripts/lint.ps1'] },
-      verify: { enter: ['scripts/enter-verify.mjs'] },
+      implement: {
+        exit: [
+          { path: 'scripts/build.sh', fatal: true },
+          { path: 'scripts/lint.ps1', fatal: true },
+        ],
+      },
+      verify: { enter: [{ path: 'scripts/enter-verify.mjs', fatal: true }] },
     })
     expect(result).toEqual({
       status: 'ready',
       hooks: {
-        implement: { exit: ['scripts/build.sh', 'scripts/lint.ps1'] },
-        verify: { enter: ['scripts/enter-verify.mjs'] },
+        implement: {
+          exit: [
+            { path: 'scripts/build.sh', fatal: true },
+            { path: 'scripts/lint.ps1', fatal: true },
+          ],
+        },
+        verify: { enter: [{ path: 'scripts/enter-verify.mjs', fatal: true }] },
       },
     })
     const after = await remote.summary()
     expect(after.nodeHooks).toEqual({
-      implement: { exit: ['scripts/build.sh', 'scripts/lint.ps1'] },
-      verify: { enter: ['scripts/enter-verify.mjs'] },
+      implement: {
+        exit: [
+          { path: 'scripts/build.sh', fatal: true },
+          { path: 'scripts/lint.ps1', fatal: true },
+        ],
+      },
+      verify: { enter: [{ path: 'scripts/enter-verify.mjs', fatal: true }] },
     })
     const text = await readFile(join(after.cwd ?? '', '.baf', 'baseline.yml'), 'utf8')
     expect(text).toContain('# 客户注释（必须原样保留）')
     expect(text).toContain('hooks:\n  nodes:\n    implement:\n      exit:\n        - scripts/build.sh\n')
     expect(text).not.toContain('scripts/old-build.sh')
     expect(text).toContain('guard:\n  secretScan: required\n')
+  })
+
+  // 【变更】2026-10-26 (批次二十八 2): the per-script 「失败中止」 switch. A
+  // script whose failure the workflow TOLERATES is written to the baseline's
+  // `tolerateFailure` list — the string lists themselves stay as they were,
+  // so an existing baseline file reads exactly as before.
+  it('writes the tolerated scripts to the baseline tolerateFailure list', async () => {
+    const remote = await customWorkspace(BASELINE_YAML, false)
+    const result = await remote.saveNodeHooks({
+      implement: {
+        exit: [
+          { path: 'scripts/build.sh', fatal: true },
+          { path: 'scripts/notify.sh', fatal: false },
+        ],
+      },
+    })
+    expect(result).toEqual({
+      status: 'ready',
+      hooks: {
+        implement: {
+          exit: [
+            { path: 'scripts/build.sh', fatal: true },
+            { path: 'scripts/notify.sh', fatal: false },
+          ],
+        },
+      },
+    })
+    const after = await remote.summary()
+    expect(after.nodeHooks).toEqual({
+      implement: {
+        exit: [
+          { path: 'scripts/build.sh', fatal: true },
+          { path: 'scripts/notify.sh', fatal: false },
+        ],
+      },
+    })
+    const text = await readFile(join(after.cwd ?? '', '.baf', 'baseline.yml'), 'utf8')
+    expect(text).toContain('      exit:\n        - scripts/build.sh\n        - scripts/notify.sh\n      tolerateFailure:\n        - scripts/notify.sh\n')
+  })
+
+  // 【变更】2026-10-26 (批次二十八 2): a baseline that tolerates a script the
+  // node does NOT configure carries dead config — the editor cannot show it,
+  // so the summary reports the line instead of dropping the entry silently.
+  it('reports a tolerated script that the node does not configure', async () => {
+    const remote = await customWorkspace(
+      `${BASELINE_YAML}hooks:\n  nodes:\n    implement:\n      exit:\n        - scripts/build.sh\n      tolerateFailure:\n        - scripts/ghost.sh\n`,
+      false,
+    )
+    const summary = await remote.summary()
+    expect(summary.status).toBe('ready')
+    expect(summary.hooksNotice).toContain('scripts/ghost.sh')
+    // The editor's own projection still lists the node's real script.
+    expect(summary.nodeHooks).toEqual({
+      implement: { exit: [{ path: 'scripts/build.sh', fatal: true }] },
+    })
+  })
+
+  // 【变更】2026-10-26 (批次二十八 2): the UI's per-entry form cannot express a
+  // tolerated script outside the node's lists, so a save never carries one.
+  it('never writes a tolerated script the node does not configure', async () => {
+    const remote = await customWorkspace(BASELINE_YAML, false)
+    const result = await remote.saveNodeHooks({
+      verify: { enter: [{ path: 'scripts/enter.sh', fatal: false }] },
+      implement: { exit: [{ path: 'scripts/other.sh', fatal: false }] },
+    })
+    expect(result.status).toBe('ready')
+    expect(result.hooks).toEqual({
+      verify: { enter: [{ path: 'scripts/enter.sh', fatal: false }] },
+      implement: { exit: [{ path: 'scripts/other.sh', fatal: false }] },
+    })
   })
 
   it('removes the hooks block on an empty map and appends nothing when absent', async () => {
@@ -640,10 +725,10 @@ describe('BafStandardConfigRemote (mounted)', () => {
 
   it('refuses invalid node-hooks drafts and answers no-workspace / no-baseline', async () => {
     const remote = await customWorkspace(BASELINE_YAML, false)
-    const invalid = await remote.saveNodeHooks({ verify: { enter: ['scripts/*.sh'] } })
+    const invalid = await remote.saveNodeHooks({ verify: { enter: [{ path: 'scripts/*.sh', fatal: true }] } })
     expect(invalid).toMatchObject({ status: 'invalid' })
     expect(invalid.message).toContain('scripts/*.sh')
-    const unknownNode = await remote.saveNodeHooks({ midway: { enter: ['a.sh'] } })
+    const unknownNode = await remote.saveNodeHooks({ midway: { enter: [{ path: 'a.sh', fatal: true }] } })
     expect(unknownNode).toMatchObject({ status: 'invalid', message: '未知的工作流节点：midway' })
     const text = await readFile(join((await remote.summary()).cwd ?? '', '.baf', 'baseline.yml'), 'utf8')
     expect(text).toBe(BASELINE_YAML)

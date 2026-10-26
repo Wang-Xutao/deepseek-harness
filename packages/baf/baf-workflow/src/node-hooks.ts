@@ -19,11 +19,19 @@
  * Execution mirrors baf-quality's runner discipline: shell spawn with
  * windowsHide/timeout/SIGKILL, output redacted + truncated, fail-closed on
  * spawn error / timeout / non-zero exit / abort.
+ *
+ * 【变更】2026-10-26 (批次二十八 2): the scripts of one list run in the
+ * CONFIGURED ORDER (top to bottom, exactly as the customer wrote them), and
+ * each script carries its own fail-stop policy: a script the baseline lists in
+ * `tolerateFailure` may fail without stopping the workflow (the per-script
+ * 「失败中止」 switch in the 状态进出hook editor is off for it); every other
+ * script keeps the fail-closed default — its failure blocks the transition.
  * @module @deepseek-ai/dsh-baf-workflow/node-hooks
  */
 
 import { join } from 'node:path'
 import {
+  normalizeHookEntry,
   WORKFLOW_NODES,
   type BaselineManifest,
   type WorkflowNode,
@@ -71,11 +79,22 @@ export interface PlannedNodeHook {
   readonly kind: 'enter' | 'exit'
   readonly node: WorkflowNode
   readonly entry: string
+  /**
+   * 【变更】2026-10-26 (批次二十八 2): whether a failure of THIS script stops
+   * the workflow. True for every script except the ones the baseline lists in
+   * `tolerateFailure` (the per-script 「失败中止」 switch's OFF state).
+   */
+  readonly fatal: boolean
 }
 
 /**
  * Compute the scripts a transition must pass: exit hooks of the FROM node
  * (forward main-chain advancement only), then enter hooks of the TO node.
+ *
+ * 【变更】2026-10-26 (批次二十八 2): the plan keeps each list's configured
+ * ORDER — the scripts of one list run exactly as the customer wrote them,
+ * top to bottom. The two lists themselves keep the engine's order (the FROM
+ * node's exit scripts first, then the TO node's enter scripts).
  * @param status - status BEFORE the transition (`current` is the FROM node).
  * @param to - target node.
  * @param baseline - governing baseline; no `hooks` block → empty plan.
@@ -90,11 +109,27 @@ export function planNodeHooks(
   if (nodes === undefined || isMainChainNode(to) === false) return []
   const plan: PlannedNodeHook[] = []
   const from = status.current
+  const push = (
+    kind: 'enter' | 'exit',
+    node: WorkflowNode,
+    entry: string,
+    tolerated: readonly string[],
+  ): void => {
+    // 【变更】2026-10-26 (批次二十八 2): the comparison uses the canonical
+    // path form — a baseline that writes `.\a.sh` in the list and `a.sh` in
+    // `tolerateFailure` still tolerates that script.
+    const canonical = normalizeHookEntry(entry.trim())
+    plan.push({ kind, node, entry, fatal: !tolerated.includes(canonical) })
+  }
   if (isMainChainNode(from)
     && (WORKFLOW_NODES as readonly string[]).indexOf(to) > (WORKFLOW_NODES as readonly string[]).indexOf(from)) {
-    for (const entry of nodes[from]?.exit ?? []) plan.push({ kind: 'exit', node: from, entry })
+    const lists = nodes[from]
+    const tolerated = (lists?.tolerateFailure ?? []).map(entry => normalizeHookEntry(entry.trim()))
+    for (const entry of lists?.exit ?? []) push('exit', from, entry, tolerated)
   }
-  for (const entry of nodes[to]?.enter ?? []) plan.push({ kind: 'enter', node: to, entry })
+  const target = nodes[to]
+  const targetTolerated = (target?.tolerateFailure ?? []).map(entry => normalizeHookEntry(entry.trim()))
+  for (const entry of target?.enter ?? []) push('enter', to, entry, targetTolerated)
   return plan
 }
 
@@ -131,16 +166,23 @@ export interface NodeHookFailure {
 
 /** Outcome of executing a hook plan. */
 export interface NodeHookRunOutcome {
-  /** Every run in order, passed or not (stops at the first failure). */
+  /** Every run in order, passed or not (stops at the first FATAL failure). */
   readonly executed: readonly {
     readonly kind: 'enter' | 'exit'
     readonly node: WorkflowNode
     readonly entry: string
     readonly passed: boolean
     readonly durationMs: number
+    /** Whether a failure of this script would have stopped the workflow. */
+    readonly fatal: boolean
   }[]
-  /** Present iff a script failed — the transition must be blocked. */
+  /** Present iff a FATAL script failed — the transition must be blocked. */
   readonly failure?: NodeHookFailure
+  /**
+   * 【变更】2026-10-26 (批次二十八 2): the failures of TOLERATED scripts — the
+   * run continued past them (the per-script 「失败中止」 switch is off).
+   */
+  readonly tolerated?: readonly NodeHookFailure[]
 }
 
 /** Options for {@link runNodeHooks}. */
@@ -155,9 +197,10 @@ export interface RunNodeHooksOptions {
 }
 
 /**
- * Execute a hook plan sequentially in the workspace root. First failure
+ * Execute a hook plan sequentially in the workspace root. A FATAL failure
  * stops the plan (later scripts are not started) and is reported with
- * redacted, truncated output.
+ * redacted, truncated output; a TOLERATED failure is recorded and the plan
+ * continues (批次二十八 2).
  * @param plan - ordered scripts from {@link planNodeHooks}.
  * @param options - workspace root + optional overrides.
  * @returns run outcome with the optional failure.
@@ -170,7 +213,8 @@ export async function runNodeHooks(
   const executor = options.executor ?? shellExecutor()
   const timeoutMs = options.timeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
   const signal = options.signal ?? new AbortController().signal
-  const executed: { kind: 'enter' | 'exit'; node: WorkflowNode; entry: string; passed: boolean; durationMs: number }[] = []
+  const executed: { kind: 'enter' | 'exit'; node: WorkflowNode; entry: string; passed: boolean; durationMs: number; fatal: boolean }[] = []
+  const tolerated: NodeHookFailure[] = []
   for (const hook of plan) {
     const result = await executor(hookCommand(hook.entry, options.workspaceRoot), {
       cwd: options.workspaceRoot,
@@ -193,24 +237,29 @@ export async function runNodeHooks(
       entry: hook.entry,
       passed,
       durationMs: result.durationMs,
+      fatal: hook.fatal,
     })
     if (!passed) {
       const combined = result.stderr.length > 0
         ? `${result.stdout}\n${result.stderr}`
         : result.stdout
-      return {
-        executed,
-        failure: {
-          kind: hook.kind,
-          node: hook.node,
-          entry: hook.entry,
-          reasonCode,
-          exitCode: result.exitCode,
-          durationMs: result.durationMs,
-          output: truncateOutput(redactSecrets(combined).trim(), MAX_FAILURE_OUTPUT_CHARS),
-        },
+      const failure: NodeHookFailure = {
+        kind: hook.kind,
+        node: hook.node,
+        entry: hook.entry,
+        reasonCode,
+        exitCode: result.exitCode,
+        durationMs: result.durationMs,
+        output: truncateOutput(redactSecrets(combined).trim(), MAX_FAILURE_OUTPUT_CHARS),
       }
+      if (!hook.fatal) {
+        // 【变更】2026-10-26 (批次二十八 2): the script's 「失败中止」 switch is
+        // off — the failure is recorded and the workflow continues.
+        tolerated.push(failure)
+        continue
+      }
+      return { executed, failure, ...(tolerated.length > 0 ? { tolerated } : {}) }
     }
   }
-  return { executed }
+  return { executed, ...(tolerated.length > 0 ? { tolerated } : {}) }
 }

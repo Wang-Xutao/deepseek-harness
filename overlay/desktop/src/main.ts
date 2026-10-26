@@ -13,7 +13,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   app,
   BrowserWindow,
@@ -978,6 +978,32 @@ ipcMain.handle('shell:openExternal', async (_event, raw: unknown) => {
   }
   try {
     await shell.openExternal(url)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+// 【变更】2026-10-26 (批次二十八 5): the 变更总览 ledger's 「在浏览器中打开」.
+// The ledger renders a self-contained HTML board in the renderer and opens it
+// through a `blob:` URL — but the window-open handler above forwards only
+// http(s)/file URLs to the system browser, and a blob: URL belongs to the
+// renderer anyway, so the board never left the app. The shell therefore
+// writes the page to a temp file and opens THAT with the system browser.
+ipcMain.handle('shell:openHtml', async (_event, payload: unknown) => {
+  if (typeof payload !== 'object' || payload === null) return { ok: false, error: '无效内容' }
+  const { html, name } = payload as { html?: unknown; name?: unknown }
+  if (typeof html !== 'string' || html.trim() === '') return { ok: false, error: '无效内容' }
+  // The file name lands on disk — keep it to a plain, bounded name.
+  const fileName = typeof name === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(name)
+    ? name
+    : 'baf-dsh-board.html'
+  try {
+    const dir = join(app.getPath('temp'), 'baf-dsh')
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, fileName)
+    writeFileSync(file, html, 'utf8')
+    await shell.openExternal(pathToFileURL(file).href)
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

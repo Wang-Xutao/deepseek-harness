@@ -2,11 +2,14 @@
  * 【变更】2026-10-19 (主页面三改 3): title/intro moved to the WorkflowPage
  * shell; this sheet keeps only the tab strip + panels. */
 
+/* 【变更】2026-10-26 (批次二十八 1): the section no longer caps its own width —
+   the 760px cap was narrower than the page column and fought it, so the tab
+   strip and its panels were 200px narrower than the content they hold. The
+   page's own `.pageContent` cap (1180px) is the single width budget now. */
 .section {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 760px;
   color: var(--dsw-alias-label-primary);
 }
 
