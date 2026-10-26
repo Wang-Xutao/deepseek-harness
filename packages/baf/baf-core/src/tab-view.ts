@@ -267,6 +267,13 @@ export interface WorkflowDashboardRow {
   readonly current: WorkflowNode | TerminalState
   /** Set only for terminal rows; drives the archived section's grouping. */
   readonly endedAt?: string
+  /**
+   * 【变更】2026-10-26 (批次二十九 5): the change's START time — the first
+   * projection event's timestamp (the same fact the Tab view carries as
+   * `startedAt`). The ledger's 排序 offers 「开始时间」, and a row without a
+   * start time cannot answer it.
+   */
+  readonly startedAt?: string
   /** Plan-ledger task rollup (absent when no readable ledger). */
   readonly tasks?: { readonly done: number; readonly total: number }
   readonly durationMs?: number

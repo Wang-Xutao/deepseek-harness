@@ -138,6 +138,10 @@ async function dashboardRowFor(
   const artifacts = await generatedArtifacts(workspaceRoot, entry)
   try {
     const { events } = await store.readEvents(entry.changeId)
+    // 【变更】2026-10-26 (批次二十九 5): the change's START time — the first
+    // event's timestamp, the same fact the Tab view carries (`projection.ts`
+    // folds it the same way). The ledger's 「开始时间」 sort needs it.
+    const startedAt = events[0]?.at
     // 【变更】2026-09-28 (用户问题 4): usage samples ride along so per-node
     // tokens attribute by stage windows — same fold the Tab view runs.
     const { byNode } = deriveWorkflowMetrics(events, Date.now(), usagePoints)
@@ -153,6 +157,7 @@ async function dashboardRowFor(
     const tasks = await taskCounts(workspaceRoot, entry.changeId)
     return {
       ...base,
+      ...(startedAt === undefined ? {} : { startedAt }),
       ...(durationMs > 0 ? { durationMs } : {}),
       ...(inputTokens > 0 || outputTokens > 0 ? { inputTokens, outputTokens } : {}),
       ...(tasks === undefined ? {} : { tasks }),

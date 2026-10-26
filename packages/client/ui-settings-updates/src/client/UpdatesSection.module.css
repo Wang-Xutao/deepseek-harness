@@ -52,11 +52,35 @@
   gap: 12px;
 }
 
+/* 【变更】2026-10-26 (批次二十九 3): the notes read as a LIST — one point per
+   paragraph, each on its own line, each with its own bullet. The paragraphs
+   were already separate elements, but `margin: 0` collapsed them into one
+   wall of text, so the「BAF DSH DESKTOP」说明 looked like a single blob. */
 .notes {
   margin: 0;
+  padding-left: 11px;
+  position: relative;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
+}
+
+/* The gap BETWEEN two points — the first point keeps the row's own rhythm. */
+.notes + .notes {
+  margin-top: 4px;
+}
+
+/* The bullet: a small dot hanging on the text's left edge. */
+.notes::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 8px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
 }
 
 /* 【变更】2026-10-20 (批次二 3.2): the upstream release-notes block under the

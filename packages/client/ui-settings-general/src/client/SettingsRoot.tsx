@@ -159,6 +159,9 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   } = props
   const { open, activeId } = useStore(state => state)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'settings.open'))
+  // 【变更】2026-10-26 (批次二十九 7): the id of the trigger's binding
+  // description — see the wide-mode hint below.
+  const bindingHintId = useId()
   const { close, openSection } = actions
   const [requestedOnboarding, setRequestedOnboarding] = useState<string | undefined>()
   const [completedOnboarding, setCompletedOnboarding] = useState<ReadonlySet<string>>(() => new Set())
@@ -273,6 +276,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
               className={clsx(css.trigger, !wide && css.rail)}
               aria-label={t('trigger')}
               aria-keyshortcuts={shortcut?.aria}
+              aria-describedby={wide && shortcut !== undefined && shortcut.keys.length > 0 ? bindingHintId : undefined}
               aria-haspopup="dialog"
               aria-expanded={open}
               onClick={() => { actions.open() }}
@@ -284,6 +288,21 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
                 <span className={css.triggerShortcut} aria-hidden="true">
                   <ShortcutKeys keys={shortcut.keys} />
                 </span>
+              )}
+              {/* 【变更】2026-10-26 (批次二十九 7): wide mode shows the binding
+                  as a HOVER keycap, so the tooltip stays off there — but the
+                  keycap is aria-hidden, and a screen-reader user therefore
+                  lost the shortcut entirely. This description carries the same
+                  text the rail tooltip shows ("Settings ⌘ ,"), referenced by
+                  the button, so the binding is announced on focus in BOTH
+                  widths. */}
+              {wide && shortcut !== undefined && shortcut.keys.length > 0 && (
+                <span
+                  id={bindingHintId}
+                  role="tooltip"
+                  className={css.srOnly}
+                  aria-label={[t('trigger'), shortcut.keys.join(' ')].filter(Boolean).join(' ')}
+                />
               )}
             </button>
           </Tooltip> })}

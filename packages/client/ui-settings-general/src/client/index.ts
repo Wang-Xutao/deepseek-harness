@@ -69,6 +69,50 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings'
 
 /**
+ * 【变更】2026-10-26 (批次二十九 2): the four BAF-owned settings sections that
+ * must read as ONE cluster, immediately after Agent 预设: 多模型路由 → 版本与
+ * 更新 → 推荐插件 → 用户反馈.
+ */
+const BAF_NAV_BLOCK = ['model-routing', 'version-updates', 'featured-plugins', 'user-feedback'] as const
+
+/** The nav row the BAF block hangs behind. */
+const BAF_NAV_ANCHOR = 'agent-presets'
+
+/**
+ * 【变更】2026-10-26 (批次二十九 2): keep the four BAF sections contiguous,
+ * right behind Agent 预设.
+ *
+ * Order values alone cannot do this: the four sections are registered by four
+ * separate plugins, and a third-party section (the runtime 技能 section owns
+ * no repo package at all) can register BETWEEN them — the live nav read
+ * 通用设置 / 模型 / 内置插件 / Agent 预设 / 多模型路由 / 技能 / 版本与更新 /
+ * 推荐插件 / 用户反馈 / 插件市场, i.e. 技能 split the cluster in half. The nav
+ * projection therefore re-pins the block after the order sort: the four rows
+ * are lifted out and re-inserted as one run behind the anchor. A deployment
+ * that does not carry all four rows keeps its natural order (the block is a
+ * BAF build's shape, not a universal one).
+ * @param sorted - the rows in their order-sorted form.
+ * @returns the rows with the BAF block pinned.
+ */
+function pinBafNavBlock(sorted: readonly SettingsSectionRow[]): readonly SettingsSectionRow[] {
+  const wanted = new Set<string>(BAF_NAV_BLOCK)
+  const block: SettingsSectionRow[] = []
+  for (const id of BAF_NAV_BLOCK) {
+    const row = sorted.find(candidate => candidate.id === id)
+    if (row === undefined) return sorted
+    block.push(row)
+  }
+  const rest = sorted.filter(row => !wanted.has(row.id))
+  const anchorIndex = rest.findIndex(row => row.id === BAF_NAV_ANCHOR)
+  // No anchor in this deployment: the block keeps the place its first row held.
+  const insertAt = anchorIndex === -1
+    ? sorted.slice(0, sorted.findIndex(row => row.id === BAF_NAV_BLOCK[0]))
+      .filter(row => !wanted.has(row.id)).length
+    : anchorIndex + 1
+  return [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]
+}
+
+/**
  * Required services (cordis fiber inject). The target slots are declared by
  * ui-settings' apply, whose activation order relative to this one is NOT
  * constrained; registrations depend on their slots through `slots.inject()`.
@@ -157,6 +201,10 @@ export function apply(ctx: ClientContext): void {
                 label: resolveSlotLabel(e.options.label) ?? '',
               }))
               .sort((a, b) => a.order - b.order)
+            // 【变更】2026-10-26 (批次二十九 2): the BAF cluster is pinned after
+            // the sort — four independent plugins cannot keep each other
+            // adjacent through order values alone.
+            rows = pinBafNavBlock(rows)
           }
           return rows
         },

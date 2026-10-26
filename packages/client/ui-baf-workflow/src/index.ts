@@ -561,6 +561,38 @@ function agentRouteFor(ctx: Context, sessionId: SessionId): DraftRoute | undefin
 }
 
 /**
+ * 【变更】2026-10-26 (批次二十九 1): the deployment's default model — the
+ * route a FRESH session starts on.
+ *
+ * A brand-new session (the very case a user arranges a draft in — nothing has
+ * been sent yet) owns no recorded selection, no agent and no request header,
+ * so every earlier candidate is empty and the formatter answered
+ * 「模型未响应」. The deployment default is the route such a session would run
+ * on, so it is the last resort.
+ *
+ * The read is structural and best-effort, exactly like the other lookups: a
+ * deployment without the service (or a throwing accessor) simply has no
+ * default here.
+ * @param ctx - host context.
+ * @returns the default route, or undefined when the deployment has none.
+ */
+function defaultRouteFor(ctx: Context): DraftRoute | undefined {
+  try {
+    const defaults = ctx.get('agentDefaultModel') as {
+      currentSelection?: () => { provider?: unknown; model?: unknown }
+    } | undefined
+    if (defaults === undefined || typeof defaults.currentSelection !== 'function') return undefined
+    const selection = defaults.currentSelection()
+    const provider = typeof selection?.provider === 'string' ? selection.provider : undefined
+    const model = typeof selection?.model === 'string' ? selection.model : undefined
+    if (provider === undefined || model === undefined) return undefined
+    return { provider, model }
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * 【变更】2026-10-25 (批次二十五 2): the route the session's last request
  * actually ran on — the header fold's current epoch.
  * @param session - the live session, or undefined when none is live.
@@ -918,6 +950,18 @@ export async function resolveDraftRoute(ctx: Context, sessionId: SessionId): Pro
   const scanned = scan.sessionModel
   if (scanned !== undefined && !scanned.auto) {
     return { provider: scanned.provider, model: scanned.model }
+  }
+  // 【变更】2026-10-26 (批次二十九 1): the deployment's default model — the
+  // route a fresh session starts on. A blank session (the case the user hit:
+  // nothing sent yet) owns no recorded selection, no agent and no request
+  // header, so without this the formatter had no route at all and answered
+  // 「模型未响应」. The default goes through the per-step resolver too, so a
+  // deployment whose default IS the BAF「自动」pseudo entry resolves to the
+  // tier route the step would run on instead of the pseudo pair.
+  const fallback = defaultRouteFor(ctx)
+  if (fallback !== undefined) {
+    const route = session === undefined ? fallback : stepRouteFor(ctx, session, fallback)
+    if (!isAutoRoute(route)) return { provider: route.provider, model: route.model }
   }
   return undefined
 }
@@ -1952,7 +1996,15 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   async formatDraft(request: BafWorkflowDraftFormatRequest): Promise<BafWorkflowDraftFormatResult> {
     if (request.draft.trim() === '') return { status: 'unavailable', reason: 'empty' }
     const route = await this.draftRouteFor(request.sessionId)
-    if (route === undefined) return { status: 'unavailable', reason: 'no-model' }
+    // 【变更】2026-10-26 (批次二十九 1): the "no route" answer used to be
+    // silent, so a 「模型未响应」 report had no ground truth. The reason is
+    // logged (and the resolved route with it) whenever the formatter runs.
+    if (route === undefined) {
+      this.ctx.logger.warn(
+        `bafWorkflowView.formatDraft: no route for session ${String(request.sessionId)} — the deployment has no model to answer with`,
+      )
+      return { status: 'unavailable', reason: 'no-model' }
+    }
     const messages: RequestMessage[] = [
       { role: 'user', content: [{ type: 'text', text: request.draft }] },
     ]

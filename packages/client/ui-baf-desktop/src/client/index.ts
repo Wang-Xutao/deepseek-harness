@@ -49,8 +49,21 @@ export type {
   DesktopNotificationEventKind,
 } from './desktop-notification.ts'
 
-/** Required services. */
-export const inject = ['slots', 'locale', 'shortcuts', 'remote']
+/**
+ * Required services.
+ *
+ * 【变更】2026-10-26 (批次二十九 1): the「格式化输入」model call rides the
+ * `bafWorkflowView` Remote namespace, and a Remote namespace is a CORDIS
+ * SERVICE of its own (`remote.bafWorkflowView`), not a property hanging off
+ * the `remote` service. Reading `ctx.remote.bafWorkflowView` therefore asks the
+ * context resolver for the service name `remote.bafWorkflowView` — so the
+ * plugin must INJECT that name. Without it the read throws
+ * 「cannot get property "remote.bafWorkflowView" without inject」, the control
+ * swallows the failure and falls back to the local arranger, and the user sees
+ * 「模型未响应，已用本地规则整理结构」 even though the Host answers the very
+ * same call.
+ */
+export const inject = ['slots', 'locale', 'shortcuts', 'remote', 'remote.bafWorkflowView'] as const
 
 /**
  * 【变更】2026-10-25 (批次二十六 3): raise one desktop notification for a

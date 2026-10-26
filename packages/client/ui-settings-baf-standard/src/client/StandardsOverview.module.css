@@ -52,6 +52,16 @@
   padding: 16px 0 16px;
 }
 
+/* 【变更】2026-10-26 (批次二十九 4): the entrance keyframe — the 确认门 tab's
+   recipe (gatesFadeUp) reused verbatim: the page assembles top-to-bottom, each
+   band fading up a few pixels as it lands. The fill mode is `backwards`, so the
+   animation never pins an element's final transform — a card that lifts on
+   hover stays free to do so once the entrance is over. */
+@keyframes wfFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* 【变更】2026-10-26 (批次二十八 4): the page header band + the figure row —
    the 测试流 / 指令集 / 企业规范 tabs now open the way the 确认门 and 变更总览
    tabs do. Same light register as those two pages: a hairline edge with a
@@ -70,6 +80,8 @@
     linear-gradient(158deg, color-mix(in srgb, var(--wf-accent) 4.5%, transparent), transparent 52%),
     var(--wf-surface);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+  /* 【变更】2026-10-26 (批次二十九 4): the 确认门-parity entrance. */
+  animation: wfFadeUp 320ms ease backwards;
 }
 
 .pageHeroBrand {
@@ -130,7 +142,15 @@
   border-radius: 12px;
   border: 1px solid var(--wf-hairline);
   background: var(--wf-surface);
+  /* 【变更】2026-10-26 (批次二十九 4): the figure row lands one plate after
+     another — the 确认门 tile rhythm. */
+  animation: wfFadeUp 360ms ease backwards;
 }
+
+.pageFigure:nth-child(1) { animation-delay: 40ms; }
+.pageFigure:nth-child(2) { animation-delay: 80ms; }
+.pageFigure:nth-child(3) { animation-delay: 120ms; }
+.pageFigure:nth-child(4) { animation-delay: 160ms; }
 
 .pageFigureValue {
   font-size: 22px;
@@ -207,6 +227,22 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
 }
+
+/* 【变更】2026-10-26 (批次二十九 4): the page's own bands fade in one after the
+   other — the header, then the figure row, then the cards under it. The four
+   tabs (项目工程 / 测试流 / 指令集 / 企业规范) now open the way 确认门 does. */
+.block > .card,
+.blockQuality > .card,
+.block > .cardFlow,
+.blockQuality > .cardFlow,
+.stack > .card,
+.stack > .cardFlow {
+  animation: wfFadeUp 380ms ease backwards;
+}
+
+/* The cards of one stack land in order. */
+.stack > :nth-child(2) { animation-delay: 60ms; }
+.stack > :nth-child(3) { animation-delay: 120ms; }
 
 /* 【变更】2026-10-26 (批次二十八 2): the card head — a glyph, the title, one
    line of guidance and the head-row actions. The three 项目工程 cards used to

@@ -40,7 +40,11 @@ export const DEFAULT_VERSIONS: AppVersions = {
   bafQuality: '0.1.0',
   bafGuard: '0.1.0',
   bafScaffold: '0.1.0',
-  bafDshNotes: 'Phase 4 工作流 Tab 半交互；设置版本明细与独立 bump；splash/通用设置打磨',
+  // 【变更】2026-10-26 (批次二十九 3): one point per line — the settings page
+  // renders the notes as a list, one paragraph per line. This is only the
+  // fallback for a deployment without the embedded product-versions file; the
+  // shipped copy comes from `version-notes.json` via pack-dsh.
+  bafDshNotes: '会话「格式化输入」不再报「模型未响应」\n设置里的 BAF 四项连成一块\n「版本与更新」说明分条列出\n工作流四页加上淡入效果\n变更总览排序与流程下拉改样式\n浏览器看板支持筛选排序与详情',
   dshNotes: '上游 DeepSeek Harness 运行时（会话、工具、Web GUI）',
   bafCoreNotes: 'baseline loader、adapter stub、bafCore isolate 挂载',
   bafWorkflowNotes: 'projection、intake、transition、工作流 Tab Remote',

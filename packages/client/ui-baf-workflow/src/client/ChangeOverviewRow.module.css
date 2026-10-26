@@ -188,6 +188,9 @@
    themes. */
 .refreshPrimary {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 16px;
   height: 32px;
   border: 1px solid color-mix(in srgb, var(--wf-accent) 34%, transparent);
@@ -390,17 +393,40 @@
   line-height: 16px;
 }
 
-.select {
+/* 【变更】2026-10-26 (批次二十九 5): the view control's trigger — the 设置 →
+   通用设置 → 权限 row's own selector recipe (a flat platform pill + a
+   chevron, no border), so the ledger's 排序 / 升降序 / 流程 read like the
+   permission preset selector instead of like the browser's native select.
+   The height and type size follow the ledger's compact toolbar. */
+.selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
   height: 26px;
-  padding: 0 6px;
-  border-radius: 8px;
-  border: 1px solid var(--wf-hairline);
-  background: var(--wf-surface);
-  color: var(--wf-ink);
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-module-platform);
   font: inherit;
   font-size: 12px;
   line-height: 18px;
+  color: var(--dsw-alias-label-primary);
   cursor: pointer;
+}
+
+@media (hover: hover) {
+  .selector:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.selector:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chevron {
+  flex: none;
 }
 
 .search {

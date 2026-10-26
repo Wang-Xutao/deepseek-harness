@@ -350,6 +350,7 @@ export type WorkflowTabKey =
   // visible-count line and the empty-match notice.
   | 'ovw.categoryLabel'
   | 'ovw.sortLabel'
+  | 'ovw.orderLabel'
   | 'ovw.modeLabel'
   | 'ovw.searchPlaceholder'
   | 'ovw.filteredCount'
@@ -360,10 +361,12 @@ export type WorkflowTabKey =
   | 'ovw.category.completed'
   | 'ovw.category.abandoned'
   | 'ovw.sort.default'
-  | 'ovw.sort.durationDesc'
-  | 'ovw.sort.durationAsc'
-  | 'ovw.sort.tasksDesc'
-  | 'ovw.sort.idAsc'
+  | 'ovw.sort.duration'
+  | 'ovw.sort.tokens'
+  | 'ovw.sort.startedAt'
+  | 'ovw.sort.tasks'
+  | 'ovw.order.asc'
+  | 'ovw.order.desc'
   | 'ovw.mode.all'
   | 'ovw.mode.fullGoPath'
   | 'ovw.mode.bugFixPath'
@@ -883,6 +886,7 @@ export const en: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-26 (批次二十八 5): the ledger's view controls.
   'ovw.categoryLabel': 'Category',
   'ovw.sortLabel': 'Sort',
+  'ovw.orderLabel': 'Order',
   'ovw.modeLabel': 'Flow',
   'ovw.searchPlaceholder': 'Search change id',
   'ovw.filteredCount': '{shown} of {total} shown',
@@ -893,10 +897,12 @@ export const en: Record<WorkflowTabKey, string> = {
   'ovw.category.completed': 'Done',
   'ovw.category.abandoned': 'Abandoned',
   'ovw.sort.default': 'Default order',
-  'ovw.sort.durationDesc': 'Longest first',
-  'ovw.sort.durationAsc': 'Shortest first',
-  'ovw.sort.tasksDesc': 'Task completion',
-  'ovw.sort.idAsc': 'Change id',
+  'ovw.sort.duration': 'Duration',
+  'ovw.sort.tokens': 'Tokens',
+  'ovw.sort.startedAt': 'Start time',
+  'ovw.sort.tasks': 'Task completion',
+  'ovw.order.asc': 'Ascending',
+  'ovw.order.desc': 'Descending',
   'ovw.mode.all': 'All flows',
   'ovw.mode.fullGoPath': 'Full flow',
   'ovw.mode.bugFixPath': 'Bug fix path',
@@ -1393,6 +1399,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   // 【变更】2026-10-26 (批次二十八 5): 变更记录视图控件。
   'ovw.categoryLabel': '分类',
   'ovw.sortLabel': '排序',
+  'ovw.orderLabel': '升降序',
   'ovw.modeLabel': '流程',
   'ovw.searchPlaceholder': '搜索变更编号',
   'ovw.filteredCount': '显示 {shown} / {total} 条',
@@ -1403,10 +1410,12 @@ export const zh: Record<WorkflowTabKey, string> = {
   'ovw.category.completed': '已完成',
   'ovw.category.abandoned': '已放弃',
   'ovw.sort.default': '默认顺序',
-  'ovw.sort.durationDesc': '耗时最长',
-  'ovw.sort.durationAsc': '耗时最短',
-  'ovw.sort.tasksDesc': '任务完成率',
-  'ovw.sort.idAsc': '变更编号',
+  'ovw.sort.duration': '耗时',
+  'ovw.sort.tokens': '耗token',
+  'ovw.sort.startedAt': '开始时间',
+  'ovw.sort.tasks': '任务完成率',
+  'ovw.order.asc': '升序',
+  'ovw.order.desc': '降序',
   'ovw.mode.all': '全部流程',
   'ovw.mode.fullGoPath': '完整流程',
   'ovw.mode.bugFixPath': 'Bug 修复路径',
