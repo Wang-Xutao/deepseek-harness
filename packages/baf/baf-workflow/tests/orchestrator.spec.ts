@@ -27,6 +27,9 @@ import { driveClassify } from '../src/command-drives.ts'
 import { driveGo } from '../src/go-coordinator.ts'
 import { ProjectionStore } from '../src/projection.ts'
 import { focusFor, resetFocusCache } from '../src/session-focus.ts'
+// 【变更】2026-10-27 (批次三十): the per-change PAUSE flag (the 暂停/继续
+// button on the workflow graph).
+import { setChangePaused } from '../src/pause.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -303,10 +306,64 @@ describe('§22.19 orchestrator: turn-end gate popping', () => {
       // IDENTICAL gap list — an accurate order, never a mutating one.
       const before = followups.length
       emit({ header: { id: 'sess-orch', cwd: root } }, turnEnd(2))
-      await settle()
-      await settle()
+      // 【变更】2026-10-27 (批次三十): the re-dispatch is a fire-and-forget
+      // chain — a fixed sleep races the orchestrator under load (a concurrent
+      // build on the same host is enough) and fails the suite for no reason.
+      // The wait polls for the order instead of guessing how long it takes.
+      await waitFor(async () => followups.length > before, [], 'clarify gap re-order', 30_000).catch(() => undefined)
       expect(followups.length).toBe(before + 1)
       expect(followups.at(-1)).toContain('【BAF 工单 · /baf-go 派单】')
+    } finally {
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+    }
+  })
+
+  it('a PAUSED change pops no gate and receives no work order; unpausing restores both (批次三十)', { timeout: 120_000 }, async () => {
+    const root = await setup()
+    try {
+      const service = serviceWith([])
+      const { emit, followups } = install(service)
+      const focus = focusFor(root)
+      await driveGo({ cwd: root, rawInput: DESCRIPTION, focus })
+      const changeId = await activeId(root)
+      if (changeId === undefined) throw new Error('no active change after mint')
+      await driveClassify(root, `confirm change=${changeId}`)
+      await author(root, changeId, 'proposal.md', [
+        '# Proposal',
+        '',
+        '## Why',
+        '',
+        'Customers need CSV export of reports for downstream spreadsheets.',
+        '',
+        '## Scope',
+        '',
+        '- In: public exportReportsCsv API',
+        '',
+        '## Impact',
+        '',
+        'Adds src/export.ts; rollback is deleting the file.',
+        '',
+      ].join('\n'))
+      await driveGo({ cwd: root, focus }) // open → clarify (template installed)
+
+      // 【变更】2026-10-27 (批次三十 · 用户问题 6): the customer pauses the
+      // workflow. The turn-end evaluation must go completely silent for this
+      // change — no dialog, no work order.
+      setChangePaused(root, changeId, true)
+      emit({ header: { id: 'sess-orch', cwd: root } }, turnEnd(1))
+      await settle()
+      await settle()
+      expect(service.calls).toHaveLength(0)
+      expect(followups).toHaveLength(0)
+
+      // 继续 releases the brake: the next turn-end dispatches the very gap the
+      // paused turn refused to send.
+      setChangePaused(root, changeId, false)
+      emit({ header: { id: 'sess-orch', cwd: root } }, turnEnd(2))
+      await waitFor(async () => followups.length >= 1, [], 'clarify gap order after resume', 30_000).catch(() => undefined)
+      expect(followups.length).toBeGreaterThanOrEqual(1)
+      expect(followups[0]).toContain('【BAF 工单 · /baf-go 派单】')
+      expect(followups[0]).toContain('阶段：clarify')
     } finally {
       await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
     }

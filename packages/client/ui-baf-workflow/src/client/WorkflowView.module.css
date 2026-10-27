@@ -195,12 +195,151 @@
 }
 
 .graphWrap {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
   padding: 1rem;
   cursor: default;
   touch-action: none;
+}
+
+/* 【变更】2026-10-27 (批次三十): the graph's floating toolbar — the buttons
+   that operate the flow (推进 / 暂停 / 继续). It sits OUTSIDE the pan/zoom
+   world so it never travels with the graph. */
+.graphOverlay {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+
+.graphOverlay > * {
+  pointer-events: auto;
+}
+
+.toolBtn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.26rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--wf-line);
+  background: color-mix(in srgb, var(--wf-card) 92%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--wf-ink);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.toolBtn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--wf-accent) 52%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-accent) 12%, transparent);
+}
+
+.toolBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 【变更】2026-10-27 (批次三十): the warn-tinted action (the 同步 order).
+   【变更】2026-10-27 (批次三十一): softened — the notice's accent is carried by
+   its rule and icon, so the button stays a quiet outline instead of a second
+   saturated block. */
+.toolBtnWarn {
+  border-color: color-mix(in srgb, var(--wf-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--wf-warn) 7%, var(--wf-card));
+  color: color-mix(in srgb, var(--wf-warn) 88%, var(--wf-ink));
+}
+
+.toolBtnWarn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--wf-warn) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-warn) 12%, transparent);
+}
+
+/* 【变更】2026-10-27 (批次三十): the drift notice — an upstream document was
+   edited AFTER a downstream one was written, so the downstream one is stale.
+   【变更】2026-10-27 (批次三十一): rebuilt. The notice was a saturated amber
+   slab sitting next to the page's gold accent, and two warm hues at that
+   weight fought each other. It is now ONE neutral surface with a single warn
+   accent — a rule on the leading edge, the icon and the title — so the notice
+   reads as one quiet annotation on the page's own material. */
+.driftBanner {
+  margin: 0.55rem 1rem 0;
+  padding: 0.55rem 0.7rem 0.55rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--wf-warn) 24%, var(--wf-line));
+  border-left: 3px solid color-mix(in srgb, var(--wf-warn) 60%, transparent);
+  background: color-mix(in srgb, var(--wf-warn) 4%, var(--wf-card));
+  color: var(--wf-ink);
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  flex: none;
+}
+
+/* The notice's icon — the one saturated warn mark in the box. */
+.driftBannerIcon {
+  flex: none;
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  color: var(--wf-warn);
+}
+
+.driftBannerIcon > svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.driftBannerText {
+  flex: 1 1 18rem;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  line-height: 1.5;
+}
+
+/* The title carries the ink, not the warn colour — the rule and the icon
+   already say 「attention」, and a second coloured word shouted over them. */
+.driftBannerTitle {
+  font-weight: 700;
+  color: var(--wf-ink);
+  white-space: nowrap;
+}
+
+.driftBannerBody {
+  color: var(--wf-muted);
+  min-width: 0;
+}
+
+/* The hold line — the workflow waits here until the documents agree. */
+.driftBannerHold {
+  flex: none;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--wf-warn) 85%, var(--wf-ink));
+  background: color-mix(in srgb, var(--wf-warn) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-warn) 28%, transparent);
 }
 
 .flowWorld {
@@ -328,6 +467,26 @@
   background: linear-gradient(135deg, var(--wf-accent-soft), var(--wf-accent));
 }
 
+/* 【变更】2026-10-27 (批次三十): the stale-artifact badge on a node card, and
+   the card's own warning edge — a stage whose document was written BEFORE an
+   upstream document was edited. The card wears it so the graph says where the
+   documents disagree without the customer reading a diff. */
+.driftPill {
+  flex: none;
+  padding: 0.12rem 0.38rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--wf-warn);
+  background: color-mix(in srgb, var(--wf-warn) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-warn) 45%, transparent);
+}
+
+.flowNode:has(> .flowNodeHead > .driftPill) {
+  border-color: color-mix(in srgb, var(--wf-warn) 58%, transparent);
+}
+
 .cardChecklist {
   border-color: color-mix(in srgb, var(--wf-accent) 55%, var(--wf-line));
   background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 14%, var(--wf-card)), var(--wf-card));
@@ -453,6 +612,21 @@
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* 【变更】2026-10-27 (批次三十): the 建立变更 card's artifact is the change's own
+   DIRECTORY — an identity, not a document. It renders as a quiet label pill: it
+   never carries the absolute path, never underlines on hover and never opens. */
+.flowNodeChangeTag {
+  padding: 0.04rem 0.34rem;
+  border: 1px solid var(--wf-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-muted) 8%, transparent);
+  color: var(--wf-muted);
+  font-size: 0.58rem;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  user-select: text;
 }
 
 /* 【变更】2026-10-22 (批次十三 1): the 测试流图 jump chip on the
@@ -858,6 +1032,37 @@
   color: var(--wf-muted);
 }
 
+/* 【变更】2026-10-27 (批次三十一): the document's DRIFT tag — the chip that
+   rides the document name in the rail. The three tags reuse the rail's own
+   state vocabulary (gold = carries the change, amber = needs the customer,
+   blue = in flight) so the rail keeps one colour language. */
+.artifactDriftTag {
+  flex: none;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* 已修改 — the upstream document that was edited. */
+.artifactDriftModified {
+  background: color-mix(in srgb, var(--wf-accent) 14%, transparent);
+  color: var(--wf-accent);
+}
+
+/* 待同步 — the downstream document the edit made stale. */
+.artifactDriftPending {
+  background: color-mix(in srgb, var(--wf-warn) 14%, transparent);
+  color: color-mix(in srgb, var(--wf-warn) 88%, var(--wf-ink));
+}
+
+/* 已同步 — the document the sync order is rewriting right now. */
+.artifactDriftSynced {
+  background: color-mix(in srgb, #3b82f6 16%, transparent);
+  color: #2563eb;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -877,9 +1082,24 @@
 
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* 【变更】2026-10-27 (批次三十): the primary button was a solid gold slab with
+   near-black copy — the loudest thing on a page whose job is to offer a
+   decision. It now spends the accent as a TINT (the same treatment the
+   session's confirm gate got), so the primary reads as emphasis rather than
+   as a hazard sign, and the deep-gold ink stays legible in both themes. */
 .btnPrimary {
-  background: linear-gradient(180deg, var(--wf-accent-soft), var(--wf-accent));
-  color: #1a1406;
+  border-color: color-mix(in srgb, var(--wf-accent) 52%, transparent);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--wf-accent) 17%, var(--wf-card)),
+    color-mix(in srgb, var(--wf-accent) 9%, var(--wf-card)));
+  color: color-mix(in srgb, var(--wf-accent) 62%, var(--wf-ink));
+}
+
+.btnPrimary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--wf-accent) 78%, transparent);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--wf-accent) 24%, var(--wf-card)),
+    color-mix(in srgb, var(--wf-accent) 13%, var(--wf-card)));
 }
 
 .btnGhost {

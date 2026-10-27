@@ -12,14 +12,17 @@
 # ── identity ────────────────────────────────────────────────────────────────
 
 # The preset's own persona, shadowing the deployment default for this agent.
-# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+# `{{model}}` resolves from the agent's own route. 【变更】2026-10-26 (问题 1b):
+# the prior comment and the `{{cwd}}` suffix clause predate upstream commit
+# 79bd3d8da7, which deleted the loop's built-in `{{cwd}}` variable — assembly
+# then threw `unknown prompt variable "{{cwd}}"`; the working-directory service
+# now supplies the directory as required context instead.
 # Schema note: dsh-persona takes `prefix` (required) + `suffix` (optional);
 # the legacy `text` field no longer exists — a `text`-only row fails to mount
 # with `$.prefix missing required value`.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    suffix: 你的工作目录是 {{cwd}}。Your working directory is {{cwd}}.
     # 【变更】2026-09-28 (用户问题 2): `|-` (literal), not `>-` — the folded
     # style space-joined the status-report skeleton's consecutive lines into
     # one dense paragraph in the model prompt, which is exactly why reports

@@ -24,6 +24,9 @@ import type {
   WorkflowTabView,
 } from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
+// 【变更】2026-10-27 (批次三十): the 同步 dispatch's answer — the client
+// mirrors the host's own result union so the banner can say what happened.
+import type { BafWorkflowPauseResult, BafWorkflowSyncResult } from '../types.ts'
 import { CATALOG_ZH } from './catalog-i18n.ts'
 import { buildClientTemplateTabView, withRenderableGraph } from './graph-template.ts'
 // 【变更】2026-10-24 (批次二十 3): the graph canvas + the read-only rail
@@ -32,7 +35,7 @@ import { buildClientTemplateTabView, withRenderableGraph } from './graph-templat
 // asked for exactly that). The behaviour here is unchanged — only the import
 // moved.
 import { FlowCanvas } from './FlowCanvas.tsx'
-import { ArtifactRail, BilingualDetail, StageChecklist, artifactName, statusClass } from './flow-parts.tsx'
+import { ArtifactRail, BilingualDetail, StageChecklist, artifactDriftTags, artifactName, statusClass, type ArtifactDriftTag } from './flow-parts.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
 import { RouteStatusRow } from './RouteStatusRow.tsx'
 import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel, parseGateSections } from './gate-ask.ts'
@@ -147,7 +150,21 @@ export interface WorkflowViewInjected {
    */
   openWorkflowConfig: () => void
   /**
-   * 【变更】2026-10-24 (批次十九 1.3): open the 工作流 page's 「变更总览」 tab —
+   * 【变更】2026-10-27 (批次三十): re-author the stale documents against the
+   * newest upstream — the 「同步」button's action.
+   *
+   * The click IS the authorization: the order the host sends carries the
+   * customer ledger scope, so it is never deduped away by the orchestrator's
+   * own turn-end order.
+   */
+  syncArtifacts: (changeId: string) => Promise<BafWorkflowSyncResult>
+  /**
+   * 【变更】2026-10-27 (批次三十): the 暂停/继续 button — brake the change's
+   * workflow, or release it and hand the outstanding gap back to the model.
+   */
+  setPaused: (changeId: string, paused: boolean) => Promise<BafWorkflowPauseResult>
+  /**
+   * 【变更】2026-10-27 (批次三十): open the 工作流 page's 「变更总览」 tab —
    * the strip's 变更总览 button. The session tab no longer carries the change
    * overview as a modal (the ledger moved to the 工作流 page), so the button
    * hands the user over to the one home of the ledger.
@@ -468,6 +485,55 @@ function RailSplitter(props: {
 }
 
 /**
+ * 【变更】2026-10-27 (批次三十): what the 「同步」dispatch did, in one line.
+ *
+ * The banner must not promise more than the host did: a dispatched order says
+ * the model is working on it, a refusal says WHY (no workspace / no live
+ * session / the model is mid-turn).
+ * @param result - the host's answer.
+ * @param t - the locale binder.
+ * @returns the banner's tone + text.
+ */
+function syncNoticeOf(
+  result: BafWorkflowSyncResult,
+  t: (key: WorkflowTabKey) => string,
+): { readonly kind: 'ok' | 'warn'; readonly text: string } {
+  switch (result.status) {
+    case 'dispatched':
+      return { kind: 'ok', text: t('flow.syncDone') }
+    // 【变更】2026-10-27 (批次三十一): the order was already on its way — the
+    // host says so instead of claiming a fresh dispatch, because nothing new
+    // reached the model.
+    case 'queued':
+      return { kind: 'ok', text: t('flow.syncQueued') }
+    case 'no-drift':
+      return { kind: 'ok', text: t('flow.syncNoDrift') }
+    case 'no-workspace':
+      return { kind: 'warn', text: t('flow.syncNoWorkspace') }
+    case 'unavailable':
+      return { kind: 'warn', text: `${t('flow.syncUnavailable')}：${result.reason}` }
+  }
+}
+
+/**
+ * 【变更】2026-10-27 (批次三十): what the 暂停/继续 action did, in one line.
+ * @param result - the host's answer.
+ * @param paused - the state the customer asked for.
+ * @param t - the locale binder.
+ * @returns the notice's tone + text.
+ */
+function pauseNoticeOf(
+  result: BafWorkflowPauseResult,
+  paused: boolean,
+  t: (key: WorkflowTabKey) => string,
+): { readonly kind: 'ok' | 'warn'; readonly text: string } {
+  if (result.status === 'unavailable') {
+    return { kind: 'warn', text: `${t('flow.pauseUnavailable')}：${result.reason}` }
+  }
+  return { kind: 'ok', text: paused ? t('flow.pauseDone') : t('flow.resumeDone') }
+}
+
+/**
  * Render the BAF workflow flowchart Tab.
  * @param props - conversation view props + inject face.
  */
@@ -476,6 +542,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     t, refresh, startIntake, advance, transition, resume,
     gateResolve, gateRevise, openArtifact, routePreview, useProjection, subscribe,
     openWorkflowConfig,
+    // 【变更】2026-10-27 (批次三十): the 「同步」button — re-author the stale
+    // documents against the newest upstream.
+    syncArtifacts,
+    // 【变更】2026-10-27 (批次三十): the 暂停/继续 button.
+    setPaused,
     // 【变更】2026-10-24 (批次十九 1.3): the strip's 变更总览 button hands the
     // user over to the 工作流 page's 变更总览 tab.
     openChangeOverview,
@@ -569,9 +640,88 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // card needs none of this: its carrier resolves on submit and the card
   // unmounts.
   const [tabRevise, setTabRevise] = useState<{ key: string; text: string; sent: boolean } | null>(null)
-  // 【变更】2026-09-28 (用户问题 1.7): the LIVE gate card's revision draft —
+  // 【变更】2026-10-28 (用户问题 3): the LIVE gate card's revision draft —
   // cleared with gateAnswered whenever a new carrier arrives.
   const [liveReviseText, setLiveReviseText] = useState('')
+  // 【变更】2026-10-27 (批次三十): the 「同步」action's outcome — the banner
+  // says what the dispatch did (or why it could not). `syncing` keeps the
+  // button from firing twice while the order is on its way.
+  const [syncNotice, setSyncNotice] = useState<{ readonly kind: 'ok' | 'warn'; readonly text: string } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  // 【变更】2026-10-27 (批次三十): the 暂停/继续 action's outcome.
+  const [pauseNotice, setPauseNotice] = useState<{ readonly kind: 'ok' | 'warn'; readonly text: string } | null>(null)
+  const [pausing, setPausing] = useState(false)
+
+  // 【变更】2026-10-27 (批次三十): the STALE documents — a downstream document
+  // an upstream edit made stale. The host reads them off the file mtimes and
+  // rides them on the view; the graph marks the affected stages.
+  const driftRows = view.artifactDrift ?? []
+  const driftNodes = useMemo(
+    () => (view.artifactDrift ?? []).map(row => row.node),
+    [view.artifactDrift],
+  )
+
+  // 【变更】2026-10-27 (批次三十一): the drift TAGS for the left rail's stage
+  // documents. The upstream document that was edited is 已修改; the downstream
+  // document that edit made stale is 待同步; the document the sync order is
+  // rewriting right now is 已同步. The tags ride the document NAME, and they
+  // are gone once the documents agree again (the drift rows are).
+  const driftTags = useMemo(
+    (): Record<string, ArtifactDriftTag> => artifactDriftTags(driftRows, syncing),
+    [driftRows, syncing],
+  )
+
+  // 【变更】2026-10-27 (批次三十一): the 「推进」action — it lives in the flow
+  // graph's toolbar now. The click re-arms the advance confirmation the
+  // customer dismissed, then scrolls the confirmation into view.
+  const rearmAdvance = useCallback((): void => {
+    setAdvanceDismissed(null)
+    // The dialog mounts on the re-render this click schedules —
+    // scroll AFTER the commit (rAF), not now.
+    requestAnimationFrame(() => {
+      document
+        .querySelector('[data-advance-dialog]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }, [])
+
+  // 【变更】2026-10-27 (批次三十): the 「同步」action. The click IS the
+  // authorization — the host's order carries the customer ledger scope, so it
+  // is never deduped away by the orchestrator's own turn-end order.
+  const syncDrift = useCallback(async (changeId: string): Promise<void> => {
+    setSyncing(true)
+    try {
+      setSyncNotice(syncNoticeOf(await syncArtifacts(changeId), t))
+    } catch (err) {
+      setSyncNotice({ kind: 'warn', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setSyncing(false)
+    }
+  }, [syncArtifacts, t])
+
+  // 【变更】2026-10-27 (批次三十): the 暂停/继续 action. The click IS the
+  // authorization: the host's resume drive carries the customer ledger scope,
+  // so the work order it hands back is never deduped away.
+  const togglePause = useCallback(async (changeId: string, paused: boolean): Promise<void> => {
+    setPausing(true)
+    try {
+      const result = await setPaused(changeId, paused)
+      setPauseNotice(pauseNoticeOf(result, paused, t))
+      // 【变更】2026-10-27 (批次三十): the button label flips on the ANSWER, not
+      // on the next poll. The 2 s poll is suppressed while the window is hidden
+      // (`refreshNow` guards on `visibilityState`), so a window that is not in
+      // the foreground would sit on a stale 「暂停」 until the customer focuses
+      // it again. The host owns the flag; the next poll still re-derives it and
+      // corrects any divergence.
+      if (result.status === 'ok') {
+        setView(prev => (prev.paused === paused ? prev : { ...prev, paused }))
+      }
+    } catch (err) {
+      setPauseNotice({ kind: 'warn', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setPausing(false)
+    }
+  }, [setPaused, t])
 
   const applyView = useCallback((next: WorkflowTabView) => {
     const safe = withRenderableGraph(next)
@@ -1019,7 +1169,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                 {t('action.abandon')}
               </button>
             ) : null}
-          {/* §22 user-request 2026-09-20 — the strip 「推进」 button is GONE
+          {/* 【变更】2026-09-25 (用户需求 工作流 1): the strip 「推进」 button is GONE
               (【变更】2026-09-25 用户需求 工作流 1): the always-on button became
               the TOP advance dialog below — it pops only when the host-derived
               `advance` says the change rests at a point that can advance, so
@@ -1030,27 +1180,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               exists (view.advance.ready), and its single job is to undo the
               暂不推进 dismissal for the CURRENT rest point so the TOP dialog
               re-renders (then scrolls into view). Before this, dismissing the
-              dialog left typing /baf-go in chat as the only way back. */}
-          {view.advance?.ready === true && (
-            <button
-              type="button"
-              className={clsx(css.btn, css.btnGhost)}
-              disabled={busy}
-              data-testid="strip-advance-rearm"
-              onClick={() => {
-                setAdvanceDismissed(null)
-                // The dialog mounts on the re-render this click schedules —
-                // scroll AFTER the commit (rAF), not now.
-                requestAnimationFrame(() => {
-                  document
-                    .querySelector('[data-advance-dialog]')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                })
-              }}
-            >
-              {t('action.advance')}
-            </button>
-          )}
+              dialog left typing /baf-go in chat as the only way back.
+              【变更】2026-10-27 (批次三十一): the button MOVED into the flow
+              graph's toolbar (left of 「暂停」/「继续」) — the customer asked for
+              the advance action to sit with the other flow controls instead of
+              in the page header. Its behavior is unchanged. */}
         </span>
       </div>
 
@@ -1362,6 +1496,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         && view.gate === undefined
         && view.pendingGate === undefined
         && liveGateView === null
+        // 【变更】2026-10-27 (批次三十一): an out-of-sync change does NOT advance.
+        // The documents disagree; the customer must sync them first, and the
+        // workflow waits at this rest point instead of popping a confirmation
+        // that would move past the disagreement.
+        && driftRows.length === 0
         && advanceKey !== null
         && advanceDismissed !== advanceKey && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('action.advance')} data-advance-dialog="">
@@ -1679,7 +1818,16 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
             )}
 
             {view.artifacts !== undefined && view.artifacts.length > 0 && (
-              <ArtifactRail rows={view.artifacts} disabled={busy} onOpen={openArtifact} t={t} />
+              /* 【变更】2026-10-27 (批次三十一): the rail's documents carry their
+                 drift tag — 已修改 / 待同步 / 已同步 — so the customer sees which
+                 document the upstream edit touched and which one is stale. */
+              <ArtifactRail
+                rows={view.artifacts}
+                driftTags={driftTags}
+                disabled={busy}
+                onOpen={openArtifact}
+                t={t}
+              />
             )}
 
             {(sessionStats !== undefined || tokenUsage !== undefined) && (
@@ -1691,6 +1839,62 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
 
         <div className={css.main}>
           {view.lanes !== undefined && <LanePanel lanes={view.lanes} t={t} />}
+          {/* 【变更】2026-10-27 (批次三十): the STALE-artifact notice. An upstream
+              document was edited AFTER a downstream one was written, so the
+              downstream one may no longer match it. The banner names the pair
+              and the 「同步」button sends the order that re-authors them.
+              【变更】2026-10-27 (批次三十一): the notice is the ONLY home of the
+              「同步」action — it exists exactly while something is out of sync,
+              and the button reads 「同步中」while the order is on its way. The
+              box itself is rebuilt: one neutral surface with a single warn
+              accent (a rule, an icon and the title) instead of a saturated
+              amber slab that fought the page's gold accent. */}
+          {driftRows.length > 0 && (
+            <div className={css.driftBanner} data-testid="flow-drift-banner">
+              <span className={css.driftBannerIcon} aria-hidden>
+                <svg viewBox="0 0 16 16" focusable="false">
+                  <path d="M8 2.2 14.4 13H1.6L8 2.2Z" />
+                  <path d="M8 6.4v3.1" />
+                  <path d="M8 11.4v.1" />
+                </svg>
+              </span>
+              <div className={css.driftBannerText}>
+                <span className={css.driftBannerTitle}>{t('flow.driftTitle')}</span>
+                <span className={css.driftBannerBody}>
+                  {driftRows.map(row => t('flow.driftBody', {
+                    upstream: row.sourceFile,
+                    stale: row.file,
+                  })).join('；')}
+                </span>
+              </div>
+              {/* 【变更】2026-10-27 (批次三十一): the workflow holds here — it
+                  neither advances nor pops a confirmation gate until the
+                  documents agree again. The notice says so, so the hold never
+                  reads as a hang. */}
+              <span className={css.driftBannerHold} data-testid="flow-drift-hold">
+                {t('flow.driftHold')}
+              </span>
+              <button
+                type="button"
+                className={clsx(css.toolBtn, css.toolBtnWarn)}
+                data-testid="flow-drift-sync"
+                title={t('flow.syncHelp')}
+                disabled={syncing || view.changeId === null}
+                onClick={() => {
+                  const changeId = view.changeId
+                  if (changeId !== null) void syncDrift(changeId)
+                }}
+              >
+                {syncing ? t('flow.syncSyncing') : t('flow.sync')}
+              </button>
+            </div>
+          )}
+          {syncNotice !== null && (
+            <p className={css.hint} data-testid="flow-sync-notice">{syncNotice.text}</p>
+          )}
+          {pauseNotice !== null && (
+            <p className={css.hint} data-testid="flow-pause-notice">{pauseNotice.text}</p>
+          )}
           {/* 【变更】2026-09-23 (demo5 issue #5): the flow canvas is its own
               component (pan/zoom/canvas math live inside) so the history
               modal re-renders the SAME graph for any change without touching
@@ -1701,6 +1905,21 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
             onActivate={onCardActivate}
             onOpenArtifact={openArtifact}
             onOpenTestFlow={(stage) => { openView('baf-test-flow', `stage:${stage}`) }}
+            controls={{
+              paused: view.paused === true,
+              onTogglePause: () => {
+                const changeId = view.changeId
+                if (changeId !== null) void togglePause(changeId, view.paused !== true)
+              },
+              pauseDisabled: pausing,
+              // 【变更】2026-10-27 (批次三十一): the 「推进」button moved from the
+              // page header into this toolbar (left of 「暂停」/「继续」). It
+              // re-arms the advance confirmation, so an out-of-sync change
+              // offers nothing to advance into.
+              advanceReady: view.advance?.ready === true && driftRows.length === 0,
+              onAdvance: rearmAdvance,
+            }}
+            driftNodes={driftNodes}
             t={t}
           />
 

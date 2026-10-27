@@ -243,6 +243,12 @@ export const GATE_REGISTRY: Readonly<Record<GateId, GateSpec>> = {
     question: '【状态变化】设计（已完成）→ 计划（待开始）\n\n【完成情况】\n- 设计文档已经齐了\n\n【确认后】\n- 系统装好计划文档模板，模型填写\n- 填好后自动弹下一次确认卡',
     options: [
       { id: 'advance', label: '确认 · 进入计划', command: '/baf-go-confirm' },
+      // 【变更】2026-10-27 (批次三十一): the rollback to clarify was offered
+      // ONLY on the parked re-pop (design-confirm), so a customer who wanted
+      // to re-clarify at the FIRST design pop had no way to ask for it and
+      // read the workflow as stuck. The first pop now carries the same option
+      // — the decision belongs to the customer at either pop.
+      { id: 'clarify', label: '退回，继续澄清需求', command: '/baf-workflow-clarify' },
       { id: 'back', label: '暂不推进', command: '__noop__', hint: '工作流暂停；需要继续时再敲一次 /baf-go' },
     ],
   },

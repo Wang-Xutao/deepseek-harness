@@ -37,6 +37,7 @@ import {
   renderProbeLines,
   renderWelcomeCard,
   resetSessionGateCache,
+  resetSessionGateDedupe,
   resolveIsolateService,
   resolveScaffoldService,
   resolveStartupBinding,
@@ -55,6 +56,9 @@ const FIXTURE_BASELINE = fileURLToPath(
 /** Empty workspace: a directory, no `.baf`, no Git. */
 async function emptyWorkspace(): Promise<string> {
   resetSessionGateCache()
+  // 【变更】2026-10-26 (用户问题 1): the once-per-session welcome record is
+  // module-level, so each test starts from a clean identity map.
+  resetSessionGateDedupe()
   return mkdtemp(join(tmpdir(), 'baf-gate-'))
 }
 
@@ -654,6 +658,40 @@ describe('BAF session gate · row install (§18.3)', () => {
       // must not fire a second welcome either.
       handlers.get('agent/created')?.({ agent })
       await new Promise(resolve => setTimeout(resolve, 25))
+      expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('fires the welcome card once per SESSION even when the agent is disposed and re-enters (2026-10-26 用户问题 1)', async () => {
+    const root = await emptyWorkspace()
+    try {
+      const calls: string[] = []
+      const handlers = new Map<string, (...args: unknown[]) => void>()
+      // The same session re-enters this preset as a NEW agent object (picker
+      // round-trip, recompose, preset reload): dispose drops the object-keyed
+      // cache, so only the session-keyed record keeps the welcome once-only.
+      const agentA = fakeAgent(root)
+      const agentB = fakeAgent(root)
+      const ctx = fakeCtx({
+        agents: { list: () => [agentA], get: () => agentB },
+        commands: { execute: async (_agent: unknown, line: string) => { calls.push(line); return {} } },
+        logger: quietLogger(),
+        on: ((event: string, handler: (...args: never[]) => void) => {
+          handlers.set(event, handler as (...args: unknown[]) => void)
+        }),
+        effect: () => undefined,
+      })
+      apply(ctx)
+      await vi.waitFor(() => { expect(calls).toContain(WELCOME_COMMAND) }, { timeout: 10_000 })
+      expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
+
+      // Dispose the first agent object, then the session re-enters through
+      // `agent-preset/selected` with a fresh agent object.
+      handlers.get('agent/disposed')?.({ agent: agentA })
+      handlers.get('agent-preset/selected')?.('fake')
+      await new Promise(resolve => setTimeout(resolve, 50))
       expect(calls.filter(line => line === WELCOME_COMMAND)).toHaveLength(1)
     } finally {
       await cleanup(root)

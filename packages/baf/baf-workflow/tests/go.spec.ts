@@ -1204,6 +1204,9 @@ describe('/baf-go work-order dispatch (§18.4.2, 2026-09-22 客户决策)', () =
         node: 'clarify',
         artifactPath: `openspec/changes/${changeId}/clarify.md`,
         missing: [...DOC_REQUIREMENTS_ZH.clarify],
+        // 【变更】2026-10-27 (派单死路): every coordinator order is customer-
+        // authorized, so it lands in the customer ledger scope.
+        scope: 'customer',
       }])
       // Dispatch is ask-side: it writes nothing and moves nothing.
       const status = await statusOf(root, changeId)

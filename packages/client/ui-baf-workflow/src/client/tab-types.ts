@@ -313,6 +313,29 @@ export interface WorkflowTabView {
     readonly ready: boolean
     readonly missing: readonly string[]
   }
+  /**
+   * 【变更】2026-10-27: the stale artifacts — a downstream document an upstream
+   * edit made stale (the upstream document's mtime is newer). Absent when
+   * nothing is stale.
+   */
+  readonly artifactDrift?: readonly WorkflowTabArtifactDrift[]
+  /**
+   * 【变更】2026-10-27 (批次三十): whether this change's workflow is PAUSED.
+   * Absent (not `false`) when it is not — the client reads the field's
+   * presence, so a host that knows nothing about the pause simply renders the
+   * button in its default state.
+   */
+  readonly paused?: boolean
+}
+
+/** 【变更】2026-10-27: one stage whose artifact predates an upstream artifact. */
+export interface WorkflowTabArtifactDrift {
+  readonly node: WorkflowNodeId
+  readonly file: string
+  readonly sourceNode: WorkflowNodeId
+  readonly sourceFile: string
+  readonly sourceMtimeMs: number
+  readonly mtimeMs: number
 }
 
 /** One generated-artifact chip of a dashboard row (mirrors baf-core, issue 3). */
@@ -391,6 +414,12 @@ export type BafWorkflowChangeOverviewResult =
 export interface BafWorkflowChangeDetailRequest {
   /** The change to describe. */
   readonly changeId: string
+  /**
+   * 【变更】2026-10-26 (用户问题 2): the workspace root to read the change
+   * from — the main-view session's cwd, so the overview follows the workspace
+   * the user is looking at. Omitted keeps the host's fallback.
+   */
+  readonly cwd?: string
 }
 
 /**

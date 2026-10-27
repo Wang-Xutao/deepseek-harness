@@ -211,6 +211,22 @@ const inflight = new Map<Agent, AbortController>()
 const gateFired = new WeakSet<Agent>()
 
 /**
+ * 【变更】2026-10-26 (用户问题 1): process-level dedupe keyed by SESSION id.
+ *
+ * `gateFired` (above) is keyed by Agent OBJECT, and `dispose` legitimately
+ * deletes from it so a picker round-trip can re-arm a session. That is also
+ * the duplicate-welcome hole: dispose → the same session re-enters this
+ * preset as a NEW agent object (or the row re-applies after a preset
+ * reload) → `gateFired` no longer knows it → /baf-welcome fires a second
+ * time into the same session's transcript. The customer requirement is
+ * "one welcome per session", so the once-per-session fact must survive
+ * every dispose. Case-insensitivity of ids is not a concern (`header.id`
+ * is a normalized uuid string); the set is never pruned — sessions are
+ * long-lived identities and the entries are tiny.
+ */
+const gateFiredSessions = new Set<string>()
+
+/**
  * Cached standard summary per workspace, with the baseline file's mtime —
  * `standardRulesSection` is synchronous, so it renders the cached summary and
  * lets an mtime drift trigger an async re-prime for the NEXT turn (§ below).
@@ -230,6 +246,15 @@ export function resetSessionGateCache(): void {
   probeCache.clear()
   snapshotCache.clear()
   standardCache.clear()
+}
+
+/**
+ * 【变更】2026-10-26 (用户问题 1): clear the once-per-session welcome record.
+ * Test-only teardown mirroring the cleanup effect; production relies on the
+ * process boundary. Not exported through the command surface.
+ */
+export function resetSessionGateDedupe(): void {
+  gateFiredSessions.clear()
 }
 
 /**
@@ -695,9 +720,14 @@ export function apply(ctx: Context): void {
   const sessionKeyOf = (agent: Agent): string => String(agent.session.header.id)
 
   const fire = (agent: Agent): void => {
-    armed.delete(sessionKeyOf(agent))
-    if (gateFired.has(agent)) return
+    const sessionKey = sessionKeyOf(agent)
+    armed.delete(sessionKey)
+    // 【变更】2026-10-26 (用户问题 1): the session-keyed set decides; the
+    // agent-keyed set is kept in sync as a cheap object-level cache for the
+    // install() fast path below.
+    if (gateFired.has(agent) || gateFiredSessions.has(sessionKey)) return
     gateFired.add(agent)
+    gateFiredSessions.add(sessionKey)
     void runSessionGate(ctx, agent)
   }
 
@@ -722,7 +752,10 @@ export function apply(ctx: Context): void {
     })
     fibers.set(agent, fiber)
     if (cwd !== undefined && cwd !== '') void primeStandardSummary(cwd)
-    if (gateFired.has(agent)) return
+    // 【变更】2026-10-26 (用户问题 1): a session that already saw its card never
+    // sees another one, no matter which agent object asks. The section fiber
+    // above still installs — only the card execution is once-per-session.
+    if (gateFired.has(agent) || gateFiredSessions.has(sessionKeyOf(agent))) return
     // Fire-and-forget: the first screen must not wait on the probe (§17.7 R20).
     if (settled) {
       fire(agent)
@@ -736,6 +769,11 @@ export function apply(ctx: Context): void {
 
   const dispose = (agent: Agent): void => {
     armed.delete(sessionKeyOf(agent))
+    // 【变更】2026-10-26 (用户问题 1): only the OBJECT-keyed cache is dropped —
+    // `gateFiredSessions` keeps the once-per-session record, so unwinding this
+    // agent (picker round-trip, recompose, preset reload) can no longer make
+    // the same session eligible for a second welcome card. The prompt-section
+    // fiber still disposes; that is a separate concern from the card.
     gateFired.delete(agent)
     inflight.get(agent)?.abort()
     inflight.delete(agent)

@@ -58,6 +58,9 @@ import {
   type DriveAdapters,
 } from './command-drives.ts'
 import { beginIntake } from './begin-intake.ts'
+// 【变更】2026-10-27 (批次三十一): the out-of-sync hold — the command path's
+// brake while a downstream document no longer matches its upstream.
+import { detectArtifactDrift, type ArtifactDriftRow } from './stages/artifact-drift.ts'
 import { cancelAsksForChangeGates } from './ask-queue.ts'
 import { GATE_REGISTRY, renderGate, type GateId, type GateSpec } from './gate-cards.ts'
 import { gateRevisionTarget, judgmentOf } from './gate-dialog.ts'
@@ -447,6 +450,40 @@ interface RouteContext {
 }
 
 /**
+ * The out-of-sync hold for the command path (§2026-10-27).
+ *
+ * A change whose documents disagree with each other — an upstream document was
+ * edited after a downstream one was written — must not advance, and must not
+ * pop a confirmation the customer cannot judge from contradictory documents.
+ * The notice names the stale documents and points at the one action that
+ * resolves it: the 工作流图's 「同步」.
+ * @param context - bound routing context.
+ * @param status - the change's recovered status.
+ * @returns the hold card, or undefined when nothing is out of sync.
+ */
+async function driftHold(context: RouteContext, status: WorkflowStatus): Promise<CommandResult | undefined> {
+  const node = status.current
+  if (node !== 'clarify' && node !== 'design' && node !== 'plan'
+    && node !== 'implement' && node !== 'verify') return undefined
+  const rows = await detectArtifactDrift(
+    context.cwd,
+    context.changeId,
+    status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+  ).catch((): readonly ArtifactDriftRow[] => [])
+  if (rows.length === 0) return undefined
+  return errorCard('文档与上游不同步 · 工作流已暂停推进', [
+    { title: '不同步的产物', lines: rows.map(row => `${row.file}（上游 ${row.sourceFile} 之后被修改）`) },
+    {
+      title: '接下来',
+      lines: [
+        '在工作流图点「同步」，让模型按最新上游重写过期的产物',
+        '同步完成后，工作流继续推进',
+      ],
+    },
+  ])
+}
+
+/**
  * Route a bound change to its next action (§18.4.2).
  *
  * Chaining rule: keep moving while the next step needs no model-authored
@@ -491,6 +528,21 @@ async function route(context: RouteContext): Promise<CommandResult> {
     const forward = resumeTarget === undefined ? '' : ` ${resumeTarget}`
     return driveResume(cwd, `change=${changeId}${forward}`, source)
   }
+
+  // 【变更】2026-10-27 (批次三十一): the OUT-OF-SYNC HOLD on the command path.
+  // The orchestrator already freezes the AUTOMATIC push (it neither pops a gate
+  // nor dispatches a work order while the documents disagree). The command path
+  // needed the same brake: `/baf-go` used to walk straight past a stale
+  // document and pop the next confirmation — the customer then judged a gate
+  // whose documents contradicted each other. The hold answers with the notice
+  // instead: sync first, then continue.
+  //
+  // The brake sits on the stages that ADVANCE over documents (clarify → design →
+  // plan → implement → verify). `intake` / `open` write the first document, so
+  // there is nothing upstream of them to be stale, and the `drift` node keeps
+  // its own resume flow.
+  const hold = await driftHold(context, status)
+  if (hold !== undefined) return hold
 
   switch (node) {
     case 'intake': {
@@ -1634,7 +1686,7 @@ function dispatchWorkOrder(
   context: Pick<RouteContext, 'dispatch' | 'dispatchOrigin' | 'changeId'>,
   node: DispatchNode,
   missing: readonly string[],
-  cause?: 'verify-failed' | 'checklist-missing' | 'checklist-open' | 'gate-revise',
+  cause?: DispatchSignal['cause'],
   mode?: 'full-go-path' | 'bug-fix-path',
   /**
    * 【变更】2026-09-28 (用户问题 1.7): explicit artifact-path override for
@@ -1652,6 +1704,11 @@ function dispatchWorkOrder(
     missing,
     ...(cause === undefined ? {} : { cause }),
     ...(mode === undefined ? {} : { mode }),
+    // 【变更】2026-10-27 (派单死路): every order the coordinator sends is
+    // customer-authorized (the origin check above is the proof), so it lands
+    // in the CUSTOMER scope — the orchestrator's turn-end order lives in the
+    // auto scope and can never dedupe it away.
+    scope: 'customer',
   }
   return dispatch(signal)
 }

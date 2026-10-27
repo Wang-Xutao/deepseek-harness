@@ -11,7 +11,14 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              suffix: 你的工作目录是 {{cwd}}。Your working directory is {{cwd}}.
+              # 【变更】2026-10-26 (问题 1b): removed the `{{cwd}}` suffix clause.
+              # Upstream v0.2.1-alpha.1 deleted the loop's built-in `{{cwd}}`
+              # variable (agent-loop registers only `provider`/`model`), so this
+              # clause made prompt assembly throw `unknown prompt variable
+              # "{{cwd}}" in section "deployment:persona-suffix"` on every new
+              # session. The working-directory service supplies the current
+              # directory as required context (docs/upgrade-guide/v0.2.1-alpha.1/
+              # working-directory/guide.md, migration step 1).
               # 【变更】2026-09-28 (用户问题 2): `|-` literal — the folded style
               # space-joined the report skeleton into one dense line (the
               # 「一大段」 symptom); paragraphs are single physical lines so

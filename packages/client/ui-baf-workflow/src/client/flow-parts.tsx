@@ -123,6 +123,40 @@ export function artifactName(path: string): string {
 }
 
 /**
+ * 【变更】2026-10-27 (批次三十一): the flow graph's operating controls.
+ *
+ * The graph's top-right corner carries the buttons that OPERATE the flow. A
+ * surface that cannot operate the change (the 变更总览 detail page has no
+ * session behind it) passes no controls — a button that cannot work is worse
+ * than an absent one.
+ *
+ * 【变更】2026-10-27 (批次三十一): the change's identity TAG left the toolbar
+ * (the customer asked for it to go), and the 「同步」button moved OUT of it —
+ * the sync action belongs to the out-of-sync notice, and only exists while
+ * something is actually out of sync. The 「推进」button arrived instead: it is
+ * the workflow's advance action and sits LEFT of 「暂停」/「继续」.
+ */
+export interface WorkflowFlowControls {
+  /** Whether the workflow is currently paused. */
+  readonly paused: boolean
+  /** Pause the workflow / continue it. */
+  readonly onTogglePause: () => void
+  /** Whether the pause request is in flight — the button waits for its answer. */
+  readonly pauseDisabled?: boolean
+  /**
+   * Whether the change rests at a point that can advance. The 「推进」button is
+   * rendered only while this is true, so the toolbar never carries an advance
+   * the host would refuse.
+   */
+  readonly advanceReady?: boolean
+  /**
+   * Re-arm the advance confirmation — the customer dismissed it and asks for it
+   * again. Absent on a surface that cannot advance.
+   */
+  readonly onAdvance?: () => void
+}
+
+/**
  * Whether a catalog action is treated as done for checkbox display.
  * 'clipped' joins — a 裁剪 node's whole action list is moot.
  * @param status - node status.
@@ -135,13 +169,51 @@ export function stageActionsDone(status: WorkflowTabNodeView['status'] | undefin
 /* ── the rail cards ──────────────────────────────────────────────────────── */
 
 /**
- * 【变更】2026-10-24 (批次二十 3): the artifact rail.
+ * 【变更】2026-10-27 (批次三十一): one document's drift tag.
+ *
+ * - `modified` — the upstream document the customer (or the model) edited after
+ *   a downstream one was written.
+ * - `pending` — the downstream document that edit made stale; it must be
+ *   rewritten before the workflow moves on.
+ * - `synced` — the document the sync order is rewriting right now.
+ */
+export type ArtifactDriftTag = 'modified' | 'pending' | 'synced'
+
+/**
+ * 【变更】2026-10-27 (批次三十一): the drift tags for one change's documents.
+ *
+ * The upstream document that was edited is 已修改; the downstream document that
+ * edit made stale is 待同步 — or 已同步 while the sync order is rewriting it.
+ * A file that appears in both roles (an upstream document of one row and a
+ * stale downstream document of another) keeps the stale role: that is the one
+ * the customer must act on.
+ * @param rows - the change's stale documents.
+ * @param syncing - whether a sync order is on its way.
+ * @returns the tag per file name.
+ */
+export function artifactDriftTags(
+  rows: readonly { readonly file: string; readonly sourceFile: string }[],
+  syncing: boolean,
+): Record<string, ArtifactDriftTag> {
+  const tags: Record<string, ArtifactDriftTag> = {}
+  for (const row of rows) tags[row.sourceFile] = 'modified'
+  for (const row of rows) tags[row.file] = syncing ? 'synced' : 'pending'
+  return tags
+}
+
+/**
+ * 【变更】2026-10-27 (批次三十一): the artifact rail.
  *
  * `onOpen` is OPTIONAL: the session tab opens an artifact in the sidebar, the
  * 变更总览 detail page has no session behind it and therefore no sidebar to
  * open into — there the row is a static chip (the file name and its state are
  * still read; only the click is absent). A row that has no file to open
  * (missing / clipped) never offered a click in the first place.
+ *
+ * `driftTags` maps a file NAME to its drift tag. The rail reads it as a second
+ * chip next to the document's state, so the customer sees which document was
+ * edited, which one is stale, and which one the sync order is rewriting —
+ * without leaving the workflow graph.
  */
 export function ArtifactRail(props: {
   rows: readonly {
@@ -150,11 +222,16 @@ export function ArtifactRail(props: {
     readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
     readonly missing: readonly string[]
   }[]
+  /**
+   * 【变更】2026-10-27 (批次三十一): the per-document drift tag, keyed by file
+   * name. Absent (or empty) when nothing is out of sync.
+   */
+  driftTags?: Readonly<Record<string, ArtifactDriftTag>>
   disabled?: boolean
   onOpen?: (path: string) => void
   t: (key: WorkflowTabKey) => string
 }): ReactElement {
-  const { rows, disabled = false, onOpen, t } = props
+  const { rows, driftTags, disabled = false, onOpen, t } = props
   const stateLabel = (state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'): string =>
     t(`artifact.state.${state}`)
   const stateClass = (state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'): string =>
@@ -162,6 +239,14 @@ export function ArtifactRail(props: {
       : state === 'planned' ? css.artifactStatePlanned ?? css.artifactStateTemplate ?? ''
         : state === 'template' || state === 'clipped' ? css.artifactStateTemplate ?? ''
           : css.artifactStateMissing ?? ''
+  // 【变更】2026-10-27 (批次三十一): the drift tag's own label + tone. The three
+  // tags read as one sequence — 已修改 → 待同步 → 已同步 — so they share one
+  // chip shape and differ only in hue.
+  const driftLabel = (tag: ArtifactDriftTag): string => t(`artifact.drift.${tag}`)
+  const driftClass = (tag: ArtifactDriftTag): string =>
+    tag === 'pending' ? css.artifactDriftPending ?? ''
+      : tag === 'synced' ? css.artifactDriftSynced ?? ''
+        : css.artifactDriftModified ?? ''
   // Each row names the stage that produces it — 「设计 design.md」「验证 verify.md」—
   // so the rail reads as the stage→document map it is.
   const stageOf = (file: string): string => {
@@ -182,6 +267,9 @@ export function ArtifactRail(props: {
         const blocked = row.state === 'missing' || row.state === 'clipped'
         const stage = stageOf(row.file)
         const label = stage === '' ? row.file : `${stage} · ${row.file}`
+        // 【变更】2026-10-27 (批次三十一): the drift tag rides the document NAME,
+        // so the customer reads 「design.md 待同步」 as one fact.
+        const drift = driftTags?.[row.file]
         return (
           <div key={row.path}>
             <div className={css.artifactRow}>
@@ -197,6 +285,14 @@ export function ArtifactRail(props: {
                 >
                   {label}
                 </button>
+              )}
+              {drift !== undefined && (
+                <span
+                  className={clsx(css.artifactDriftTag, driftClass(drift))}
+                  data-testid={`artifact-drift-tag-${row.file}`}
+                >
+                  {driftLabel(drift)}
+                </span>
               )}
               <span className={clsx(css.artifactState, stateClass(row.state))}>
                 {stateLabel(row.state)}

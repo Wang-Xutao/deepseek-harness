@@ -13,11 +13,15 @@
 
 
 # The preset's own persona, shadowing the deployment default for this agent.
-# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+# 【变更】2026-10-26 (问题 1b): `{{model}}` resolves from the agent's own route;
+# the `{{cwd}}` suffix clause is gone with upstream commit 79bd3d8da7, which
+# deleted the loop's built-in `{{cwd}}` variable — keeping it made prompt
+# assembly throw `unknown prompt variable "{{cwd}}" in section
+# "deployment:persona-suffix"`. The working-directory service supplies the
+# directory as required context instead.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    suffix: Your working directory is {{cwd}}.
     prefix: |-
       You are a coding agent powered by the {{model}} model, running on the DeepSeek Harness.
 

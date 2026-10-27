@@ -192,14 +192,21 @@ export function apply(ctx: ClientContext): void {
     order: 16,
     locale: NS,
     inject: (): ChangeOverviewRowInjected => ({
-      loadChangeOverview: async () => unwrap(await ctx.remote.bafWorkflowView.changeOverview()),
+      // 【变更】2026-10-26 (用户问题 2): `cwd` — the main-view session's
+      // workspace. The row reads its sessions through the `sessions` seat and
+      // passes the workspace the user is looking at, so 变更总览 switches with
+      // the workspace instead of always answering for the newest session.
+      loadChangeOverview: async (cwd?: string) =>
+        unwrap(await ctx.remote.bafWorkflowView.changeOverview(cwd === undefined ? {} : { cwd })),
       // 【变更】2026-10-24 (批次十九 1.3): the host's payload type is the
       // baf-core .d.ts build (compiled WITHOUT exactOptionalPropertyTypes, so
       // its optional props carry `| undefined`), while the client mirror is
       // strict — the two differ only in that optionality, so the same plain
       // `as` the 测试流图 tab's `testFlowStatus` uses bridges them.
-      loadChangeDetail: async (changeId: string) =>
-        unwrap(await ctx.remote.bafWorkflowView.changeDetail({ changeId })) as BafWorkflowChangeDetailResult,
+      loadChangeDetail: async (changeId: string, cwd?: string) =>
+        unwrap(await ctx.remote.bafWorkflowView.changeDetail(
+          cwd === undefined ? { changeId } : { changeId, cwd },
+        )) as BafWorkflowChangeDetailResult,
       // 【变更】2026-10-24 (批次二十 3): open one of the change's artifacts in
       // the right sidebar. The 变更总览 page is PROJECT-scoped — there is no
       // conversation behind it to borrow a file address from — so the opener
@@ -324,6 +331,23 @@ export function apply(ctx: ClientContext): void {
         openWorkflowConfig: () => {
           ctx.layout.selectPanel('workflow' as MainPanelId)
         },
+        // 【变更】2026-10-27 (批次三十): the 「同步」button — re-author the
+        // stale documents against the newest upstream. The remote resolves the
+        // workspace from the session's cwd (the same pin `changeDetail` uses).
+        // 【变更】2026-10-27 (批次三十一): the session id travels with the
+        // request — the work order must land in THIS conversation.
+        syncArtifacts: async (changeId: string) => {
+          const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+          return unwrap(await remote.syncArtifacts({
+            sessionId,
+            changeId,
+            ...(cwd === undefined ? {} : { cwd }),
+          })) as import('../types.ts').BafWorkflowSyncResult
+        },
+        // 【变更】2026-10-27 (批次三十): the 暂停/继续 button — brake the
+        // workflow, or release it and hand the outstanding gap back.
+        setPaused: async (changeId: string, paused: boolean) =>
+          unwrap(await remote.setWorkflowPaused({ sessionId, changeId, paused })) as import('../types.ts').BafWorkflowPauseResult,
         // 【变更】2026-10-24 (批次十九 1.3): the strip's 变更总览 button — the
         // change ledger moved to the 工作流 page, so the button asks that page
         // for its 变更总览 tab and opens the panel.

@@ -1,0 +1,371 @@
+/**
+ * 【变更】2026-10-27 (同步产物): the artifact-drift detector and the ledger
+ * scope split.
+ *
+ * The shipped bug the drift half pins: the customer edits `proposal.md` AFTER
+ * `design.md` was written, and nothing noticed — every gate judges a document
+ * on its own shape, so the change still walked to archive while the shipped
+ * documents contradicted each other.
+ *
+ * The shipped bug the scope half pins: a customer-typed `/baf-go` could never
+ * re-dispatch an unchanged gap. The orchestrator expires the dispatch ledger at
+ * a turn's START and sends its turn-end order at the turn's END, so the
+ * turn-end order re-armed the very key the customer's next command reads —
+ * that command then deduped and sent NOTHING, and the only escape was free
+ * text. The customer's orders and the host's turn-end order now live in
+ * separate ledger scopes.
+ */
+
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  detectArtifactDrift,
+  driftArtifactPath,
+  driftWorkLines,
+  isDriftStage,
+} from '../src/stages/artifact-drift.ts'
+import { buildWorkflowTabView } from '../src/tab-view.ts'
+import { createWorkflowService } from '../src/workflow-service.ts'
+import { ProjectionStore } from '../src/projection.ts'
+import {
+  expireDispatchLedger,
+  makeGoDispatcher,
+  resetDispatchLedger,
+  workOrderText,
+  type DispatchSignal,
+} from '../src/go-dispatch.ts'
+
+const execFileAsync = promisify(execFile)
+
+const FIXTURE_BASELINE = fileURLToPath(
+  new URL('../../baf-core/tests/fixtures/baseline/baseline.yml', import.meta.url),
+)
+
+/** A base timestamp far from any real write, so the mtimes stay ordered. */
+const BASE_MS = 1_700_000_000_000
+
+/** One minute between two artifacts — coarse enough for any filesystem stamp. */
+const STEP_MS = 60_000
+
+/** The change id every fixture writes into. */
+const CHANGE_ID = 'change-drift-1'
+
+/**
+ * Write one change artifact with an exact mtime.
+ * @param root - workspace root.
+ * @param file - artifact file name.
+ * @param mtimeMs - the modification time to stamp.
+ */
+async function writeArtifact(root: string, file: string, mtimeMs: number): Promise<void> {
+  const dir = join(root, 'openspec', 'changes', CHANGE_ID)
+  await mkdir(dir, { recursive: true })
+  const path = join(dir, file)
+  await writeFile(path, `# ${file}\n`, 'utf8')
+  await utimes(path, new Date(mtimeMs), new Date(mtimeMs))
+}
+
+/** An empty workspace (no change directory at all). */
+async function workspace(): Promise<string> {
+  return await mkdtemp(join(tmpdir(), 'baf-drift-'))
+}
+
+/** Remove a temp workspace (best effort). */
+async function cleanup(root: string): Promise<void> {
+  await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
+}
+
+/** An agent double recording every queued message. */
+function recorder(status: 'idle' | 'running' = 'idle') {
+  const sent: unknown[] = []
+  return {
+    sent,
+    agent: {
+      status,
+      followup: vi.fn((message: unknown) => { sent.push(message) }),
+    },
+  }
+}
+
+/** The clarify gap the scope specs dispatch (the go-dispatch spec's fixture). */
+const CLARIFY_GAP: DispatchSignal = {
+  changeId: 'change-scope-1',
+  node: 'clarify',
+  artifactPath: 'openspec/changes/change-scope-1/clarify.md',
+  missing: ['## Acceptance criteria 节缺失：每条要能落成命令或可观测行为'],
+}
+
+describe('detectArtifactDrift', () => {
+  it('reports nothing when every artifact is at least as new as the one before it', async () => {
+    const root = await workspace()
+    try {
+      await writeArtifact(root, 'proposal.md', BASE_MS)
+      await writeArtifact(root, 'clarify.md', BASE_MS + STEP_MS)
+      await writeArtifact(root, 'design.md', BASE_MS + 2 * STEP_MS)
+      await writeArtifact(root, 'plan.md', BASE_MS + 3 * STEP_MS)
+      await writeArtifact(root, 'plan.json', BASE_MS + 4 * STEP_MS)
+      await writeArtifact(root, 'checklist.md', BASE_MS + 5 * STEP_MS)
+      expect(await detectArtifactDrift(root, CHANGE_ID, 'full-go-path')).toEqual([])
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('names the stale document and the newer upstream one when an upstream edit lands late', async () => {
+    const root = await workspace()
+    try {
+      // The customer re-edited proposal.md after design.md was written.
+      await writeArtifact(root, 'proposal.md', BASE_MS + STEP_MS)
+      await writeArtifact(root, 'design.md', BASE_MS)
+      const rows = await detectArtifactDrift(root, CHANGE_ID, 'full-go-path')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({
+        node: 'design',
+        file: 'design.md',
+        sourceNode: 'open',
+        sourceFile: 'proposal.md',
+      })
+      expect(rows[0]?.mtimeMs).toBeLessThan(rows[0]?.sourceMtimeMs ?? 0)
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('pairs a stale document with the NEWEST upstream one, not the first', async () => {
+    const root = await workspace()
+    try {
+      await writeArtifact(root, 'proposal.md', BASE_MS)
+      await writeArtifact(root, 'clarify.md', BASE_MS + 2 * STEP_MS)
+      await writeArtifact(root, 'design.md', BASE_MS + STEP_MS)
+      const rows = await detectArtifactDrift(root, CHANGE_ID, 'full-go-path')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({
+        node: 'design',
+        file: 'design.md',
+        sourceNode: 'clarify',
+        sourceFile: 'clarify.md',
+      })
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('keeps the earlier upstream when two of them share the newest stamp', async () => {
+    const root = await workspace()
+    try {
+      await writeArtifact(root, 'proposal.md', BASE_MS + STEP_MS)
+      await writeArtifact(root, 'clarify.md', BASE_MS + STEP_MS)
+      await writeArtifact(root, 'design.md', BASE_MS)
+      const rows = await detectArtifactDrift(root, CHANGE_ID, 'full-go-path')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ node: 'design', sourceNode: 'open', sourceFile: 'proposal.md' })
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('bug-fix-path skips the clipped clarify/design/plan stages', async () => {
+    const root = await workspace()
+    try {
+      await writeArtifact(root, 'proposal.md', BASE_MS + 4 * STEP_MS)
+      await writeArtifact(root, 'clarify.md', BASE_MS)
+      await writeArtifact(root, 'design.md', BASE_MS)
+      await writeArtifact(root, 'bug-fix-path-ledger.json', BASE_MS)
+      await writeArtifact(root, 'checklist.md', BASE_MS + STEP_MS)
+
+      const bugFix = await detectArtifactDrift(root, CHANGE_ID, 'bug-fix-path')
+      expect(bugFix.map(row => row.node)).toEqual(['implement', 'verify'])
+      expect(bugFix[0]).toMatchObject({
+        node: 'implement',
+        file: 'bug-fix-path-ledger.json',
+        sourceNode: 'open',
+        sourceFile: 'proposal.md',
+      })
+      expect(bugFix.map(row => row.node)).not.toContain('clarify')
+      expect(bugFix.map(row => row.node)).not.toContain('design')
+
+      // The same files on the full-go chain DO report the clipped stages.
+      const fullGo = await detectArtifactDrift(root, CHANGE_ID, 'full-go-path')
+      expect(fullGo.map(row => row.node)).toEqual(['clarify', 'design', 'implement', 'verify'])
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('reads the implement ledger under either of its two names', async () => {
+    const root = await workspace()
+    try {
+      await writeArtifact(root, 'proposal.md', BASE_MS + STEP_MS)
+      // Full-go's ledger name first, the fast-path name as the fallback.
+      await writeArtifact(root, 'bug-fix-path-ledger.json', BASE_MS)
+      const rows = await detectArtifactDrift(root, CHANGE_ID, 'full-go-path')
+      expect(rows[0]).toMatchObject({ node: 'implement', file: 'bug-fix-path-ledger.json' })
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('reports nothing for a missing change and never throws on an unreadable one', async () => {
+    const root = await workspace()
+    try {
+      expect(await detectArtifactDrift(root, 'change-that-never-existed', 'full-go-path')).toEqual([])
+      // A directory where the artifact should be: the stat fails, the stage is
+      // simply absent.
+      await mkdir(join(root, 'openspec', 'changes', CHANGE_ID, 'proposal.md'), { recursive: true })
+      expect(await detectArtifactDrift(root, CHANGE_ID, 'full-go-path')).toEqual([])
+    } finally {
+      await cleanup(root)
+    }
+  })
+})
+
+describe('drift helpers', () => {
+  it('narrows a stage id to the drift chain', () => {
+    expect(isDriftStage('design')).toBe(true)
+    expect(isDriftStage('archive')).toBe(false)
+  })
+
+  it('renders one work-order line per stale document, naming both files', async () => {
+    const root = await workspace()
+    try {
+      await writeArtifact(root, 'proposal.md', BASE_MS + STEP_MS)
+      await writeArtifact(root, 'design.md', BASE_MS)
+      const rows = await detectArtifactDrift(root, CHANGE_ID, 'full-go-path')
+      expect(driftWorkLines(rows)).toEqual([
+        '- design.md：上游 proposal.md 在本文件之后被修改——按 proposal.md 的最新内容重写 design.md',
+      ])
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('points at the change directory the artifact lives in', () => {
+    expect(driftArtifactPath('c-1', 'design.md')).toBe('openspec/changes/c-1/design.md')
+  })
+})
+
+describe('the sync work order', () => {
+  it('carries its own head, the drift lines and the customer authorization', () => {
+    const text = workOrderText({
+      changeId: 'c-1',
+      node: 'design',
+      artifactPath: 'openspec/changes/c-1/design.md',
+      missing: ['- design.md：上游 proposal.md 在本文件之后被修改——按 proposal.md 的最新内容重写 design.md'],
+      cause: 'artifact-drift-sync',
+    })
+    expect(text).toContain('【BAF 工单 · 同步产物 · 上游已更新】')
+    expect(text).toContain('上游已更新')
+    expect(text).toContain('- design.md：上游 proposal.md 在本文件之后被修改')
+    expect(text).toContain('本阶段之后每个阶段的文档都要按同样方式跟着重写')
+    expect(text).toContain('本工单由客户点击「同步」生成（客户已授权）')
+    // The re-authored document must still pass its stage's gate.
+    expect(text).toContain('完成条件（裁决门）：')
+    expect(text).toContain('- design.md 有实际内容：Approach（接口/数据流/错误路径/兼容性）为主')
+  })
+})
+
+describe('the dispatch ledger scopes', () => {
+  it('never dedupes the auto-scope order against the customer scope', () => {
+    resetDispatchLedger()
+    const { agent, sent } = recorder()
+    const dispatch = makeGoDispatcher('D:/ws-scope', agent)
+    const auto: DispatchSignal = { ...CLARIFY_GAP, scope: 'auto' }
+    const customer: DispatchSignal = { ...CLARIFY_GAP, scope: 'customer' }
+    expect(dispatch?.(auto)).toBe('sent')
+    expect(dispatch?.(customer)).toBe('sent')
+    // Two customer commands in ONE turn still dedupe against each other.
+    expect(dispatch?.(customer)).toBe('deduped')
+    expect(dispatch?.(auto)).toBe('deduped')
+    expect(sent).toHaveLength(2)
+  })
+
+  it('defaults an unscoped order to the customer scope', () => {
+    resetDispatchLedger()
+    const { agent, sent } = recorder()
+    const dispatch = makeGoDispatcher('D:/ws-default', agent)
+    expect(dispatch?.(CLARIFY_GAP)).toBe('sent')
+    expect(dispatch?.(CLARIFY_GAP)).toBe('deduped')
+    expect(dispatch?.({ ...CLARIFY_GAP, scope: 'customer' })).toBe('deduped')
+    expect(dispatch?.({ ...CLARIFY_GAP, scope: 'auto' })).toBe('sent')
+    expect(sent).toHaveLength(2)
+  })
+
+  it('2026-10-27 (派单死路): the turn-end order re-arms its own key without silencing the customer', () => {
+    // The shipped bug: the orchestrator expires the ledger at the turn's start
+    // and sends its turn-end order at the turn's end, so the auto key was
+    // armed again — and the customer's next /baf-go deduped against it and
+    // sent NOTHING.
+    resetDispatchLedger()
+    const { agent, sent } = recorder()
+    const dispatch = makeGoDispatcher('D:/ws-deadend', agent)
+    const auto: DispatchSignal = { ...CLARIFY_GAP, scope: 'auto' }
+    const customer: DispatchSignal = { ...CLARIFY_GAP, scope: 'customer' }
+    expect(dispatch?.(auto)).toBe('sent')
+    expireDispatchLedger('D:/ws-deadend')
+    // The turn-end order re-arms its key after the expiry...
+    expect(dispatch?.(auto)).toBe('sent')
+    // ...and the customer's command still dispatches.
+    expect(dispatch?.(customer)).toBe('sent')
+    expect(sent).toHaveLength(3)
+  })
+})
+
+describe('the Tab view artifact drift', () => {
+  it('attaches the stale documents of the focused change', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-drift-tab-'))
+    try {
+      await mkdir(join(root, '.baf'), { recursive: true })
+      await writeFile(
+        join(root, '.baf', 'baseline.yml'),
+        await readFile(FIXTURE_BASELINE, 'utf8'),
+        'utf8',
+      )
+      await execFileAsync('git', ['init', '-q'], { cwd: root })
+      await execFileAsync('git', [
+        '-c', 'user.email=baf@test', '-c', 'user.name=baf', '-c', 'commit.gpgsign=false',
+        'commit', '-q', '--allow-empty', '-m', 'init',
+      ], { cwd: root })
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const { intake } = await createWorkflowService({ store }).intake({
+        description: 'feat: report the stale stage documents',
+        workspace: { root },
+      })
+      const dir = join(root, 'openspec', 'changes', intake.changeId)
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'proposal.md'), '# proposal\n', 'utf8')
+      await writeFile(join(dir, 'design.md'), '# design\n', 'utf8')
+      await utimes(join(dir, 'proposal.md'), new Date(BASE_MS + STEP_MS), new Date(BASE_MS + STEP_MS))
+      await utimes(join(dir, 'design.md'), new Date(BASE_MS), new Date(BASE_MS))
+
+      const view = await buildWorkflowTabView(store, intake.changeId)
+      expect(view.artifactDrift).toHaveLength(1)
+      expect(view.artifactDrift?.[0]).toMatchObject({
+        node: 'design',
+        file: 'design.md',
+        sourceNode: 'open',
+        sourceFile: 'proposal.md',
+      })
+    } finally {
+      await cleanup(root)
+    }
+  })
+
+  it('leaves the drift field absent when nothing is stale', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-drift-tab-'))
+    try {
+      const store = new ProjectionStore({ workspaceRoot: root })
+      const { intake } = await createWorkflowService({ store }).intake({
+        description: 'feat: report the stale stage documents',
+        workspace: { root },
+      })
+      const view = await buildWorkflowTabView(store, intake.changeId)
+      expect(view.artifactDrift).toBeUndefined()
+    } finally {
+      await cleanup(root)
+    }
+  })
+})

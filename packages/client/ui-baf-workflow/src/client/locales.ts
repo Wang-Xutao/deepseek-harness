@@ -106,6 +106,31 @@ export type WorkflowTabKey =
   | 'tflow.stageOffNote'
   | 'flow.testFlowJump'
   | 'flow.testFlowJumpDesc'
+  // 【变更】2026-10-27 (批次三十): the graph toolbar's own vocabulary — the
+  // controls that operate the flow.
+  // 【变更】2026-10-27 (批次三十一): the change's identity TAG left the toolbar;
+  // the 「推进」button joined it, and the 「同步」button moved into the
+  // out-of-sync notice.
+  | 'flow.advanceHelp'
+  | 'flow.pauseWorkflow'
+  | 'flow.resumeWorkflow'
+  | 'flow.pauseHelp'
+  | 'flow.resumeHelp'
+  | 'flow.pauseDone'
+  | 'flow.resumeDone'
+  | 'flow.pauseUnavailable'
+  | 'flow.sync'
+  | 'flow.syncHelp'
+  | 'flow.syncSyncing'
+  | 'flow.driftTitle'
+  | 'flow.driftBody'
+  | 'flow.driftHold'
+  | 'flow.driftNode'
+  | 'flow.syncDone'
+  | 'flow.syncQueued'
+  | 'flow.syncNoDrift'
+  | 'flow.syncNoWorkspace'
+  | 'flow.syncUnavailable'
   | 'tflow.cfgFiles'
   | 'tflow.cfgPreview'
   | 'tflow.cfgOpen'
@@ -434,6 +459,15 @@ export type WorkflowTabKey =
   | 'dashboard.board.allChanges'
   | 'dashboard.board.empty'
   | 'dashboard.board.endedAt'
+  // 【变更】2026-10-27 (批次三十): the board's TOP BAR — the theme switch, the
+  // refresh — and the artifact PREVIEW pane.
+  | 'dashboard.board.themeLight'
+  | 'dashboard.board.themeDark'
+  | 'dashboard.board.refresh'
+  | 'dashboard.board.preview'
+  | 'dashboard.board.previewEmpty'
+  | 'dashboard.board.previewTruncated'
+  | 'dashboard.board.previewClose'
   // 【变更】2026-09-29 (demo23 问题 5): the 工作流 settings row copy.
   | 'settings.workflowTab.title'
   | 'settings.workflowTab.description'
@@ -520,6 +554,12 @@ export type WorkflowTabKey =
   | 'artifact.state.planned'
   | 'artifact.state.filled'
   | 'artifact.state.clipped'
+  // 【变更】2026-10-27 (批次三十一): the document's drift tag — the upstream
+  // document that was edited, the downstream document that is stale, and the
+  // document the sync order is rewriting.
+  | 'artifact.drift.modified'
+  | 'artifact.drift.pending'
+  | 'artifact.drift.synced'
   // 【变更】2026-09-22 (user report #4) — session token statistics card.
   | 'stats.title'
   | 'stats.help'
@@ -660,6 +700,26 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.stageOffNote': 'This stage is switched off in the 测试流 canvas (工作流 · 测试流); turn it on there to run it.',
   'flow.testFlowJump': '测试流图',
   'flow.testFlowJumpDesc': 'Open the test-flow chart at this stage',
+  'flow.advanceHelp': 'Advance the workflow to the next stage.',
+  'flow.pauseWorkflow': 'Pause',
+  'flow.resumeWorkflow': 'Continue',
+  'flow.pauseHelp': 'Pause the workflow: it stops popping confirm gates and stops sending work orders on its own. Your own commands still work.',
+  'flow.resumeHelp': 'Continue the workflow: the due gate pops again and the outstanding work order goes back to the model.',
+  'flow.pauseDone': 'Workflow paused — no more automatic pops or work orders until you continue.',
+  'flow.resumeDone': 'Workflow continued — the due gate is back and the model has its work order.',
+  'flow.pauseUnavailable': 'The pause control could not be applied',
+  'flow.sync': 'Sync',
+  'flow.syncHelp': 'Re-author the outdated artifacts against the newest upstream documents.',
+  'flow.syncSyncing': 'Syncing',
+  'flow.driftTitle': 'Artifacts out of sync',
+  'flow.driftBody': '{upstream} was edited after {stale} was written, so {stale} may no longer match it.',
+  'flow.driftHold': 'The workflow holds here until the documents agree again.',
+  'flow.driftNode': 'Stale stage',
+  'flow.syncDone': 'The work order went out — the model is re-authoring the stale documents now.',
+  'flow.syncQueued': 'That sync order is already on its way — the model is re-authoring the stale documents.',
+  'flow.syncNoDrift': 'Nothing is out of sync — every document already follows the newest upstream.',
+  'flow.syncNoWorkspace': 'This change belongs to no workspace the app can reach.',
+  'flow.syncUnavailable': 'The sync order could not be sent',
   'tflow.cfgFiles': 'Config files',
   'tflow.cfgPreview': 'Config file preview',
   'tflow.cfgOpen': 'Open file',
@@ -962,6 +1022,13 @@ export const en: Record<WorkflowTabKey, string> = {
   'dashboard.board.allChanges': 'All changes',
   'dashboard.board.empty': 'No change records yet.',
   'dashboard.board.endedAt': 'Ended at',
+  'dashboard.board.themeLight': 'Day',
+  'dashboard.board.themeDark': 'Night',
+  'dashboard.board.refresh': 'Refresh',
+  'dashboard.board.preview': 'Artifact preview',
+  'dashboard.board.previewEmpty': '(empty — nothing to preview)',
+  'dashboard.board.previewTruncated': 'Content truncated',
+  'dashboard.board.previewClose': 'Close',
   'settings.workflowTab.title': 'Workflow graph tab',
   'settings.workflowTab.description': 'Turn off to hide the Workflow graph tab on the conversation view.',
   // 【变更】2026-10-07 (九点批 问题 9): the 门禁总览 read-only row.
@@ -1031,6 +1098,9 @@ export const en: Record<WorkflowTabKey, string> = {
   'artifact.state.planned': 'planned',
   'artifact.state.filled': 'filled',
   'artifact.state.clipped': 'clipped',
+  'artifact.drift.modified': 'Modified',
+  'artifact.drift.pending': 'Out of sync',
+  'artifact.drift.synced': 'Syncing',
   'stats.title': 'Session stats',
   'stats.help': 'Whole-session figures from the durable log: turn/step counts, model and tool wall time, and cumulative provider token usage.',
   'stats.breakdownTitle': 'Input {input} · cache read {cacheRead} · cache write {cacheWrite} · output {output}',
@@ -1163,6 +1233,26 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.stageOffNote': '该步骤已在测试流画布（工作流 · 测试流）中关闭；可前往打开后运行。',
   'flow.testFlowJump': '测试流图',
   'flow.testFlowJumpDesc': '跳转到测试流图的这一步',
+  'flow.advanceHelp': '把工作流推进到下一阶段。',
+  'flow.pauseWorkflow': '暂停',
+  'flow.resumeWorkflow': '继续',
+  'flow.pauseHelp': '暂停工作流：不再自动弹出确认门，也不再自动派发工单；你手动输入的命令照常生效。',
+  'flow.resumeHelp': '继续工作流：重新弹出到期的确认门，并把未完成的工单交回模型。',
+  'flow.pauseDone': '工作流已暂停——在你点「继续」之前，不再自动弹门，也不再自动派单。',
+  'flow.resumeDone': '工作流已继续——到期的确认门重新弹出，模型已收到工单。',
+  'flow.pauseUnavailable': '暂停操作未能生效',
+  'flow.sync': '同步',
+  'flow.syncHelp': '按最新的上游文档重写过期的下游产物。',
+  'flow.syncSyncing': '同步中',
+  'flow.driftTitle': '产物不同步',
+  'flow.driftBody': '{upstream} 在 {stale} 之后被修改，{stale} 可能已经与它不一致。',
+  'flow.driftHold': '工作流在此暂停推进，等文档一致后再继续。',
+  'flow.driftNode': '过期阶段',
+  'flow.syncDone': '工单已派出——模型正在按最新上游重写过期的产物。',
+  'flow.syncQueued': '这张同步工单已经在路上——模型正在按最新上游重写过期的产物。',
+  'flow.syncNoDrift': '没有不同步的产物——每份文档都已跟随最新上游。',
+  'flow.syncNoWorkspace': '该变更不属于应用能访问的工作区。',
+  'flow.syncUnavailable': '同步工单未能派出',
   'tflow.cfgFiles': '配置文件',
   'tflow.cfgPreview': '配置文件预览',
   'tflow.cfgOpen': '打开文件',
@@ -1475,6 +1565,13 @@ export const zh: Record<WorkflowTabKey, string> = {
   'dashboard.board.allChanges': '全部变更',
   'dashboard.board.empty': '暂无变更记录',
   'dashboard.board.endedAt': '结束于',
+  'dashboard.board.themeLight': '白天',
+  'dashboard.board.themeDark': '黑夜',
+  'dashboard.board.refresh': '刷新',
+  'dashboard.board.preview': '产物预览',
+  'dashboard.board.previewEmpty': '（空）暂无可预览的内容',
+  'dashboard.board.previewTruncated': '内容已截断',
+  'dashboard.board.previewClose': '关闭',
   'settings.workflowTab.title': '工作流图',
   'settings.workflowTab.description': '关闭后，对话 Tab 不再显示「工作流图」。',
   // 【变更】2026-10-07 (九点批 问题 9): 门禁总览·只读行。
@@ -1547,6 +1644,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'artifact.state.planned': '已计划',
   'artifact.state.clipped': '已裁剪',
   'artifact.state.filled': '已填写',
+  'artifact.drift.modified': '已修改',
+  'artifact.drift.pending': '待同步',
+  'artifact.drift.synced': '已同步',
   'stats.title': '会话统计',
   'stats.help': '来自完整会话日志的累计数字：回合/步骤数、模型与工具耗时、以及按 provider 上报累计的 token 用量。',
   'stats.breakdownTitle': '输入 {input} · 缓存读 {cacheRead} · 缓存写 {cacheWrite} · 输出 {output}',

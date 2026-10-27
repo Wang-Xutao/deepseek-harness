@@ -37,12 +37,17 @@
  *
  * ## Dedupe
  *
- * The ledger is process-local and keyed `cwd | changeId | node | missing…`.
- * Typing `/baf-go` twice at an unchanged rest is a no-op (`deduped`) — the
- * model is already working on exactly that gap. A gap that *shrinks* (the model
- * filled some items) is a new key, i.e. a legitimate re-dispatch with a tighter
- * order. A host restart forgets the ledger and re-sends once; the order is
- * idempotent prose, so that is harmless by construction.
+ * The ledger is process-local and keyed `session | cwd | scope | changeId |
+ * node | missing…`. Typing `/baf-go` twice at an unchanged rest is a no-op
+ * (`deduped`) — the model is already working on exactly that gap. A gap that
+ * *shrinks* (the model filled some items) is a new key, i.e. a legitimate
+ * re-dispatch with a tighter order. A host restart forgets the ledger and
+ * re-sends once; the order is idempotent prose, so that is harmless by
+ * construction.
+ *
+ * 【变更】2026-10-27 (派单死路): the key carries a SCOPE — the customer's
+ * orders and the orchestrator's turn-end order are separate ledgers, so the
+ * turn-end order can never silence the customer's next `/baf-go`.
  *
  * @module @deepseek-ai/dsh-baf-workflow/go-dispatch
  */
@@ -56,6 +61,21 @@ import { sharedHostSet } from './host-memory.ts'
 /** Artifact-authoring stages a work order can address (`implement` edits the allowlist). */
 export type DispatchNode = 'open' | 'clarify' | 'design' | 'plan' | 'implement' | 'verify'
 
+/**
+ * 【变更】2026-10-27 (派单死路): which authorization a work order carries.
+ *
+ * `'customer'` marks every order a customer action authorized (a typed
+ * `/baf-go` or `/baf-go-confirm`, a gate-dialog option click, the Tab's
+ * 「推进」/gate-card/同步 clicks). `'auto'` marks the orchestrator's turn-end
+ * rest order — the one the host sends on its own at the end of a turn.
+ *
+ * The two scopes are separate ledger entries, so the turn-end order can never
+ * dedupe away the customer's next command: the customer's explicit command IS
+ * the authorization, and the orchestrator's order only says "the model is
+ * still working on this gap".
+ */
+export type DispatchScope = 'customer' | 'auto'
+
 /** One "the model must author this" rest, as the coordinator observes it. */
 export interface DispatchSignal {
   /** Change the order is about. */
@@ -67,7 +87,7 @@ export interface DispatchSignal {
   /** The gate's missing-item lines — the order's per-item work list. */
   readonly missing: readonly string[]
   /** Optional verification reason (the T11 fix loop / the checklist gates / the 2026-09-28 gate revision loop). */
-  readonly cause?: 'verify-failed' | 'checklist-missing' | 'checklist-open' | 'gate-revise'
+  readonly cause?: 'verify-failed' | 'checklist-missing' | 'checklist-open' | 'gate-revise' | 'artifact-drift-sync'
   /**
    * 【变更】2026-09-26 (用户需求 工作流 3): the change's mode — on bug-fix-path
    * the open rest's completion conditions are the bug-record requirements
@@ -77,6 +97,13 @@ export interface DispatchSignal {
    * proposal.md on both modes now — the flag only selects the conditions.
    */
   readonly mode?: 'full-go-path' | 'bug-fix-path'
+  /**
+   * 【变更】2026-10-27 (派单死路): which authorization the order carries —
+   * `'customer'` (a customer action: a typed `/baf-go`, a gate/Tab click, the
+   * Tab's 同步 button) or `'auto'` (the orchestrator's turn-end rest order).
+   * Absent = `'customer'`, so every pre-existing call site keeps its scope.
+   */
+  readonly scope?: DispatchScope
 }
 
 /** What a dispatch attempt did. */
@@ -118,9 +145,10 @@ export interface DispatchAgent {
 }
 
 /**
- * Ledger of dispatched gaps: `cwd | changeId | node | missing…`. A process
- * singleton, matching `session-focus.ts` / the orchestrator's `OFFERED` (all
- * three are host-plane memories that must not reach the log).
+ * Ledger of dispatched gaps: `sessionKey | cwd | scope | changeId | node |
+ * missing…`. A process singleton, matching `session-focus.ts` / the
+ * orchestrator's `OFFERED` (all three are host-plane memories that must not
+ * reach the log).
  *
  * 【变更】2026-09-23 (user issue #4): the ledger used to be a permanent Set —
  * once an order was sent for a gap, every later `/baf-go` at the same gap
@@ -131,6 +159,16 @@ export interface DispatchAgent {
  * for a workspace at every completed turn end, so the next `/baf-go`
  * re-dispatches with a fresh order — the model had its chance and did not
  * close the gap, so re-sending is the correct move, not spam.
+ *
+ * 【变更】2026-10-27 (派单死路): the key carries the order's SCOPE, and that
+ * split closes the dead-end the expiry alone could not: the orchestrator
+ * expires the ledger at the turn's START and sends its turn-end order at the
+ * turn's END, so the auto order re-armed its key AFTER the expiry — and the
+ * customer's next `/baf-go` then deduped against it and sent NOTHING. The
+ * customer's command and the host's turn-end order are separate entries now:
+ * a customer `/baf-go` always re-dispatches an unchanged gap, two customer
+ * commands inside ONE turn still dedupe against each other, and the auto
+ * order never suppresses a customer command.
  */
 const SENT = sharedHostSet('go-dispatch/sent')
 
@@ -144,11 +182,16 @@ export function resetDispatchLedger(): void {
  * Called by the orchestrator at every `turn/end` with the session's cwd: any
  * order sent before this turn has either been consumed by it or ignored by it,
  * and in both cases the customer's next `/baf-go` may dispatch again.
+ *
+ * 【变更】2026-10-27 (派单死路): BOTH scopes expire here — the customer's and
+ * the turn-end order's. The expiry alone was not enough: the turn-end order
+ * is sent AFTER it and re-armed its own (auto-scope) key; the customer's next
+ * command reads a different scope, so it still dispatches.
  * @param cwd - workspace root the ledger is scoped to.
  */
 export function expireDispatchLedger(cwd: string): void {
-  // Key shape: `sessionKey | cwd | changeId | node | missing…` — the cwd sits
-  // in the second segment (session keys carry no '|').
+  // Key shape: `sessionKey | cwd | scope | changeId | node | missing…` — the
+  // cwd sits in the second segment (session keys carry no '|').
   for (const key of SENT.keys()) {
     if (key.split('|')[1] === cwd) SENT.delete(key)
   }
@@ -213,6 +256,9 @@ export const IMPLEMENT_REQUIREMENTS_ZH = [
  * The completion conditions the order restates. Implement quotes its own
  * ledger gate; a bug-fix open quotes {@link BUG_RECORD_REQUIREMENTS_ZH}; every
  * other doc stage quotes {@link DOC_REQUIREMENTS_ZH}.
+ *
+ * 【变更】2026-10-27 (同步产物): the artifact-sync order rides the same
+ * table — the re-authored document must still pass its stage's gate.
  * @param signal - the observed gap.
  * @returns the pass-condition lines.
  */
@@ -253,21 +299,37 @@ export function workOrderText(signal: DispatchSignal): string {
         // customer's modification request verbatim.
         : cause === 'gate-revise'
           ? '【BAF 工单 · /baf-go 派单 · 客户修改意见】'
-          : '【BAF 工单 · /baf-go 派单】'
+          // 【变更】2026-10-27 (同步产物): the artifact-sync order — the
+          // customer clicked 同步 on a document an upstream edit made stale.
+          : cause === 'artifact-drift-sync'
+            ? '【BAF 工单 · 同步产物 · 上游已更新】'
+            : '【BAF 工单 · /baf-go 派单】'
   return [
     head,
     `变更：${changeId}`,
     `阶段：${node}`,
     `产物：${artifactPath}`,
     '',
-    cause === 'gate-revise' ? '按客户修改意见修订（意见逐条如下）：' : missing.length === 0 ? '缺什么：产物未达该阶段裁决门' : '缺什么（逐项补齐）：',
+    cause === 'gate-revise'
+      ? '按客户修改意见修订（意见逐条如下）：'
+      : cause === 'artifact-drift-sync'
+        ? '上游已更新（上游文档在本阶段文档之后被修改，以下每份都要按最新上游重写）：'
+        : missing.length === 0 ? '缺什么：产物未达该阶段裁决门' : '缺什么（逐项补齐）：',
     ...missing.map(line => `- ${line}`),
     ...(conditions.length === 0
       ? []
       : ['', cause === 'gate-revise' ? '修订时仍须满足的完成条件（裁决门）：' : '完成条件（裁决门）：', ...conditions.map(line => `- ${line}`)]),
     '',
     '执行要求：',
-    '1. 直接编辑上方产物补齐，不要另建文件；',
+    // 【变更】2026-10-27 (同步产物): the sync order is a REWRITE, not a fill —
+    // the model must read the newest upstream content first and carry it
+    // through this document AND every later stage's document.
+    ...(cause === 'artifact-drift-sync'
+      ? [
+        '1. 先读上面列出的上游文件的最新内容，再按它重写上方产物——直接编辑该文件，不要另建文件；',
+        '1a. 本阶段之后每个阶段的文档都要按同样方式跟着重写，保持全文与最新上游一致；',
+      ]
+      : ['1. 直接编辑上方产物补齐，不要另建文件；']),
     // 【变更】2026-09-30 (demo31 问题 5 · demo30 卡滞): the fix-loop order names
     // the allowlist escape up front — a failed fix often needs a NEW file
     // (demo30: lite_hsm.h 等), and before this the model created it, bounced
@@ -282,7 +344,13 @@ export function workOrderText(signal: DispatchSignal): string {
       : []),
     '2. 补齐后立即结束本回合——系统会在回合结束时自动弹出下一阶段裁决卡，无需你调用任何命令；',
     '3. 需要客户决策时调用 baf_question_ask，不要用文字向客户提问；',
-    `4. 本工单由客户${cause === 'gate-revise' ? '在确认卡输入修改意见' : '敲 /baf-go'} 生成（客户已授权），照单执行即可。`,
+    // 【变更】2026-10-27 (同步产物): the sync order names the 同步 button — the
+    // customer action that authorized it.
+    cause === 'gate-revise'
+      ? '4. 本工单由客户在确认卡输入修改意见 生成（客户已授权），照单执行即可。'
+      : cause === 'artifact-drift-sync'
+        ? '4. 本工单由客户点击「同步」生成（客户已授权），照单执行即可。'
+        : '4. 本工单由客户敲 /baf-go 生成（客户已授权），照单执行即可。',
   ].join('\n')
 }
 
@@ -307,9 +375,17 @@ export function workOrderMessage(signal: DispatchSignal): UserMessage {
   })
 }
 
-/** The ledger key for one gap — a shrinking `missing` list is a distinct gap. */
+/**
+ * The ledger key for one gap — a shrinking `missing` list is a distinct gap.
+ *
+ * 【变更】2026-10-27 (派单死路): the key carries the order's SCOPE. A
+ * customer-authorized order and the orchestrator's turn-end order are
+ * different entries even for the same gap, so the turn-end order can never
+ * dedupe away the customer's next command. Absent scope = `'customer'`.
+ */
 function ledgerKey(sessionKey: string, cwd: string, signal: DispatchSignal): string {
-  return [sessionKey, cwd, signal.changeId, signal.node, signal.missing.join('\u0000')].join('|')
+  const scope = signal.scope ?? 'customer'
+  return [sessionKey, cwd, scope, signal.changeId, signal.node, signal.missing.join('\u0000')].join('|')
 }
 
 /**

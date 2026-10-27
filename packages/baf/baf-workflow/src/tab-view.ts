@@ -25,6 +25,9 @@ import { deriveWorkflowMetrics, type UsagePoint } from './metrics.ts'
 import type { ProjectionStore } from './projection.ts'
 import { pickActiveChange } from './projection.ts'
 import { bugRecordGate, changeArtifactStatus, clarifyGate, designGate, implementGate, planGate, proposalGate, type GateInput, type GateOutcome } from './stages/gates.ts'
+import { detectArtifactDrift, type ArtifactDriftRow, type WorkflowNodeId } from './stages/artifact-drift.ts'
+// 【变更】2026-10-27 (批次三十): the change's pause state.
+import { isChangePaused } from './pause.ts'
 import { checkBlocksVerify } from './stages/check-runner.ts'
 import { readVerifyReport } from './stages/verify.ts'
 import { readLedger } from './stages/implement.ts'
@@ -38,6 +41,35 @@ export type {
 } from '@deepseek-ai/dsh-baf-core'
 
 export { buildEmptyTabView, statusToTabView } from '@deepseek-ai/dsh-baf-core'
+
+/** 【变更】2026-10-27: one stage whose artifact predates an upstream artifact. */
+export interface WorkflowTabArtifactDrift {
+  readonly node: WorkflowNodeId
+  readonly file: string
+  readonly sourceNode: WorkflowNodeId
+  readonly sourceFile: string
+  readonly sourceMtimeMs: number
+  readonly mtimeMs: number
+}
+
+/**
+ * 【变更】2026-10-27: the Tab view plus the artifact-drift fold — the core
+ * view with the stale documents attached. The drift is ABSENT (not an empty
+ * array) when nothing is stale, so the client can tell "no drift" from "the
+ * read failed" by the field's presence alone.
+ */
+export type WorkflowTabDriftView = WorkflowTabView & {
+  /** The stale artifacts (upstream edited after a downstream document was written). */
+  readonly artifactDrift?: readonly WorkflowTabArtifactDrift[]
+  /**
+   * 【变更】2026-10-27 (批次三十): whether this change's workflow is PAUSED.
+   *
+   * ABSENT (not `false`) when the change is not paused — the client reads the
+   * field's presence, so a host that knows nothing about the pause simply
+   * renders the button in its default state.
+   */
+  readonly paused?: boolean
+}
 
 /** Workspace path where the governing baseline is expected. */
 const WORKSPACE_BASELINE_PATH = '.baf/baseline.yml'
@@ -147,7 +179,7 @@ export async function buildWorkflowTabView(
   store: ProjectionStore,
   selectedChangeId?: string | null,
   options: BuildWorkflowTabViewOptions = {},
-): Promise<WorkflowTabView> {
+): Promise<WorkflowTabDriftView> {
   const includeMetrics = options.includeMetrics !== false
   const index = await store.readIndex()
   const changes = index.changes.map(c => ({
@@ -231,7 +263,25 @@ export async function buildWorkflowTabView(
     // the two surfaces in sync (mint → appears, classify-confirm → disappears).
     const withIntakeGate = attachIntakePendingGate(withArtifacts, status)
     const enriched = gateSnapshot !== undefined ? enrichTabGateWithSnapshot(withIntakeGate, gateSnapshot) : withIntakeGate
-    return attachWorkspaceGates(enriched, store.workspaceRoot())
+    // 【变更】2026-10-27 (同步产物): the stale documents of the focused change —
+    // an upstream document edited AFTER a downstream one was written. The read
+    // is a handful of `stat` calls (the same primitive the gate fingerprint
+    // uses), so it rides the ordinary paint.
+    const drift = await detectArtifactDrift(
+      store.workspaceRoot(),
+      selected,
+      status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+    ).catch((): readonly ArtifactDriftRow[] => [])
+    // 【变更】2026-10-27 (批次三十): the change's PAUSE state — the client renders
+    // the 暂停/继续 button off it. The flag lives in host memory, not in the
+    // projection: it is a present-tense operator control, not part of the
+    // change's history.
+    const paused = isChangePaused(store.workspaceRoot(), selected)
+    return attachArtifactDrift(
+      attachWorkspaceGates(enriched, store.workspaceRoot()),
+      drift,
+      paused,
+    )
   } catch (error) {
     return attachWorkspaceGates({
       ...buildEmptyTabView(changes),
@@ -239,6 +289,38 @@ export async function buildWorkflowTabView(
       blockedReason: error instanceof Error ? error.message : String(error),
     }, store.workspaceRoot())
   }
+}
+
+/**
+ * 【变更】2026-10-27 (同步产物): attach the stale documents to the view. The
+ * field is ABSENT when nothing is stale — an empty array would read as "the
+ * drift read ran and found nothing", and the client renders the 同步 affordance
+ * off the field's presence.
+ * @param view - the assembled view.
+ * @param drift - the stale documents.
+ * @param paused - whether the change's workflow is paused.
+ * @returns the view with the drift fold attached.
+ */
+function attachArtifactDrift(
+  view: WorkflowTabView,
+  drift: readonly ArtifactDriftRow[],
+  paused: boolean,
+): WorkflowTabDriftView {
+  const folded: WorkflowTabDriftView = drift.length === 0
+    ? view
+    : {
+      ...view,
+      artifactDrift: drift.map(row => ({
+        node: row.node,
+        file: row.file,
+        sourceNode: row.sourceNode,
+        sourceFile: row.sourceFile,
+        sourceMtimeMs: row.sourceMtimeMs,
+        mtimeMs: row.mtimeMs,
+      })),
+    }
+  // The pause field is present only while the change IS paused.
+  return paused ? { ...folded, paused: true } : folded
 }
 
 /**

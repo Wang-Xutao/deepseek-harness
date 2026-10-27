@@ -17,7 +17,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 afterEach(cleanup)
-import { ChangeOverviewRow } from '../src/client/ChangeOverviewRow.tsx'
+import { ChangeOverviewRow, toBoardGraph } from '../src/client/ChangeOverviewRow.tsx'
 import type {
   BafWorkflowChangeDetailResult, BafWorkflowChangeOverviewResult,
 } from '../src/client/tab-types.ts'
@@ -145,11 +145,13 @@ function detailFixture(changeId: string): BafWorkflowChangeDetailResult {
 }
 
 function mount(
-  loadChangeOverview: () => Promise<BafWorkflowChangeOverviewResult>,
-  loadChangeDetail: (changeId: string) => Promise<BafWorkflowChangeDetailResult> =
+  loadChangeOverview: (cwd?: string) => Promise<BafWorkflowChangeOverviewResult>,
+  loadChangeDetail: (changeId: string, cwd?: string) => Promise<BafWorkflowChangeDetailResult> =
     async changeId => detailFixture(changeId),
   openArtifact?: (cwd: string, path: string) => boolean,
   readArtifact?: (cwd: string, path: string) => Promise<WorkflowTabFileReadResult>,
+  useSessions: (selector: (state: unknown) => unknown) => unknown =
+    function select<S>(selector: (state: unknown) => S): S { return selector({ byId: {}, phase: 'ready' }) },
 ) {
   return render(
     <ChangeOverviewRow
@@ -158,6 +160,7 @@ function mount(
       loadChangeDetail={loadChangeDetail}
       {...(openArtifact === undefined ? {} : { openArtifact })}
       {...(readArtifact === undefined ? {} : { readArtifact })}
+      useSessions={useSessions as never}
     />,
   )
 }
@@ -222,6 +225,60 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
     fireEvent.click(screen.getByTestId('change-overview-refresh'))
     expect(await screen.findByTestId('change-overview-row-change-active')).toBeDefined()
     expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  /**
+   * 【变更】2026-10-26 (用户问题 2): the ledger follows the MAIN-VIEW session's
+   * workspace — no main view (a fresh web client with sessions but no main
+   * binding, or a main view that names no cwd) falls back to the
+   * parameterless read; a main view that names a cwd passes it to every load
+   * (rollup, drill-down, board export), so the ledger switches with the
+   * workspace the user is looking at.
+   */
+  it('reads the MAIN-VIEW session\'s workspace and reloads when it switches', async () => {
+    const fixture = readyFixture()
+    const load = vi.fn(async (cwd?: string) => ({
+      ...fixture,
+      cwd: cwd ?? '/work/fallback',
+    }))
+    const seat = (sessions: readonly { id: string; cwd: string; main: boolean }[]) =>
+      function select<S>(selector: (state: unknown) => S): S {
+        const byId: Record<string, unknown> = {}
+        for (const session of sessions) {
+          byId[session.id] = {
+            id: session.id,
+            cwd: session.cwd,
+            retainedBy: session.main ? { mainView: 1 } : {},
+          }
+        }
+        return selector({ ids: sessions.map(session => session.id), byId, phase: 'ready' })
+      }
+    const element = (sessions: readonly { id: string; cwd: string; main: boolean }[]) => (
+      <ChangeOverviewRow
+        t={t as never}
+        loadChangeOverview={load}
+        loadChangeDetail={async changeId => detailFixture(changeId)}
+        useSessions={seat(sessions) as never}
+      />
+    )
+    const view = render(element([{ id: 's1', cwd: '/work/alpha', main: true }]))
+    await screen.findByTestId('change-overview-row-change-active')
+    expect(load).toHaveBeenLastCalledWith('/work/alpha')
+
+    // The main view moves to another workspace → the ledger re-reads THAT one.
+    view.rerender(element([
+      { id: 's1', cwd: '/work/alpha', main: false },
+      { id: 's2', cwd: '/work/beta', main: true },
+    ]))
+    await waitFor(() => { expect(load).toHaveBeenLastCalledWith('/work/beta') })
+  })
+
+  it('keeps the parameterless fallback when no main-view session names a workspace', async () => {
+    const load = vi.fn().mockResolvedValue(readyFixture())
+    mount(load, undefined, undefined, undefined, selector => selector({ byId: {}, phase: 'ready' }))
+
+    await screen.findByTestId('change-overview-row-change-active')
+    expect(load).toHaveBeenLastCalledWith()
   })
 
   // 【变更】2026-10-24 (批次二十 3): clicking a change card opens the FOUR-ZONE
@@ -359,5 +416,47 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
     fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
     expect(await screen.findByTestId('change-detail-unknown')).toBeDefined()
     expect(screen.getByTestId('change-detail-unknown').textContent).toBe('ovw.detailUnknownChange')
+  })
+
+  /**
+   * 【变更】2026-10-26 (用户问题 2): the browser board renders the COMPLETE
+   * workflow graph, not a text list. The board is a static file, so the graph
+   * is laid out at EXPORT time — the same grid pitch, the same cubic-bezier
+   * edge shape and the same status colours the in-app FlowCanvas uses.
+   */
+  it('lays the change graph out for the standalone board with the canvas geometry', () => {
+    const detail = detailFixture('change-active')
+    if (detail.status !== 'ready') throw new Error('fixture must be ready')
+    const graph = toBoardGraph(detail, t as never)
+    expect(graph).toBeDefined()
+    if (graph === undefined) return
+
+    // Two columns wide → (1 + 1) * COL_W + 56, one row → ROW_H + 72.
+    expect(graph.width).toBe(2 * 248 + 56)
+    expect(graph.height).toBe(128 + 72)
+
+    const intake = graph.nodes.find(node => node.id === 'intake')
+    const implement = graph.nodes.find(node => node.id === 'implement')
+    expect(intake).toMatchObject({ x: 28, y: 28, width: 208, height: 96, tone: 'completed', onPath: true })
+    expect(implement).toMatchObject({ x: 28 + 248, y: 28, tone: 'active', current: true })
+    // The current stage carries its figures line; an idle stage would read —.
+    expect(implement?.metrics.length).toBe(2)
+
+    // One edge, drawn exactly as the canvas draws it: from the LOWER edge of
+    // the source card into the TOP edge of the target, a cubic bezier with
+    // both control points on the vertical midpoint.
+    expect(graph.edges).toHaveLength(1)
+    const edge = graph.edges[0]
+    expect(edge?.kind).toBe('forward')
+    expect(edge?.active).toBe(true)
+    const x1 = 28 + 208 / 2
+    const x2 = 28 + 248 + 208 / 2
+    const y1 = 28 + 96
+    const y2 = 28
+    const mid = (y1 + y2) / 2
+    expect(edge?.path).toBe(`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`)
+    // The condition text is the plain-zh rendering (the edge is unknown to the
+    // table, so the raw condition comes through).
+    expect(edge?.title).toBe('ok')
   })
 })

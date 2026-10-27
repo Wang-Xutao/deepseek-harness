@@ -37,20 +37,28 @@ import {
   IconChevronDownOutlineRegular, Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { formatDuration, formatTimestamp, formatTokens, modeLabel } from './dashboard-format.ts'
-import { buildDashboardHtml, type DashboardHtmlChangeDetail, type DashboardHtmlLabels } from './dashboard-html.ts'
+import { buildDashboardHtml, type DashboardHtmlChangeDetail, type DashboardHtmlGraph, type DashboardHtmlGraphEdge, type DashboardHtmlGraphNode, type DashboardHtmlLabels } from './dashboard-html.ts'
 import { FlowCanvas } from './FlowCanvas.tsx'
-import { ArtifactRail, BilingualDetail, StageChecklist } from './flow-parts.tsx'
+import { ArtifactRail, BilingualDetail, StageChecklist, COL_W, NODE_H, NODE_W, ROW_H, artifactDriftTags, stageExecuted } from './flow-parts.tsx'
+import { conditionTextOf } from './graph-template.ts'
 import css from './ChangeOverviewRow.module.css'
 
 /** The inject face the slot registration hands the row. */
 export interface ChangeOverviewRowInjected {
-  /** Load the project change overview (workspace-scoped). */
-  loadChangeOverview: () => Promise<BafWorkflowChangeOverviewResult>
+  /**
+   * 【变更】2026-10-26 (用户问题 2): load the project change overview for one
+   * workspace. `cwd` PINS the read to the workspace the user is looking at —
+   * the main-view session's — so the ledger switches with the workspace;
+   * undefined keeps the host's newest-live-session fallback.
+   */
+  loadChangeOverview: (cwd?: string) => Promise<BafWorkflowChangeOverviewResult>
   /**
    * 【变更】2026-10-24 (批次十九 1.3): load ONE change's detail (its flow
    * projection + its event history) for the drill-down modal.
+   * 【变更】2026-10-26 (用户问题 2): `cwd` — the same main-view workspace pin
+   * {@link ChangeOverviewRowInjected.loadChangeOverview} takes.
    */
-  loadChangeDetail: (changeId: string) => Promise<BafWorkflowChangeDetailResult>
+  loadChangeDetail: (changeId: string, cwd?: string) => Promise<BafWorkflowChangeDetailResult>
   /**
    * 【变更】2026-10-24 (批次二十 3): open one of the change's artifacts in the
    * right sidebar.
@@ -288,6 +296,28 @@ function readDesktopBridge(): DesktopBridge | undefined {
 }
 
 /**
+ * 【变更】2026-10-27 (批次三十): the Blob URL of the board the ledger last
+ * opened in a BROWSER (the desktop path writes a file instead — see
+ * {@link readDesktopBridge}).
+ *
+ * The board's own 刷新 button reloads the page, and a revoked Blob URL cannot
+ * be reloaded — so the URL is dropped when the NEXT board is exported, not on
+ * a timer. An open board therefore stays refreshable for as long as the
+ * customer is looking at it.
+ */
+let boardBlobUrl: string | undefined
+
+/**
+ * 【变更】2026-10-27 (批次三十): drop the previous board's Blob URL.
+ * @returns nothing.
+ */
+function revokeBoardBlobUrl(): void {
+  if (boardBlobUrl === undefined) return
+  URL.revokeObjectURL(boardBlobUrl)
+  boardBlobUrl = undefined
+}
+
+/**
  * 【变更】2026-10-26 (批次二十八 5): the loading plate — a spinning ring beside
  * the label, inside the page's own card vocabulary. The bare「正在加载…」 line
  * read as a frozen page; the ring says the round is running.
@@ -373,6 +403,150 @@ function orderByGraph(view: WorkflowTabView): readonly WorkflowTabNodeView[] {
 }
 
 /**
+ * 【变更】2026-10-26 (用户问题 2): one node's board STATUS TONE — the colour
+ * family the board's graph card uses. The mapping is the in-app
+ * `flow-parts.statusClass` one: completed → green, in-progress → the gold
+ * accent, failed/blocked → red, drifted → amber, everything else → grey;
+ * the parked gate and the current terminal are their own tones.
+ * @param status - the node's status (undefined = template idle).
+ * @param abandoned - this card is the abandoned terminus.
+ * @param isGate - the change is parked on a confirm gate at this node.
+ * @param isCurrentTerminal - this terminal card is the change's outcome.
+ * @returns the tone id.
+ */
+function boardToneOf(
+  status: WorkflowTabNodeView['status'] | undefined,
+  abandoned: boolean,
+  isGate: boolean,
+  isCurrentTerminal: boolean,
+): DashboardHtmlGraphNode['tone'] {
+  if (isGate) return 'gate'
+  if (isCurrentTerminal) return abandoned ? 'failed' : 'completed'
+  switch (status) {
+    case 'completed': return 'completed'
+    case 'in-progress': return 'active'
+    case 'failed':
+    case 'blocked': return 'failed'
+    case 'drifted': return 'drifted'
+    default: return 'idle'
+  }
+}
+
+/**
+ * 【变更】2026-10-26 (用户问题 2): lay ONE change's detail graph out for the
+ * board — the same grid geometry, the same edge paths and the same status
+ * colours the in-app `FlowCanvas` resolves at render time; here they are
+ * resolved at EXPORT time, because the board is a static file that cannot
+ * run the app's canvas.
+ * @param detail - the change's host detail payload (status `ready`).
+ * @param t - the locale binder.
+ * @returns the laid-out graph.
+ */
+export function toBoardGraph(
+  detail: BafWorkflowChangeDetailResult & { status: 'ready' },
+  t: ChangeOverviewRowProps['t'],
+): DashboardHtmlGraph | undefined {
+  const view = detail.view
+  if (view.graph.nodes.length === 0) return undefined
+  const placements = view.graph.nodes
+  const maxCol = Math.max(0, ...placements.map(p => p.column))
+  const maxRow = Math.max(0, ...placements.map(p => p.row))
+  const width = (maxCol + 1) * COL_W + 56
+  const height = (maxRow + 1) * ROW_H + 72
+  const posById = new Map<string, { x: number; y: number }>()
+  for (const p of placements) {
+    const id = String(p.id)
+    posById.set(id, { x: 28 + p.column * COL_W, y: 28 + p.row * ROW_H })
+  }
+  const nodeById = new Map(view.nodes.map(node => [String(node.id), node]))
+  // The parked gate and the current stage — the same reads FlowCanvas applies.
+  const gateNode = view.gate?.node === undefined ? undefined : String(view.gate.node)
+  const edges = view.graph.edges.map((edge) => {
+    const fromId = edge.from ?? 'intake'
+    const a = posById.get(fromId)
+    const b = posById.get(String(edge.to))
+    if (a === undefined || b === undefined) return undefined
+    const x1 = a.x + NODE_W / 2
+    const y1 = edge.from === null ? a.y : a.y + NODE_H
+    const x2 = b.x + NODE_W / 2
+    const y2 = b.y
+    const mid = (y1 + y2) / 2
+    const current = view.current === null ? undefined : String(view.current)
+    return {
+      id: edge.id,
+      path: `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`,
+      kind: edge.kind,
+      active: current !== undefined && (edge.from === view.current || edge.to === view.current),
+      title: conditionTextOf(edge),
+    } satisfies DashboardHtmlGraphEdge
+  }).filter((edge): edge is DashboardHtmlGraphEdge => edge !== undefined)
+  const nodes: DashboardHtmlGraphNode[] = []
+  placements.forEach((placement) => {
+    const id = String(placement.id)
+    const p = posById.get(id)
+    if (p === undefined) return
+    const node = nodeById.get(id)
+    const isCurrent = view.current === placement.id
+    const isGate = gateNode === id
+    const isClipped = view.mode === 'bug-fix-path' && !placement.onPath
+      && placement.id !== 'completed' && placement.id !== 'abandoned'
+    const isCurrentTerminal = (placement.id === 'completed' || placement.id === 'abandoned') && isCurrent
+    const badge = isCurrent && (placement.id === 'completed' || placement.id === 'abandoned')
+      ? placement.id === 'completed' ? t('status.completed') : t('status.abandoned')
+      : null
+    const nonCurrentTerminalBadge = !isCurrent && (placement.id === 'completed' || placement.id === 'abandoned')
+      && (view.current === 'completed' || view.current === 'abandoned')
+      ? t('status.skipped')
+      : null
+    const statusLabel = isGate
+      ? t('status.awaiting')
+      : badge !== null
+        ? badge
+        : nonCurrentTerminalBadge !== null
+          ? nonCurrentTerminalBadge
+          : isClipped
+            ? t('status.clipped')
+            : node === undefined
+              ? t('status.template')
+              : t(`status.${node.status}`)
+    // The CURRENT terminal card carries the change's TOTAL figures — the
+    // same rule the app's FlowCanvas applies to its metrics row.
+    const metrics = isCurrentTerminal
+      ? [
+          `${t('card.duration')} ${formatDuration(view.metrics?.totalDurationMs ?? 0)}`,
+          `${t('card.tokens')} ${formatTokens(view.metrics?.totalInputTokens ?? 0, view.metrics?.totalOutputTokens ?? 0)}`,
+        ]
+      : [
+          `${t('card.duration')} ${
+            node?.metrics?.durationMs !== undefined
+              ? formatDuration(node.metrics.durationMs)
+              : stageExecuted(node?.status) ? '0s' : '—'
+          }`,
+          `${t('card.tokens')} ${
+            node?.metrics?.inputTokens !== undefined || node?.metrics?.outputTokens !== undefined
+              ? formatTokens(node.metrics?.inputTokens, node.metrics?.outputTokens)
+              : stageExecuted(node?.status) ? formatTokens(0, 0) : '—'
+          }`,
+        ]
+    nodes.push({
+      id,
+      label: t(`node.${placement.id as WorkflowNodeId}`),
+      statusLabel,
+      tone: boardToneOf(node?.status, placement.id === 'abandoned', isGate, isCurrentTerminal),
+      onPath: placement.onPath,
+      current: isCurrent,
+      x: p.x,
+      y: p.y,
+      width: NODE_W,
+      height: NODE_H,
+      metrics,
+    })
+  })
+  const graph: DashboardHtmlGraph = { width, height, nodes, edges }
+  return graph
+}
+
+/**
  * 【变更】2026-10-26 (批次二十九 6): flatten ONE change's detail into the
  * board's embedded payload.
  *
@@ -441,6 +615,12 @@ function toBoardDetail(
         onPath: node.onPath,
       })),
     }),
+    // 【变更】2026-10-26 (用户问题 2): the COMPLETE laid-out graph — the board
+    // draws the same picture the in-app canvas does, offline.
+    ...(() => {
+      const graph = toBoardGraph(detail, t)
+      return graph === undefined ? {} : { graph }
+    })(),
     ...(detail.history.length === 0 ? {} : {
       history: detail.history.map(entry => ({
         at: formatTimestamp(entry.at),
@@ -455,15 +635,95 @@ function toBoardDetail(
 }
 
 /**
+ * 【变更】2026-10-27 (批次三十): how much of ONE artifact the board embeds.
+ *
+ * The board carries every change's documents inside itself, so an unbounded
+ * body would turn the page into a multi-megabyte file. The cap keeps the board
+ * readable; a cut document says so in the preview pane.
+ */
+const BOARD_ARTIFACT_CAP = 40_000
+
+/**
+ * 【变更】2026-10-27 (批次三十): embed each stage document's TEXT into the
+ * board's detail payload.
+ *
+ * The board is a static file on disk: when the customer clicks a stage
+ * document there, the page cannot ask the host for its body. So the export
+ * reads every artifact up front and embeds the texts. A document the reader
+ * cannot reach is embedded WITHOUT a body — the board's row then says so
+ * instead of opening an empty pane.
+ * @param detail - the flattened board detail.
+ * @param cwd - the workspace root to read through.
+ * @param readArtifact - the reader; undefined when the workspace has no live
+ * session, in which case nothing is embedded.
+ * @returns the detail with the artifact bodies attached.
+ */
+async function withArtifactContents(
+  detail: DashboardHtmlChangeDetail,
+  cwd: string,
+  readArtifact: ((cwd: string, path: string) => Promise<WorkflowTabFileReadResult>) | undefined,
+): Promise<DashboardHtmlChangeDetail> {
+  if (readArtifact === undefined || detail.artifacts === undefined) return detail
+  const artifacts = await Promise.all(detail.artifacts.map(async (artifact) => {
+    if (artifact.content !== undefined) return artifact
+    try {
+      const read = await readArtifact(cwd, artifact.path)
+      if (read.status !== 'ready' || read.content === undefined) return artifact
+      const cut = read.content.length > BOARD_ARTIFACT_CAP
+      return {
+        ...artifact,
+        content: cut ? read.content.slice(0, BOARD_ARTIFACT_CAP) : read.content,
+        ...(cut ? { truncated: true } : {}),
+      }
+    } catch {
+      // An unreadable document leaves its row without a body — the board says
+      // so rather than failing the whole export.
+      return artifact
+    }
+  }))
+  return { ...detail, artifacts }
+}
+
+/**
  * Render the 工作流 page's 变更总览 row — the project's change ledger.
  * @param props - composed slot props.
  * @returns the row element tree.
  */
 export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactElement {
-  const { t, loadChangeOverview, loadChangeDetail, openArtifact, readArtifact } = props
+  const { t, loadChangeOverview, loadChangeDetail, openArtifact, readArtifact, useSessions } = props
   const [result, setResult] = useState<BafWorkflowChangeOverviewResult | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
+  /**
+   * 【变更】2026-10-26 (用户问题 2): the MAIN-VIEW workspace — the session the
+   * shell retains as the main view (`retainedBy.mainView > 0`, the same rule
+   * ui-session's publishMain applies). `undefined` when no live session is the
+   * main view (or it names no workspace): the ledger then reads the host's
+   * newest-live-session fallback instead of answering for a workspace nobody
+   * is looking at.
+   */
+  const mainCwd = useSessions((state) => {
+    const main = Object.values(state.byId).find(
+      session => (session.retainedBy.mainView ?? 0) > 0,
+    )
+    return main?.cwd
+  })
+  // 【变更】2026-10-26 (用户问题 2): key the load on the main-view workspace so
+  // switching the workspace re-reads the ledger for THAT project.
+  const loadKey = mainCwd ?? ''
+  const load = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    try {
+      setResult(await (loadKey === '' ? loadChangeOverview() : loadChangeOverview(loadKey)))
+      setError(undefined)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [loadChangeOverview, loadKey])
+
+  useEffect(() => { void load() }, [load])
   // 【变更】2026-10-24 (批次十九 1.3): the drill-down state — the open change
   // id plus its detail payload.
   const [openChangeId, setOpenChangeId] = useState<string | undefined>(undefined)
@@ -495,20 +755,6 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
     if (result?.status !== 'ready') return []
     return selectChangeRows(result.rows, { category, mode, sort, sortOrder, query })
   }, [result, category, mode, sort, sortOrder, query])
-
-  const load = useCallback(async (): Promise<void> => {
-    setLoading(true)
-    try {
-      setResult(await loadChangeOverview())
-      setError(undefined)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [loadChangeOverview])
-
-  useEffect(() => { void load() }, [load])
 
   /**
    * 【变更】2026-10-24 (批次十九 1.3): the standalone board — the project
@@ -574,6 +820,15 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           'bug-fix-path': t('mode.bugFixPath'),
           'clarify-required': t('mode.clarify'),
         },
+        // 【变更】2026-10-27 (批次三十): the board's TOP BAR + the artifact
+        // preview — the theme switch, the refresh and the preview pane's copy.
+        themeLight: t('dashboard.board.themeLight'),
+        themeDark: t('dashboard.board.themeDark'),
+        refresh: t('dashboard.board.refresh'),
+        preview: t('dashboard.board.preview'),
+        previewEmpty: t('dashboard.board.previewEmpty'),
+        previewTruncated: t('dashboard.board.previewTruncated'),
+        previewClose: t('dashboard.board.previewClose'),
         // 【变更】2026-10-26 (批次二十九 6): the board's own view controls — the
         // same four the in-app ledger carries, so the exported page reads like
         // the page it came from.
@@ -617,11 +872,19 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           state: t('ovw.columnState'),
           openSpec: t('ovw.detailOpenSpec'),
           confirmation: t('ovw.detailConfirmation'),
+          current: t('card.current'),
         },
       }
       const details = await Promise.all(result.rows.map(async (row): Promise<DashboardHtmlChangeDetail> => {
         try {
-          return toBoardDetail(row, await loadChangeDetail(row.changeId), t)
+          const changeDetail = loadKey === ''
+            ? await loadChangeDetail(row.changeId)
+            : await loadChangeDetail(row.changeId, loadKey)
+          const flat = toBoardDetail(row, changeDetail, t)
+          // 【变更】2026-10-27 (批次三十): the board's PREVIEW needs the stage
+          // documents' own text — the page is a file on disk and can never ask
+          // the host for a document.
+          return loadKey === '' ? flat : await withArtifactContents(flat, loadKey, readArtifact)
         } catch {
           return { changeId: row.changeId, status: 'failed' }
         }
@@ -642,24 +905,30 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
       }
       const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
       window.open(url, '_blank', 'noopener,noreferrer')
-      window.setTimeout(() => { URL.revokeObjectURL(url) }, 60_000)
+      // 【变更】2026-10-27 (批次三十): the board's own 刷新 button RELOADS the
+      // page, and a revoked Blob URL cannot be reloaded — so the URL is no
+      // longer dropped on a 60s timer. It is revoked when the NEXT board is
+      // exported instead, which keeps an open board refreshable for as long
+      // as the customer is looking at it.
+      revokeBoardBlobUrl()
+      boardBlobUrl = url
     } finally {
       setExporting(false)
     }
-  }, [result, t, loadChangeDetail])
+  }, [result, t, loadChangeDetail, loadKey, readArtifact])
 
   const openDetail = useCallback(async (changeId: string): Promise<void> => {
     setOpenChangeId(changeId)
     setDetail(undefined)
     setDetailLoading(true)
     try {
-      setDetail(await loadChangeDetail(changeId))
+      setDetail(loadKey === '' ? await loadChangeDetail(changeId) : await loadChangeDetail(changeId, loadKey))
     } catch {
       setDetail({ status: 'unknown-change', changeId })
     } finally {
       setDetailLoading(false)
     }
-  }, [loadChangeDetail])
+  }, [loadChangeDetail, loadKey])
 
   const stateLabel = (state: ChangeState): string => {
     if (state === 'completed') return t('ovw.completed')
@@ -1138,6 +1407,9 @@ function ChangeDetailWorkspace(props: {
                   {view.artifacts !== undefined && view.artifacts.length > 0 && (
                     <ArtifactRail
                       rows={view.artifacts}
+                      // 【变更】2026-10-27 (批次三十一): the same drift tags the
+                      // session rail wears — 已修改 / 待同步 / 已同步.
+                      driftTags={artifactDriftTags(view.artifactDrift ?? [], false)}
                       onOpen={(path) => { void openPreview(path) }}
                       t={t}
                     />

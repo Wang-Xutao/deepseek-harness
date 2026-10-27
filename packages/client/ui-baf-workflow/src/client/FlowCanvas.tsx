@@ -37,6 +37,7 @@ import {
   ZOOM_MAX,
   ZOOM_MIN,
   clamp,
+  type WorkflowFlowControls,
 } from './flow-parts.tsx'
 import css from './WorkflowView.module.css'
 
@@ -64,9 +65,21 @@ export function FlowCanvas(props: {
    * nodes, edges, statuses, artifact chips, route badges — stays identical.
    */
   onOpenTestFlow?: (stage: TestFlowStepId) => void
+  /**
+   * 【变更】2026-10-27 (批次三十): the graph's top-right toolbar — the buttons
+   * that operate the flow (推进 / 暂停 / 继续). Absent on a surface that cannot
+   * operate the change (the 变更总览 detail page has no session behind it).
+   */
+  controls?: WorkflowFlowControls
+  /**
+   * 【变更】2026-10-27 (批次三十): the stages whose artifact is stale — an
+   * upstream document was edited after it was written. Those cards wear a
+   * warning badge, so the graph itself says where the documents disagree.
+   */
+  driftNodes?: readonly WorkflowNodeId[]
   t: (key: WorkflowTabKey) => string
 }): React.ReactElement {
-  const { view, selected, onActivate, onOpenArtifact, onOpenTestFlow, t } = props
+  const { view, selected, onActivate, onOpenArtifact, onOpenTestFlow, controls, driftNodes, t } = props
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const panDrag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
@@ -149,6 +162,41 @@ export function FlowCanvas(props: {
       onPointerCancel={onCanvasPointerUp}
       onWheel={onCanvasWheel}
     >
+      {/* 【变更】2026-10-27 (批次三十): the graph's floating toolbar. It lives
+          OUTSIDE the pan/zoom world, so it stays put while the graph moves.
+          【变更】2026-10-27 (批次三十一): the toolbar is now only the buttons
+          that OPERATE the flow — 「推进」then「暂停」/「继续」. The change's
+          identity tag left it (the customer asked), and the 「同步」button
+          moved into the out-of-sync notice, where it exists only while
+          something is actually out of sync. */}
+      <div className={css.graphOverlay}>
+        {controls !== undefined && (
+          <>
+            {controls.onAdvance !== undefined && controls.advanceReady === true && (
+              <button
+                type="button"
+                className={css.toolBtn}
+                data-testid="flow-advance"
+                title={t('flow.advanceHelp')}
+                onClick={() => { controls.onAdvance?.() }}
+              >
+                {t('action.advance')}
+              </button>
+            )}
+            <button
+              type="button"
+              className={css.toolBtn}
+              data-testid="flow-toggle-pause"
+              title={controls.paused ? t('flow.resumeHelp') : t('flow.pauseHelp')}
+              aria-pressed={controls.paused}
+              disabled={controls.pauseDisabled === true}
+              onClick={() => { controls.onTogglePause() }}
+            >
+              {controls.paused ? t('flow.resumeWorkflow') : t('flow.pauseWorkflow')}
+            </button>
+          </>
+        )}
+      </div>
       <div
         className={css.flowWorld}
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
@@ -298,6 +346,14 @@ export function FlowCanvas(props: {
                     </span>
                   </div>
                   {isCurrent && <span className={css.currentPill}>{t('card.current')}</span>}
+                  {/* 【变更】2026-10-27 (批次三十): the stale-artifact badge — an
+                      upstream document was edited after this stage's document was
+                      written, so this one may no longer match it. */}
+                  {driftNodes?.includes(placement.id as WorkflowNodeId) === true && (
+                    <span className={css.driftPill} data-testid={`flow-node-drift-${placement.id}`}>
+                      {t('flow.driftNode')}
+                    </span>
+                  )}
                 </div>
                 <div className={css.flowMetrics}>
                   {/* The CURRENT terminal card (完成 / 已放弃) carries the
@@ -343,22 +399,42 @@ export function FlowCanvas(props: {
                 })()}
                 {node?.artifacts !== undefined && node.artifacts.length > 0 && (
                   <div className={css.flowNodeArtifacts}>
-                    {node.artifacts.map(artifact => (
-                      <button
-                        key={`${placement.id}:${artifact}`}
-                        type="button"
-                        className={css.flowNodeArtifactChip}
-                        title={artifact}
-                        onClick={(event) => {
-                          // The node itself selects on click — the chip must
-                          // not, it opens the file.
-                          event.stopPropagation()
-                          onOpenArtifact(artifact)
-                        }}
-                      >
-                        {artifactName(artifact)}
-                      </button>
-                    ))}
+                    {node.artifacts.map(artifact => {
+                      // 【变更】2026-10-27 (批次三十): the 建立变更 card's artifact is
+                      // the change's OWN directory — the change's IDENTITY, not a
+                      // document. As a click-to-open chip it read as a file path
+                      // (its tooltip carried the whole absolute path) and it
+                      // invited an open that has no document behind it. The graph
+                      // already names the change as a TAG in its overlay, so the
+                      // card repeats it as a plain, non-interactive label.
+                      if (view.changeId !== null && artifactName(artifact) === view.changeId) {
+                        return (
+                          <span
+                            key={`${placement.id}:${artifact}`}
+                            className={css.flowNodeChangeTag}
+                            data-testid={`flow-node-change-${placement.id}`}
+                          >
+                            {artifactName(artifact)}
+                          </span>
+                        )
+                      }
+                      return (
+                        <button
+                          key={`${placement.id}:${artifact}`}
+                          type="button"
+                          className={css.flowNodeArtifactChip}
+                          title={artifact}
+                          onClick={(event) => {
+                            // The node itself selects on click — the chip must
+                            // not, it opens the file.
+                            event.stopPropagation()
+                            onOpenArtifact(artifact)
+                          }}
+                        >
+                          {artifactName(artifact)}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
                 {/* The 测试流图 jump chip — the implement/verify/archive cards'

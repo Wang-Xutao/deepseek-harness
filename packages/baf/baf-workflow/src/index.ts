@@ -65,6 +65,10 @@ export * from './dashboard.ts'
 export * from './stages/context.ts'
 export * from './stages/artifacts.ts'
 export * from './stages/gates.ts'
+export * from './stages/artifact-drift.ts'
+// 【变更】2026-10-27 (批次三十): the per-change PAUSE flag (the 暂停/继续
+// button on the workflow graph).
+export * from './pause.ts'
 export * from './stages/check-runner.ts'
 export * from './stages/write.ts'
 export * from './stages/open.ts'
@@ -106,9 +110,9 @@ export { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
  * no pin, no audit, same decision as a real dispatch).
  */
 export {
-  artifactPathFor, IMPLEMENT_REQUIREMENTS_ZH, type DispatchNode, type DispatchSignal,
+  artifactPathFor, IMPLEMENT_REQUIREMENTS_ZH, type DispatchNode, type DispatchSignal, type DispatchScope,
 } from './go-dispatch.ts'
-export { tierRouteSelection, type TierRouteOutcome } from './route-dispatch.ts'
+export { tierRouteSelection, tierRouteSelectorFor, type TierRouteOutcome } from './route-dispatch.ts'
 export { taskTierFor, type FrozenTaskTier } from './task-tier-memory.ts'
 /** 【变更】2026-10-07 (九点批 问题 5): the Auto pseudo entry ids, for the
  * Tab fold's session-model auto flag (last request/header epoch). */

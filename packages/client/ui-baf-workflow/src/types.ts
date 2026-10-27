@@ -420,7 +420,90 @@ export type BafWorkflowChangeOverviewResult =
 export interface BafWorkflowChangeDetailRequest {
   /** The change to describe. */
   readonly changeId: string
+  /**
+   * 【变更】2026-10-26 (用户问题 2): the workspace root to read the change
+   * from. The client passes the MAIN-VIEW session's cwd so the overview
+   * follows the workspace the user is actually looking at; omitted keeps the
+   * host's newest-live-session fallback.
+   */
+  readonly cwd?: string
 }
+
+/**
+ * 【变更】2026-10-26 (用户问题 2): optional request for the workspace-scoped
+ * 变更总览 rollup. `cwd` pins the read to the main-view session's workspace;
+ * omitted keeps the host's newest-live-session fallback.
+ */
+export interface BafWorkflowChangeOverviewRequest {
+  /** Absolute workspace root to read the rollup from. */
+  readonly cwd?: string
+}
+
+/**
+ * 【变更】2026-10-27 (同步产物): request for the artifact-sync dispatch — the
+ * customer clicked 同步 on a document an upstream edit made stale.
+ *
+ * `cwd` pins the read to the main-view session's workspace; omitted keeps the
+ * host's newest-live-session fallback (the same rule `changeDetail` uses).
+ *
+ * 【变更】2026-10-27 (批次三十一): `sessionId` is REQUIRED. The work order must
+ * land in the conversation the customer clicked from — the workspace's home
+ * session can be a different one, and an order sent there reads as a dead
+ * click in the customer's own conversation.
+ */
+export interface BafWorkflowSyncRequest {
+  /** The session the customer clicked 同步 in — the order lands here. */
+  readonly sessionId: SessionId
+  readonly changeId: string
+  /** The workspace root to read the change from (the main-view session's cwd). */
+  readonly cwd?: string
+}
+
+/**
+ * 【变更】2026-10-27 (批次三十): request for the workflow PAUSE control — the
+ * 工作流图's 暂停/继续 button.
+ *
+ * `paused: true` brakes the workflow (no automatic gate pops, no automatic
+ * work orders); `paused: false` releases it and hands the outstanding gap back
+ * to the model.
+ */
+export interface BafWorkflowPauseRequest {
+  readonly sessionId: SessionId
+  readonly changeId: string
+  /** True to pause, false to resume. */
+  readonly paused: boolean
+}
+
+/**
+ * 【变更】2026-10-27 (批次三十): the outcome of a pause control request.
+ *
+ * `resumed` reports whether the resume drive actually moved the workflow
+ * (the gate popped / the work order went out); `unavailable` carries why it
+ * could not (no live session, no dispatch channel).
+ */
+export type BafWorkflowPauseResult =
+  | { readonly status: 'ok'; readonly paused: boolean }
+  | { readonly status: 'unavailable'; readonly reason: string }
+
+/**
+ * 【变更】2026-10-27 (同步产物): result of the artifact-sync dispatch.
+ *
+ * `dispatched` names the stale stages the work order covers (the order is
+ * addressed at the EARLIEST one — every later stage follows it). `queued` means
+ * the very same order is already on its way, so nothing new was sent.
+ * `unavailable` carries why no order could be sent (no live session, the model
+ * is busy).
+ *
+ * 【变更】2026-10-27 (批次三十一): `queued` is its own status. The old shape
+ * answered `dispatched` for a deduped order too, so the client reported a work
+ * order that no model ever received.
+ */
+export type BafWorkflowSyncResult =
+  | { readonly status: 'no-workspace' }
+  | { readonly status: 'no-drift' }
+  | { readonly status: 'dispatched'; readonly nodes: readonly string[] }
+  | { readonly status: 'queued'; readonly nodes: readonly string[] }
+  | { readonly status: 'unavailable'; readonly reason: string }
 
 /**
  * 【变更】2026-10-24 (批次十九 1.3): one projection event, flattened for the

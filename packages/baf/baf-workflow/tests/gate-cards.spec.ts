@@ -215,6 +215,23 @@ describe('renderGateCard (§22)', () => {
     expect(result.text).toContain('退回，继续澄清需求')
   })
 
+  /**
+   * 【变更】2026-10-27 (批次三十一): the FIRST design pop offered no way back
+   * — the rollback to clarify lived on the parked re-pop only, so a customer
+   * who wanted to re-clarify at the first pop had nothing to click and read
+   * the workflow as stuck.
+   */
+  it('offers the rollback to clarify on the FIRST design pop too', () => {
+    const result = renderGate('design-advance', { cwd: '/tmp/ws', changeId: 'CHG-003' })
+    expect(result.kind).toBe('success')
+    expect(result.text).toContain('确认 · 进入计划')
+    expect(result.text).toContain('退回，继续澄清需求')
+    expect(result.text).toContain('/baf-workflow-clarify')
+    // The dismissal stays available — the customer may want to park the
+    // decision without rolling back.
+    expect(result.text).toContain('暂不推进')
+  })
+
   it('renders the verify-archive gate pointing at /baf-go (the §18.5 门 B)', () => {
     const result = renderGate('verify-archive', { cwd: '/tmp/ws', changeId: 'CHG-004' })
     expect(result.kind).toBe('success')

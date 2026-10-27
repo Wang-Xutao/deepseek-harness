@@ -56,22 +56,25 @@
         so the boot finishes in the tray (the main window shows itself when
         the backend is ready; splash.js wires the button to the splash:bg-start
         IPC through preload-splash).
-        【变更】2026-10-23 (批次十七 1): the separate band is GONE — the hint
-        joins the rotating status line (splash.js inserts it into the statuses
-        array so it reads like 正在检查更新…, no layout shift ever), and the
-        button stands ALONE pinned to the panel's bottom-left corner.
-        【变更】2026-10-23 (批次十八 1.3/1.4): the button moves to the panel's
-        TOP-RIGHT corner and grows a down-arrow glyph (「启动转入后台」); it
-        reveals in the same frame as the hint sentence, never ahead of it.
+        【变更】2026-10-23 (批次十八 1.3): the button grows a down-arrow glyph
+        (「启动转入后台」).
+        【变更】2026-10-27: the hint leaves the rotating status line — it shares
+        the panel's TOP-LEFT row with the button, which the row itself owns
+        (the row is out of flow, so the centered logo group never shifts), and
+        the row reveals in a single frame so the button never appears alone.
       -->
-      <button id="bgStart" class="bgStart" type="button">
-        <svg class="bgStartIcon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path d="M8 1.75v6.25" />
-          <path d="M4.75 5.25 8 8.5l3.25-3.25" />
-          <path d="M2.75 13.25h10.5" />
-        </svg>
-        <span>后台启动</span>
-      </button>
+      <div class="topRow" id="topRow">
+        <button id="bgStart" class="bgStart" type="button">
+          <svg class="bgStartIcon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M8 1.75v6.25" />
+            <path d="M4.75 5.25 8 8.5l3.25-3.25" />
+            <path d="M2.75 13.25h10.5" />
+          </svg>
+          <span>后台启动</span>
+        </button>
+        <!-- The hint copy lives in splash.js (SLOW_HINT); the row fills it in. -->
+        <p id="slowHint" class="slowHint"></p>
+      </div>
       <div class="footer">
         <p class="credit">by sora</p>
       </div>

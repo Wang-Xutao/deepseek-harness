@@ -57,6 +57,10 @@ import { BUG_FIX_PATH_LEDGER_FILE } from './stages/bug-fix-path.ts'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { focusFor } from './session-focus.ts'
 import { homeSessionFor } from './session-home.ts'
+import { isChangePaused } from './pause.ts'
+// 【变更】2026-10-27 (批次三十一): the out-of-sync hold — the workflow waits
+// while a downstream document no longer matches its upstream.
+import { detectArtifactDrift, type ArtifactDriftRow } from './stages/artifact-drift.ts'
 import { isActiveChange, pickActiveChange, ProjectionStore } from './projection.ts'
 import type { ProjectionIndexEntry } from './projection.ts'
 
@@ -135,6 +139,10 @@ async function orchestrateTurn(ctx: Context, session: SessionLike, cwd: string):
   // been consumed or ignored by it; a gap that survives the turn must be
   // re-dispatchable by the customer's next `/baf-go`, not answered forever
   // with 「已派单 · 等待补齐」 while the model idles.
+  // 【变更】2026-10-27 (派单死路): the expiry alone could not keep that
+  // promise — the turn-end order below is sent AFTER it and re-armed the same
+  // key, so the customer's next `/baf-go` deduped and sent nothing. The two
+  // orders now live in separate scopes (customer / auto).
   expireDispatchLedger(cwd)
 
   // ① Workspace not initialized → the scaffold gate, once per session. This
@@ -386,7 +394,31 @@ async function popDueGate(
   store: ProjectionStore,
   changeId: string,
 ): Promise<void> {
+  // 【变更】2026-10-27 (批次三十 · 用户问题 6): a PAUSED change pops NOTHING and
+  // receives NO work order. This is the single funnel of both (the gate pop and
+  // the resting-gap dispatch are the only two things this row does for a bound
+  // change), so the brake covers both.
+  //
+  // The customer's own commands stay untouched: `/baf-go` and the Tab's 推进
+  // are explicit instructions, and a lock the customer cannot unlock with a
+  // command is a dead end — the very shape this workflow is supposed to avoid.
+  if (isChangePaused(cwd, changeId)) return
   const status = await store.readStatus(changeId)
+  // 【变更】2026-10-27 (批次三十一): an OUT-OF-SYNC change HOLDS. An upstream
+  // document was edited after a downstream one was written, so the downstream
+  // one may no longer match it. The workflow must not advance past that
+  // disagreement, and it must not pop a confirmation the customer cannot judge
+  // from documents that contradict each other — the 同步 notice is the
+  // customer's next action, and the flow resumes when the documents agree.
+  //
+  // The customer's own commands stay untouched (as with the pause brake): the
+  // 同步 order and an explicit `/baf-go` are instructions, not automatic pops.
+  const drift = await detectArtifactDrift(
+    cwd,
+    changeId,
+    status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+  ).catch((): readonly ArtifactDriftRow[] => [])
+  if (drift.length > 0) return
   const { events } = await store.readEvents(changeId)
   let due = dueGateFor(status, events)
   // 【变更】2026-09-23 (demo5 issue #1): the status the pop's fingerprint reads
@@ -601,6 +633,11 @@ async function dispatchRestingGap(
     artifactPath: artifactPathFor(changeId, node, mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path'),
     missing,
     ...(mode === 'bug-fix-path' ? { mode: 'bug-fix-path' as const } : {}),
+    // 【变更】2026-10-27 (派单死路): the turn-end order is the AUTO scope —
+    // this order is sent AFTER the turn's ledger expiry, so it re-arms its
+    // own key; keeping it out of the customer scope is what lets the
+    // customer's next `/baf-go` re-dispatch the very same gap.
+    scope: 'auto',
   })
   ctx.logger.info(`${stamp()} - session baf:orchestrate change=${changeId} gapDispatch node=${node} outcome=${outcome} missing=${missing.length}`)
 }

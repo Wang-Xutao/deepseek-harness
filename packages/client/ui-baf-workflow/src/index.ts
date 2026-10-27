@@ -59,6 +59,14 @@ import {
   projectGateOverview,
   taskTierFor,
   tierRouteSelection,
+  tierRouteSelectorFor,
+  detectArtifactDrift,
+  driftArtifactPath,
+  driftWorkLines,
+  isDriftStage,
+  // 【变更】2026-10-27 (批次三十): the per-change PAUSE flag (the 暂停/继续
+  // button on the workflow graph).
+  setChangePaused,
   type DispatchNode,
   // 【变更】2026-10-07 (九点批 问题 5): the Auto pseudo entry ids, for the
   // route-scan's session-model auto flag (see readSessionRouteScan).
@@ -94,6 +102,7 @@ import type {
   BafWorkflowChangeDetailRequest,
   BafWorkflowChangeDetailResult,
   BafWorkflowChangeHistoryEntry,
+  BafWorkflowChangeOverviewRequest,
   BafWorkflowChangeOverviewResult,
   BafWorkflowChangeRequest,
   BafWorkflowChangeRow,
@@ -111,6 +120,11 @@ import type {
   BafWorkflowStageRunRequest,
   BafWorkflowStageRunResult,
   BafWorkflowStartIntakeRequest,
+  BafWorkflowSyncRequest,
+  BafWorkflowSyncResult,
+  // 【变更】2026-10-27 (批次三十): the workflow PAUSE control.
+  BafWorkflowPauseRequest,
+  BafWorkflowPauseResult,
   BafWorkflowTestFlowStageToggle,
   BafWorkflowTestFlowStatus,
   BafWorkflowTransitionRequest,
@@ -1270,6 +1284,53 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   }
 
   /**
+   * 【变更】2026-10-27 (批次三十): the 工作流图's 暂停/继续 button.
+   *
+   * 暂停 brakes the workflow: the orchestrator pops NO gate and sends NO work
+   * order for this change (the brake sits in `popDueGate`, the single funnel of
+   * both). The customer's own commands stay untouched — `/baf-go` and the Tab's
+   * 推进 are explicit instructions, and a lock the customer cannot unlock with
+   * a command is a dead end.
+   *
+   * 继续 releases the brake AND hands the outstanding gap back: it runs the
+   * SAME drive the session's `/baf-go` runs (`driveGo` with the popup + work
+   * order channels), so the due gate pops again and the model receives the
+   * order — without waiting for a turn that may never come. The gate is
+   * POPPED, never auto-confirmed: 「继续」 means "resume", not "approve the
+   * pending gate".
+   *
+   * @param request - session + change + the wanted state.
+   * @returns the outcome.
+   */
+  @Remote('setWorkflowPaused')
+  async setWorkflowPaused(request: BafWorkflowPauseRequest): Promise<BafWorkflowPauseResult> {
+    const { cwd } = await this.contextFor(request.sessionId)
+    setChangePaused(cwd, request.changeId, request.paused)
+    if (request.paused) return { status: 'ok', paused: true }
+    // 继续 — hand the outstanding gap back to the model.
+    const adapters = this.resolveAdapters(request.sessionId, cwd)
+    const agent = this.liveAgentFor(request.sessionId)
+    const ask = makeGateAsk(this.ctx, agent)
+    const dispatch = makeGoDispatcher(cwd, agent as DispatchAgent | undefined)
+    if (ask === undefined && dispatch === undefined) {
+      return { status: 'unavailable', reason: '当前会话没有可用的工作流通道（会话可能未运行）' }
+    }
+    bindSessionChange(cwd, request.sessionId, request.changeId)
+    const result = await this.guardDomain(() => driveGo({
+      cwd,
+      rawInput: `change=${request.changeId}`,
+      source: 'tab',
+      adapters,
+      ...(ask === undefined ? {} : { ask }),
+      ...(dispatch === undefined ? {} : { dispatch, dispatchOrigin: 'customer' as const }),
+    }))
+    if (result.kind === 'error') {
+      return { status: 'unavailable', reason: result.text }
+    }
+    return { status: 'ok', paused: false }
+  }
+
+  /**
    * Request a legal stage transition.
    *
    * Routes every transition through the same drive layer the slash handlers
@@ -1565,8 +1626,13 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    * @returns the project change rows plus the header rollups.
    */
   @Remote('changeOverview')
-  async changeOverview(): Promise<BafWorkflowChangeOverviewResult> {
-    const cwd = this.workspaceCwd()
+  async changeOverview(request?: BafWorkflowChangeOverviewRequest): Promise<BafWorkflowChangeOverviewResult> {
+    // 【变更】2026-10-26 (用户问题 2): the rollup follows the workspace the user
+    // is looking at. The client passes the main-view session's cwd; a host
+    // without one (older client) keeps the newest-live-session fallback.
+    const cwd = request?.cwd !== undefined && request.cwd !== ''
+      ? request.cwd
+      : this.workspaceCwd()
     if (cwd === undefined) return { status: 'no-workspace' }
     const store = this.pool.storeFor(cwd)
     // The token attribution folds every session that ever ran in this
@@ -1604,7 +1670,12 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
    */
   @Remote('changeDetail')
   async changeDetail(request: BafWorkflowChangeDetailRequest): Promise<BafWorkflowChangeDetailResult> {
-    const cwd = this.workspaceCwd()
+    // 【变更】2026-10-26 (用户问题 2): same rule as `changeOverview` — the
+    // client pins the workspace, the parameterless read falls back to the
+    // newest live session.
+    const cwd = request.cwd !== undefined && request.cwd !== ''
+      ? request.cwd
+      : this.workspaceCwd()
     if (cwd === undefined) return { status: 'no-workspace' }
     const store = this.pool.storeFor(cwd)
     const changeId = request.changeId
@@ -1783,6 +1854,97 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       }
     }
     return await this.viewFor(request.sessionId, store, resolvedChangeId)
+  }
+
+  /**
+   * 【变更】2026-10-27 (同步产物): the artifact-sync dispatch — the customer
+   * clicked 同步 on a document that an upstream edit made stale, so the model
+   * must re-author it (and every document after it).
+   *
+   * The red line this respects: the repo's rule is 「no dispatch without a
+   * customer action」. This remote is reachable ONLY from the Tab's 同步
+   * button, so the click IS the authorization — the order it sends carries
+   * the `customer` ledger scope and never dedupes against the orchestrator's
+   * turn-end order.
+   *
+   * The order is addressed at the EARLIEST stale stage: the later documents
+   * are rewritten from it, so re-authoring them one by one would only produce
+   * another drift.
+   *
+   * 【变更】2026-10-27 (批次三十一): the order lands in the session the customer
+   * clicked from. It used to be addressed to the WORKSPACE's home session, so
+   * a customer working in a second conversation saw the click accepted and
+   * nothing happened — the order went somewhere they were not looking. The
+   * request now carries the session id and the order goes to THAT session's
+   * agent.
+   * @param request - the change to sync, in the session the customer is in.
+   * @returns what the dispatch did.
+   */
+  @Remote('syncArtifacts')
+  async syncArtifacts(request: BafWorkflowSyncRequest): Promise<BafWorkflowSyncResult> {
+    // 【变更】2026-10-27: same workspace rule as `changeDetail` — the client
+    // pins the workspace, the parameterless read falls back to the newest
+    // live session.
+    const cwd = request.cwd !== undefined && request.cwd !== ''
+      ? request.cwd
+      : this.workspaceCwd()
+    if (cwd === undefined) return { status: 'no-workspace' }
+    const store = this.pool.storeFor(cwd)
+    const status = await store.readStatus(request.changeId).catch(() => undefined)
+    if (status === undefined) {
+      return { status: 'unavailable', reason: `变更不存在：${request.changeId}` }
+    }
+    const mode = status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path'
+    const drift = await detectArtifactDrift(cwd, request.changeId, mode)
+    if (drift.length === 0) return { status: 'no-drift' }
+    const target = drift[0]
+    if (target === undefined || !isDriftStage(target.node)) {
+      return { status: 'unavailable', reason: '待同步的阶段无法识别' }
+    }
+    // 【变更】2026-10-27 (批次三十一): the agent of the session the customer
+    // clicked in — not the workspace's home session, which can be another
+    // conversation the customer is not looking at.
+    const addressed = this.liveAgentFor(request.sessionId) as DispatchAgent | undefined
+    if (addressed === undefined) {
+      return { status: 'unavailable', reason: '当前工作区没有可用会话（会话可能未运行）' }
+    }
+    const dispatch = makeGoDispatcher(
+      cwd,
+      addressed,
+      tierRouteSelectorFor(cwd, this.ctx, addressed),
+    )
+    if (dispatch === undefined) {
+      return { status: 'unavailable', reason: '当前会话没有可用的派单通道（会话可能不在运行中）' }
+    }
+    // 【变更】2026-10-27: the customer acted on this change here — bind the
+    // session to it, so the workflow's later pops land in this conversation.
+    bindSessionChange(cwd, request.sessionId, request.changeId)
+    // 【变更】2026-10-27 (批次三十一): anchor the workspace's home session here
+    // too — the orchestrator's turn-end pop follows the home session, and the
+    // customer's 同步 click is what brought this change back to life.
+    homeSessionFor(cwd).set(request.sessionId)
+    const outcome = dispatch({
+      changeId: request.changeId,
+      node: target.node,
+      artifactPath: driftArtifactPath(request.changeId, target.file),
+      missing: driftWorkLines(drift),
+      cause: 'artifact-drift-sync',
+      mode,
+      scope: 'customer',
+    })
+    const nodes = drift.map(row => row.node)
+    this.ctx.logger.info(
+      `[baf] ${new Date().toISOString()} - session baf:sync change=${request.changeId} nodes=${nodes.join(',')} outcome=${outcome}`,
+    )
+    // 【变更】2026-10-27 (批次三十一): a deduped order means the very same
+    // order is already on its way — nothing new reached the model, and the
+    // client must not read that as a fresh dispatch.
+    if (outcome === 'sent') return { status: 'dispatched', nodes }
+    if (outcome === 'deduped') return { status: 'queued', nodes }
+    return {
+      status: 'unavailable',
+      reason: outcome === 'busy' ? '模型回合进行中，回合结束后再点同步' : '派单通道未放行',
+    }
   }
 
   /**
