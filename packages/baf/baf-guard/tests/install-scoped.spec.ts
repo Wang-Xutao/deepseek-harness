@@ -26,6 +26,7 @@ import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
+import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { apply, inject, name } from '../src/install.ts'
@@ -50,7 +51,10 @@ function bashTool(): ToolDefinition {
 
 /** Run the probe through the real tool pipeline as one agent. */
 async function runBash(ctx: Context, agent: Agent, command: string): Promise<string> {
-  const result = await ctx.tools.execute({
+  // 【变更】2026-10-29 (合并上游 master): 上游把「工具定义」与「执行器」拆开了，
+  // `ctx.tools.execute` 现在只接受批次并转交给选中的 executor；单次调用走真实
+  // 管线（prepare → 守卫 → dispatch）的入口是 tool-testkit 的 executeToolFixture。
+  const result = await executeToolFixture(ctx, {
     signal,
     callId: ToolCallId(`probe-${command.length}-${resultSeq++}`),
     name: 'bash',

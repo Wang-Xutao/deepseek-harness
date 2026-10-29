@@ -39,6 +39,8 @@ export interface BuildArguments {
   readonly scope: BuildScope
   /** Client build profile requested by `--profile`; `complete` and `artifacts` scopes only. */
   readonly profile: string | undefined
+  /** Run build steps without overlap, including when a concurrency override is set. */
+  readonly serial: boolean
 }
 
 /**
@@ -54,6 +56,7 @@ export function parseBuildArguments(args: readonly string[]): BuildArguments {
     options: {
       profile: { type: 'string' },
       scope: { type: 'string' },
+      serial: { type: 'boolean', default: false },
     },
     allowPositionals: false,
   })
@@ -64,7 +67,7 @@ export function parseBuildArguments(args: readonly string[]): BuildArguments {
   if ((scope === 'check' || scope === 'typecheck') && values.profile !== undefined) {
     throw new Error(`build: --profile selects artifact values and does not apply to --scope ${scope}`)
   }
-  return { scope, profile: values.profile }
+  return { scope, profile: values.profile, serial: values.serial }
 }
 
 /**
@@ -80,6 +83,7 @@ export function parseBuildArguments(args: readonly string[]): BuildArguments {
  * @param root - Repository root containing the compiler and bundle configurations.
  * @param scope - Steps to include.
  * @param environment - Environment overlay applied to every step; the parent value of a key mapped to `undefined` is removed.
+ * @param serial - Whether each step must wait for the preceding step in report order.
  * @returns The gate graph in report order.
  * @throws If an aggregate configuration is invalid.
  */
@@ -87,6 +91,7 @@ export function buildGates(
   root: string,
   scope: BuildScope,
   environment: Readonly<Record<string, string | undefined>> = {},
+  serial = false,
 ): Gate[] {
   const env = { ...environment }
   const gates: Gate[] = []
@@ -112,6 +117,12 @@ export function buildGates(
         env,
       })
     }
+  }
+  if (serial) {
+    return gates.map((gate, index) => {
+      const previous = gates[index - 1]
+      return previous === undefined ? gate : { ...gate, needs: [...new Set([...(gate.needs ?? []), previous.id])] }
+    })
   }
   return gates
 }
@@ -178,16 +189,16 @@ async function main(): Promise<number> {
   if (!process.features.typescript) {
     throw new Error('build: Node.js TypeScript type stripping is unavailable in this Node.js process; remove --no-experimental-strip-types from NODE_OPTIONS or use a Node.js build with TypeScript support')
   }
-  const { scope, profile } = parseBuildArguments(process.argv.slice(2))
+  const { scope, profile, serial } = parseBuildArguments(process.argv.slice(2))
   const root = resolve(import.meta.dirname, '..')
   const name = scope === 'complete' ? 'build' : scope === 'typecheck' ? 'typecheck' : `build:${scope}`
   const budget = defaultParallelism()
   const workers = (gates: readonly Gate[]) => ({
-    workers: Math.min(gates.length, budget),
-    source: describeDefaultParallelism(),
+    workers: serial ? 1 : Math.min(gates.length, budget),
+    source: serial ? '--serial' : describeDefaultParallelism(),
   })
   if (scope === 'check' || scope === 'typecheck') {
-    const gates = buildGates(root, scope)
+    const gates = buildGates(root, scope, {}, serial)
     return runAggregate(name, gates, workers(gates))
   }
 
@@ -195,7 +206,7 @@ async function main(): Promise<number> {
   const clientEnvironment = resolveClientBuildEnvironment(repositoryEnvironment, profile ?? process.env[CLIENT_BUILD_PROFILE_SELECTOR])
   const environment = environmentOverlay(process.env, clientBuildProcessEnvironment(process.env, clientEnvironment))
   rmSync(resolve(root, CLIENT_BUILD_RECORD_PATH), { force: true })
-  const gates = buildGates(root, scope, environment)
+  const gates = buildGates(root, scope, environment, serial)
   const exitCode = await runAggregate(name, gates, workers(gates))
   if (exitCode !== 0) return exitCode
   syncHelpDocs(environment)

@@ -15,7 +15,7 @@
     { "path": "../ui-settings/tsconfig.client.json" },
     { "path": "../ui-sidebar" },
     { "path": "../ui-slots" },
-    { "path": "../ui-trajectory" },
+    { "path": "../ui-trajectory/tsconfig.client.json" },
     { "path": "../ui-workflow-run" },
     { "path": "../../session/session-stats" }
   ]
