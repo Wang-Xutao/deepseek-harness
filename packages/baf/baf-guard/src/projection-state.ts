@@ -7,7 +7,7 @@
  * @module @deepseek-ai/dsh-baf-guard/projection-state
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { load as loadYaml } from 'js-yaml'
 import {
@@ -16,6 +16,9 @@ import {
   parseBaselineManifest,
   type BaselineManifest,
 } from '@deepseek-ai/dsh-baf-core'
+// 【变更】2026-10-29 (批次三十七 · 用户问题 6): the document lifecycle the
+// guard locks — the same rule the workflow rail shows.
+import { ARTIFACT_FLOW, lockedArtifactDocuments, type ProjectionEvent } from '@deepseek-ai/dsh-baf-core'
 import {
   BUG_FIX_PATH_LEDGER_FILE,
   focusFor,
@@ -26,6 +29,7 @@ import {
 } from '@deepseek-ai/dsh-baf-workflow'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { DEFAULT_GUARD_CONFIG, type GuardPolicyConfig, type GuardWorkflowState } from './policy.ts'
+import { stageOfDocument, upstreamDocuments } from './policy.ts'
 
 /** Workspace convention for the governing baseline (guard-side, sync load). */
 export const GUARD_BASELINE_PATH = '.baf/baseline.yml'
@@ -133,6 +137,78 @@ function pickGuardActive(
 }
 
 /**
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 8): the change's documents that a
+ * customer-authorized 「同步」 may rewrite — a document whose upstream document
+ * is newer than it is.
+ *
+ * The workflow's own drift detector (`detectArtifactDrift` in
+ * `@deepseek-ai/dsh-baf-workflow`) judges the same relation, but it is async
+ * and it only judges a COMPLETED stage. The guard needs a synchronous, local
+ * answer for one question — "may this document be re-authored?" — so this
+ * reads the chain's documents directly. A pure mtime bump therefore unlocks a
+ * document here even when its content did not change; the lock this guards is
+ * about WHICH document the model may touch, not about content.
+ * @param workspaceRoot - absolute workspace root.
+ * @param changeId - the active change id.
+ * @returns workspace-relative paths of the stale documents.
+ */
+function readStaleDocuments(workspaceRoot: string, changeId: string): readonly string[] {
+  const changeDir = join(workspaceRoot, 'openspec', 'changes', changeId)
+  const mtimeOf = (fileName: string): number | undefined => {
+    try {
+      return Math.floor(statSync(join(changeDir, fileName)).mtimeMs)
+    } catch {
+      return undefined
+    }
+  }
+  const documents = [
+    'proposal.md', 'clarify.md', 'design.md', 'plan.md', 'tasks.md',
+    'plan.json', 'bug-fix-path-ledger.json', 'checklist.md', 'verify.md', 'verify-report.json',
+  ]
+  const stale: string[] = []
+  for (const fileName of documents) {
+    const own = mtimeOf(fileName)
+    if (own === undefined) continue
+    const stage = stageOfDocument(fileName)
+    if (stage === undefined) continue
+    const behind = upstreamDocuments(stage).some((upstream) => {
+      const upstreamMtime = mtimeOf(upstream)
+      return upstreamMtime !== undefined && upstreamMtime > own
+    })
+    if (behind) stale.push(`openspec/changes/${changeId}/${fileName}`)
+  }
+  return stale
+}
+
+/**
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 6): the documents the customer
+ * CONFIRMED — the ones whose gate was passed (已完成). They are the
+ * customer's own word: the model may not rewrite them, and only the customer
+ * (by editing the file, or by pressing 同步) may.
+ * @param workspaceRoot - absolute workspace root.
+ * @param changeId - the active change id.
+ * @param events - the change's projection events.
+ * @returns workspace-relative paths of the confirmed documents.
+ */
+function readLockedDocuments(
+  workspaceRoot: string,
+  changeId: string,
+  events: readonly ProjectionEvent[],
+): readonly string[] {
+  const changeDir = join(workspaceRoot, 'openspec', 'changes', changeId)
+  const mtimes: Record<string, number> = {}
+  for (const fileName of Object.keys(ARTIFACT_FLOW)) {
+    try {
+      mtimes[fileName] = Math.floor(statSync(join(changeDir, fileName)).mtimeMs)
+    } catch {
+      // The document does not exist yet — nothing to lock.
+    }
+  }
+  return lockedArtifactDocuments(events, mtimes)
+    .map(fileName => `openspec/changes/${changeId}/${fileName}`)
+}
+
+/**
  * Read the active change's workflow state synchronously. "Active" = a
  * non-terminal entry in the projection index selected by the §22.19 ranking
  * (write path → session focus → highest seq); no index / no active entry /
@@ -179,6 +255,12 @@ export function readGuardWorkflowState(workspaceRoot: string, targetPath?: strin
       // tail stops being awaiting-confirm).
       gatePending: status.intake?.confirmation !== 'confirmed'
         || events.at(-1)?.type === 'awaiting-confirm',
+      // 【变更】2026-10-29 (批次三十六 · 用户问题 8): the documents a
+      // customer-authorized 「同步」 may rewrite.
+      staleDocuments: readStaleDocuments(workspaceRoot, active.changeId),
+      // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the documents the
+      // customer CONFIRMED (已完成) — the model may no longer rewrite them.
+      lockedDocuments: readLockedDocuments(workspaceRoot, active.changeId, events),
     }
   } catch {
     // Corrupted tail: fail closed rather than guessing the stage.

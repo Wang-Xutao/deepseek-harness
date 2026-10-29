@@ -34,6 +34,13 @@ export interface StandardsOverviewState {
   /** The Host's summary projection; undefined only while loading. */
   summary: BafStandardSummaryResult | undefined
   /**
+   * 【变更】2026-10-29 (批次三十六 · 用户问题 1): the last failed read's
+   * message while a good summary is still on screen. A failed read never
+   * clears what the customer already sees — it is reported as a notice line
+   * next to the content. Undefined when the last read succeeded.
+   */
+  summaryError: string | undefined
+  /**
    * 【变更】2026-10-20 (批次六 5): the 企业规范 viewer's open document id
    * (undefined = viewer closed). The docs are product constants, so this
    * survives summary reloads and workspace switches.
@@ -211,6 +218,7 @@ export interface StandardsOverviewFace {
 const INITIAL: StandardsOverviewState = {
   status: 'loading',
   summary: undefined,
+  summaryError: undefined,
   enterpriseDocId: undefined,
   enterpriseDoc: undefined,
   localeActive: 'zh',
@@ -267,6 +275,11 @@ interface WorkspaceStartSlice {
  */
 export class StandardsController {
   private readonly store: SnapshotStore<StandardsOverviewState>
+  /**
+   * 【变更】2026-10-29 (批次三十六 · 用户问题 1): monotonic token for the
+   * summary reads (compare-and-drop). Only the newest read may paint.
+   */
+  private summarySeq = 0
 
   /**
    * @param ctx - the browser plugin context, whose `remote.bafStandardConfig`
@@ -285,7 +298,11 @@ export class StandardsController {
     } catch {
       // Locale service absent (bare test harness): the 'zh' default stands.
     }
-    void this.reload()
+    // 【变更】2026-10-29 (批次三十六 · 用户问题 1): the activation-time read
+    // is a WARM-UP. It can land before the workspace Remote is up, and the
+    // panel is not on screen yet — its failure must not answer the page. The
+    // panel's own read (on mount) decides what 项目工程 shows.
+    void this.readSummary(true)
   }
 
   /** The inject face the slot registration hands the row component. */
@@ -324,15 +341,34 @@ export class StandardsController {
 
   /** @inheritdoc */
   async reload(): Promise<void> {
-    // 【变更】2026-10-06 运行时探针: a rejected proxy call (e.g. the client-side
-    // arity/contract check) used to leave the row at `loading` forever — settle
-    // every failure into the `failed` status the component already renders.
+    await this.readSummary()
+  }
+
+  /**
+   * Read the summary once and fold the answer into the store.
+   *
+   * 【变更】2026-10-29 (批次三十六 · 用户问题 1): the read is sequenced. The
+   * controller reads at plugin activation AND every panel reads again when it
+   * mounts, so two reads are usually in flight at once. The older answer must
+   * never paint over the newer one: a failed activation read used to land its
+   * error banner for one frame and the mount read's success replaced it — the
+   * "错误状态一闪而过" the customer reported on the first visit to 项目工程.
+   *
+   * A failure also never clears a summary the customer already sees: it is
+   * kept and the message becomes a notice line.
+   */
+  private async readSummary(warmup = false): Promise<void> {
+    const seq = ++this.summarySeq
+    let outcome: BafStandardSummaryResult
     try {
       const response = await this.ctx.remote.bafStandardConfig.summary()
-      this.applySummary(response.ok ? response.value : { status: 'failed', error: response.error.message })
+      outcome = response.ok ? response.value : { status: 'failed', error: response.error.message }
     } catch (error) {
-      this.applySummary({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
+      outcome = { status: 'failed', error: error instanceof Error ? error.message : String(error) }
     }
+    // A stale answer is dropped: the newer read decides what the panel shows.
+    if (seq !== this.summarySeq) return
+    this.applySummary(outcome, warmup)
   }
 
   /** @inheritdoc */
@@ -354,8 +390,20 @@ export class StandardsController {
   }
 
   /** Fold one summary answer into the store (shared by reload's outcomes). */
-  private applySummary(summary: BafStandardSummaryResult): void {
+  private applySummary(summary: BafStandardSummaryResult, warmup = false): void {
     this.store.update((state) => {
+      // 【变更】2026-10-29 (批次三十六 · 用户问题 1): a failed read never
+      // clears what the customer already sees. The summary the panel shows
+      // stays; the failure becomes a notice line beside it. Only a panel that
+      // has never seen a summary answers with the full error banner.
+      if (summary.status === 'failed') {
+        state.summaryError = summary.error
+        const hasSummary = state.summary !== undefined && state.summary.status !== 'failed'
+        if (hasSummary || warmup) return
+        state.status = 'failed'
+        return
+      }
+      state.summaryError = undefined
       // 【变更】2026-10-19 (六问题批 4.1 web 验证修复): a fresh ready answer
       // re-seeds only drafts that are still CLEAN against the projection it
       // replaces — one typed during the roundtrip (or during a save's reload)

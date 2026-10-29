@@ -26,11 +26,20 @@ import {
 } from './stages/gates.ts'
 import { IMPLEMENT_REQUIREMENTS_ZH } from './go-dispatch.ts'
 
-/** One option of a confirm gate: its label and the command a click runs. */
+/**
+ * One option of a confirm gate: its label and the command a click runs.
+ *
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 1): the option's plain-Chinese
+ * explanation rides along — the customer asked for a short explanation under
+ * every option, and the read-only overview is one of the surfaces that shows
+ * them.
+ */
 export interface GateOverviewOptionRow {
   readonly id: string
   readonly label: string
   readonly command: string
+  /** What clicking the option does, in one short Chinese sentence. */
+  readonly hint?: string
 }
 
 /** One 客户确认门 row (a `GATE_REGISTRY` entry, verbatim). */
@@ -99,7 +108,15 @@ export function projectGateOverview(): GateOverview {
       id: spec.id,
       title: spec.title,
       question: spec.question,
-      options: spec.options.map(option => ({ id: option.id, label: option.label, command: option.command })),
+      options: spec.options.map(option => ({
+        id: option.id,
+        label: option.label,
+        command: option.command,
+        // 【变更】2026-10-29 (批次三十六 · 用户问题 1): the option's
+        // explanation rides on the row — the overview shows the same
+        // explanation the confirmation dialog does.
+        ...(option.hint === undefined ? {} : { hint: option.hint }),
+      })),
       ...(rest === undefined ? {} : rest),
       // dynamicOptions rides verbatim so the overview can say WHY the option
       // cell is empty (bind-workflow / resume fill theirs at runtime).

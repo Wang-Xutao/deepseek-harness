@@ -207,19 +207,6 @@ export function apply(ctx: ClientContext): void {
         unwrap(await ctx.remote.bafWorkflowView.changeDetail(
           cwd === undefined ? { changeId } : { changeId, cwd },
         )) as BafWorkflowChangeDetailResult,
-      // 【变更】2026-10-24 (批次二十 3): open one of the change's artifacts in
-      // the right sidebar. The 变更总览 page is PROJECT-scoped — there is no
-      // conversation behind it to borrow a file address from — so the opener
-      // resolves a LIVE session of the SAME workspace and uses its id. With no
-      // such session the page has no sidebar to open into, so the opener
-      // reports the refusal instead of the page offering a dead button.
-      openArtifact: (cwd: string, path: string): boolean => {
-        const sessions = Object.values(ctx.sessions.list.getSnapshot().byId)
-        const owner = sessions.find(session => session.cwd === cwd)
-        if (owner === undefined) return false
-        ctx.sidebarRight.openResource(fileAddressFor(owner.id, cwd, path))
-        return true
-      },
       // 【变更】2026-10-25 (批次二十四 1): the artifact preview's reader. The
       // page is PROJECT-scoped, so it borrows a LIVE session of the same
       // workspace and reads the document through it (the same
@@ -272,6 +259,13 @@ export function apply(ctx: ClientContext): void {
           sessionId,
           changeId,
           ...(skipAsk === true ? { skipAsk: true } : {}),
+        })) as WorkflowTabView,
+        // 【变更】2026-10-28 (批次三十五 · 用户问题 2): the Tab's own 暂不推进 —
+        // recorded host-side so BOTH tabs stand down (no re-prompt) until the
+        // graph's 「推进」 re-raises the deferred confirmation.
+        advanceDismiss: async changeId => unwrap(await remote.advanceDismiss({
+          sessionId,
+          changeId,
         })) as WorkflowTabView,
         transition: async (changeId, to, evidence) => unwrap(await remote.transition({
           sessionId,

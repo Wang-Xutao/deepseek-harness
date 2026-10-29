@@ -15,15 +15,23 @@
  * detail view became a FOUR-ZONE workspace:
  *
  *   顶部  a strip with the change's identity and its headline figures
- *   左侧  a fixed rail: the change classification + the stage artifacts
+ *   左侧  a fixed rail: the change classification + the stage artifacts, and
+ *         — at its BOTTOM — the change's full event history (【变更】
+ *         2026-10-28 (批次三十五 · 用户问题 1): the history moved DOWN from
+ *         the right rail to the bottom-left band; it is the change's story and
+ *         it reads under the change's own identity and documents)
  *   中间  the COMPLETE workflow graph — the session tab's own `FlowCanvas`,
  *         the same component, the same nodes, the same edges, the same status
  *         colours (a change that looks different in the ledger than in the
  *         conversation is a bug, not a variant)
- *   右侧  a rail: the stage head, the stage checklist, the stage detail and
- *         the change's full event history
+ *   右侧  a rail: the stage head, the stage checklist and the stage detail
+ *
+ * 【变更】2026-10-28 (批次三十五 · 用户问题 1/2): the stage NAMES are
+ * bilingual — 中文在前，英文在后 on ONE line, the 确认门配置流程图's anatomy
+ * (the English name is a plain constant, the zh label stays locale-owned).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import clsx from 'clsx'
 import type {
   InjectFace, PropsLocale, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
@@ -39,7 +47,7 @@ import {
 import { formatDuration, formatTimestamp, formatTokens, modeLabel } from './dashboard-format.ts'
 import { buildDashboardHtml, type DashboardHtmlChangeDetail, type DashboardHtmlGraph, type DashboardHtmlGraphEdge, type DashboardHtmlGraphNode, type DashboardHtmlLabels } from './dashboard-html.ts'
 import { FlowCanvas } from './FlowCanvas.tsx'
-import { ArtifactRail, BilingualDetail, StageChecklist, COL_W, NODE_H, NODE_W, ROW_H, artifactDriftTags, stageExecuted } from './flow-parts.tsx'
+import { ArtifactRail, BilingualDetail, StageChecklist, StageSummaryCard, COL_W, NODE_EN, NODE_H, NODE_W, ROW_H, artifactDriftTags, stageExecuted, workspaceRelativePath } from './flow-parts.tsx'
 import { conditionTextOf } from './graph-template.ts'
 import css from './ChangeOverviewRow.module.css'
 
@@ -59,17 +67,6 @@ export interface ChangeOverviewRowInjected {
    * {@link ChangeOverviewRowInjected.loadChangeOverview} takes.
    */
   loadChangeDetail: (changeId: string, cwd?: string) => Promise<BafWorkflowChangeDetailResult>
-  /**
-   * 【变更】2026-10-24 (批次二十 3): open one of the change's artifacts in the
-   * right sidebar.
-   *
-   * The 变更总览 page is PROJECT-scoped and has no conversation behind it, so
-   * there is no session to borrow a file address from. The opener therefore
-   * resolves a LIVE session of the same workspace and returns `false` when the
-   * workspace has none — the page then says so instead of offering a button
-   * that cannot work.
-   */
-  openArtifact?: (cwd: string, path: string) => boolean
   /**
    * 【变更】2026-10-25 (批次二十四 1): read one artifact's text for the
    * preview window. The 变更总览 page is PROJECT-scoped, so the reader resolves
@@ -513,21 +510,21 @@ export function toBoardGraph(
     // same rule the app's FlowCanvas applies to its metrics row.
     const metrics = isCurrentTerminal
       ? [
-          `${t('card.duration')} ${formatDuration(view.metrics?.totalDurationMs ?? 0)}`,
-          `${t('card.tokens')} ${formatTokens(view.metrics?.totalInputTokens ?? 0, view.metrics?.totalOutputTokens ?? 0)}`,
-        ]
+        `${t('card.duration')} ${formatDuration(view.metrics?.totalDurationMs ?? 0)}`,
+        `${t('card.tokens')} ${formatTokens(view.metrics?.totalInputTokens ?? 0, view.metrics?.totalOutputTokens ?? 0)}`,
+      ]
       : [
-          `${t('card.duration')} ${
-            node?.metrics?.durationMs !== undefined
-              ? formatDuration(node.metrics.durationMs)
-              : stageExecuted(node?.status) ? '0s' : '—'
-          }`,
-          `${t('card.tokens')} ${
-            node?.metrics?.inputTokens !== undefined || node?.metrics?.outputTokens !== undefined
-              ? formatTokens(node.metrics?.inputTokens, node.metrics?.outputTokens)
-              : stageExecuted(node?.status) ? formatTokens(0, 0) : '—'
-          }`,
-        ]
+        `${t('card.duration')} ${
+          node?.metrics?.durationMs !== undefined
+            ? formatDuration(node.metrics.durationMs)
+            : stageExecuted(node?.status) ? '0s' : '—'
+        }`,
+        `${t('card.tokens')} ${
+          node?.metrics?.inputTokens !== undefined || node?.metrics?.outputTokens !== undefined
+            ? formatTokens(node.metrics?.inputTokens, node.metrics?.outputTokens)
+            : stageExecuted(node?.status) ? formatTokens(0, 0) : '—'
+        }`,
+      ]
     nodes.push({
       id,
       label: t(`node.${placement.id as WorkflowNodeId}`),
@@ -591,7 +588,7 @@ function toBoardDetail(
       intake: {
         kind: view.intake.kind,
         modeLabel: modeLabel(view.intake.mode, t),
-        affectedScope: view.intake.affectedScope,
+        affectedScope: t(`scope.${view.intake.affectedScope}` as WorkflowTabKey),
         confidence: view.intake.confidence,
         reasonCodes: view.intake.reasonCodes,
         openspecRequired: view.intake.openspecRequired,
@@ -690,7 +687,7 @@ async function withArtifactContents(
  * @returns the row element tree.
  */
 export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactElement {
-  const { t, loadChangeOverview, loadChangeDetail, openArtifact, readArtifact, useSessions } = props
+  const { t, loadChangeOverview, loadChangeDetail, readArtifact, useSessions } = props
   const [result, setResult] = useState<BafWorkflowChangeOverviewResult | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
@@ -813,6 +810,10 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           template: t('artifact.state.template'),
           planned: t('artifact.state.planned'),
           filled: t('artifact.state.filled'),
+          // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail.
+          completed: t('artifact.state.completed'),
+          updated: t('artifact.state.updated'),
+          stale: t('artifact.state.stale'),
         },
         nodeLabels,
         modeLabels: {
@@ -1176,7 +1177,6 @@ export function ChangeOverviewRow(props: ChangeOverviewRowProps): React.ReactEle
           changeId={openChangeId}
           detail={detail}
           loading={detailLoading}
-          openArtifact={openArtifact}
           readArtifact={readArtifact}
           onClose={() => { setOpenChangeId(undefined); setDetail(undefined) }}
           t={t}
@@ -1199,11 +1199,10 @@ function ChangeDetailWorkspace(props: {
   detail: BafWorkflowChangeDetailResult | undefined
   loading: boolean
   onClose: () => void
-  openArtifact: ((cwd: string, path: string) => boolean) | undefined
   readArtifact: ((cwd: string, path: string) => Promise<WorkflowTabFileReadResult>) | undefined
   t: ChangeOverviewRowProps['t']
 }): React.ReactElement {
-  const { changeId, detail, loading, onClose, openArtifact, readArtifact, t } = props
+  const { changeId, detail, loading, onClose, readArtifact, t } = props
   const view = detail?.status === 'ready' ? detail.view : undefined
   const cwd = detail?.status === 'ready' ? detail.cwd : undefined
   const shell = useRef<HTMLDivElement | null>(null)
@@ -1280,13 +1279,18 @@ function ChangeDetailWorkspace(props: {
       setOpenNotice(t('ovw.detailNoSession'))
       return
     }
-    setPreview({ path })
+    // 【变更】2026-10-28 (批次三十四 · 用户问题 6): the graph's chips carry the
+    // ABSOLUTE paths the stage events recorded, and the workspace reader takes
+    // workspace-relative paths only — every document preview answered
+    // 「仅支持工作区相对路径」. The path becomes relative here.
+    const relative = workspaceRelativePath(cwd, path)
+    setPreview({ path: relative })
     try {
-      const result = await readArtifact(cwd, path)
-      setPreview(current => (current !== null && current.path === path ? { path, result } : current))
+      const result = await readArtifact(cwd, relative)
+      setPreview(current => (current !== null && current.path === relative ? { path: relative, result } : current))
     } catch (err) {
-      setPreview(current => (current !== null && current.path === path
-        ? { path, result: { status: 'unreadable', reason: err instanceof Error ? err.message : String(err) } }
+      setPreview(current => (current !== null && current.path === relative
+        ? { path: relative, result: { status: 'unreadable', reason: err instanceof Error ? err.message : String(err) } }
         : current))
     }
   }, [readArtifact, cwd, t])
@@ -1304,14 +1308,10 @@ function ChangeDetailWorkspace(props: {
     return () => { document.removeEventListener('keydown', onKey, true) }
   }, [preview])
 
-  const openFile = useCallback((path: string): void => {
-    if (openArtifact === undefined || cwd === undefined) {
-      setOpenNotice(t('ovw.detailNoSession'))
-      return
-    }
-    setOpenNotice(openArtifact(cwd, path) ? undefined : t('ovw.detailOpenFailed'))
-  }, [openArtifact, cwd, t])
-
+  // 【变更】2026-10-27 (批次三十二 · 用户问题 6): the preview's 在侧栏打开
+  // button is GONE — the document is already on screen in this window, and the
+  // button only moved it to another surface. With it gone the preview is one
+  // reading surface: title, path, body.
   const state: ChangeState = view === undefined
     ? 'active'
     : view.current === 'abandoned'
@@ -1387,40 +1387,55 @@ function ChangeDetailWorkspace(props: {
           </header>
 
           <div className={css.wsBody}>
-            {/* ── 左侧 · classification + artifacts ───────────────────────── */}
+            {/* ── 左侧 · classification + artifacts + the HISTORY (bottom) ── */}
             <aside className={css.wsLeft} data-testid="change-detail-left">
-              {loading && <LoadingPlate label={t('ovw.detailLoading')} testid="change-detail-loading" />}
-              {!loading && detail === undefined && (
-                <div className={css.statusError}>{t('ovw.detailFailed')}</div>
-              )}
-              {!loading && detail?.status === 'unknown-change' && (
-                <div className={css.status} data-testid="change-detail-unknown">
-                  {t('ovw.detailUnknownChange')}
-                </div>
-              )}
-              {!loading && detail?.status === 'no-workspace' && (
-                <div className={css.status}>{t('ovw.noWorkspace')}</div>
-              )}
+              <div className={css.wsLeftScroll}>
+                {loading && <LoadingPlate label={t('ovw.detailLoading')} testid="change-detail-loading" />}
+                {!loading && detail === undefined && (
+                  <div className={css.statusError}>{t('ovw.detailFailed')}</div>
+                )}
+                {!loading && detail?.status === 'unknown-change' && (
+                  <div className={css.status} data-testid="change-detail-unknown">
+                    {t('ovw.detailUnknownChange')}
+                  </div>
+                )}
+                {!loading && detail?.status === 'no-workspace' && (
+                  <div className={css.status}>{t('ovw.noWorkspace')}</div>
+                )}
+                {view !== undefined && (
+                  <>
+                    <IntakeCard view={view} t={t} />
+                    {view.artifacts !== undefined && view.artifacts.length > 0 && (
+                      <ArtifactRail
+                        rows={view.artifacts}
+                        // 【变更】2026-10-27 (批次三十一): the same drift tags the
+                        // session rail wears — 已修改 / 待同步 / 已同步.
+                        driftTags={artifactDriftTags(view.artifactDrift ?? [], false)}
+                        onOpen={(path) => { void openPreview(path) }}
+                        t={t}
+                      />
+                    )}
+                    {readArtifact === undefined && (
+                      <p className={css.wsNote} data-testid="change-detail-no-session">{t('ovw.detailNoSession')}</p>
+                    )}
+                    {openNotice !== undefined && (
+                      <p className={css.wsWarn} data-testid="change-detail-open-failed">{openNotice}</p>
+                    )}
+                  </>
+                )}
+              </div>
+              {/* 【变更】2026-10-28 (批次三十五 · 用户问题 1): the change's
+                  HISTORY moved DOWN from the right rail to the rail's BOTTOM
+                  band (左下方). It is the change's story (what happened, in
+                  order); the right rail answers 「这个阶段现在怎么样」, and the
+                  left rail's upper part answers 「这个变更是什么」. */}
               {view !== undefined && (
-                <>
-                  <IntakeCard view={view} t={t} />
-                  {view.artifacts !== undefined && view.artifacts.length > 0 && (
-                    <ArtifactRail
-                      rows={view.artifacts}
-                      // 【变更】2026-10-27 (批次三十一): the same drift tags the
-                      // session rail wears — 已修改 / 待同步 / 已同步.
-                      driftTags={artifactDriftTags(view.artifactDrift ?? [], false)}
-                      onOpen={(path) => { void openPreview(path) }}
-                      t={t}
-                    />
-                  )}
-                  {openArtifact === undefined && (
-                    <p className={css.wsNote} data-testid="change-detail-no-session">{t('ovw.detailNoSession')}</p>
-                  )}
-                  {openNotice !== undefined && (
-                    <p className={css.wsWarn} data-testid="change-detail-open-failed">{openNotice}</p>
-                  )}
-                </>
+                <div className={css.wsLeftHistory} data-testid="change-detail-history-region">
+                  <HistoryPanel
+                    history={detail?.status === 'ready' ? detail.history : []}
+                    t={t}
+                  />
+                </div>
               )}
             </aside>
 
@@ -1446,31 +1461,33 @@ function ChangeDetailWorkspace(props: {
               )}
             </section>
 
-            {/* ── 右侧 · stage head + checklist + detail + history ─────────── */}
+            {/* ── 右侧 · stage card + checklist + detail ─────────────────── */}
             <aside className={css.wsRight} data-testid="change-detail-right">
               {view !== undefined && (
                 <>
-                  <div className={css.wsStageHead}>
-                    <span className={css.wsStageLabel}>{t('ovw.detailStageHead')}</span>
-                    <span className={css.wsStageName}>
-                      {terminal !== null
+                  <div className={css.wsRightScroll}>
+                    {/* 【变更】2026-10-27 (批次三十二 · 用户问题 5): the stage
+                        header became the stage's NAME CARD — the name plus the
+                        stage's own figures (状态 / 耗时 / Tokens / 下一跳 /
+                        条件), the same card the session rail shows.
+                        【变更】2026-10-28 (批次三十五 · 用户问题 1): the name
+                        is BILINGUAL — the English name rides INLINE after the
+                        zh name on the same line (中文在前，英文在后). */}
+                    <StageSummaryCard
+                      name={terminal !== null
                         ? t(`node.${terminal}`)
                         : selectedNode === undefined
                           ? t('ovw.detailSelectStage')
                           : t(`node.${selectedNode.id}`)}
-                    </span>
-                    {terminal !== null && (
-                      <span className={css.wsStageStatus} data-status={terminal}>
-                        {t(`status.${terminal}`)}
-                      </span>
-                    )}
-                    {selectedNode !== undefined && (
-                      <span className={css.wsStageStatus} data-status={selectedNode.status}>
-                        {t(`status.${selectedNode.status}`)}
-                      </span>
-                    )}
-                  </div>
-                  <div className={css.wsRightScroll}>
+                      nameEn={terminal !== null
+                        ? NODE_EN[terminal]
+                        : selectedNode === undefined
+                          ? undefined
+                          : NODE_EN[selectedNode.id]}
+                      node={selectedNode}
+                      nextEdge={nextEdge}
+                      t={t}
+                    />
                     {terminal !== null ? (
                       <section className={css.wsCard} data-testid="change-detail-terminal">
                         <div className={css.terminalRow}>
@@ -1479,11 +1496,15 @@ function ChangeDetailWorkspace(props: {
                         </div>
                         <div className={css.terminalRow}>
                           <span className={css.intakeKey}>{t('detail.artifacts')}</span>
-                          <span className={css.intakeValue}>{t(`terminal.${terminal}.artifacts`)}</span>
+                          <span className={clsx(css.intakeValue, css.intakeValueWrap)}>
+                            {t(`terminal.${terminal}.artifacts`)}
+                          </span>
                         </div>
                         <div className={css.terminalRow}>
                           <span className={css.intakeKey}>{t('detail.completion')}</span>
-                          <span className={css.intakeValue}>{t(`terminal.${terminal}.completion`)}</span>
+                          <span className={clsx(css.intakeValue, css.intakeValueWrap)}>
+                            {t(`terminal.${terminal}.completion`)}
+                          </span>
                         </div>
                       </section>
                     ) : selectedNode === undefined ? (
@@ -1492,14 +1513,10 @@ function ChangeDetailWorkspace(props: {
                       <>
                         <StageChecklist node={selectedNode} t={t} />
                         <section className={css.wsCard}>
-                          <BilingualDetail node={selectedNode} t={t} nextEdge={nextEdge} />
+                          <BilingualDetail node={selectedNode} t={t} />
                         </section>
                       </>
                     )}
-                    <HistoryPanel
-                      history={detail?.status === 'ready' ? detail.history : []}
-                      t={t}
-                    />
                   </div>
                 </>
               )}
@@ -1539,16 +1556,6 @@ function ChangeDetailWorkspace(props: {
                   : preview.result.status === 'missing' ? t('ovw.artifactPreviewMissing')
                     : `${t('ovw.artifactPreviewFailed')}${preview.result.reason ?? ''}`}
             </pre>
-            <div className={css.modalFoot}>
-              <button
-                type="button"
-                className={css.modalAction}
-                data-testid="change-artifact-preview-open"
-                onClick={() => { openFile(preview.path) }}
-              >
-                {t('ovw.artifactPreviewOpen')}
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -1588,7 +1595,10 @@ function IntakeCard(props: { view: WorkflowTabView; t: ChangeOverviewRowProps['t
       </div>
       <div className={css.intakeRow}>
         <span className={css.intakeKey}>{t('ovw.detailScope')}</span>
-        <span className={css.intakeValue}>{intake.affectedScope}</span>
+        {/* 【变更】2026-10-28 (批次三十四 · 用户问题 6): the scope reads as the
+            customer's word (跨模块 / 局部小改 / 单文件), not the raw enum the
+            session rail already localizes. */}
+        <span className={css.intakeValue}>{t(`scope.${intake.affectedScope}` as WorkflowTabKey)}</span>
       </div>
       <div className={css.intakeRow}>
         <span className={css.intakeKey}>{t('ovw.detailConfidence')}</span>
@@ -1597,6 +1607,10 @@ function IntakeCard(props: { view: WorkflowTabView; t: ChangeOverviewRowProps['t
       <div className={css.confidence}>
         <span className={css.confidenceFill} style={{ width: `${percent}%` }} />
       </div>
+      {/* 【变更】2026-10-29 (批次三十六 · 用户问题 4): the 置信度 number's
+          meaning and purpose ride the card as a line — the customer asked
+          「置信度到底是什么，有什么用」 and a bare percentage did not say. */}
+      <p className={css.intakeNote}>{t('intake.confidenceNote')}</p>
       {intake.reasonCodes.length > 0 && (
         <div className={css.intakeRow}>
           <span className={css.intakeKey}>{t('ovw.detailReason')}</span>
@@ -1620,7 +1634,10 @@ function IntakeCard(props: { view: WorkflowTabView; t: ChangeOverviewRowProps['t
 
 /**
  * 【变更】2026-10-24 (批次二十 3): the change's event HISTORY — every
- * projection event, oldest first, as a timeline in the right rail.
+ * projection event, oldest first, as a timeline.
+ * 【变更】2026-10-28 (批次三十五 · 用户问题 1): the timeline moved to the
+ * BOTTOM-LEFT band of the change detail (the left rail's lower part), and
+ * every stage name it prints is BILINGUAL — 中文在前，英文在后 on one line.
  * @param props - the panel props.
  * @returns the panel element tree.
  */
@@ -1642,7 +1659,12 @@ function HistoryPanel(props: {
                 <span className={css.historyAt}>{formatTimestamp(entry.at)}</span>
                 <span className={css.historyTitle}>{t(historyKeyOf(entry.type) as WorkflowTabKey)}</span>
                 {entry.node !== undefined && (
-                  <span className={css.historyNode}>{t(`node.${entry.node}` as WorkflowTabKey)}</span>
+                  <span className={css.historyNode}>
+                    {t(`node.${entry.node}` as WorkflowTabKey)}
+                    {NODE_EN[entry.node] !== undefined && (
+                      <span className={css.historyNodeEn}>{NODE_EN[entry.node]}</span>
+                    )}
+                  </span>
                 )}
                 {entry.gate !== undefined && <span className={css.historyGate}>{entry.gate}</span>}
                 {entry.detail !== undefined && <span className={css.historyDetail}>{entry.detail}</span>}

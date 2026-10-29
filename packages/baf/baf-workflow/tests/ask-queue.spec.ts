@@ -14,8 +14,10 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import {
   cancelAsksForChange,
   cancelAsksForChangeGates,
+  claimChangeGate,
   enqueueAsk,
   hasPendingAsk,
+  releaseChangeGate,
   resetAskQueue,
   type AskOutcome,
 } from '../src/ask-queue.ts'
@@ -345,6 +347,62 @@ describe('【变更】2026-10-02 (demo31 问题 3) cancelAsksForChangeGates — 
     heldScaffold.resolve('scaffold')
     expect(await pre).toEqual({ kind: 'answered', value: 'pre' })
     expect(await scaffold).toEqual({ kind: 'answered', value: 'scaffold' })
+  })
+})
+
+describe('【变更】2026-10-29 (批次三十六 · 用户问题 2) the change-gate slot', () => {
+  it('claims one (change, gate) slot once — and frees it on release', () => {
+    expect(claimChangeGate('chg-1', 'clarify-advance')).toBe(true)
+    // The same gate of the same change is already on screen → refused.
+    expect(claimChangeGate('chg-1', 'clarify-advance')).toBe(false)
+    // Another gate of the same change is another decision → its own slot.
+    expect(claimChangeGate('chg-1', 'design-advance')).toBe(true)
+    // Another change is another decision → its own slot.
+    expect(claimChangeGate('chg-2', 'clarify-advance')).toBe(true)
+    // The dialog settled → the slot is free again.
+    releaseChangeGate('chg-1', 'clarify-advance')
+    expect(claimChangeGate('chg-1', 'clarify-advance')).toBe(true)
+  })
+
+  it('the same gate in one session stands down even when the change ids differ', async () => {
+    // The customer saw the same card twice: the first dialog (no choice
+    // made) was covered by a second one. The session is the last line of
+    // defence — one session shows one card per gate, whoever pops it.
+    const held = deferred<string>()
+    const first = enqueueAsk({
+      sessionId: 's1',
+      key: 'gate:clarify-advance:chg-1',
+      run: () => held.promise,
+    })
+    await Promise.resolve()
+    const second = await enqueueAsk({
+      sessionId: 's1',
+      key: 'gate:clarify-advance:chg-2',
+      run: async () => 'must-not-pop',
+    })
+    expect(second).toEqual({ kind: 'dropped', reason: 'duplicate' })
+    held.resolve('answered')
+    expect(await first).toEqual({ kind: 'answered', value: 'answered' })
+  })
+
+  it('a different gate in the same session still pops', async () => {
+    const held = deferred<string>()
+    const first = enqueueAsk({
+      sessionId: 's1',
+      key: 'gate:clarify-advance:chg-1',
+      run: () => held.promise,
+    })
+    await Promise.resolve()
+    // A different decision is a different card — it waits its turn, it does
+    // not stand down.
+    const second = enqueueAsk({
+      sessionId: 's1',
+      key: 'gate:design-advance:chg-1',
+      run: async () => 'other-gate',
+    })
+    held.resolve('answered')
+    expect(await first).toEqual({ kind: 'answered', value: 'answered' })
+    expect(await second).toEqual({ kind: 'answered', value: 'other-gate' })
   })
 })
 

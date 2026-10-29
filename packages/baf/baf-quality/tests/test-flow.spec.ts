@@ -6,7 +6,16 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { readTestFlowToggles, testFlowCompletion, testFlowGated } from '../src/test-flow.ts'
+import {
+  readTestFlowToggles,
+  runTestFlowChain,
+  testFlowCompletion,
+  testFlowGated,
+  testFlowStageCommand,
+  TEST_FLOW_CHAIN_ORDER,
+  type QualityCommandResult,
+  type QualityExecutor,
+} from '../src/test-flow.ts'
 
 const workspaces: string[] = []
 
@@ -126,5 +135,84 @@ describe('testFlowGated', () => {
   it('gates only baselines with a real test command (placeholders never gate)', () => {
     expect(testFlowGated({ stack: { test: '<enterprise-tbd>' } })).toBe(false)
     expect(testFlowGated({ stack: { test: 'ceedling test' } })).toBe(true)
+  })
+})
+
+describe('runTestFlowChain (批次三十四 · 用户问题 5)', () => {
+  /**
+   * A recording executor: every command it is handed is remembered, and the
+   * outcome is the one the test asks for.
+   * @param exitCode - the exit code every command reports.
+   * @returns the executor plus the commands it saw.
+   */
+  function recorder(exitCode: number): { readonly executor: QualityExecutor; readonly commands: string[] } {
+    const commands: string[] = []
+    const executor: QualityExecutor = async (command) => {
+      commands.push(command)
+      const result: QualityCommandResult = {
+        command,
+        stdout: 'ok',
+        stderr: '',
+        exitCode,
+        timedOut: false,
+        cancelled: false,
+        spawnError: null,
+        durationMs: 1,
+      }
+      return result
+    }
+    return { executor, commands }
+  }
+
+  it('runs one command per distinct step command and reports every step', async () => {
+    const root = tempWorkspace()
+    const { executor, commands } = recorder(0)
+    const result = await runTestFlowChain(root, {
+      executor,
+      stages: ['build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze'],
+    })
+    expect(result.ok).toBe(true)
+    // build/test share `baf-quality test`, instrument/report/gate share
+    // `baf-quality check`, lint/analyze share `baf-quality lint` — three
+    // commands for seven steps.
+    expect(commands).toHaveLength(3)
+    expect(result.steps.map(step => step.stage)).toEqual([
+      'build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze',
+    ])
+    expect(result.steps.every(step => step.ok)).toBe(true)
+  })
+
+  it('halts the sweep at the first failed step', async () => {
+    const root = tempWorkspace()
+    const { executor, commands } = recorder(1)
+    const result = await runTestFlowChain(root, { executor, stages: ['build', 'test', 'lint'] })
+    expect(result.ok).toBe(false)
+    expect(commands).toHaveLength(1)
+    expect(result.steps.map(step => step.stage)).toEqual(['build'])
+  })
+
+  it('classifies a missing tool apart from a failed run', async () => {
+    const root = tempWorkspace()
+    const executor: QualityExecutor = async command => ({
+      command,
+      stdout: "'ceedling' 不是内部或外部命令",
+      stderr: '',
+      exitCode: 1,
+      timedOut: false,
+      cancelled: false,
+      spawnError: null,
+      durationMs: 1,
+    })
+    const result = await runTestFlowChain(root, { executor, stages: ['build'] })
+    expect(result.steps[0]?.toolMissing).toBe(true)
+  })
+
+  it('maps every step onto its baf-quality subcommand', () => {
+    expect(testFlowStageCommand('build')).toBe('baf-quality test')
+    expect(testFlowStageCommand('instrument')).toBe('baf-quality check')
+    expect(testFlowStageCommand('lint')).toBe('baf-quality lint')
+    expect([...TEST_FLOW_CHAIN_ORDER]).toEqual([
+      'build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze', 'format',
+    ])
   })
 })

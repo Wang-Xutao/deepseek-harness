@@ -38,7 +38,18 @@ import {
 import { ProjectionStore } from './projection.ts'
 import { isActiveChange } from './projection.ts'
 import { StagePipeline } from './stages/pipeline.ts'
-import { BUG_RECORD_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH, bugRecordGate, checklistGate, checklistTickedGate, implementGate, proposalGate } from './stages/gates.ts'
+import type { QualityExecutor } from '@deepseek-ai/dsh-baf-quality'
+import { BUG_RECORD_REQUIREMENTS_ZH, DOC_REQUIREMENTS_ZH, bugRecordGate, checklistTickedGate, implementGate, proposalGate } from './stages/gates.ts'
+// 【变更】2026-10-28 (批次三十五 · 用户问题 8): the implement→verify test-flow
+// precondition — one verdict shared with the turn-end pop and the Tab button.
+// 【变更】2026-10-29 (批次三十六 · 用户问题 9): the shared entry verdict, the
+// chain the transition runs itself, and the chain's failure lines.
+import {
+  ensureTestFlowEvidence,
+  testFlowChainFailureLines,
+  testFlowWorkOrderLines,
+  verifyEntryVerdict,
+} from './test-flow-gate.ts'
 import { checkBlocksVerify } from './stages/check-runner.ts'
 import { BUG_FIX_PROPOSAL_FILE } from './stages/bug-fix-path.ts'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
@@ -61,7 +72,11 @@ import { beginIntake } from './begin-intake.ts'
 // 【变更】2026-10-27 (批次三十一): the out-of-sync hold — the command path's
 // brake while a downstream document no longer matches its upstream.
 import { detectArtifactDrift, type ArtifactDriftRow } from './stages/artifact-drift.ts'
-import { cancelAsksForChangeGates } from './ask-queue.ts'
+import { isAdvanceDeclineGate, markAdvanceDeclined } from './advance-decline.ts'
+// 【变更】2026-10-29 (批次三十六 · 用户问题 3): the change-scoped single-flight
+// slot — the archive decision takes it, so a second concurrent archive request
+// for the same change stands down instead of opening a second surface.
+import { cancelAsksForChangeGates, claimChangeGate, releaseChangeGate } from './ask-queue.ts'
 import { GATE_REGISTRY, renderGate, type GateId, type GateSpec } from './gate-cards.ts'
 import { gateRevisionTarget, judgmentOf } from './gate-dialog.ts'
 import type { GateJudgment } from './gate-dialog.ts'
@@ -117,7 +132,7 @@ export interface GoInput {
    */
   readonly dispatch?: GoDispatch
   /**
-   * 【变更】2026-09-23 (user issue #1): marks the calling surface as a
+   * 【变更】2026-10-23 (user issue #1): marks the calling surface as a
    * customer action (typed slash, gate-dialog click, Tab button click).
    * Dispatch requires this marker — `dispatch` without an origin is inert, so
    * host-internal re-drives (the orchestrator's verify auto-drive) can never
@@ -126,6 +141,15 @@ export interface GoInput {
    * typed it, so its confirm path is as customer-origin as `/baf-go`'s.
    */
   readonly dispatchOrigin?: DispatchOrigin
+  /**
+   * 【变更】2026-10-29 (批次三十六 · 用户问题 9): the executor the 测试流 chain
+   * runs through when the implement→verify transition runs it itself.
+   *
+   * Production leaves it undefined — the real shell executor runs the real
+   * toolchain. Tests inject a deterministic one so the transition's chain run
+   * can be exercised without an enterprise toolchain on the machine.
+   */
+  readonly testFlowExecutor?: QualityExecutor
 }
 
 /**
@@ -287,6 +311,7 @@ export async function driveGo(input: GoInput): Promise<CommandResult> {
       ...(input.ask === undefined ? {} : { ask: input.ask }),
       ...(input.dispatch === undefined ? {} : { dispatch: input.dispatch }),
       ...(input.dispatchOrigin === undefined ? {} : { dispatchOrigin: input.dispatchOrigin }),
+      ...(input.testFlowExecutor === undefined ? {} : { testFlowExecutor: input.testFlowExecutor }),
       confirm: input.confirm === true,
     }
     // `/baf-go gate=<id>` (2026-09-21 user request: 回到指定确认门) — explicit
@@ -445,6 +470,11 @@ interface RouteContext {
   readonly dispatch?: GoDispatch
   /** 2026-09-23 issue #1: present only on customer-action surfaces. */
   readonly dispatchOrigin?: DispatchOrigin
+  /**
+   * 【变更】2026-10-29 (批次三十六 · 用户问题 9): the executor the 测试流 chain
+   * runs through at the implement→verify transition (tests inject one).
+   */
+  readonly testFlowExecutor?: QualityExecutor
   /** `/baf-go-confirm` mode: take the positive path without popping. */
   readonly confirm: boolean
 }
@@ -465,10 +495,16 @@ async function driftHold(context: RouteContext, status: WorkflowStatus): Promise
   const node = status.current
   if (node !== 'clarify' && node !== 'design' && node !== 'plan'
     && node !== 'implement' && node !== 'verify') return undefined
+  // 【变更】2026-10-28 (批次三十五 · 用户问题 1): the events ride along — only
+  // a COMPLETED stage can be held, so the model's same-turn co-write of
+  // `clarify.md` + `proposal.md` no longer reads as a desync.
+  const { events } = await context.store.readEvents(context.changeId)
+    .catch(() => ({ events: [] as readonly ProjectionEvent[] }))
   const rows = await detectArtifactDrift(
     context.cwd,
     context.changeId,
     status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+    events,
   ).catch((): readonly ArtifactDriftRow[] => [])
   if (rows.length === 0) return undefined
   return errorCard('文档与上游不同步 · 工作流已暂停推进', [
@@ -923,50 +959,21 @@ async function route(context: RouteContext): Promise<CommandResult> {
 
     case 'verify': {
       if (at('verify') !== 'completed') return driveVerifyNow(context)
-      // 【变更】2026-09-28 (用户问题 8): gate B's hard precondition — the
-      // archive card is not even offered while a checklist box is open. The
-      // model ticks items as verification confirms them; the refusal names
-      // every unticked item and dispatches the verify-stage ticking order.
-      const ticked = await checklistTickedGate({
-        workspaceRoot: cwd,
+      // 【变更】2026-10-29 (批次三十六 · 用户问题 3): the archive decision goes
+      // through ONE host entry point (`driveArchiveDecision`) — the
+      // coordinator, the Tab's gate card and the client's own 「确认归档」
+      // surface all land there, so one change has exactly ONE archive
+      // decision (the customer's 「归档的弹窗也是弹了两次」).
+      return driveArchiveDecision({
+        cwd,
         changeId,
+        source,
+        adapters: context.adapters,
+        ...(context.ask === undefined ? {} : { ask: context.ask }),
+        ...(context.dispatch === undefined ? {} : { dispatch: context.dispatch }),
+        ...(context.dispatchOrigin === undefined ? {} : { dispatchOrigin: context.dispatchOrigin }),
         mode: status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
       })
-      if (!ticked.ok) {
-        const gap = ticked.missing ?? (ticked.detail === undefined ? [] : [ticked.detail])
-        const parts = dispatchParts(
-          dispatchWorkOrder(context, 'verify', gap, 'checklist-open',
-            status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path'),
-          ['模型逐项确认打勾后再敲 /baf-go'],
-        )
-        return errorCard('检查单未全部确认 · 不能归档', [
-          { title: '原因', lines: [ticked.detail ?? 'checklist.md 存在未勾选项'] },
-          { title: '未确认项', lines: gap.length === 0 ? ['（无明细）'] : gap },
-          { title: '下一步', lines: [...parts.next] },
-        ], parts.marker)
-      }
-      // **Gate B** (§18.5 / §22.17) — archiving is the customer's call, not
-      // the coordinator's. Same three unlock shapes as gate A.
-      const parked = await gateUnlocked(store, changeId, 'verify-to-archive')
-      if (!parked) await parkOnGate(store, changeId, 'verify-to-archive')
-      const proceed = async (): Promise<CommandResult> => {
-        const driven = await pipeline.driveArchiveStage(changeId, true, source)
-        if (driven.node !== 'archive') throw new Error(`expected an archive drive, got ${driven.node}`)
-        const after = await store.readStatus(changeId)
-        return successCard('检查已确认 · 已归档', [
-          { title: '状态', lines: statusLines(after) },
-          { title: '产物', lines: [driven.result.archivePath] },
-          { title: '下一步', lines: ['本条工作流结束；新需求请在新会话中提出'] },
-        ])
-      }
-      if (context.confirm) return proceed()
-      if (context.ask !== undefined) {
-        const resolved = await resolveViaDialog(context, { gateId: 'verify-archive', changeId })
-        if (resolved !== undefined) return resolved
-        return withContinueHint(renderGate('verify-archive', { cwd, changeId }))
-      }
-      // §22.14-D: render the registered §22 card verbatim.
-      return parked ? proceed() : renderGate('verify-archive', { cwd, changeId })
     }
 
     case 'archive': {
@@ -1317,23 +1324,60 @@ async function verifyEntry(context: RouteContext): Promise<CommandResult> {
   // customer-action surface, dispatches the implement-stage order that wakes
   // the model to write it. Applies before BOTH the confirm shortcut and the
   // dialog, so no surface can skip the customer's checklist review.
+  //
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the judgment is now the ONE
+  // shared verdict (`verifyEntryVerdict`) the Tab's 推进 readiness reads too —
+  // the button and this transition can no longer disagree (the customer's
+  // 「点不了还报错」). The refusal quotes the verdict's `missing` lines, which
+  // name the REAL checklist condition that failed.
   const gateInput = {
     workspaceRoot: cwd,
     changeId,
     mode: (await store.readStatus(changeId)).mode === 'bug-fix-path' ? 'bug-fix-path' as const : 'full-go-path' as const,
   }
-  const checklist = await checklistGate(gateInput)
-  if (!checklist.ok) {
-    const gap = checklist.missing ?? (checklist.detail === undefined ? [] : [checklist.detail])
+  const verdict = await verifyEntryVerdict(gateInput)
+  if (!verdict.checklist.ok) {
+    const gap = verdict.missing
     const parts = dispatchParts(
       dispatchWorkOrder(context, 'implement', gap, 'checklist-missing', gateInput.mode),
       ['模型生成 checklist.md 后再敲 /baf-go'],
     )
     return errorCard('验证检查单未就绪 · 不能开始验证', [
-      { title: '原因', lines: [checklist.detail ?? 'checklist.md 未达验证前置门'] },
+      { title: '原因', lines: [verdict.checklist.detail ?? 'checklist.md 未达验证前置门'] },
       { title: '缺什么', lines: gap.length === 0 ? ['（无明细）'] : gap },
       { title: '下一步', lines: [...parts.next] },
     ], parts.marker)
+  }
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the 测试流 precondition — the
+  // entry used to demand the durable evidence ALREADY exist while the only
+  // automatic runner lived inside the verify stage: a gated workspace could
+  // never produce the evidence the entry asked for (the customer's 「测试流
+  // 使能了但没有跑」). The transition now RUNS the chain itself (the same
+  // runner, the same enabled step list) and judges the result: a green run
+  // advances, a red one refuses with the chain's own diagnostics — a missing
+  // toolchain reads as 工具缺失, never as a silent pass.
+  //
+  // An ungated workspace (no baseline, a placeholder stack.test and no explicit
+  // stage switch) asks for no evidence — the never-gate-dead rule.
+  if (verdict.testFlow.gated && !verdict.testFlow.ok) {
+    const run = await ensureTestFlowEvidence(cwd, {
+      ...(context.testFlowExecutor === undefined ? {} : { executor: context.testFlowExecutor }),
+    })
+    if (!run.completion.ok) {
+      const problems = [
+        ...run.completion.problems,
+        ...(run.chain === undefined ? [] : testFlowChainFailureLines(run.chain)),
+      ]
+      const parts = dispatchParts(
+        dispatchWorkOrder(context, 'implement', testFlowWorkOrderLines(problems), 'test-flow-not-passed', gateInput.mode),
+        ['模型跑通测试流并修复后，再敲 /baf-go'],
+      )
+      return errorCard('测试流未通过 · 不能开始验证', [
+        { title: '原因', lines: ['实现阶段的测试流证据不绿——实现必须先跑通测试流才能进入验证'] },
+        { title: '缺什么', lines: problems.length === 0 ? ['（无明细）'] : problems },
+        { title: '下一步', lines: [...parts.next] },
+      ], parts.marker)
+    }
   }
   if (confirm) return driveVerifyNow(context)
   if (ask !== undefined) {
@@ -1342,6 +1386,145 @@ async function verifyEntry(context: RouteContext): Promise<CommandResult> {
     return withContinueHint(renderGate('verify-advance', { cwd, changeId }))
   }
   return driveVerifyNow(context)
+}
+
+/**
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 3): the ONE host entry point for
+ * the archive decision.
+ *
+ * The customer filed 「归档的弹窗也是弹了两次」: the archive had TWO decision
+ * surfaces — the session's `verify-archive` gate card (the host path) and the
+ * Tab's parked-gate banner, whose client-side 「确认归档」 modal resolved
+ * through `transition(changeId, 'archive')` — a path that never touched the
+ * gate registry. The result was a change archived 24 ms after the verify, with
+ * no `awaiting-confirm` record and an UNCHECKED checklist.
+ *
+ * Every archive decision now lands here, and this function owns the rules:
+ *
+ * 1. **State** — only a change whose verify completed may be archived, and
+ *    only with every checklist box ticked (gate B's hard precondition; the
+ *    model ticks the items as verification confirms them).
+ * 2. **The customer's answer** — the baseline's `guard.requireHumanConfirmation`
+ *    decides whether the `verify-archive` gate must be answered first. When it
+ *    lists `archive` (the scaffold default), the archive completes only after
+ *    the gate was offered and answered (§18.5: the parked gate's tail event IS
+ *    the answer).
+ * 3. **Single flight** — the decision takes the change-scoped gate slot, so a
+ *    second, concurrent archive request for the same change stands down
+ *    instead of opening a second decision surface.
+ *
+ * @param input - the workspace, the change, and the surface's channels.
+ * @returns the decision card (the archive result, the gate card, or a refusal).
+ */
+export interface ArchiveDecisionInput {
+  /** Absolute workspace root. */
+  readonly cwd: string
+  /** The change to archive. */
+  readonly changeId: string
+  /** The drive origin (§22.15 B) — the archive refuses a non-human source. */
+  readonly source?: TransitionSource
+  /** Stack/guard adapters for the drive layer. */
+  readonly adapters?: DriveAdapters
+  /** §22.17 popup channel; absent on CLI/tests. */
+  readonly ask?: GateAsk
+  /** §18.4.2 work-order channel; absent unless the caller built one. */
+  readonly dispatch?: GoDispatch
+  /** 2026-09-23 issue #1: present only on customer-action surfaces. */
+  readonly dispatchOrigin?: DispatchOrigin
+  /** The change's workflow mode (the checklist gate reads it). */
+  readonly mode?: 'full-go-path' | 'bug-fix-path'
+}
+
+/**
+ * The archive decision — see {@link ArchiveDecisionInput}.
+ * @param input - the workspace, the change, and the surface's channels.
+ * @returns the decision card.
+ */
+export async function driveArchiveDecision(input: ArchiveDecisionInput): Promise<CommandResult> {
+  const { cwd, changeId } = input
+  const store = new ProjectionStore({ workspaceRoot: cwd })
+  const status = await store.readStatus(changeId)
+  if (status.terminal !== undefined) {
+    return successCard('已归档', [{ title: '状态', lines: statusLines(status) }])
+  }
+  if (status.current !== 'verify' || status.nodes.verify !== 'completed') {
+    return errorCard('还不能归档 · 验证尚未完成', [
+      { title: '状态', lines: statusLines(status) },
+      { title: '处理', lines: ['验证通过后才会弹归档确认卡'] },
+    ])
+  }
+  // 【变更】2026-09-28 (用户问题 8): gate B's hard precondition — the archive
+  // card is not even offered while a checklist box is open. The model ticks
+  // items as verification confirms them; the refusal names every unticked
+  // item.
+  const ticked = await checklistTickedGate({
+    workspaceRoot: cwd,
+    changeId,
+    mode: input.mode ?? (status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path'),
+  })
+  if (!ticked.ok) {
+    const gap = ticked.missing ?? (ticked.detail === undefined ? [] : [ticked.detail])
+    return errorCard('检查单未全部确认 · 不能归档', [
+      { title: '原因', lines: [ticked.detail ?? 'checklist.md 存在未勾选项'] },
+      { title: '未确认项', lines: gap.length === 0 ? ['（无明细）'] : gap },
+      { title: '下一步', lines: ['模型逐项确认打勾后再敲 /baf-go'] },
+    ])
+  }
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 3): the workspace baseline's
+  // `guard.requireHumanConfirmation` decides whether the archive gate must be
+  // answered. The scaffold default lists `archive`, so the archive completes
+  // only after the customer answered the `verify-archive` gate.
+  const baseline = await loadWorkspaceBaseline(cwd).catch(() => undefined)
+  const humanRequired = baseline?.guard.requireHumanConfirmation.includes('archive') ?? true
+  const parked = await gateUnlocked(store, changeId, 'verify-to-archive')
+  if (humanRequired && !parked) {
+    // §18.5: the gate is offered first; the answer (the dialog's click, the
+    // Tab's gate card, or the next typed `/baf-go`) is the parked gate's
+    // tail event, and THAT drive archives.
+    await parkOnGate(store, changeId, 'verify-to-archive')
+  }
+  // The popup channel owns the decision while it exists: the customer's
+  // click is the answer, and the answer's own drive performs the archive.
+  // (The dialog's own change-scoped slot is the single-flight here — the
+  // host must not take it, or the dialog would stand down against itself.)
+  if (input.ask !== undefined) {
+    const resolved = await resolveViaDialog({
+      ask: input.ask,
+      cwd,
+      adapters: input.adapters ?? {},
+      ...(input.dispatch === undefined ? {} : { dispatch: input.dispatch }),
+      ...(input.dispatchOrigin === undefined ? {} : { dispatchOrigin: input.dispatchOrigin }),
+      changeId,
+    }, { gateId: 'verify-archive', changeId })
+    if (resolved !== undefined) return resolved
+    return withContinueHint(renderGate('verify-archive', { cwd, changeId }))
+  }
+  if (humanRequired && !parked) {
+    // No popup channel: the gate is offered as the §22 card, and the next
+    // customer drive (the parked gate's tail event) is the answer.
+    return withContinueHint(renderGate('verify-archive', { cwd, changeId }))
+  }
+  // Single flight: a second, concurrent archive request for the same change
+  // stands down instead of driving a second archive.
+  if (!claimChangeGate(changeId, 'verify-archive')) {
+    return errorCard('归档确认已在进行中 · 请勿重复提交', [
+      { title: '原因', lines: ['同一条变更的归档确认已经在处理中——本次请求不再重复执行归档'] },
+      { title: '处理', lines: ['稍后刷新工作流页查看归档结果'] },
+    ])
+  }
+  try {
+    const pipeline = await pipelineFor(cwd, input.adapters ?? {})
+    const driven = await pipeline.driveArchiveStage(changeId, true, input.source ?? 'gate-card')
+    if (driven.node !== 'archive') throw new Error(`expected an archive drive, got ${driven.node}`)
+    const after = await store.readStatus(changeId)
+    return successCard('检查已确认 · 已归档', [
+      { title: '状态', lines: statusLines(after) },
+      { title: '产物', lines: [driven.result.archivePath] },
+      { title: '下一步', lines: ['本条工作流结束；新需求请在新会话中提出'] },
+    ])
+  } finally {
+    releaseChangeGate(changeId, 'verify-archive')
+  }
 }
 
 /**
@@ -1425,6 +1608,13 @@ async function resolveViaDialog(
 ): Promise<CommandResult | undefined> {
   if (surface.ask === undefined) return undefined
   const outcome = await surface.ask(gate)
+  // 【变更】2026-10-28 (批次三十五 · 用户问题 2): the conversation tab's
+  // 暂不推进 is a deferral the workflow must hear — record it, so the
+  // turn-end pop and the Tab's own advance dialog stand down until the
+  // customer presses the workflow graph's 「推进」 (or types /baf-go).
+  if (outcome.kind === 'paused' && gate.changeId !== undefined && isAdvanceDeclineGate(gate.gateId)) {
+    markAdvanceDeclined(surface.cwd, gate.changeId, gate.gateId)
+  }
   // 【变更】2026-09-28 (用户问题 1.7): free text from the dialog's revision
   // input — dispatch the modification as a work order at the gate's stage
   // artifact; the gate re-pops (artifact fingerprint re-arm) once the model

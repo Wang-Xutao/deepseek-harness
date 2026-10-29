@@ -61,6 +61,10 @@ import { isChangePaused } from './pause.ts'
 // 【变更】2026-10-27 (批次三十一): the out-of-sync hold — the workflow waits
 // while a downstream document no longer matches its upstream.
 import { detectArtifactDrift, type ArtifactDriftRow } from './stages/artifact-drift.ts'
+import { isAdvanceDeclineGate, isAdvanceDeclined } from './advance-decline.ts'
+// 【变更】2026-10-28 (批次三十五 · 用户问题 8): the implement→verify test-flow
+// precondition — the same verdict the /baf-go entry refuses on.
+import { testFlowEntryVerdict, testFlowWorkOrderLines } from './test-flow-gate.ts'
 import { isActiveChange, pickActiveChange, ProjectionStore } from './projection.ts'
 import type { ProjectionIndexEntry } from './projection.ts'
 
@@ -238,11 +242,20 @@ async function popGate(
   const service = resolveUserQuestions(ctx, agent)
   if (service === undefined) return
 
+  // 【变更】2026-10-28 (批次三十三 · 用户问题 3): the ledger is claimed BEFORE
+  // the pop, not after it. It used to be written after the dialog settled,
+  // which left a window: a second pop that started while the first dialog was
+  // on screen passed the check, stood down on the change-scoped slot — and
+  // the moment the first dialog settled, the slot was free and the ledger
+  // still empty, so the very next pop took the slot and put the SAME gate on
+  // screen a second time. The customer saw one confirmation gate twice in a
+  // row. Claiming first makes every concurrent pop see the fingerprint and
+  // stand down.
+  OFFERED.set(ledgerKey, fingerprint)
   const outcome = await askGateDialogQueued(service, agent as GateDialogAgent, gate, {
     sessionId,
     isMoot,
   })
-  OFFERED.set(ledgerKey, fingerprint)
   // 【变更】2026-09-28 (用户问题 1.7): the auto-pop's revision input — the
   // custom answer is a customer action on this session, so the SAME
   // gate-revise dispatch the coordinator's gate surface takes applies here;
@@ -360,7 +373,14 @@ async function docAdvanceDue(cwd: string, changeId: string, status: WorkflowStat
       if (ledger === undefined) return undefined
       const gate = await implementGate(input, ledger.touched).catch(() => undefined)
       if (gate === undefined || !gate.ok) return undefined
-      return (await checklistGate(input).catch(() => undefined))?.ok === true ? 'verify-advance' : undefined
+      if ((await checklistGate(input).catch(() => undefined))?.ok !== true) return undefined
+      // 【变更】2026-10-28 (批次三十五 · 用户问题 8): the test-flow precondition
+      // gates the pop too — the card may not offer a verify entry the /baf-go
+      // path would refuse one click later. Red evidence keeps the rest in the
+      // model's authoring domain (the turn-end gap dispatch orders the flow).
+      const testFlow = await testFlowEntryVerdict(cwd)
+      if (testFlow.gated && !testFlow.ok) return undefined
+      return 'verify-advance'
     }
     default: return undefined
   }
@@ -404,6 +424,11 @@ async function popDueGate(
   // command is a dead end — the very shape this workflow is supposed to avoid.
   if (isChangePaused(cwd, changeId)) return
   const status = await store.readStatus(changeId)
+  // 【变更】2026-10-28 (批次三十五): the events read moves ABOVE the drift
+  // check — the detector now folds the change's completion times out of them,
+  // so only a COMPLETED stage can be held (the model's same-turn co-write of
+  // two documents is its own authoring domain, not a desync).
+  const { events } = await store.readEvents(changeId)
   // 【变更】2026-10-27 (批次三十一): an OUT-OF-SYNC change HOLDS. An upstream
   // document was edited after a downstream one was written, so the downstream
   // one may no longer match it. The workflow must not advance past that
@@ -417,10 +442,16 @@ async function popDueGate(
     cwd,
     changeId,
     status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+    events,
   ).catch((): readonly ArtifactDriftRow[] => [])
   if (drift.length > 0) return
-  const { events } = await store.readEvents(changeId)
   let due = dueGateFor(status, events)
+  // 【变更】2026-10-28 (批次三十五 · 用户问题 2): a declined advance gate
+  // stands down. The customer said 暂不推进 in the conversation tab, and
+  // re-asking the same gate on the next turn-end is the exact re-prompt they
+  // declined. The workflow graph's 「推进」 (and a typed /baf-go) re-raises it
+  // on their click — that is the link the two tabs were missing.
+  if (due !== undefined && isAdvanceDeclineGate(due.gateId) && isAdvanceDeclined(cwd, changeId, due.gateId)) return
   // 【变更】2026-09-23 (demo5 issue #1): the status the pop's fingerprint reads
   // — swapped for a fresh read whenever the settle below advances the change.
   let live = status
@@ -442,6 +473,10 @@ async function popDueGate(
     // gate pops and the confirm click drives the run.
     const advance = await docAdvanceDue(cwd, changeId, status).catch(() => undefined)
     if (advance !== undefined) {
+      // 【变更】2026-10-28 (批次三十五 · 用户问题 2): the doc-aware layer stands
+      // down behind the SAME decline marker — settling the stage only matters
+      // for the pop the customer already deferred.
+      if (isAdvanceDeclined(cwd, changeId, advance)) return
       // 【变更】2026-09-23 (demo5 issue #1/#4): settle the doc stage BEFORE the
       // dialog pops. The pop used to fire while nodes.clarify/design/plan
       // still read in-progress and plan.md/tasks.md still sat as unfilled
@@ -617,6 +652,15 @@ async function dispatchRestingGap(
         missing = undone.length > 0
           ? [`plan.json：${undone.length}/${ledger.tasks.length} 个任务未完成——做完并把 done 标为 true`]
           : gate.missing ?? [gate.detail ?? 'implement 未达完成门']
+        break
+      }
+      // 【变更】2026-10-28 (批次三十五 · 用户问题 8): implement tasks done but
+      // the 测试流 evidence red — the remaining gap IS the flow. The turn-end
+      // order tells the model to run the same baf-quality chain the 测试流图
+      // buttons run, so the durable reports exist before verify entry asks.
+      const testFlow = await testFlowEntryVerdict(cwd)
+      if (testFlow.gated && !testFlow.ok) {
+        missing = [...testFlowWorkOrderLines(testFlow.problems)]
       }
       break
     }
@@ -706,6 +750,10 @@ async function popBind(
   const service = resolveUserQuestions(ctx, agent)
   if (service === undefined) return
 
+  // 【变更】2026-10-28 (批次三十三 · 用户问题 3): claimed before the pop, like
+  // {@link popGate} — a concurrent pop must not slip through the window the
+  // dialog leaves open.
+  OFFERED.set(ledgerKey, fingerprint)
   const outcome = await askGateDialogQueued(service, agent as GateDialogAgent, {
     gateId: 'bind-workflow',
     bindCandidates: candidates,

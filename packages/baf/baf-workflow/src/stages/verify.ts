@@ -10,7 +10,13 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { WorkflowStatus } from '@deepseek-ai/dsh-baf-core'
 import { changeDir } from '@deepseek-ai/dsh-baf-openspec'
-import { collectStatusBlockers, testFlowCompletion, testFlowGated } from '@deepseek-ai/dsh-baf-quality'
+import {
+  collectStatusBlockers,
+  testFlowCompletion,
+  testFlowEvidenceSteps,
+  testFlowGated,
+  runTestFlowChain,
+} from '@deepseek-ai/dsh-baf-quality'
 import type { StageContext } from './context.ts'
 import { CheckRunner, checkActuallyRanAndFailed, checkDidNotRun, type CheckReportRow, type VerifyReport } from './check-runner.ts'
 import { verifyGate } from './gates.ts'
@@ -157,7 +163,15 @@ export function buildVerifyRunner(
   // backToImplement (T11) with an explicit rerun instruction — the model fixes
   // in implement, reruns the 测试流, then verify again; it never iterates
   // inside verify.
-  const testFlowRequired = qualityWired && ctx.baseline !== undefined && testFlowGated(ctx.baseline)
+  //
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the gate reads the
+  // workspace's EXPLICIT switches too — the customer enabled the stages while
+  // the baseline still carried the placeholder (「测试流使能了但没有跑」), so
+  // the flow is now gated on that switch as well. A workspace that never
+  // touched the file stays untouched by the whole flow.
+  const testFlowRequired = qualityWired
+    && ctx.baseline !== undefined
+    && testFlowGated(ctx.baseline, ctx.workspace.root)
   runner.register({
     name: 'test-flow',
     required: testFlowRequired,
@@ -166,15 +180,65 @@ export function buildVerifyRunner(
         return { ok: false, diagnostics: ['tool_unavailable: quality environment not wired'] }
       }
       if (!testFlowRequired) {
-        return { ok: true, diagnostics: ['skipped: test flow not configured (baseline stack.test is a placeholder)'] }
+        // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the honest wording — a
+        // flow that was never configured did NOT pass, it did not run. The
+        // customer's report read 「ok: true · passed: true」 for a workspace
+        // that never executed a single test; the diagnostics now say so in
+        // plain Chinese, and verify.md's verdict carries the same caveat.
+        return {
+          ok: true,
+          diagnostics: ['skipped: test flow not configured — 测试流未配置，未执行真实测试（基线 stack.test 仍是占位，工作区也未启用测试流阶段）'],
+        }
       }
       if (signal.aborted) {
         return { ok: false, diagnostics: ['cancelled'] }
       }
-      const completion = testFlowCompletion(ctx.workspace.root)
-      return completion.ok
+      // 【变更】2026-10-28 (批次三十四 · 用户问题 5): the 测试流 RUNS here.
+      // The customer filed 「确认开始验证」后测试流都没有触发: until now this
+      // check only READ the reports the 测试流图's buttons had left behind, so
+      // a change nobody ran the flow on asked for evidence that could not
+      // exist. The verify stage now walks the evidence-producing steps itself
+      // (build→test→instrument→report→gate→lint→analyze) and judges the
+      // reports those steps wrote. The format step stays out: it rewrites the
+      // customer's source tree and leaves no report.
+      //
+      // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the step list is the
+      // workspace's ENABLED evidence steps (the same list the implement→verify
+      // transition runs) — the per-stage switches the settings canvas writes
+      // now decide what participates.
+      //
+      // The chain runs only when the evidence is missing or red — a green
+      // report set means the flow already ran, and re-running the enterprise
+      // toolchain for nothing would slow every verify down.
+      const before = testFlowCompletion(ctx.workspace.root)
+      if (before.ok) {
+        return { ok: true, diagnostics: ['test flow complete: coverage + static-analysis reports green'] }
+      }
+      const chain = await runTestFlowChain(ctx.workspace.root, {
+        signal,
+        stages: testFlowEvidenceSteps(ctx.workspace.root),
+      })
+      const failed = chain.steps.filter(step => !step.ok)
+      const after = testFlowCompletion(ctx.workspace.root)
+      if (failed.length > 0) {
+        return {
+          ok: false,
+          diagnostics: [
+            // The evidence problem first — it is the customer-facing summary —
+            // then the step that caused it.
+            ...after.problems,
+            ...failed.flatMap(step => [
+              `test_flow.${step.stage}:${step.toolMissing ? 'tool_missing' : 'failed'}`,
+              ...(step.output === ''
+                ? []
+                : [`test_flow.${step.stage}.output: ${step.output.slice(0, 200)}`]),
+            ]),
+          ],
+        }
+      }
+      return after.ok
         ? { ok: true, diagnostics: ['test flow complete: coverage + static-analysis reports green'] }
-        : { ok: false, diagnostics: [...completion.problems] }
+        : { ok: false, diagnostics: [...after.problems] }
     },
   })
 
@@ -382,9 +446,40 @@ function catalogEntryOf(name: string): CheckCatalogEntry {
     ?? { name, content: `检查项 ${name}（暂无中文元数据，详见诊断信息）。`, method: '由该检查的注册实现执行；详见诊断信息。' }
 }
 
-/** Verdict line for one report row. */
+/**
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 9): the verdict's caveats — the
+ * checks that never ran, named in plain Chinese.
+ *
+ * A check that never ran cannot fail the gate (the 2026-09-22 placeholder
+ * semantics), but it must not read as a PASS either: the customer filed 「测试
+ * 流使能了但没有跑」and the whole verdict read 「全部通过」. The 测试流's own
+ * row is called out separately, because 「未执行真实测试」is the one sentence
+ * the customer needs.
+ * @param report - the aggregated report.
+ * @returns the caveat lines (empty when every check ran).
+ */
+function notRunNotes(report: VerifyReport): readonly string[] {
+  const notRun = report.checks.filter(check => checkDidNotRun(check))
+  if (notRun.length === 0) return []
+  const names = notRun.map(check => check.name).join('、')
+  const testFlowSkipped = notRun.some(check => check.name === 'test-flow')
+  return [
+    `> ⚠️ 有 ${notRun.length} 项检查未执行（${names}）——未执行的检查不计入通过判定，本次验证没有覆盖这些项目。`,
+    ...(testFlowSkipped ? ['> ⚠️ 测试流未配置——本次验证未执行真实测试，不能作为质量通过依据。'] : []),
+    '',
+  ]
+}
+
+/**
+ * Verdict line for one report row.
+ *
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 9): a check that NEVER RAN does not
+ * read as 通过 — an absent check is not a passed one (the same rule the gate
+ * reads: only a check that ran can fail, and only a check that ran can have
+ * passed).
+ */
 function checkVerdictZh(check: CheckReportRow): string {
-  if (check.ok) return '✅ 通过'
+  if (check.ok) return checkDidNotRun(check) ? '⚠️ 未执行（不阻断）' : '✅ 通过'
   if (check.required) return '❌ 失败（必需检查）'
   // 【变更】2026-10-24 (批次十九 2.4, 客户决策「规定要跑过的测试必须通过才能通过
   // 确认门」): a non-required check that RAN and failed blocks the confirm gate —
@@ -445,6 +540,12 @@ export async function renderVerifyMd(
       ? '**✅ 通过** —— 必需检查项全部通过，已执行的检查项也全部通过，变更满足进入归档的质量要求。'
       : '**❌ 未通过** —— 存在未通过的检查项（含已执行但未通过的检查），变更退回实现阶段修复后重新验证。',
     '',
+    // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the conclusion must not read
+    // as 「全部通过」 when a check never ran. The customer's report showed
+    // `ok: true · passed: true` for a workspace that never executed a single
+    // test (the 测试流 was not configured), so the verdict now states plainly
+    // that no real test ran.
+    ...notRunNotes(report),
     '## 验证总览',
     '',
     '| # | 验证名称 | 类别 | 验证结果 | 耗时 |',

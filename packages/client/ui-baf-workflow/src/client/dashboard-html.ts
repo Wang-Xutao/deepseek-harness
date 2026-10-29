@@ -241,7 +241,9 @@ export interface DashboardHtmlLabels {
   readonly tokensHelp: string
   readonly endedAt: string
   readonly artifactsLabel: string
-  readonly artifactStates: Readonly<Record<'template' | 'planned' | 'filled', string>>
+  /** 【变更】2026-10-29 (批次三十七 · 用户问题 6): the six-state document
+   * ladder's labels — the board's chips read the same states the rail does. */
+  readonly artifactStates: Readonly<Record<'template' | 'planned' | 'filled' | 'completed' | 'updated' | 'stale', string>>
   /** Stage label per node id + terminal states (t('node.…')). */
   readonly nodeLabels: Readonly<Record<string, string>>
   /** Mode label per mode id (modeLabel()). */
@@ -1044,7 +1046,12 @@ html[data-theme="dark"] {
   }
   .dFigureLabel { color: var(--bd-ink-4); font-size: 11px; }
   .dFigureValue { color: var(--bd-ink); font-size: 13px; }
-  .dColumns { display: grid; grid-template-columns: 260px minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+  /* 【变更】2026-10-27 (批次三十二 · 用户问题 7): the stage flow takes the
+     WORKFLOW graph's own width and height. The middle track is sized by the
+     graph's own pixels (max-content), so the stage flow renders at exactly the
+     size the in-app flow graph does — the board's picture and the app's
+     picture are the same picture. */
+  .dColumns { display: grid; grid-template-columns: 260px max-content 320px; gap: 14px; align-items: start; }
   @media (max-width: 980px) { .dColumns { grid-template-columns: 1fr; } }
   .dCol { display: flex; flex-direction: column; gap: 14px; }
   .dCard { border: 1px solid var(--bd-line); border-radius: 12px; padding: 14px 16px; background: var(--bd-panel-2); }
@@ -1077,8 +1084,13 @@ html[data-theme="dark"] {
   .dEmpty { color: var(--bd-ink-3); font-size: 12px; }
 
   /* 【变更】2026-10-26 (用户问题 2): the board's COMPLETE workflow graph — the
-     same grid, edges and status colours the in-app FlowCanvas renders. */
-  .wfGraphWrap { overflow: auto; max-height: 62vh; border: 1px solid var(--bd-line); border-radius: 12px; background: var(--bd-panel-2); }
+     same grid, edges and status colours the in-app FlowCanvas renders.
+     【变更】2026-10-27 (批次三十二 · 用户问题 7): the wrap no longer CLIPS the
+     graph — it showed the picture inside a 62vh box with its own scrollbar, so
+     the stage flow was a smaller, scrollable thing than the workflow graph it
+     copies. The board's picture is now the workflow graph's own size, and the
+     DETAIL PANEL scrolls (it already did), not the graph inside it. */
+  .wfGraphWrap { overflow: visible; border: 1px solid var(--bd-line); border-radius: 12px; background: var(--bd-panel-2); }
   .wfGraph { display: block; }
   .wfEdge {
     fill: none; stroke: var(--bd-ink-4); stroke-width: 1.6; opacity: .85;

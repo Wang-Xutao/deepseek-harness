@@ -190,7 +190,10 @@ type GatesLocaleKey = PropsLocale<'baf.go-workflow'>['t'] extends (key: infer K)
 
 /** Render one option line — 【变更】2026-10-20 (批次五 2.1): a two-part row
  * (label, then the command a click runs in mono; sentinels map to their
- * localized meaning — they dispatch nothing). */
+ * localized meaning — they dispatch nothing).
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 6): the option's explanation
+ * rides under the label — the customer asked for a short plain-language note
+ * under EVERY option, and the command alone did not say what the click does. */
 function OptionLine({ option, t }: {
   option: BafWorkflowGateConfirmRow['options'][number]
   t: GatesOverviewRowProps['t']
@@ -203,6 +206,11 @@ function OptionLine({ option, t }: {
   return (
     <div className={css.option}>
       <span className={css.optionLabel}>{option.label}</span>
+      {option.hint !== undefined && (
+        <span className={css.optionHint} data-testid={`baf-gate-option-hint-${option.id}`}>
+          {option.hint}
+        </span>
+      )}
       <span className={css.optionCommand}>{command}</span>
     </div>
   )

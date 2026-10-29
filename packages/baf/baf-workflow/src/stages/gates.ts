@@ -7,7 +7,11 @@
 
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { OpenSpecAdapter } from '@deepseek-ai/dsh-baf-core'
+import type { OpenSpecAdapter, ProjectionEvent } from '@deepseek-ai/dsh-baf-core'
+import {
+  artifactFlowIndex,
+  artifactLifecycleState,
+} from '@deepseek-ai/dsh-baf-core'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { BUG_FIX_PATH_LEDGER_FILE, BUG_FIX_PROPOSAL_FILE, REGRESSION_TASK_ID, sectionOf } from './bug-fix-path.ts'
 import { checkBlocksVerify, type CheckVerdict } from './check-runner.ts'
@@ -32,8 +36,27 @@ export interface GateOutcome {
  * Customer-facing state of one change artifact, as cards render it.
  * 【变更】2026-09-23 (demo5 issue #4): `planned` is tasks.md's 中间态 — 计划
  * 完成（todo list 已从账本渲染）但实现未完成（done 标记未全勾）。
+ *
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 6): the six-state document
+ * lifecycle the customer reads:
+ *   missing   未生成（灰）— the document does not exist yet
+ *   template  未填写（黄）— the template exists, its placeholders do not
+ *   filled    已填写（蓝）— real content, the gate has not confirmed it yet
+ *   completed 已完成（绿）— the gate confirmed it; it is LOCKED from now on
+ *   updated   已更新（橙）— a completed document was edited afterwards
+ *   stale     待更新（红）— a document of a later stage, now out of sync
+ *   planned   已计划（蓝灰）— tasks.md / checklist.md's middle state
+ *   clipped   已裁剪（灰）— bug-fix-path never produces this document
  */
-export type ArtifactState = 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
+export type ArtifactState =
+  | 'missing'
+  | 'template'
+  | 'planned'
+  | 'filled'
+  | 'completed'
+  | 'updated'
+  | 'stale'
+  | 'clipped'
 
 /** One artifact status row for the /baf-go and /baf-status cards. */
 export interface ArtifactStatusRow {
@@ -237,6 +260,13 @@ export interface GateInput {
   readonly changeId: string
   /** Which workflow mode the change runs (fast path skips full-go-path artifacts). */
   readonly mode: 'full-go-path' | 'bug-fix-path'
+  /**
+   * 【变更】2026-10-29 (批次三十七 · 用户问题 6): the change's projection
+   * events. They carry which stages ran and WHEN — the facts that turn a
+   * FILLED document into a CONFIRMED (已完成) one, and that catch a completed
+   * document edited afterwards (已更新).
+   */
+  readonly events?: readonly ProjectionEvent[]
 }
 
 const ok: GateOutcome = { ok: true, reasonCodes: [] }
@@ -676,7 +706,7 @@ export function verifyGate(checks: readonly CheckVerdict[]): GateOutcome {
       ['verify_required'],
       `failed checks: ${blocked.map(c => c.name).join(', ')}`,
       blocked.map(c =>
-        `验证未通过：${c.name}${c.required ? '' : '（非必需，但检查已执行）'} —— ${c.diagnostics?.[0] ?? '检查失败，修复后重跑验证'}`,
+        `验证未通过：${c.name}${c.required ? '' : '（非必需，但检查已执行）'} —— ${c.diagnostics?.slice(0, 3).join('；') || '检查失败，修复后重跑验证'}`,
       ),
     )
   }
@@ -698,11 +728,16 @@ export async function checklistGate(input: GateInput): Promise<GateOutcome> {
   const body = await readArtifact(input, CHECKLIST_FILE)
   if (body === undefined) {
     return fail(['stage_incomplete'], 'checklist.md missing', [
+      // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the first line names the
+      // REAL blocker — the Tab's 推进 readiness renders these lines verbatim,
+      // so the customer must read WHICH condition failed, not just 「未就绪」.
+      '验证检查单未就绪：checklist.md 不存在',
       'checklist.md 不存在——实现完成后、验证开始前，模型需生成检查验证项清单',
     ])
   }
   if (templateOnly(body)) {
     return fail(['stage_incomplete'], 'checklist.md is still the unfilled template', [
+      '验证检查单未就绪：checklist.md 还是未填的模板',
       // 【变更】2026-09-30 (demo33 问题 2): the hint teaches the NAMED Chinese
       // item format, not a bare checkbox.
       '把 TODO 占位替换为逐项检查清单：每行一个 `- [ ] **检查项名称**：检查内容与判定标准`（中文命名）',
@@ -713,6 +748,7 @@ export async function checklistGate(input: GateInput): Promise<GateOutcome> {
   const status = parseChecklist(body)
   if (status.total === 0) {
     return fail(['stage_incomplete'], 'checklist.md has no checkbox items', [
+      '验证检查单未就绪：checklist.md 没有可勾选的检查项',
       'checklist.md 至少一个 `- [ ] 检查项`（当前没有可勾选行）',
     ])
   }
@@ -768,8 +804,58 @@ function stateZh(state: ArtifactState): string {
     case 'template': return '仍是未填的模板'
     case 'planned': return '已计划'
     case 'filled': return '已填写'
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail.
+    case 'completed': return '已完成'
+    case 'updated': return '已更新'
+    case 'stale': return '待更新'
     case 'clipped': return '已裁剪（缺陷修复路径不经过该阶段）'
   }
+}
+
+/**
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 6): the stage flow of every
+ * customer-facing document lives in baf-core (`artifact-lifecycle.ts`) — the
+ * guard locks the same documents the rail shows, so both read one rule.
+ *
+ * `fill` is the stage that PRODUCES the document's content, `confirm` is the
+ * stage whose entry means the customer passed the gate in front of it — the
+ * moment the document becomes 已完成 (and, from that moment, locked).
+ *
+ * proposal.md is the case the customer reported: the OPEN stage only writes
+ * its template (未填写); the CLARIFY stage is where the customer really fills
+ * it (已填写); passing the clarify gate into DESIGN confirms it (已完成).
+ */
+
+/**
+ * The flow index of one document (its fill stage's position in the flow).
+ * @param file - the artifact file name.
+ * @returns the index, or undefined for a document without a flow.
+ */
+function flowIndexOf(file: string): number | undefined {
+  return artifactFlowIndex(file)
+}
+
+/**
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle state of one
+ * document.
+ *
+ * A document with real content is 已填写 (blue) until the gate in front of it
+ * is passed; from that moment it is 已完成 (green) and locked. A completed
+ * document edited afterwards is 已更新 (orange) — the customer's own edit or
+ * an unauthorized one.
+ * @param input - the gate input (carries the events).
+ * @param file - the artifact file name.
+ * @param base - the content-derived state (missing / template / planned / filled).
+ * @param mtimeMs - the file's last modification stamp, when it exists.
+ * @returns the lifecycle state.
+ */
+function lifecycleState(
+  input: GateInput,
+  file: string,
+  base: ArtifactState,
+  mtimeMs: number | undefined,
+): ArtifactState {
+  return artifactLifecycleState(file, base, input.events ?? [], mtimeMs)
 }
 
 /**
@@ -819,9 +905,12 @@ export async function changeArtifactStatus(input: GateInput): Promise<readonly A
     const livePath = `openspec/changes/${input.changeId}/${file}`
     const archivedPath = `openspec/changes/archive/${input.changeId}/${file}`
     const body = await readArtifact(input, file)
-    const path = body === undefined || await stat(join(input.workspaceRoot, livePath)).then(() => true, () => false)
-      ? livePath
-      : archivedPath
+    const liveExists = await stat(join(input.workspaceRoot, livePath)).then(() => true, () => false)
+    const path = body === undefined || liveExists ? livePath : archivedPath
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the file's last write stamp
+    // — the fact that separates 「the customer edited it after the gate」 from
+    // 「the model wrote it before the gate」.
+    const mtimeMs = await stat(join(input.workspaceRoot, path)).then(s => s.mtimeMs, () => undefined)
     let row: ArtifactStatusRow
     // 【变更】2026-09-30 (demo31 问题 4): the rename made BUG_FIX_PROPOSAL_FILE
     // === 'proposal.md' — the mode guard is now LOAD-BEARING, or full-go's
@@ -929,7 +1018,11 @@ export async function changeArtifactStatus(input: GateInput): Promise<readonly A
       const md = markdownState(body)
       row = { file, path, state: md.state, missing: md.state === 'filled' ? [] : md.missing }
     }
-    rows.push(row)
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail — a
+    // document with real content is 已填写 until the gate in front of it is
+    // passed (已完成), and 已更新 when it was edited after that.
+    const state = lifecycleState(input, file, row.state, mtimeMs)
+    rows.push(state === row.state ? row : { ...row, state })
   }
   // 【变更】2026-10-24 (批次十九 2.4): the 测试流's report rides the rail as a
   // verify-stage artifact — but only once the flow produced it (see
@@ -939,7 +1032,33 @@ export async function changeArtifactStatus(input: GateInput): Promise<readonly A
     const file = rel.slice(rel.lastIndexOf('/') + 1)
     rows.push({ file, path: rel, state: 'filled', missing: [] })
   }
-  return rows
+  return markStaleDocuments(rows)
+}
+
+/**
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 6): the 待更新 tail.
+ *
+ * A completed document that was edited (已更新) makes every document of a
+ * LATER stage out of sync — those rows read 待更新 (red) until the sync order
+ * rewrites them.
+ * @param rows - the classified rows.
+ * @returns the rows with the downstream documents marked 待更新.
+ */
+function markStaleDocuments(rows: readonly ArtifactStatusRow[]): readonly ArtifactStatusRow[] {
+  let updatedIndex: number | undefined
+  for (const row of rows) {
+    if (row.state !== 'updated') continue
+    const index = flowIndexOf(row.file)
+    if (index === undefined) continue
+    if (updatedIndex === undefined || index < updatedIndex) updatedIndex = index
+  }
+  if (updatedIndex === undefined) return rows
+  return rows.map((row) => {
+    if (row.state !== 'filled' && row.state !== 'completed' && row.state !== 'planned') return row
+    const index = flowIndexOf(row.file)
+    if (index === undefined || index <= updatedIndex) return row
+    return { ...row, state: 'stale' as const }
+  })
 }
 
 /** One artifact row rendered as a card line: `path · state`. */

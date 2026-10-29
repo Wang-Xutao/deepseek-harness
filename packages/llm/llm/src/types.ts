@@ -571,6 +571,11 @@ export interface GenerateOptions {
    * the composer's「格式化输入」runs one auxiliary call on the conversation's
    * own route, and the classification says the request is NOT the user's turn
    * (an adapter that routes by purpose must not treat it as one).
+   *
+   * 【变更】2026-10-29 (批次三十七 · 用户问题 4): `intake-confidence` joins the
+   * vocabulary — the workflow's intake classifier asks the model how confident
+   * it is about the requirement's path. Same shape: an auxiliary call, not the
+   * user's turn.
    */
-  purpose?: 'compaction' | 'session-title' | 'draft-format'
+  purpose?: 'compaction' | 'session-title' | 'draft-format' | 'intake-confidence'
 }

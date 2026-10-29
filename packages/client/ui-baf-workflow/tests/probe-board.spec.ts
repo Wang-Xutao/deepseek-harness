@@ -60,7 +60,15 @@ it('bakes the board html', async () => {
     tileDuration: '耗时', tileTokens: 'Tokens', chartModes: '流程分布', chartDuration: '耗时排行',
     allChanges: '变更记录', empty: '暂无变更', tasksHelp: '任务进度', durationHelp: '耗时',
     tokensHelp: 'Tokens', endedAt: '结束时间', artifactsLabel: '阶段产物',
-    artifactStates: { template: '仍是未填的模板', planned: '尚未生成', filled: '已填写' },
+    artifactStates: {
+      template: '仍是未填的模板',
+      planned: '尚未生成',
+      filled: '已填写',
+      // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail.
+      completed: '已完成',
+      updated: '已更新',
+      stale: '待更新',
+    },
     nodeLabels: {},
     modeLabels: { 'full-go-path': '完整流程', 'bug-fix-path': '缺陷修复', 'clarify-required': '需要澄清' },
     // 【变更】2026-10-27 (批次三十): the top bar + the artifact preview.

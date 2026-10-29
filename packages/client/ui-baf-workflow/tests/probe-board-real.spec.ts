@@ -91,6 +91,10 @@ it('bakes the real board html', async () => {
       template: t('artifact.state.template'),
       planned: t('artifact.state.planned'),
       filled: t('artifact.state.filled'),
+      // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail.
+      completed: t('artifact.state.completed'),
+      updated: t('artifact.state.updated'),
+      stale: t('artifact.state.stale'),
     },
     nodeLabels,
     modeLabels: {

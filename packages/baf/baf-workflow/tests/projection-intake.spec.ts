@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, afterEach } from 'vitest'
 import { BafError } from '@deepseek-ai/dsh-baf-core'
-import { classifyIntake } from '../src/intake.ts'
+import { classifyIntake, deriveScopeFromAllowlist } from '../src/intake.ts'
 import { ProjectionStore, replay } from '../src/projection.ts'
 import { decideTransition } from '../src/transition.ts'
 import { confirmIntake, createWorkflowService } from '../src/workflow-service.ts'
@@ -312,9 +312,10 @@ describe('intake rules', () => {
     try {
       const store = new ProjectionStore({ workspaceRoot: root })
       const service = createWorkflowService({ store })
-      // No feature/bug keywords → heuristic kind 'unknown'.
+      // 【变更】2026-10-29 (批次三十七 · 用户问题 4): no feature/bug keyword →
+      // the heuristic kind stays 'unknown' (the model may still fill it in).
       const bugish = await service.intake({
-        description: '重构 ecum 模块',
+        description: 'ecum 模块的登录态老是丢失',
         workspace: { root },
       })
       const { setIntakeMode } = await import('../src/workflow-service.ts')
@@ -399,5 +400,35 @@ describe('tab view', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('the 影响范围 derivation from the frozen allowlist', () => {
+  it('reads one module as 局部小改, not 跨模块', () => {
+    // 【变更】2026-10-28 (批次三十四 · 用户问题 3): the customer's ECU
+    // abstraction rework touched fourteen files of ONE module and the scope
+    // read as 跨模块 — the old rule counted files, the word names modules.
+    expect(deriveScopeFromAllowlist([
+      'ecum/port/ecum_action.h',
+      'ecum/port/ecum_port.h',
+      'ecum/service/ecum_sm.c',
+      'ecum/service/ecum.c',
+    ])).toBe('small-local')
+  })
+
+  it('reads two module roots as 跨模块', () => {
+    expect(deriveScopeFromAllowlist(['ecum/service/ecum.c', 'can/can_rx.c'])).toBe('cross-module')
+  })
+
+  it('ignores the workflow documents in the allowlist', () => {
+    expect(deriveScopeFromAllowlist([
+      'openspec/changes/change-1/verify.md',
+      'openspec/changes/change-1/checklist.md',
+      'ecum/service/ecum.c',
+    ])).toBe('single-file')
+  })
+
+  it('reads a single product file as 单文件', () => {
+    expect(deriveScopeFromAllowlist(['ecum/service/ecum.c'])).toBe('single-file')
   })
 })

@@ -86,7 +86,7 @@ function detailFixture(changeId: string): BafWorkflowChangeDetailResult {
         changeId,
         kind: 'feature',
         mode: 'full-go-path',
-        affectedScope: 'src/app.ts',
+        affectedScope: 'small-local',
         confidence: 0.82,
         reasonCodes: ['scope-narrow'],
         openspecRequired: true,
@@ -148,7 +148,6 @@ function mount(
   loadChangeOverview: (cwd?: string) => Promise<BafWorkflowChangeOverviewResult>,
   loadChangeDetail: (changeId: string, cwd?: string) => Promise<BafWorkflowChangeDetailResult> =
     async changeId => detailFixture(changeId),
-  openArtifact?: (cwd: string, path: string) => boolean,
   readArtifact?: (cwd: string, path: string) => Promise<WorkflowTabFileReadResult>,
   useSessions: (selector: (state: unknown) => unknown) => unknown =
     function select<S>(selector: (state: unknown) => S): S { return selector({ byId: {}, phase: 'ready' }) },
@@ -158,7 +157,6 @@ function mount(
       t={t as never}
       loadChangeOverview={loadChangeOverview}
       loadChangeDetail={loadChangeDetail}
-      {...(openArtifact === undefined ? {} : { openArtifact })}
       {...(readArtifact === undefined ? {} : { readArtifact })}
       useSessions={useSessions as never}
     />,
@@ -300,11 +298,19 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
     expect(top.textContent).toContain('card.duration')
     expect(top.textContent).toContain('card.tokens')
 
-    // 左侧 · the classification card + the stage artifacts.
+    // 左侧 · the classification card + the stage artifacts + the HISTORY (bottom).
+    // 【变更】2026-10-28 (批次三十五 · 用户问题 1): the history moved DOWN from
+    // the right rail to the left rail's BOTTOM band (左下方).
     const left = screen.getByTestId('change-detail-left')
     expect(left.textContent).toContain('ovw.detailIntake')
-    expect(left.textContent).toContain('src/app.ts')
     expect(left.textContent).toContain('proposal.md')
+    // 【变更】2026-10-28 (批次三十四 · 用户问题 6): the scope reads as the
+    // customer's word (跨模块 / 局部小改 / 单文件), not the raw enum.
+    expect(left.textContent).toContain('scope.small-local')
+    const history = screen.getByTestId('change-detail-history')
+    expect(history.textContent).toContain('hist.intakeClassified')
+    expect(history.textContent).toContain('hist.stageEntered')
+    expect(history.textContent).toContain('hist.stageCompleted')
 
     // 中间 · the COMPLETE graph — both stages and the edge between them.
     const graph = screen.getByTestId('change-detail-graph')
@@ -313,13 +319,82 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
     expect(graph.querySelectorAll('[role="button"]').length).toBeGreaterThanOrEqual(2)
     expect(graph.querySelector('svg')).not.toBeNull()
 
-    // 右侧 · the stage head + the stage checklist + the full event history.
+    // 右侧 · the stage name card + the stage checklist — the HISTORY left it.
     const right = screen.getByTestId('change-detail-right')
     expect(right.textContent).toContain('node.implement')
-    const history = screen.getByTestId('change-detail-history')
-    expect(history.textContent).toContain('hist.intakeClassified')
-    expect(history.textContent).toContain('hist.stageEntered')
-    expect(history.textContent).toContain('hist.stageCompleted')
+    // 【变更】2026-10-28 (批次三十五 · 用户问题 1): the history sits in the
+    // BOTTOM-LEFT band, not in the right rail.
+    expect(right.querySelector('[data-testid="change-detail-history"]')).toBeNull()
+    expect(left.querySelector('[data-testid="change-detail-history"]')).not.toBeNull()
+  })
+
+  /**
+   * 【变更】2026-10-28 (批次三十五 · 用户问题 1): the history's NEW home — the
+   * bottom-left band of the change detail. It is a region of its own, so the
+   * reader can see where it sits without reading the copy.
+   */
+  it('puts the change history in the bottom-left band, out of the right rail', async () => {
+    const load = vi.fn().mockResolvedValue(readyFixture())
+    const detail = vi.fn().mockImplementation(async (changeId: string) => detailFixture(changeId))
+    mount(load, detail)
+
+    fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
+    await screen.findByTestId('change-detail-modal')
+
+    // The history region lives INSIDE the left rail, under the change's own
+    // identity and documents.
+    const left = screen.getByTestId('change-detail-left')
+    const region = screen.getByTestId('change-detail-history-region')
+    expect(left.contains(region)).toBe(true)
+    expect(region.textContent).toContain('hist.intakeClassified')
+    // …and it is GONE from the right rail.
+    const right = screen.getByTestId('change-detail-right')
+    expect(right.contains(screen.getByTestId('change-detail-history'))).toBe(false)
+    expect(right.textContent).not.toContain('hist.stageEntered')
+  })
+
+  /**
+   * 【变更】2026-10-28 (批次三十五 · 用户问题 1): the change detail's stage
+   * NAMES are bilingual — 中文在前，英文在后 on ONE line, the 确认门配置流程图's
+   * anatomy (the English name is a plain constant, the zh label stays
+   * locale-owned).
+   */
+  it('names the stage bilingually in the change detail', async () => {
+    const load = vi.fn().mockResolvedValue(readyFixture())
+    const detail = vi.fn().mockImplementation(async (changeId: string) => detailFixture(changeId))
+    mount(load, detail)
+
+    fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
+    await screen.findByTestId('change-detail-modal')
+
+    // The stage name card prints both halves.
+    const name = await screen.findByTestId('stage-summary-name')
+    expect(name.textContent).toContain('node.implement')
+    expect(name.textContent).toContain('Implement')
+    // …and the graph's stage card names the stage the same way.
+    const card = screen.getByTestId('flow-node-name-implement')
+    expect(card.textContent).toContain('node.implement')
+    expect(card.textContent).toContain('Implement')
+  })
+
+  // 【变更】2026-10-28 (批次三十四 · 用户问题 6): a finished change's outcome card
+  // showed 「期望产物」「完成条件」 cut off by an ellipsis — the values are
+  // sentences, so they WRAP now.
+  it('wraps the finished change\'s artifact and completion lines', async () => {
+    const load = vi.fn().mockResolvedValue(readyFixture())
+    const detail = vi.fn().mockImplementation(async (changeId: string) => {
+      const base = detailFixture(changeId)
+      return { ...base, view: { ...base.view, current: 'completed' as const } }
+    })
+    mount(load, detail)
+
+    fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
+    const terminal = await screen.findByTestId('change-detail-terminal')
+    expect(terminal.textContent).toContain('detail.artifacts')
+    expect(terminal.textContent).toContain('detail.completion')
+    // Both long values carry the WRAP class (white-space: normal), not the
+    // truncating one.
+    expect(terminal.querySelectorAll('span[class*="intakeValueWrap"]')).toHaveLength(2)
   })
 
   // 【变更】2026-10-24 (批次二十 3): clicking a node in the graph switches the
@@ -344,15 +419,15 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
   })
 
   // 【变更】2026-10-25 (批次二十四 1): clicking a 文档产物 opens the PREVIEW
-  // window (the same one the 测试流图's config files use); the window's
-  // 在侧栏打开 button is what reaches the sidebar opener.
-  it('previews an artifact in the document window and opens it in the sidebar from there', async () => {
+  // window (the same one the 测试流图's config files use).
+  // 【变更】2026-10-27 (批次三十二 · 用户问题 6): the preview's 在侧栏打开
+  // footer button is GONE — the document is already on screen in this window.
+  it('previews an artifact in the document window', async () => {
     const load = vi.fn().mockResolvedValue(readyFixture())
-    const openArtifact = vi.fn().mockReturnValue(true)
     const readArtifact = vi.fn().mockResolvedValue({
       status: 'ready', path: '/work/demo-project/openspec/changes/x/proposal.md', content: '# 提案\n正文',
     } satisfies WorkflowTabFileReadResult)
-    mount(load, undefined, openArtifact as never, readArtifact as never)
+    mount(load, undefined, readArtifact as never)
 
     fireEvent.click(await screen.findByTestId('change-overview-row-change-active'))
     await screen.findByTestId('change-detail-left')
@@ -366,11 +441,8 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
       expect(screen.getByTestId('change-artifact-preview-body').textContent).toContain('# 提案')
     })
     expect(readArtifact).toHaveBeenCalledWith('/work/demo-project', 'openspec/changes/x/proposal.md')
-    expect(openArtifact).not.toHaveBeenCalled()
-
-    // 在侧栏打开 hands the artifact to the sidebar.
-    fireEvent.click(screen.getByTestId('change-artifact-preview-open'))
-    expect(openArtifact).toHaveBeenCalledWith('/work/demo-project', 'openspec/changes/x/proposal.md')
+    // No footer action — the preview IS the reading surface now.
+    expect(screen.queryByTestId('change-artifact-preview-open')).toBeNull()
   })
 
   // 【变更】2026-10-25 (批次二十四 1): without a live session there is nothing

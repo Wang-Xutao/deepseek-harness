@@ -23,8 +23,8 @@ let i = 0
 
 /**
  * 【变更】2026-10-27: the slow-start sentence is NOT one of the rotating
- * statuses — it is the quiet annotation beside the 后台启动 button in the
- * panel's top-left row (splash.css), and that row carries the reveal.
+ * statuses — it is the quiet annotation in the panel's top-left corner
+ * (splash.css), and the row that owns both corners carries the reveal.
  */
 const SLOW_HINT = '首次启动耗时较久，请耐心等待…'
 

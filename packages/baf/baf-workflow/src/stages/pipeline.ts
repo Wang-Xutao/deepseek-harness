@@ -17,6 +17,7 @@ import {
   type WorkflowNode,
 } from '@deepseek-ai/dsh-baf-core'
 import { ARTIFACT_FILES, createLocalOpenSpecAdapter, tasksTemplate } from '@deepseek-ai/dsh-baf-openspec'
+import { deriveScopeFromAllowlist } from '../intake.ts'
 import { assertTransitionAccepted, decideTransition } from '../transition.ts'
 import { ProjectionStore } from '../projection.ts'
 import { createStageContext, type StageContext } from './context.ts'
@@ -490,21 +491,21 @@ export class StagePipeline {
       await renderTasksMdFromLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
       // 【变更】2026-09-24 (demo6 问题 2): the plan just froze the file
       // allowlist — the pre-judgment 影响范围 derives from the REAL file
-      // count at this exact transition (1→single-file, ≤3→small-local,
-      // else cross-module) instead of waiting for the archive-time
+      // list at this exact transition instead of waiting for the archive-time
       // backstop. tasks.md 已计划 and the scope settle land together, so
       // the rail's 变更分类 card shows a determined scope by the time the
       // plan-advance dialog asks to enter implement.
+      // 【变更】2026-10-28 (批次三十四 · 用户问题 3): the derivation counts
+      // MODULE ROOTS, not files — a one-module rework of fourteen files is
+      // 局部小改, not 跨模块.
       const afterRender = await this.readCurrent(changeId)
       if (afterRender.intake?.affectedScope === 'unknown') {
         const ledger = await readLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
         if (ledger !== undefined && ledger.allowlist.length > 0) {
-          const affectedScope = ledger.allowlist.length <= 1
-            ? 'single-file'
-            : ledger.allowlist.length <= 3 ? 'small-local' : 'cross-module'
+          const affectedScope = deriveScopeFromAllowlist(ledger.allowlist)
           await this.store.append(changeId, afterRender.projectionVersion, meta => ({
             type: 'intake-settled' as const,
-            affectedScope: affectedScope as 'single-file' | 'small-local' | 'cross-module',
+            affectedScope,
             reasonCodes: ['settled-at-plan'] as const,
             ...meta,
           })).catch(() => undefined)
@@ -694,9 +695,9 @@ export class StagePipeline {
     if (scopeUnknown) {
       const ledger = await readLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
       if (ledger === undefined) return undefined
-      affectedScope = ledger.allowlist.length <= 1
-        ? 'single-file'
-        : ledger.allowlist.length <= 3 ? 'small-local' : 'cross-module'
+      // 【变更】2026-10-28 (批次三十四 · 用户问题 3): the same module-root rule
+      // the plan stage settles with — one derivation for both sites.
+      affectedScope = deriveScopeFromAllowlist(ledger.allowlist)
     }
     if (affectedScope === 'unknown') return undefined
     return {

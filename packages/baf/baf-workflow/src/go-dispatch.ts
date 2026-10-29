@@ -86,8 +86,12 @@ export interface DispatchSignal {
   readonly artifactPath: string
   /** The gate's missing-item lines — the order's per-item work list. */
   readonly missing: readonly string[]
-  /** Optional verification reason (the T11 fix loop / the checklist gates / the 2026-09-28 gate revision loop). */
-  readonly cause?: 'verify-failed' | 'checklist-missing' | 'checklist-open' | 'gate-revise' | 'artifact-drift-sync'
+  /**
+   * Optional verification reason (the T11 fix loop / the checklist gates / the 2026-09-28 gate revision loop /
+   * 【变更】批次三十五 (问题 8): the implement test-flow rest — the verify entry refused
+   * because the implement stage's test-flow evidence is not green).
+   */
+  readonly cause?: 'verify-failed' | 'checklist-missing' | 'checklist-open' | 'gate-revise' | 'artifact-drift-sync' | 'test-flow-not-passed'
   /**
    * 【变更】2026-09-26 (用户需求 工作流 3): the change's mode — on bug-fix-path
    * the open rest's completion conditions are the bug-record requirements
@@ -303,7 +307,11 @@ export function workOrderText(signal: DispatchSignal): string {
           // customer clicked 同步 on a document an upstream edit made stale.
           : cause === 'artifact-drift-sync'
             ? '【BAF 工单 · 同步产物 · 上游已更新】'
-            : '【BAF 工单 · /baf-go 派单】'
+            // 【变更】批次三十五 (问题 8): the implement test-flow rest — the
+            // verify entry refused until the baf-quality chain runs green.
+            : cause === 'test-flow-not-passed'
+              ? '【BAF 工单 · /baf-go 派单 · 测试流未通过】'
+              : '【BAF 工单 · /baf-go 派单】'
   return [
     head,
     `变更：${changeId}`,
@@ -321,6 +329,13 @@ export function workOrderText(signal: DispatchSignal): string {
       : ['', cause === 'gate-revise' ? '修订时仍须满足的完成条件（裁决门）：' : '完成条件（裁决门）：', ...conditions.map(line => `- ${line}`)]),
     '',
     '执行要求：',
+    // 【变更】2026-10-29 (批次三十六 · 用户问题 8): the upstream documents are
+    // the BASIS. The demo1 session edited clarify.md eight times after
+    // design.md was written — the model fixed an upstream inconsistency by
+    // rewriting the upstream, and the drift detector rightly raised the alarm.
+    // The order now says which way the fix goes: change THIS stage's document
+    // to match the upstream, never the other way round.
+    '0. 上游文档（proposal.md / clarify.md / design.md）是基准，不要改写；发现本阶段文档与上游不一致时，改本阶段文档让它跟上上游；',
     // 【变更】2026-10-27 (同步产物): the sync order is a REWRITE, not a fill —
     // the model must read the newest upstream content first and carry it
     // through this document AND every later stage's document.
@@ -341,6 +356,16 @@ export function workOrderText(signal: DispatchSignal): string {
     // 追问纪律（风格提示，不是完成条件 — 裁决门仍只查 clarify.md 形状）。
     ...(node === 'clarify'
       ? ['1b. 追问纪律：一次只问一个最阻塞的问题（先问卡住后续决策的）；每问给一句背景＋选项与推荐默认；客户答不上就给出你的建议并标记「待定」；阻塞问题清零后才算澄清完成；']
+      : []),
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the clarify stage REALLY
+    // fills the proposal. The customer reported the proposal still being a
+    // blank template (Why / Scope / Impact all placeholders) at the clarify
+    // stage, with the model unable to write it — the old upstream lock
+    // covered proposal.md from the clarify stage on. The proposal is the
+    // clarify stage's document to fill (未填写 → 已填写); the lock starts when
+    // the gate in front of it is passed (已完成).
+    ...(node === 'clarify'
+      ? ['1c. 澄清阶段要把 proposal.md 的 Why / Scope / Impact 全部写成真实内容（占位符必须替换），未填写完 proposal.md 不算澄清完成；']
       : []),
     '2. 补齐后立即结束本回合——系统会在回合结束时自动弹出下一阶段裁决卡，无需你调用任何命令；',
     '3. 需要客户决策时调用 baf_question_ask，不要用文字向客户提问；',

@@ -27,7 +27,9 @@ import type { WorkflowTabKey } from './locales.ts'
 // 【变更】2026-10-27 (批次三十): the 同步 dispatch's answer — the client
 // mirrors the host's own result union so the banner can say what happened.
 import type { BafWorkflowPauseResult, BafWorkflowSyncResult } from '../types.ts'
-import { CATALOG_ZH } from './catalog-i18n.ts'
+// 【变更】2026-10-28 (批次三十三 · 用户问题 3): the flow notice card — a title
+// and a short body instead of the host's raw text in one muted line.
+import { FlowNotice } from './FlowNotice.tsx'
 import { buildClientTemplateTabView, withRenderableGraph } from './graph-template.ts'
 // 【变更】2026-10-24 (批次二十 3): the graph canvas + the read-only rail
 // parts moved into shared modules, so the 变更总览's per-change detail page
@@ -35,7 +37,7 @@ import { buildClientTemplateTabView, withRenderableGraph } from './graph-templat
 // asked for exactly that). The behaviour here is unchanged — only the import
 // moved.
 import { FlowCanvas } from './FlowCanvas.tsx'
-import { ArtifactRail, BilingualDetail, StageChecklist, artifactDriftTags, artifactName, statusClass, type ArtifactDriftTag } from './flow-parts.tsx'
+import { ArtifactRail, BilingualDetail, StageChecklist, StageSummaryCard, artifactDriftTags, artifactName, statusClass, type ArtifactDriftTag } from './flow-parts.tsx'
 import { createRefreshScheduler } from './refresh-scheduler.ts'
 import { RouteStatusRow } from './RouteStatusRow.tsx'
 import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel, parseGateSections } from './gate-ask.ts'
@@ -80,6 +82,13 @@ export interface WorkflowViewInjected {
    * while the dispatch channel still wakes the model at the landed rest.
    */
   advance: (changeId: string, skipAsk?: boolean) => Promise<WorkflowTabView>
+  /**
+   * 【变更】2026-10-28 (批次三十五 · 用户问题 2): record the Tab's own 暂不推进
+   * host-side — the same deferral the conversation tab's decline records, so
+   * BOTH tabs stand down (no re-prompt) until the graph's 「推进」 re-raises the
+   * deferred confirmation.
+   */
+  advanceDismiss: (changeId: string) => Promise<WorkflowTabView>
   /**
    * §13 R3 — fast-path Tab dispatch. The `evidence` payload is flattened on
    * the host into `key=value` pairs the same way the slash parser reads
@@ -490,47 +499,68 @@ function RailSplitter(props: {
  * The banner must not promise more than the host did: a dispatched order says
  * the model is working on it, a refusal says WHY (no workspace / no live
  * session / the model is mid-turn).
+ *
+ * 【变更】2026-10-28 (批次三十三 · 用户问题 3): a notice is a TITLE plus a
+ * body, not one long line. The title says which action failed; the body says
+ * why, in the host's own short words.
+ *
+ * 【变更】2026-10-28 (批次三十三 · 用户问题 2): a dispatched order is not a
+ * sentence — it is work ON ITS WAY, and the notice for that state is derived
+ * from the drift still being on disk (the 「正在同步」 spinner), not stored
+ * here. So this answers with a notice only when the sync FAILED.
  * @param result - the host's answer.
  * @param t - the locale binder.
- * @returns the banner's tone + text.
+ * @returns the failure notice, or null when there is nothing to report.
  */
 function syncNoticeOf(
   result: BafWorkflowSyncResult,
   t: (key: WorkflowTabKey) => string,
-): { readonly kind: 'ok' | 'warn'; readonly text: string } {
+): { readonly kind: 'warn'; readonly title: string; readonly text: string } | null {
   switch (result.status) {
     case 'dispatched':
-      return { kind: 'ok', text: t('flow.syncDone') }
     // 【变更】2026-10-27 (批次三十一): the order was already on its way — the
     // host says so instead of claiming a fresh dispatch, because nothing new
     // reached the model.
     case 'queued':
-      return { kind: 'ok', text: t('flow.syncQueued') }
+    // Nothing is out of sync: there is nothing to wait for either.
     case 'no-drift':
-      return { kind: 'ok', text: t('flow.syncNoDrift') }
+      return null
     case 'no-workspace':
-      return { kind: 'warn', text: t('flow.syncNoWorkspace') }
+      return { kind: 'warn', title: t('flow.syncFailedTitle'), text: t('flow.syncNoWorkspace') }
     case 'unavailable':
-      return { kind: 'warn', text: `${t('flow.syncUnavailable')}：${result.reason}` }
+      return { kind: 'warn', title: t('flow.syncFailedTitle'), text: result.reason }
   }
 }
 
 /**
- * 【变更】2026-10-27 (批次三十): what the 暂停/继续 action did, in one line.
+ * 【变更】2026-10-27 (批次三十): what the 暂停/继续 action did.
+ *
+ * 【变更】2026-10-27 (批次三十二 · 补充 2): ONLY a failure says anything now.
+ * The success used to print a plain sentence under the graph (「工作流已暂停——
+ * 在你点「继续」之前，不再自动弹门，也不再自动派单。」), but the pause state is
+ * already on screen: the toolbar button reads 继续 instead of 暂停, and the
+ * 「推进」button is gone while the brake holds. The sentence repeated what the
+ * picture already showed, so it left; a FAILED pause still reports itself —
+ * that is a fact the customer cannot see.
+ *
+ * 【变更】2026-10-28 (批次三十三 · 用户问题 3): the title follows the ACTION
+ * the customer took — a failed 继续 never says 「暂停操作未能生效」 — and the
+ * body is the host's one-line reason instead of its whole card.
  * @param result - the host's answer.
- * @param paused - the state the customer asked for.
+ * @param paused - the action the customer took (true = 暂停).
  * @param t - the locale binder.
- * @returns the notice's tone + text.
+ * @returns the notice, or null when the action succeeded.
  */
 function pauseNoticeOf(
   result: BafWorkflowPauseResult,
   paused: boolean,
   t: (key: WorkflowTabKey) => string,
-): { readonly kind: 'ok' | 'warn'; readonly text: string } {
+): { readonly kind: 'warn'; readonly title: string; readonly text: string } | null {
   if (result.status === 'unavailable') {
-    return { kind: 'warn', text: `${t('flow.pauseUnavailable')}：${result.reason}` }
+    const title = paused ? t('flow.pauseFailedTitle') : t('flow.resumeFailedTitle')
+    return { kind: 'warn', title, text: result.reason }
   }
-  return { kind: 'ok', text: paused ? t('flow.pauseDone') : t('flow.resumeDone') }
+  return null
 }
 
 /**
@@ -540,6 +570,7 @@ function pauseNoticeOf(
 export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   const {
     t, refresh, startIntake, advance, transition, resume,
+    advanceDismiss,
     gateResolve, gateRevise, openArtifact, routePreview, useProjection, subscribe,
     openWorkflowConfig,
     // 【变更】2026-10-27 (批次三十): the 「同步」button — re-author the stale
@@ -646,16 +677,39 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // 【变更】2026-10-27 (批次三十): the 「同步」action's outcome — the banner
   // says what the dispatch did (or why it could not). `syncing` keeps the
   // button from firing twice while the order is on its way.
-  const [syncNotice, setSyncNotice] = useState<{ readonly kind: 'ok' | 'warn'; readonly text: string } | null>(null)
+  // 【变更】2026-10-28 (批次三十三 · 用户问题 2): the outcome is now only a
+  // FAILURE. A dispatched order is work on its way: the notice shows the
+  // 「正在同步」 animation (derived from the drift still being on disk), not a
+  // sentence about the dispatch.
+  const [syncFailure, setSyncFailure] = useState<{ readonly kind: 'warn'; readonly title: string; readonly text: string } | null>(null)
+  // Whether the customer asked for a sync — the 「正在同步」 state rides on it
+  // until the stale documents are actually rewritten.
+  const [syncStarted, setSyncStarted] = useState(false)
   const [syncing, setSyncing] = useState(false)
   // 【变更】2026-10-27 (批次三十): the 暂停/继续 action's outcome.
-  const [pauseNotice, setPauseNotice] = useState<{ readonly kind: 'ok' | 'warn'; readonly text: string } | null>(null)
+  // 【变更】2026-10-27 (批次三十二 · 补充 2): only a FAILED action produces a
+  // notice — the success is on screen already (the button reads 继续, and the
+  // 「推进」button is gone while the brake holds).
+  const [pauseNotice, setPauseNotice] = useState<{ readonly kind: 'warn'; readonly title: string; readonly text: string } | null>(null)
   const [pausing, setPausing] = useState(false)
 
   // 【变更】2026-10-27 (批次三十): the STALE documents — a downstream document
   // an upstream edit made stale. The host reads them off the file mtimes and
   // rides them on the view; the graph marks the affected stages.
   const driftRows = view.artifactDrift ?? []
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the document lifecycle's own
+  // drift signal — a 已完成 document that was edited (已更新) and the
+  // documents of the later stages that are now 待更新. The banner opens on
+  // these rows too, so the customer is told to sync even when the pair-wise
+  // drift detector found no stale pair (an edited document with nothing
+  // downstream of it yet).
+  const lifecycleDrift = (view.artifacts ?? []).filter(row => row.state === 'updated' || row.state === 'stale')
+  // 【变更】2026-10-27 (批次三十二 · 用户问题 2): the change is PAUSED. A paused
+  // change advances nothing: the 「推进」button is gone, the TOP advance
+  // confirmation never renders, and the parked-gate banner is hidden — the
+  // customer asked for the pause, so no surface may offer to move the change on
+  // until 「继续」 is pressed.
+  const paused = view.paused === true
   const driftNodes = useMemo(
     () => (view.artifactDrift ?? []).map(row => row.node),
     [view.artifactDrift],
@@ -671,29 +725,22 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     [driftRows, syncing],
   )
 
-  // 【变更】2026-10-27 (批次三十一): the 「推进」action — it lives in the flow
-  // graph's toolbar now. The click re-arms the advance confirmation the
-  // customer dismissed, then scrolls the confirmation into view.
-  const rearmAdvance = useCallback((): void => {
-    setAdvanceDismissed(null)
-    // The dialog mounts on the re-render this click schedules —
-    // scroll AFTER the commit (rAF), not now.
-    requestAnimationFrame(() => {
-      document
-        .querySelector('[data-advance-dialog]')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    })
-  }, [])
-
   // 【变更】2026-10-27 (批次三十): the 「同步」action. The click IS the
   // authorization — the host's order carries the customer ledger scope, so it
   // is never deduped away by the orchestrator's own turn-end order.
   const syncDrift = useCallback(async (changeId: string): Promise<void> => {
     setSyncing(true)
+    setSyncStarted(true)
+    setSyncFailure(null)
     try {
-      setSyncNotice(syncNoticeOf(await syncArtifacts(changeId), t))
+      setSyncFailure(syncNoticeOf(await syncArtifacts(changeId), t))
     } catch (err) {
-      setSyncNotice({ kind: 'warn', text: err instanceof Error ? err.message : String(err) })
+      setSyncStarted(false)
+      setSyncFailure({
+        kind: 'warn',
+        title: t('flow.syncFailedTitle'),
+        text: err instanceof Error ? err.message : String(err),
+      })
     } finally {
       setSyncing(false)
     }
@@ -717,7 +764,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         setView(prev => (prev.paused === paused ? prev : { ...prev, paused }))
       }
     } catch (err) {
-      setPauseNotice({ kind: 'warn', text: err instanceof Error ? err.message : String(err) })
+      setPauseNotice({
+        kind: 'warn',
+        title: paused ? t('flow.pauseFailedTitle') : t('flow.resumeFailedTitle'),
+        text: err instanceof Error ? err.message : String(err),
+      })
     } finally {
       setPausing(false)
     }
@@ -761,6 +812,19 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     }
   }, [applyView])
 
+  // 【变更】2026-10-28 (批次三十五 · 用户问题 9): the toolbar's 「推进」 drives
+  // the SAME `/baf-go` a typed command would — ask channel and all — so the
+  // registered confirmation pops as the workflow tab's live-gate dialog AND
+  // the conversation tab's BafGateComposer modal at once. A deferred 暂不推进
+  // is re-raised by this click: the host clears the marker before the drive,
+  // and the popped dialog carries the decision both tabs see.
+  const advanceFromToolbar = useCallback((): void => {
+    const changeId = view.changeId
+    if (changeId === null) return
+    setAdvanceDismissed(null)
+    void run(() => advance(changeId, false))
+  }, [advance, run, view.changeId])
+
   // 【变更】2026-09-22 (user report #3): automatic refreshes (scheduler
   // poll/poke ticks, focus & visibility re-syncs) must never toggle `busy` —
   // every poll flashed the whole strip (all `disabled={busy}` buttons plus the
@@ -795,6 +859,13 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // session's bottom popup.
   const pendingInteraction = useSessionStatus(snapshot =>
     snapshot.get(sessionId)?.pendingInteraction)
+  // 【变更】2026-10-28 (批次三十五 · 用户问题 1): whether the session's model
+  // turn is still RUNNING. The 「同步」button stays disabled while it is — the
+  // sync order would collide with the very turn that is still authoring the
+  // documents (the host refuses it with 会话进行中无法同步), so the customer
+  // waits for the turn to end instead of clicking into the refusal.
+  const sessionRunning = useSessionStatus(snapshot =>
+    snapshot.get(sessionId)?.running) === true
   const liveGate = useMemo(
     () => (isBafGatePending(pendingInteraction) ? pendingInteraction : null),
     [pendingInteraction],
@@ -931,20 +1002,21 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // 【变更】2026-10-24 (批次十九 1.2): the rail's stage header values. The
   // column's cards describe ONE stage — the SELECTED node's — so the header
   // names it; with nothing selected the change's current stage stands in.
-  // The hint line is the stage's one-line purpose (the catalog copy).
+  // 【变更】2026-10-27 (批次三十二 · 用户问题 5): the header is now the stage's
+  // NAME CARD — the name plus the stage's own figures (状态 / 耗时 / Tokens /
+  // 下一跳 / 条件). The one-line purpose blurb is gone: it repeated the 目标
+  // section the 阶段详情 already carries, one screen lower.
   const railStage = useMemo(() => {
     if (selectedNode !== null) {
       return {
         name: t(`node.${selectedNode.id}` as WorkflowTabKey),
-        hint: CATALOG_ZH[selectedNode.id]?.purpose ?? selectedNode.catalog.purpose,
-        hintKey: 'rail.stageSelected' as WorkflowTabKey,
+        node: selectedNode,
       }
     }
     if (selectedTerminal !== null) {
       return {
         name: t(`status.${selectedTerminal}` as WorkflowTabKey),
-        hint: t(`terminal.${selectedTerminal}.completion` as WorkflowTabKey),
-        hintKey: 'rail.stageSelected' as WorkflowTabKey,
+        node: undefined,
       }
     }
     if (view.current !== null) {
@@ -954,14 +1026,13 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
         name: terminal
           ? t(`status.${view.current}` as WorkflowTabKey)
           : t(`node.${view.current}` as WorkflowTabKey),
-        hint: node === undefined ? null : (CATALOG_ZH[node.id]?.purpose ?? node.catalog.purpose),
-        hintKey: 'rail.stageCurrent' as WorkflowTabKey,
+        node: terminal ? undefined : node,
       }
     }
-    return { name: t('strip.idle'), hint: null, hintKey: 'rail.stageCurrent' as WorkflowTabKey }
+    return { name: t('strip.idle'), node: undefined }
   }, [selectedNode, selectedTerminal, view, t])
   const railStageName = railStage.name
-  const railStageHint = railStage.hint
+  const railStageNode = railStage.node
 
   // 【变更】2026-09-22 (user report #4) — strip token cell + stats-card
   // figures derived from the tokenUsage projection (undefined → placeholder).
@@ -1279,19 +1350,25 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           />
           <div className={css.actions}>
             {liveGateView.options.map(opt => (
-              <button
-                key={`live-gate-${opt.label}`}
-                type="button"
-                className={clsx(css.btn, opt.label === livePrimaryLabel ? css.btnPrimary : css.btnGhost)}
-                disabled={busy || gateAnswered !== null}
-                onClick={() => {
-                  setGateAnswered(opt.label)
-                  answerGateOption(liveGate, liveGateView, opt.label)
-                }}
-              >
-                {opt.label}
-                {opt.hint !== undefined && <span className={css.optionHintInline}> · {opt.hint}</span>}
-              </button>
+              /* 【变更】2026-10-29 (批次三十六 · 用户问题 6): the option's
+                 explanation rides UNDER its button, not inline after the label —
+                 the customer asked for a clear note under every option. */
+              <span key={`live-gate-${opt.label}`} className={css.actionCell}>
+                <button
+                  type="button"
+                  className={clsx(css.btn, opt.label === livePrimaryLabel ? css.btnPrimary : css.btnGhost)}
+                  disabled={busy || gateAnswered !== null}
+                  onClick={() => {
+                    setGateAnswered(opt.label)
+                    answerGateOption(liveGate, liveGateView, opt.label)
+                  }}
+                >
+                  {opt.label}
+                </button>
+                {opt.hint !== undefined && (
+                  <span className={css.actionHint}>{opt.hint}</span>
+                )}
+              </span>
             ))}
           </div>
           {liveGateView.allowsRevise && (
@@ -1359,28 +1436,40 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
             {view.pendingGate.options.map((opt) => {
               const isCancel = opt.id === 'cancel' || opt.id === 'reject'
               return (
-                <button
-                  key={`pending-${opt.id}`}
-                  type="button"
-                  className={clsx(css.btn, isCancel ? css.btnGhost : css.btnPrimary)}
-                  disabled={busy}
-                  title={
-                    view.pendingGate?.gateId === 'intake-classify' && opt.id === 'confirm-bugfix'
-                      ? t('pendingGate.bugFixFieldsHelp')
-                      : undefined
-                  }
-                  onClick={() => {
-                    const gate = view.pendingGate
-                    if (gate === undefined) return
-                    void run(() => gateResolve({
-                      ...(gate.changeId === undefined ? {} : { changeId: gate.changeId }),
-                      gateId: gate.gateId,
-                      optionId: opt.id,
-                    }))
-                  }}
-                >
-                  {opt.label}
-                </button>
+                /* 【变更】2026-10-29 (批次三十六 · 用户问题 6): each option shows
+                   the registry's explanation under its button. */
+                <span key={`pending-${opt.id}`} className={css.actionCell}>
+                  <button
+                    type="button"
+                    className={clsx(css.btn, isCancel ? css.btnGhost : css.btnPrimary)}
+                    disabled={busy}
+                    title={
+                      view.pendingGate?.gateId === 'intake-classify' && opt.id === 'confirm-bugfix'
+                        ? t('pendingGate.bugFixFieldsHelp')
+                        : undefined
+                    }
+                    onClick={() => {
+                      const gate = view.pendingGate
+                      if (gate === undefined) return
+                      void run(() => gateResolve({
+                        ...(gate.changeId === undefined ? {} : { changeId: gate.changeId }),
+                        gateId: gate.gateId,
+                        optionId: opt.id,
+                      }))
+                    }}
+                  >
+                    {opt.label}
+                    {/* 【变更】2026-10-29 (批次三十七 · 用户问题 4): the
+                        recommended path (the higher-confidence one) carries a
+                        「推荐」 badge. */}
+                    {opt.recommended === true && (
+                      <span className={css.recommendBadge} data-baf-recommended="">推荐</span>
+                    )}
+                  </button>
+                  {opt.hint !== undefined && (
+                    <span className={css.actionHint}>{opt.hint}</span>
+                  )}
+                </span>
               )
             })}
           </div>
@@ -1396,11 +1485,15 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           button. The rail keeps its buttons — this banner is the
           at-the-top parity surface, not a replacement.
           【变更】2026-09-25 (用户需求 工作流 1): suppressed while the LIVE gate
-          dialog above is showing (same decision, fresher instant). */}
+          dialog above is showing (same decision, fresher instant).
+          【变更】2026-10-27 (批次三十二 · 用户问题 2): suppressed while the
+          change is PAUSED — a parked gate's confirm advances the change, and a
+          paused change must not advance. */}
       {view.gate !== undefined
         && view.gate.gateId !== undefined
         && view.gate.question !== undefined
         && view.changeId !== null
+        && !paused
         && liveGateView === null && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('gate.bannerTitle')}>
           <div className={css.cardTitle}>{t('gate.bannerTitle')}</div>
@@ -1489,18 +1582,27 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           【变更】2026-09-30 (demo31 问题 5 · 非标准样式): the dialog now renders
           in the SAME shape as the standard §22 gate cards — segmented
           【状态变化】/【确认后】 body, 「确认推进 · 进入X」 primary option — so
-          the workflow page has ONE decision-card style, not a bespoke one. */}
+          the workflow page has ONE decision-card style, not a bespoke one.
+          【变更】2026-10-27 (批次三十二 · 用户问题 2): a PAUSED change shows NO
+          advance confirmation — the flow is on the brake, so no surface may ask
+          the customer to move it on until 「继续」 is pressed. */}
       {changeActive
         && view.current !== 'drift'
         && view.advance?.ready === true
         && view.gate === undefined
         && view.pendingGate === undefined
         && liveGateView === null
+        // 【变更】2026-10-28 (批次三十五 · 用户问题 2): a DECLINED advance shows
+        // no re-prompt — the customer said 暂不推进 (this tab or the
+        // conversation tab), so the graph's 「推进」 button is the way forward
+        // and this dialog stays down until that click re-raises it.
+        && view.advanceDeclined !== true
         // 【变更】2026-10-27 (批次三十一): an out-of-sync change does NOT advance.
         // The documents disagree; the customer must sync them first, and the
         // workflow waits at this rest point instead of popping a confirmation
         // that would move past the disagreement.
         && driftRows.length === 0
+        && !paused
         && advanceKey !== null
         && advanceDismissed !== advanceKey && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('action.advance')} data-advance-dialog="">
@@ -1555,7 +1657,15 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               type="button"
               className={clsx(css.btn, css.btnGhost)}
               disabled={busy}
-              onClick={() => { setAdvanceDismissed(advanceKey) }}
+              onClick={() => {
+                setAdvanceDismissed(advanceKey)
+                // 【变更】2026-10-28 (批次三十五 · 用户问题 2): the dismissal is
+                // recorded HOST-side too — the turn-end pops stand down on
+                // both tabs, and the graph's 「推进」 button re-raises the
+                // deferred confirmation when the customer is ready.
+                const changeId = view.changeId
+                if (changeId !== null) void advanceDismiss(changeId).catch(() => undefined)
+              }}
             >
               {t('advanceDialog.dismiss')}
             </button>
@@ -1670,6 +1780,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                   <span className={css.metaKey}>{t('intake.summary')}</span>
                   <span className={css.summaryText}>{view.intake.summary}</span>
                 </div>
+                {/* 【变更】2026-10-29 (批次三十六 · 用户问题 4): the 置信度
+                    number's meaning and purpose ride the card as a line — the
+                    customer asked 「置信度到底是什么，有什么用」 and a hover
+                    title did not answer it. */}
+                <p className={css.intakeNote}>{t('intake.confidenceNote')}</p>
                 {/* §13 R9 — keep the classification metadata visible after
                     confirm so the customer can re-check what was agreed.
                     Pending: the two registry path buttons (§22.17 J parity —
@@ -1849,51 +1964,83 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               box itself is rebuilt: one neutral surface with a single warn
               accent (a rule, an icon and the title) instead of a saturated
               amber slab that fought the page's gold accent. */}
-          {driftRows.length > 0 && (
+          {(driftRows.length > 0 || lifecycleDrift.length > 0) && (
             <div className={css.driftBanner} data-testid="flow-drift-banner">
               <span className={css.driftBannerIcon} aria-hidden>
-                <svg viewBox="0 0 16 16" focusable="false">
-                  <path d="M8 2.2 14.4 13H1.6L8 2.2Z" />
-                  <path d="M8 6.4v3.1" />
-                  <path d="M8 11.4v.1" />
-                </svg>
+                {/* 【变更】2026-10-28 (批次三十四 · 用户问题 4): the syncing state
+                    LIVES in this card — the card changes its state (正在同步 →
+                    产物不同步) instead of a second notice appearing under it. */}
+                {syncing || (syncStarted && driftRows.length > 0)
+                  ? <span className={css.flowNoticeSpinner} />
+                  : (
+                    <svg viewBox="0 0 16 16" focusable="false">
+                      <path d="M8 2.2 14.4 13H1.6L8 2.2Z" />
+                      <path d="M8 6.4v3.1" />
+                      <path d="M8 11.4v.1" />
+                    </svg>
+                  )}
               </span>
               <div className={css.driftBannerText}>
-                <span className={css.driftBannerTitle}>{t('flow.driftTitle')}</span>
+                <span className={css.driftBannerTitle}>
+                  {syncing || (syncStarted && driftRows.length > 0)
+                    ? t('flow.syncRunningTitle')
+                    : t('flow.driftTitle')}
+                </span>
                 <span className={css.driftBannerBody}>
-                  {driftRows.map(row => t('flow.driftBody', {
-                    upstream: row.sourceFile,
-                    stale: row.file,
-                  })).join('；')}
+                  {syncing || (syncStarted && driftRows.length > 0)
+                    ? t('flow.syncRunning')
+                    : driftRows.length > 0
+                      ? driftRows.map(row => t('flow.driftBody', {
+                        upstream: row.sourceFile,
+                        stale: row.file,
+                      })).join('；')
+                      // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the
+                      // lifecycle's own signal — a 已完成 document was edited
+                      // (已更新) and the documents after it are 待更新.
+                      : t('flow.lifecycleDriftBody', {
+                        updated: lifecycleDrift.map(row => row.file).join('、'),
+                      })}
                 </span>
               </div>
               {/* 【变更】2026-10-27 (批次三十一): the workflow holds here — it
                   neither advances nor pops a confirmation gate until the
                   documents agree again. The notice says so, so the hold never
-                  reads as a hang. */}
-              <span className={css.driftBannerHold} data-testid="flow-drift-hold">
-                {t('flow.driftHold')}
-              </span>
+                  reads as a hang.
+                  【变更】2026-10-28 (批次三十四 · 用户问题 4): the hold line is
+                  hidden while the sync is on its way — the card's state already
+                  says the work is in flight. */}
+              {(!(syncing || (syncStarted && driftRows.length > 0))) && (
+                <span className={css.driftBannerHold} data-testid="flow-drift-hold">
+                  {/* 【变更】2026-10-28 (批次三十五 · 用户问题 1): while a model
+                      turn is running the hold line says WHY the 「同步」button
+                      is disabled — wait for the turn to end, or stop it. */}
+                  {sessionRunning ? t('flow.driftHoldRunning') : t('flow.driftHold')}
+                </span>
+              )}
               <button
                 type="button"
                 className={clsx(css.toolBtn, css.toolBtnWarn)}
                 data-testid="flow-drift-sync"
                 title={t('flow.syncHelp')}
-                disabled={syncing || view.changeId === null}
+                disabled={syncing || sessionRunning || view.changeId === null}
                 onClick={() => {
                   const changeId = view.changeId
                   if (changeId !== null) void syncDrift(changeId)
                 }}
               >
-                {syncing ? t('flow.syncSyncing') : t('flow.sync')}
+                {/* 【变更】2026-10-28 (批次三十三 · 用户问题 2): the button
+                    reads 「同步中」 for as long as the sync is on its way — the
+                    dispatch AND the model's rewrite, which the stale documents
+                    still on disk report. */}
+                {syncing || (syncStarted && driftRows.length > 0) ? t('flow.syncSyncing') : t('flow.sync')}
               </button>
             </div>
           )}
-          {syncNotice !== null && (
-            <p className={css.hint} data-testid="flow-sync-notice">{syncNotice.text}</p>
+          {syncFailure !== null && (
+            <FlowNotice notice={syncFailure} testId="flow-sync-notice" />
           )}
           {pauseNotice !== null && (
-            <p className={css.hint} data-testid="flow-pause-notice">{pauseNotice.text}</p>
+            <FlowNotice notice={pauseNotice} testId="flow-pause-notice" />
           )}
           {/* 【变更】2026-09-23 (demo5 issue #5): the flow canvas is its own
               component (pan/zoom/canvas math live inside) so the history
@@ -1916,8 +2063,15 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               // page header into this toolbar (left of 「暂停」/「继续」). It
               // re-arms the advance confirmation, so an out-of-sync change
               // offers nothing to advance into.
-              advanceReady: view.advance?.ready === true && driftRows.length === 0,
-              onAdvance: rearmAdvance,
+              // 【变更】2026-10-27 (批次三十二 · 用户问题 2): a PAUSED change
+              // offers nothing to advance into either — the button is gone
+              // until 「继续」 releases the brake.
+              // 【变更】2026-10-28 (批次三十五 · 用户问题 2/9): after a 暂不推进
+              // (either tab) this button is the WAY FORWARD — one click drives
+              // the same /baf-go the typed command would, and the deferred
+              // confirmation pops in BOTH tabs.
+              advanceReady: view.advance?.ready === true && driftRows.length === 0 && !paused,
+              onAdvance: advanceFromToolbar,
             }}
             driftNodes={driftNodes}
             t={t}
@@ -1956,15 +2110,20 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               stage name in big type at the very top of the column, so 「现在在
               哪个阶段」 reads before any card. The stage is the SELECTED node
               (the cards below describe it); with nothing selected the change's
-              current stage stands in. */}
+              current stage stands in.
+              【变更】2026-10-27 (批次三十二 · 用户问题 5): the header became the
+              stage's NAME CARD — the name plus the stage's own figures (状态 /
+              耗时 / Tokens / 下一跳 / 条件), which used to sit in the 阶段详情
+              one screen lower. The 「阶段」label and the purpose blurb are
+              gone: the card's title IS the stage name, and the purpose repeats
+              the 目标 section below. */}
           <div className={css.railStageHead} data-testid="rail-stage-head">
-            <span className={css.railStageLabel}>{t('rail.stage')}</span>
-            <span className={css.railStageName} data-testid="rail-stage-name">
-              {railStageName}
-            </span>
-            {railStageHint !== null && (
-              <span className={css.railStageHint}>{railStageHint}</span>
-            )}
+            <StageSummaryCard
+              name={railStageName}
+              node={railStageNode}
+              nextEdge={nextEdge}
+              t={t}
+            />
           </div>
           <div className={css.railScroll}>
             {/* 【变更】2026-10-24 (批次十九 1.1): the intake / artifacts / stats
@@ -1972,11 +2131,12 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                 keeps only the stage-scoped cards below. */}
             {selectedNode !== null && (
               <section className={clsx(css.card, css.cardChecklist)} aria-label={t('detail.checklist')}>
+                {/* 【变更】2026-10-27 (批次三十二 · 用户问题 5): the stage name
+                    next to 本阶段清单 is gone — the name card above already
+                    names the stage, and the duplicate chip read as a second
+                    heading for the same card. */}
                 <h3 className={css.cardTitle}>
                   {t('detail.checklist')}
-                  <span className={css.checklistStage}>
-                    {t(`node.${selectedNode.id}` as WorkflowTabKey)}
-                  </span>
                 </h3>
                 <StageChecklist node={selectedNode} t={t} />
               </section>
@@ -2036,7 +2196,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                   <span>{t(`terminal.${selectedTerminal}.completion`)}</span>
                 </div>
               ) : (
-                <BilingualDetail node={selectedNode as NonNullable<typeof selectedNode>} t={t} nextEdge={nextEdge} />
+                <BilingualDetail node={selectedNode as NonNullable<typeof selectedNode>} t={t} />
               )}
             </section>
 
@@ -2432,7 +2592,10 @@ function SessionStatsCard(props: {
       <h3 className={css.cardTitle}>{t('stats.title')}</h3>
       {stats !== undefined && (
         <>
-          <div className={css.checklistHead}>{t('stats.section.overview')}</div>
+          {/* 【变更】2026-10-27 (批次三十二 · 用户问题 9): the section heads
+              (概览 / 工具 / TOKENS) carry their own class — the checklist's
+              quiet head was too small to read as a heading. */}
+          <div className={css.statsSectionHead}>{t('stats.section.overview')}</div>
           <div className={css.statsGrid}>
             <span className={css.statsKey}>{t('stats.turns')}</span>
             <span className={css.statsNum}>{stats.turns}</span>
@@ -2441,7 +2604,7 @@ function SessionStatsCard(props: {
             <span className={css.statsKey}>{t('stats.llmTime')}</span>
             <span className={css.statsNum}>{formatDuration(stats.llmMs)}</span>
           </div>
-          <div className={css.checklistHead}>{t('stats.section.tools')}</div>
+          <div className={css.statsSectionHead}>{t('stats.section.tools')}</div>
           <div className={css.statsGrid}>
             <span className={css.statsKey}>{t('stats.toolCalls')}</span>
             <span className={css.statsNum}>{stats.toolCalls}</span>
@@ -2450,7 +2613,7 @@ function SessionStatsCard(props: {
           </div>
         </>
       )}
-      <div className={css.checklistHead}>{t('stats.section.tokens')}</div>
+      <div className={css.statsSectionHead}>{t('stats.section.tokens')}</div>
       {usage !== undefined ? (
         <div className={css.statsGrid}>
           <span className={css.statsKey} title={t('stats.breakdownTitle')

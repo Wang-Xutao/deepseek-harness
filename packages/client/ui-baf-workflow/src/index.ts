@@ -4,12 +4,20 @@
  */
 
 import { exec } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
-import { createRequire } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { Context } from '@deepseek-ai/cordis'
+import {
+  bafQualityCliPath,
+  classifyStageToolMissing,
+  stageSpawnCommand,
+  testFlowCommandFor,
+  testFlowStageCommand,
+  TEST_FLOW_CHAIN_ORDER,
+  TEST_FLOW_STAGE_TIMEOUT_MS as BAF_TEST_FLOW_STAGE_TIMEOUT_MS,
+  STAGE_TOOL_TOKENS,
+} from '@deepseek-ai/dsh-baf-quality'
 import {
   BafError,
   isBafError,
@@ -40,7 +48,7 @@ import {
   artifactPathFor,
   dispatchGateRevisionFromTab,
   driveAbandon,
-  driveArchive,
+  driveArchiveDecision,
   driveClarify,
   driveClassify,
   driveDesign,
@@ -67,6 +75,17 @@ import {
   // 【变更】2026-10-27 (批次三十): the per-change PAUSE flag (the 暂停/继续
   // button on the workflow graph).
   setChangePaused,
+  // 【变更】2026-10-28 (批次三十三 · 用户问题 2): the pause brake — a paused
+  // change advances through NO surface, the button hidden or not.
+  isChangePaused,
+  // 【变更】2026-10-28 (批次三十五 · 用户问题 2): the per-gate ADVANCE-DECLINE
+  // marker — the conversation tab's 暂不推进, honored until 推进 re-raises it.
+  markAdvanceDeclinedForNode,
+  clearAdvanceDeclined,
+  // 【变更】2026-10-28 (批次三十三): whether the pause CUT a running model
+  // turn, and the 「继续」 instruction that resumes it.
+  wasChangeInterrupted,
+  resumeMessage,
   type DispatchNode,
   // 【变更】2026-10-07 (九点批 问题 5): the Auto pseudo entry ids, for the
   // route-scan's session-model auto flag (see readSessionRouteScan).
@@ -77,6 +96,10 @@ import {
   type DispatchAgent,
   type DriveAdapters,
   type ScaffoldAdapter,
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the intake confidence
+  // evaluator registry — the model hook the classifier asks for a real
+  // percentage.
+  setIntakeConfidenceEvaluator,
 } from '@deepseek-ai/dsh-baf-workflow'
 import { readRouteTierConfigSync } from '@deepseek-ai/dsh-baf-workflow/route-config-io'
 import { isTierRoutingActive } from '@deepseek-ai/dsh-baf-core'
@@ -93,8 +116,11 @@ import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, RequestMessage } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, RequestMessage, UserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-llm'
+// 【变更】2026-10-29 (批次三十七 · 用户问题 4): the model evaluation behind the
+// intake's real confidence percentage.
+import { evaluateIntakeConfidence } from './intake-evaluator.ts'
 import type {
   BafWorkflowChainRunRequest,
   BafWorkflowChainRunResult,
@@ -408,7 +434,7 @@ export async function readSessionRouteScan(
 const execShell = promisify(exec)
 
 /** Wall-clock budget for one per-stage manual run (批次十二 2.1). */
-export const TEST_FLOW_STAGE_TIMEOUT_MS = 300_000
+export const TEST_FLOW_STAGE_TIMEOUT_MS = BAF_TEST_FLOW_STAGE_TIMEOUT_MS
 
 /** Preview payload cap for readWorkspaceFile (批次十二 2.6). */
 export const WORKSPACE_FILE_PREVIEW_CAP = 256 * 1024
@@ -623,49 +649,23 @@ function headerRouteFor(session: Session | undefined): DraftRoute | undefined {
 }
 
 /**
- * 【变更】2026-10-22 (批次十二 2.1 + 2.4): the baf-wrapped command one 测试流图
- * stage runs as — the `baf-quality` CLI's own subcommand contract (the wrapper
- * ships with the quality pack; `test` → ceedling test:all, `check` → gcov
- * 插桩 + gcovr + 覆盖率门禁, `lint` → cpplint + cppcheck). build shares `test`
- * (ceedling compiles inside the test build — no compile-only subcommand);
- * format is NOT here (raw `clang-format -i <arg>`, built by the caller).
- * @param stage - the step id.
- * @returns the shell command string.
+ * 【变更】2026-10-28 (批次三十四 · 用户问题 5): the 测试流's step→command map
+ * and its chain order live in `dsh-baf-quality` now — the workflow's verify
+ * stage runs the same chain, so the two surfaces cannot disagree about what a
+ * step does. The client keeps re-exporting them (its public API).
  */
-export function testFlowStageCommand(
-  stage: 'build' | 'test' | 'instrument' | 'report' | 'gate' | 'lint' | 'analyze',
-): string {
-  switch (stage) {
-    case 'build':
-    case 'test':
-      return 'baf-quality test'
-    case 'instrument':
-    case 'report':
-    case 'gate':
-      return 'baf-quality check'
-    case 'lint':
-    case 'analyze':
-      return 'baf-quality lint'
-  }
+export {
+  classifyStageToolMissing,
+  stageSpawnCommand,
+  STAGE_TOOL_TOKENS,
+  testFlowStageCommand,
+  TEST_FLOW_CHAIN_ORDER,
 }
 
 /** Keep the last `max` chars of a stage run's combined output (result card). */
 function tailOfStage(text: string, max = 1200): string {
   const trimmed = text.trim()
   return trimmed.length <= max ? trimmed : `… [前略] ${trimmed.slice(trimmed.length - max)}`
-}
-
-/**
- * 【变更】2026-10-22 (批次十三 1): the canonical order a 全部运行 sweep walks —
- * the check chain first (编译→测试→插桩→报告→门禁), then lint/analyze, then the
- * format discipline's final step. Mirrors the canvas node order.
- */
-export const TEST_FLOW_CHAIN_ORDER = ['build', 'test', 'instrument', 'report', 'gate', 'lint', 'analyze', 'format'] as const
-
-/** The shell command one stage runs as (format keeps its raw clang-format). */
-function testFlowCommandFor(stage: BafWorkflowStageRunRequest['stage'], arg: string): string {
-  const formatPath = arg.trim() === '' ? 'source' : arg.trim()
-  return stage === 'format' ? `clang-format -i ${formatPath}` : testFlowStageCommand(stage)
 }
 
 /**
@@ -678,79 +678,6 @@ function testFlowCommandFor(stage: BafWorkflowStageRunRequest['stage'], arg: str
  * @param arg - the format node's configurable path ('' → `source`).
  * @returns the run outcome plus the tool-missing classification.
  */
-/**
- * 【变更】2026-10-22 (批次十三 3): pure form of the "was this a missing tool?"
- * classifier, extracted so the Windows 11 gotcha stays pinned by a spec:
- * cmd returns exit **1** (not 9009) for a missing command AND the localized
- * 不是内部或外部命令 message arrives GBK-mangled through Node's utf8 decode,
- * so the localized regex never matches. The `'NAME'` quoting prefix is
- * ASCII-stable across locales — with a tiny output it identifies the shell's
- * own not-found line (a real stage failure echoes findings, not a lone quoted
- * command name).
- */
-export function classifyStageToolMissing(code: unknown, combined: string, command: string): boolean {
-  // 【变更】2026-10-22 (批次十三复核 3): the wrapper runs its subcommands in a
-  // fresh shell, so the shell's not-found line can name ANY chain member
-  // (`'ceedling' 不是内部或外部命令` inside a baf-quality check), not only the
-  // wrapper itself — probe every candidate token, not just command[0].
-  const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const tokens = new Set<string>()
-  const head = command.split(' ')[0] ?? ''
-  if (head !== '') tokens.add(head)
-  for (const tool of STAGE_TOOL_TOKENS) tokens.add(tool)
-  const shortOutput = typeof code === 'number' && code === 1 && combined.trim().length <= 200
-  const shellNotFound = shortOutput
-    && [...tokens].some(token => new RegExp(`^'${escapeRe(token)}'`, 'm').test(combined))
-  return code === 'ENOENT'
-    || code === 9009
-    || /not recognized|不是内部或外部命令|无法将|command not found/i.test(combined)
-    || shellNotFound
-}
-
-/**
- * 【变更】2026-10-22 (批次十三复核 3): the toolchain members any stage command
- * can reach — the classifier's not-found probe set.
- */
-export const STAGE_TOOL_TOKENS = ['baf-quality', 'ceedling', 'gcovr', 'cpplint', 'cppcheck', 'clang-format', 'gcc', 'ruby'] as const
-
-/**
- * 【变更】2026-10-22 (批次十三复核 3): the shipped `baf-quality` CLI resolves by
- * absolute path — via the always-exported `package.json` root (a direct
- * `./baf-quality-cli.cjs` export would trip the typert analyzer, which only
- * walks TypeScript sources) plus an existence stat. Memoized; undefined when
- * the layout lacks it — then the bare `baf-quality …` stays an
- * enterprise-provided PATH wrapper.
- */
-let bafQualityCliCache: string | undefined
-let bafQualityCliResolved = false
-function bafQualityCliPath(): string | undefined {
-  if (!bafQualityCliResolved) {
-    bafQualityCliResolved = true
-    try {
-      const pkgRoot = dirname(createRequire(import.meta.url).resolve('@deepseek-ai/dsh-baf-quality/package.json'))
-      const cli = join(pkgRoot, 'baf-quality-cli.cjs')
-      bafQualityCliCache = existsSync(cli) ? cli : undefined
-    } catch {
-      bafQualityCliCache = undefined
-    }
-  }
-  return bafQualityCliCache
-}
-
-/**
- * The spawn form of a stage's display command (批次十三复核 3): `baf-quality …`
- * becomes `"<node>" "<cli.cjs>" …` so the run needs nothing on PATH — the
- * display contract stays `baf-quality test` and the UI is untouched. Pure.
- * @param display - the customer-facing command (testFlowCommandFor output).
- * @param cliPath - absolute baf-quality-cli.cjs path (undefined → display unchanged).
- * @param execPath - the node executable to run the CLI under.
- * @returns the shell command to spawn.
- */
-export function stageSpawnCommand(display: string, cliPath: string | undefined, execPath: string): string {
-  if (cliPath === undefined || !display.startsWith('baf-quality ')) return display
-  return `"${execPath}" "${cliPath}"${display.slice('baf-quality'.length)}`
-}
-
 async function execTestFlowStage(
   cwd: string,
   stage: BafWorkflowStageRunRequest['stage'],
@@ -981,6 +908,24 @@ export async function resolveDraftRoute(ctx: Context, sessionId: SessionId): Pro
 }
 
 /**
+ * 【变更】2026-10-28 (批次三十三 · 用户问题 2): the agent face the 暂停/继续
+ * control drives.
+ *
+ * `cancel` cuts the running turn; `followup` queues the 「继续」 instruction
+ * that resumes it; `status` says whether a turn was in flight when the brake
+ * took hold. Every member is optional — a session without a live model simply
+ * has no channel, and the control reports that instead of guessing.
+ */
+interface PauseAgentFace {
+  /** Cut the running turn. The cause is the platform's user-interrupt cause. */
+  cancel?: (cause: { readonly kind: 'user' }, options?: { readonly keepInbox?: boolean }) => void
+  /** Queue a user-role message into the next-turn inbox and wake the driver. */
+  followup?: (message: UserMessage) => void
+  /** Whether this agent has a turn in flight. */
+  readonly status?: 'idle' | 'running'
+}
+
+/**
  * Host Remote: assembles {@link WorkflowTabView} and applies semi-interactive mutations.
  */
 export class BafWorkflowTabRemote extends TypertRemoteService {
@@ -1008,6 +953,17 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     super(ctx, 'bafWorkflowView')
     this.pool = createProjectionStorePool(ctx)
     ctx.effect(() => { return () => { this.pool.dispose() } }, 'bafWorkflowView: projection store pool')
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 4): register the model hook the
+    // intake classifier asks for a real confidence percentage. It hangs off
+    // the process-wide registry so EVERY mint surface (this Tab's
+    // 「新建变更」, the model's `baf_gate_ask` bootstrap, the CLI) classifies
+    // with the model's own score instead of a fixed tier. The route is the
+    // deployment's default model — the evaluation is a workflow decision, not
+    // a session's turn.
+    setIntakeConfidenceEvaluator(async (input) => {
+      const route = defaultRouteFor(this.ctx)
+      return evaluateIntakeConfidence(this.ctx, route, input)
+    })
   }
 
   /**
@@ -1194,7 +1150,14 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   @Remote('startIntake')
   async startIntake(request: BafWorkflowStartIntakeRequest): Promise<WorkflowTabView> {
     const { store, cwd } = await this.contextFor(request.sessionId)
-    const outcome = await this.guardDomain(() => beginIntake(cwd, request.description))
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the classification runs the
+    // model on the SESSION's own route (the same route the formatter uses), so
+    // the confidence percentage comes from the model the customer is already
+    // talking to. A missing route leaves the keyword answer in place.
+    const route = await this.draftRouteFor(request.sessionId).catch(() => undefined)
+    const outcome = await this.guardDomain(() => beginIntake(cwd, request.description, async (input) => {
+      return evaluateIntakeConfidence(this.ctx, route, input)
+    }))
     const changeId = outcome.kind === 'minted' || outcome.kind === 'reused'
       ? outcome.changeId
       : undefined
@@ -1258,6 +1221,21 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   @Remote('advance')
   async advance(request: BafWorkflowChangeRequest): Promise<WorkflowTabView> {
     const { cwd, store } = await this.contextFor(request.sessionId)
+    // 【变更】2026-10-27 (批次三十二 · 用户问题 2): a PAUSED change advances
+    // through NO surface. The 「推进」button is hidden while the brake holds,
+    // but a stale client (or a command that reached this remote another way)
+    // must be refused too — the pause is the customer's brake, not a UI state.
+    if (isChangePaused(cwd, request.changeId)) {
+      throw new RemoteError('baf-workflow/transition', '工作流已暂停——请先点「继续」再推进。', {
+        code: 'advance_paused',
+        message: '工作流已暂停——请先点「继续」再推进。',
+      })
+    }
+    // 【变更】2026-10-28 (批次三十五 · 用户问题 2): the 推进 click re-raises the
+    // deferred confirmation — the decline marker the customer's 暂不推进 left
+    // is cleared, so the confirmation pops on THIS click and the turn-end
+    // pops resume once it is answered.
+    clearAdvanceDeclined(cwd, request.changeId)
     const adapters = this.resolveAdapters(request.sessionId, cwd)
     const agent = this.liveAgentFor(request.sessionId)
     // §22.17 popup channel + §18.4.2 work-order channel — the same pair the
@@ -1284,20 +1262,58 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   }
 
   /**
+   * 【变更】2026-10-28 (批次三十五 · 用户问题 2): record the workflow Tab's own
+   * 暂不推进 — the same deferral the conversation tab's decline records.
+   *
+   * The marker is the link between the two tabs: once set, the turn-end pops
+   * stand down (no re-prompt on either surface) and the graph's 「推进」 button
+   * (one click = /baf-go) is the way forward.
+   * @param request - the change whose advance dialog the customer dismissed.
+   * @returns the refreshed view, `advanceDeclined` now attached.
+   */
+  @Remote('advanceDismiss')
+  async advanceDismiss(request: BafWorkflowChangeRequest): Promise<WorkflowTabView> {
+    const { cwd, store } = await this.contextFor(request.sessionId)
+    const status = await store.readStatus(request.changeId).catch(() => undefined)
+    if (status !== undefined && status.terminal === undefined && status.current !== 'drift') {
+      markAdvanceDeclinedForNode(
+        cwd,
+        request.changeId,
+        status.current,
+        status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+      )
+      this.ctx.logger.info(
+        `[baf] ${new Date().toISOString()} - session baf:advanceDismiss change=${request.changeId} node=${status.current}`,
+      )
+    }
+    return await this.viewFor(request.sessionId, store, request.changeId)
+  }
+
+  /**
    * 【变更】2026-10-27 (批次三十): the 工作流图's 暂停/继续 button.
    *
-   * 暂停 brakes the workflow: the orchestrator pops NO gate and sends NO work
-   * order for this change (the brake sits in `popDueGate`, the single funnel of
-   * both). The customer's own commands stay untouched — `/baf-go` and the Tab's
-   * 推进 are explicit instructions, and a lock the customer cannot unlock with
-   * a command is a dead end.
+   * 【变更】2026-10-28 (批次三十三 · 用户问题 2): the control now owns the
+   * MODEL's turn, not only the workflow's gates.
    *
-   * 继续 releases the brake AND hands the outstanding gap back: it runs the
-   * SAME drive the session's `/baf-go` runs (`driveGo` with the popup + work
-   * order channels), so the due gate pops again and the model receives the
-   * order — without waiting for a turn that may never come. The gate is
-   * POPPED, never auto-confirmed: 「继续」 means "resume", not "approve the
-   * pending gate".
+   * 暂停 does two things, in this order:
+   * 1. the brake goes on FIRST — the orchestrator pops no gate and sends no
+   *    work order for this change (the brake sits in `popDueGate`, the single
+   *    funnel of both);
+   * 2. the model's turn is CUT (`Agent.cancel`), so the conversation the
+   *    customer sees stops with the graph instead of running on behind it.
+   *
+   * 继续 releases the brake AND hands the work back:
+   * - a pause that CUT a turn resumes it with the customer's own word —
+   *   「继续」 goes to the model, which picks up where the interruption left
+   *   it. A fresh work order would be wrong here: the model already knows
+   *   what it was doing.
+   * - a pause that caught the model IDLE has no turn to resume, so the
+   *   outstanding gap goes back the way `/baf-go` sends it: the same drive
+   *   the session's `/baf-go` runs, so the due gate pops again.
+   *
+   * The customer's own commands stay untouched in both directions —
+   * `/baf-go` and the Tab's 推进 are explicit instructions, and a lock the
+   * customer cannot unlock with a command is a dead end.
    *
    * @param request - session + change + the wanted state.
    * @returns the outcome.
@@ -1305,18 +1321,54 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
   @Remote('setWorkflowPaused')
   async setWorkflowPaused(request: BafWorkflowPauseRequest): Promise<BafWorkflowPauseResult> {
     const { cwd } = await this.contextFor(request.sessionId)
-    setChangePaused(cwd, request.changeId, request.paused)
-    if (request.paused) return { status: 'ok', paused: true }
-    // 继续 — hand the outstanding gap back to the model.
+    const agent = this.livePauseAgent(request.sessionId)
+    if (request.paused) {
+      // The brake goes on BEFORE the turn is cut: the aborted turn ends with
+      // a `turn/end`, and the orchestrator reads the brake on that event. A
+      // brake set after the cut would let the gate pop in the gap between.
+      const interrupted = agent?.status === 'running'
+      setChangePaused(cwd, request.changeId, true, { interrupted })
+      agent?.cancel?.({ kind: 'user' }, { keepInbox: true })
+      return { status: 'ok', paused: true }
+    }
+    // 继续 — read the pause's own record BEFORE the brake comes off.
+    const interrupted = wasChangeInterrupted(cwd, request.changeId)
+    setChangePaused(cwd, request.changeId, false)
+    if (interrupted) {
+      // The cut turn resumes on the customer's word.
+      if (agent?.followup === undefined) {
+        return {
+          status: 'unavailable',
+          code: 'no-model-channel',
+          reason: '当前会话没有可用的模型通道（会话可能未运行）。',
+        }
+      }
+      bindSessionChange(cwd, request.sessionId, request.changeId)
+      agent.followup(resumeMessage())
+      return { status: 'ok', paused: false }
+    }
+    // The model was idle: the outstanding gap goes back the way `/baf-go`
+    // sends it — the due gate pops again, and the work order goes to the
+    // model when it is not already working.
     const adapters = this.resolveAdapters(request.sessionId, cwd)
-    const agent = this.liveAgentFor(request.sessionId)
     const ask = makeGateAsk(this.ctx, agent)
     const dispatch = makeGoDispatcher(cwd, agent as DispatchAgent | undefined)
     if (ask === undefined && dispatch === undefined) {
-      return { status: 'unavailable', reason: '当前会话没有可用的工作流通道（会话可能未运行）' }
+      return {
+        status: 'unavailable',
+        code: 'no-model-channel',
+        reason: '当前会话没有可用的工作流通道（会话可能未运行）。',
+      }
     }
     bindSessionChange(cwd, request.sessionId, request.changeId)
-    const result = await this.guardDomain(() => driveGo({
+    // 【变更】2026-10-28 (批次三十三 · 用户问题 3): the drive's card is the
+    // workflow's RESTING POINT, not a failed resume — it answers with an error
+    // card for every rest ("implement 进行中 · 等模型"), and reporting that as
+    // a failure put 「继续操作未能生效」 over a change that was working. The
+    // brake is off and the change is live again; whatever the workflow rests
+    // on now (a gate to judge, a document to write) is shown by its own
+    // surface.
+    await this.guardDomain(() => driveGo({
       cwd,
       rawInput: `change=${request.changeId}`,
       source: 'tab',
@@ -1324,9 +1376,6 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       ...(ask === undefined ? {} : { ask }),
       ...(dispatch === undefined ? {} : { dispatch, dispatchOrigin: 'customer' as const }),
     }))
-    if (result.kind === 'error') {
-      return { status: 'unavailable', reason: result.text }
-    }
     return { status: 'ok', paused: false }
   }
 
@@ -1400,11 +1449,20 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
           return driveVerify(cwd, rawInput, adapters, source)
         case 'archive':
         case 'completed':
-          // T14: archive writes `change-archived`; the projection fold
-          // sets `current=completed`. driveArchive carries the confirm
-          // positional; the host-stamped `source='tab'` satisfies the
-          // confirm-edge source guard (§22.15 B).
-          return driveArchive(cwd, `confirm ${rawInput}`, source)
+          // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the archive goes
+          // through the ONE host entry point (`driveArchiveDecision`) — the
+          // same one the coordinator, the Tab's gate card and the session's
+          // gate dialog use. The old path (`driveArchive` straight from the
+          // client) skipped the checklist gate and the workspace's
+          // `guard.requireHumanConfirmation`, which is how demo1's change was
+          // archived 24 ms after its verify with 25 unticked checklist boxes
+          // and no customer answer.
+          return driveArchiveDecision({
+            cwd,
+            changeId: request.changeId,
+            source,
+            adapters,
+          })
         case 'abandoned':
           // T16: driveAbandon appends `change-abandoned` raw (no
           // decideTransition), source check runs in the drive.
@@ -1895,7 +1953,12 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       return { status: 'unavailable', reason: `变更不存在：${request.changeId}` }
     }
     const mode = status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path'
-    const drift = await detectArtifactDrift(cwd, request.changeId, mode)
+    // 【变更】2026-10-28 (批次三十五 · 用户问题 1): the events ride along — only
+    // a COMPLETED stage can be judged, so the model's same-turn co-write of
+    // two documents is not a desync (and the 同步 click that collides with
+    // the still-running turn is refused below instead).
+    const { events } = await store.readEvents(request.changeId).catch(() => ({ events: [] }))
+    const drift = await detectArtifactDrift(cwd, request.changeId, mode, events)
     if (drift.length === 0) return { status: 'no-drift' }
     const target = drift[0]
     if (target === undefined || !isDriftStage(target.node)) {
@@ -2293,6 +2356,18 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     } catch {
       return undefined
     }
+  }
+
+  /**
+   * 【变更】2026-10-28 (批次三十三 · 用户问题 2): the agent face the 暂停/继续
+   * control drives — the turn it cuts and the 「继续」 it hands back.
+   *
+   * Structural on purpose: a session whose agent is gone (or a test double
+   * without the members) reports no channel, and the control answers with a
+   * notice instead of pretending it interrupted something.
+   */
+  private livePauseAgent(sessionId: SessionId): PauseAgentFace | undefined {
+    return this.liveAgentFor(sessionId) as PauseAgentFace | undefined
   }
 
   /**

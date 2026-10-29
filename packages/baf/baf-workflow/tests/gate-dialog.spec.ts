@@ -25,6 +25,7 @@ import type {
 } from '@deepseek-ai/dsh-user-questions'
 import { askGateDialog, askGateDialogQueued, makeGateAsk, reAskGateAfterRefusal, toolDriveAdapters } from '../src/gate-dialog.ts'
 import { apply } from '../src/gate-ask.ts'
+import { releaseChangeGate } from '../src/ask-queue.ts'
 import { driveOpen } from '../src/command-drives.ts'
 import { ProjectionStore } from '../src/projection.ts'
 import type { GateAskOutcome } from '../src/go-coordinator.ts'
@@ -253,8 +254,10 @@ describe('§22.17 gate-dialog answer mapping', () => {
     const offered = service.calls[0]?.questions[0]?.options?.map(o => o.label) ?? []
     expect(offered).toEqual(['接手 chg-100', '接手 chg-200'])
     const descriptions = service.calls[0]?.questions[0]?.options?.map(o => o.description) ?? []
-    expect(descriptions).toContain('将执行 /baf-go change=chg-100')
-    expect(descriptions).toContain('将执行 /baf-go change=chg-200')
+    // 【变更】2026-10-29 (批次三十六 · 用户问题 6): the option's description is
+    // the registry's plain-language hint — the customer asked for an
+    // explanation under every option, and the technical invocation is not one.
+    expect(descriptions).toContain('接手这条变更，本会话继续推进它')
   })
 
   it('builds the question from the registry spec (title as question, body as detail)', async () => {
@@ -278,7 +281,9 @@ describe('§22.17 gate-dialog answer mapping', () => {
     // 【变更】2026-09-28 (用户问题 1.2): the change id rides as a `{{change:…}}`
     // first line (the client's top-right chip), no longer prose.
     expect(question?.detail).toContain('{{change:CHG-1}}')
-    expect(question?.detail).toContain('系统初步判断：缺陷修复路径 · 缺陷 · 置信 0.82')
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the confidence is a real
+    // PERCENTAGE, not the old two-decimal fraction.
+    expect(question?.detail).toContain('系统初步判断：缺陷修复路径 · 缺陷 · 置信 82%')
     expect(question?.detail).toContain('需求摘要：登录页在空输入时崩溃')
   })
 
@@ -815,7 +820,10 @@ describe('confirmed-but-never-opened intake: explain, do not re-pop (2026-09-20 
     const root = await setupToolWorkspace()
     try {
       // The incident's own description classifies as clarify-required.
-      const changeId = await mintConfirmed(root, '重构ecum模块', 'clarify-required')
+      // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the wording carries NO
+      // path keyword — 「重构ecum模块」 now names one (重构 → full-go-path,
+      // 100%), so the undecidable case needs a keyword-free requirement.
+      const changeId = await mintConfirmed(root, 'ecum模块的登录态老是丢失', 'clarify-required')
       const service = fakeService(answered('确认 · 完整流程'))
       const text = await runTool(registerTool(), service, root, {
         gateId: 'intake-classify',
@@ -849,6 +857,105 @@ describe('confirmed-but-never-opened intake: explain, do not re-pop (2026-09-20 
     await confirmIntake(store, changeId, 'user')
     return changeId
   }
+})
+
+describe('【变更】2026-10-29 (批次三十六 · 用户问题 2) a change-scoped gate pops once', () => {
+  /**
+   * The customer reported: 「进入澄清的确认门弹窗又弹了两遍，第一个没有操作
+   * 选择，第二个就覆盖了。」 The model's own `baf_gate_ask` popped the
+   * advance gate WITHOUT a change id, so the change-scoped on-screen slot was
+   * never taken — and the orchestrator's turn-end pop of the SAME decision
+   * (which does carry the change id) popped a second card over the first.
+   *
+   * These tests pin the fix: a change-scoped gate is scoped to the active
+   * change even when the model omits the id, so the second pop stands down.
+   */
+
+  /** A `userQuestions` service that never answers — the dialog stays up. */
+  function holdingService() {
+    const calls: AskUserQuestionRequest[] = []
+    return {
+      calls,
+      async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer> {
+        calls.push(request)
+        return await new Promise<AskUserQuestionAnswer>(() => {})
+      },
+    }
+  }
+
+  /** Wait until the service has been asked at least `count` times. */
+  async function waitForAsks(service: { calls: AskUserQuestionRequest[] }, count: number): Promise<void> {
+    for (let attempt = 0; attempt < 200 && service.calls.length < count; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+  }
+
+  /**
+   * One execute() call in its OWN session — the shared fallback session
+   * serializes every pop behind the never-settling dialog below.
+   */
+  async function runToolInSession(
+    tool: ToolDouble,
+    service: unknown,
+    root: string,
+    args: Record<string, unknown>,
+    sessionId: string,
+  ): Promise<string> {
+    const agent = { session: { header: { cwd: root, id: sessionId } }, ctx: ctxWith({ userQuestions: service }) }
+    const result = await tool.execute(args, { agent }) as { type: string; text: string }[]
+    return result.map(block => block.text).join('\n')
+  }
+
+  it('scopes a change-scoped advance gate to the active change when the model omits the id', async () => {
+    const root = await setupToolWorkspace()
+    let changeId = ''
+    try {
+      await driveOpen(root, 'feat: add export public API for reports')
+      changeId = (await new ProjectionStore({ workspaceRoot: root }).readIndex())
+        .changes.filter(c => c.current !== 'completed' && c.current !== 'abandoned')[0]?.changeId ?? ''
+      expect(changeId).not.toBe('')
+
+      const service = holdingService()
+      // The model asks for the advance gate and names no change — the tool
+      // must scope the pop to the active change all the same.
+      const pending = runToolInSession(registerTool(), service, root, { gateId: 'clarify-advance' }, 'sess-scoped-gate')
+      await waitForAsks(service, 1)
+      expect(service.calls).toHaveLength(1)
+      const detail = service.calls[0]?.questions[0]?.detail ?? ''
+      expect(detail.startsWith(`{{change:${changeId}}}`)).toBe(true)
+
+      // The orchestrator's turn-end pop of the SAME decision (it carries the
+      // change id) stands down instead of covering the first card.
+      const second = fakeService(answered('确认 · 进入设计'))
+      const outcome = await askGateDialogQueued(
+        second,
+        undefined,
+        { gateId: 'clarify-advance', changeId },
+        { sessionId: 'another-session' },
+      )
+      expect(outcome).toEqual({ kind: 'paused', reason: 'dismissed' })
+      expect(second.calls).toHaveLength(0)
+      void pending.catch(() => undefined)
+    } finally {
+      if (changeId !== '') releaseChangeGate(changeId, 'clarify-advance')
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('a workspace-scoped gate (scaffold) still pops without a change id', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baf-gate-ask-'))
+    try {
+      const service = fakeService(answered('暂不初始化'))
+      const text = await runTool(registerTool(), service, root, { gateId: 'scaffold' })
+      expect(service.calls).toHaveLength(1)
+      expect(service.calls[0]?.questions[0]?.question).toBe('工作区需要初始化')
+      // No change chip: the environment decision is the workspace's.
+      expect(service.calls[0]?.questions[0]?.detail ?? '').not.toContain('{{change:')
+      expect(text).toContain('客户暂未选择')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('§22.17 J path-choice options + bug-field draft (classify dialog v2)', () => {

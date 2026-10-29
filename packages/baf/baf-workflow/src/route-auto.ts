@@ -109,7 +109,12 @@ export class BafRouteAutoRuntime extends Service {
     super(ctx, 'bafRouteAuto')
     // The agent loop reads a step's route before every step; this runtime is
     // the resolver that maps the auto pseudo pair to that step's tier route.
-    ctx.effect(() => ctx.provide('stepRouteResolver', this), 'bafRouteAuto.stepRouteResolver')
+    // 【变更】2026-10-28 (批次三十五): provide runs synchronously in the
+    // constructor — inside ctx.effect the registration lands a tick later, so
+    // a reader in the same breath (the agent loop right after plugin load, or
+    // the registration test) received cordis's throw-on-access proxy for
+    // `stepRouteResolver` instead of this service.
+    ctx.provide('stepRouteResolver', this)
     ctx.on('session/event', (session, event) => {
       if (event.type !== 'user/message') return
       const data = (event.data ?? {}) as UserMessageLike

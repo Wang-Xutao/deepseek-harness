@@ -246,7 +246,15 @@ export function BafGateComposer(props: BafGateComposerProps): React.ReactElement
                   answerGateOption(matched, view, opt.label)
                 }}
               >
-                <span className={css.optionLabel}>{opt.label}</span>
+                <span className={css.optionLabel}>
+                  {opt.label}
+                  {/* 【变更】2026-10-29 (批次三十七 · 用户问题 4): the
+                      recommended path (the higher-confidence one) carries a
+                      「推荐」 badge. */}
+                  {opt.recommended === true && (
+                    <span className={css.recommendBadge} data-baf-recommended="">推荐</span>
+                  )}
+                </span>
                 {opt.hint !== undefined && <span className={css.optionHint}>{opt.hint}</span>}
               </button>
             ))}

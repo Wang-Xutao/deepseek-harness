@@ -155,7 +155,7 @@ export interface WorkflowTabArtifact {
    * bug-fix path never produces (clarify/design docs) — rail parity with
    * full-go-path, the skipped rows read 已裁剪.
    */
-  readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
+  readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'completed' | 'updated' | 'stale' | 'clipped'
   /** Missing items when state is not `filled` (Chinese, one line each). */
   readonly missing: readonly string[]
 }
@@ -327,7 +327,13 @@ export interface WorkflowTabPendingGate {
   /** Present iff `gateId === 'intake-classify'` — the change awaiting classification. */
   readonly changeId?: string
   readonly question: string
-  readonly options: readonly { readonly id: string; readonly label: string }[]
+  /**
+   * 【变更】2026-10-29 (批次三十六 · 用户问题 6): each option carries the
+   * registry's plain-language hint — what clicking it does. The Tab's pending
+   * gate is a confirmation surface, so it explains its options like the dialog
+   * does.
+   */
+  readonly options: readonly { readonly id: string; readonly label: string; readonly hint?: string }[]
   /**
    * Extra context paragraphs under the question (intake-classify: the
    * classifier's verdict — path / kind / confidence / summary — so the two

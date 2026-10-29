@@ -14,9 +14,20 @@
  *   document). A fixed `wf-arrow` id would make the second canvas's arrows
  *   inherit the first one's marker.
  * - the layout constants and the stage helpers come from `flow-parts.tsx`.
+ *
+ * 【变更】2026-10-28 (批次三十五 · 用户问题 2): every stage card's NAME is
+ * BILINGUAL — the zh label with the English name riding INLINE after it on
+ * ONE name line (中文在前，英文在后), the 确认门配置流程图's card anatomy. The
+ * zh label stays locale-owned; the English name is a plain constant
+ * (`flow-parts.NODE_EN`).
  */
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
 import clsx from 'clsx'
+import {
+  IconPauseOutlineRegular,
+  IconPlayOutlineRegular,
+  IconTriangleRightFillRegular,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TestFlowStepId, WorkflowNodeId, WorkflowTabNodeView, WorkflowTabView } from './tab-types.ts'
 import type { WorkflowTabKey } from './locales.ts'
 import { conditionTextOf } from './graph-template.ts'
@@ -29,6 +40,7 @@ import {
   NODE_H,
   NODE_W,
   ROW_H,
+  StageName,
   stageDuration,
   stageTokens,
   statusClass,
@@ -84,6 +96,9 @@ export function FlowCanvas(props: {
   const [zoom, setZoom] = useState(1)
   const panDrag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const markerId = useId()
+  // 【变更】2026-10-27 (批次三十二 · 用户问题 8): the change is PAUSED — the
+  // running stage stops breathing, so a paused workflow looks still.
+  const paused = controls?.paused === true
 
   const nodeById = useMemo(() => {
     const map = new Map<string, WorkflowTabNodeView>()
@@ -180,18 +195,35 @@ export function FlowCanvas(props: {
                 title={t('flow.advanceHelp')}
                 onClick={() => { controls.onAdvance?.() }}
               >
+                <span className={css.toolBtnIcon} aria-hidden>
+                  <IconTriangleRightFillRegular size={13} />
+                </span>
                 {t('action.advance')}
               </button>
             )}
+            {/* 【变更】2026-10-28 (批次三十三 · 用户问题 1): the 暂停/继续
+                control was a gold chip with dark ink — ugly and unreadable.
+                It is now TWO controls that say what they do: 暂停 wears the
+                graphite brake with a pause glyph, 继续 wears the brand foil
+                with a play glyph and a slow halo (the one button that
+                matters while the brake holds). Both inks are light. */}
             <button
               type="button"
-              className={css.toolBtn}
+              className={clsx(
+                css.toolBtn,
+                controls.paused ? css.toolBtnResume : css.toolBtnBrake,
+              )}
               data-testid="flow-toggle-pause"
               title={controls.paused ? t('flow.resumeHelp') : t('flow.pauseHelp')}
               aria-pressed={controls.paused}
               disabled={controls.pauseDisabled === true}
               onClick={() => { controls.onTogglePause() }}
             >
+              <span className={css.toolBtnIcon} aria-hidden>
+                {controls.paused
+                  ? <IconPlayOutlineRegular size={15} />
+                  : <IconPauseOutlineRegular size={15} />}
+              </span>
               {controls.paused ? t('flow.resumeWorkflow') : t('flow.pauseWorkflow')}
             </button>
           </>
@@ -272,6 +304,11 @@ export function FlowCanvas(props: {
             // one action is the way forward.
             const isGate = view.gate?.node === placement.id
             const label = t(`node.${placement.id}`)
+            // 【变更】2026-10-28 (批次三十五 · 用户问题 2): the card's NAME is
+            // bilingual — the zh label with the English name riding INLINE
+            // after it on ONE line (中文在前，英文在后), the 确认门配置流程图's
+            // card anatomy (`StageName`). The status badge beside it stays as
+            // it was.
             // Terminal cards carry their outcome (已完成 / 已放弃); on a terminal
             // change the opposite outcome card reads 已忽略 — never the template
             // 空闲 (nothing is idle after the flow ended).
@@ -308,6 +345,11 @@ export function FlowCanvas(props: {
                 key={placement.id}
                 className={clsx(
                   css.flowNode,
+                  // 【变更】2026-10-27 (批次三十二 · 用户问题 8): the RUNNING
+                  // card — the stage the model works on right now breathes, so
+                  // the eye finds the live stage without reading a status. A
+                  // PAUSED change switches it off.
+                  node !== undefined && node.status === 'in-progress' && !paused && css.nodeRunning,
                   isCurrent && css.nodeCurrent,
                   isSelected && css.nodeSelected,
                   isGate && css.nodeGate,
@@ -333,7 +375,13 @@ export function FlowCanvas(props: {
                 <div className={css.flowNodeHead}>
                   <span className={css.nodeIcon}><NodeIcon id={placement.id} /></span>
                   <div className={css.flowNodeTitles}>
-                    <span className={css.nodeLabel}>{label}</span>
+                    <StageName
+                      id={placement.id}
+                      t={t}
+                      className={css.nodeLabel}
+                      enClassName={css.nodeNameEn}
+                      testid={`flow-node-name-${placement.id}`}
+                    />
                     <span
                       className={clsx(
                         css.nodeBadge,
@@ -399,7 +447,7 @@ export function FlowCanvas(props: {
                 })()}
                 {node?.artifacts !== undefined && node.artifacts.length > 0 && (
                   <div className={css.flowNodeArtifacts}>
-                    {node.artifacts.map(artifact => {
+                    {node.artifacts.map((artifact) => {
                       // 【变更】2026-10-27 (批次三十): the 建立变更 card's artifact is
                       // the change's OWN directory — the change's IDENTITY, not a
                       // document. As a click-to-open chip it read as a file path
@@ -413,11 +461,21 @@ export function FlowCanvas(props: {
                             key={`${placement.id}:${artifact}`}
                             className={css.flowNodeChangeTag}
                             data-testid={`flow-node-change-${placement.id}`}
+                            // 【变更】2026-10-27 (批次三十二 · 用户问题 3): the id
+                            // shows on ONE line and the full value rides the
+                            // hover — a long id used to wrap and shove the card's
+                            // own figures around.
+                            title={artifactName(artifact)}
                           >
                             {artifactName(artifact)}
                           </span>
                         )
                       }
+                      // 【变更】2026-10-29 (批次三十六 · 用户问题 5): the chip
+                      // carries the FILE NAME — the customer reads the graph by
+                      // the same name the 阶段产物 rail lists (plan.md,
+                      // checklist.md). The three-character labels (立项书 /
+                      // 检查单 / 计划账) are gone from the graph.
                       return (
                         <button
                           key={`${placement.id}:${artifact}`}

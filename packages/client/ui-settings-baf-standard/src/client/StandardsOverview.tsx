@@ -227,6 +227,16 @@ function StatusSurface({ state, summary, t, suppressNoBaseline }: {
       </div>
     )
   }
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 1): a read that failed while a
+  // good summary is on screen is a notice beside the content. The content
+  // stays — the message says what went wrong with the latest read.
+  if (state.summaryError !== undefined) {
+    return (
+      <div className={css.statusNotice} data-testid="baf-standard-notice">
+        {t('statusNotice')}{state.summaryError}
+      </div>
+    )
+  }
   // 【变更】2026-10-12 (问题 4.2): the no-workspace / no-baseline answers used
   // to render NOTHING here — the tab body read as a blank page. Both now show
   // their guidance copy (pointing at /baf-scaffold), so every tab always

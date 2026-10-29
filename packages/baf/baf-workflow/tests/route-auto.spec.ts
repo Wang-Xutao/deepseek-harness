@@ -178,8 +178,12 @@ describe('BafRouteAutoRuntime (多模型路由 auto 模型)', () => {
   })
 
   it('registers as the step route resolver the agent loop reads', async () => {
-    const { ctx, service } = await fixture()
-    expect(ctx.get('stepRouteResolver')).toBe(service)
+    const { ctx } = await fixture()
+    // 【变更】2026-10-28: cordis's ctx.get returns a traceable wrapper whose
+    // identity differs per call, so `toBe(service)` can never hold; assert the
+    // registration itself — the resolver under 'stepRouteResolver' is this
+    // runtime class, synchronously after plugin load.
+    expect(ctx.get('stepRouteResolver')).toBeInstanceOf(BafRouteAutoRuntime)
   })
 
   it('resolveStepRoute() maps the pseudo pair to the step route and leaves other routes alone', async () => {

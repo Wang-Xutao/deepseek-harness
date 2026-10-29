@@ -26,7 +26,7 @@ import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { GATE_REGISTRY, renderGate } from './gate-cards.ts'
+import { GATE_REGISTRY, isChangeScopedGate, renderGate } from './gate-cards.ts'
 import { cardTitle, formatCommandReport } from './command-format.ts'
 import {
   askGateDialogQueued,
@@ -42,9 +42,13 @@ import { driveGateResolve, loadWorkspaceBaseline } from './command-drives.ts'
 import { makeGoDispatcher, type DispatchAgent } from './go-dispatch.ts'
 import { tierRouteSelectorFor } from './route-dispatch.ts'
 import { beginIntake } from './begin-intake.ts'
-import { bindSessionChange } from './session-change.ts'
+import { bindSessionChange, sessionChangeFor } from './session-change.ts'
 import { clearParkedRequirementFor } from './requirement-park.ts'
+import { focusFor } from './session-focus.ts'
 import { ProjectionStore, isActiveChange, pickActiveChange } from './projection.ts'
+// 【变更】2026-10-27 (批次三十二 · 用户问题 2): the per-change pause brake — a
+// paused change pops NO confirmation gate, from this tool either.
+import { isChangePaused } from './pause.ts'
 
 /** Preset row identity — referenced from `agent.cordis.yml`. */
 export const name = 'baf-gate-ask'
@@ -206,6 +210,40 @@ async function confirmNewWorkflow(
 }
 
 /**
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 2): the change a change-scoped
+ * gate is about, resolved from the projection when the model did not name one.
+ *
+ * Why: the model's own `baf_gate_ask` popped a change-scoped gate WITHOUT a
+ * change id, so the change-scoped on-screen slot (ask-queue's
+ * `claimChangeGate`) was never taken — and the orchestrator's turn-end pop of
+ * the SAME decision (which does carry the change id) popped a second dialog
+ * that covered the first one the customer had not answered yet.
+ *
+ * The pick mirrors the orchestrator's own binding (workspace focus → the lone
+ * active change → this session's own binding), so both surfaces name the same
+ * change and the change-scoped slot dedupes them. When no change can be
+ * resolved the caller keeps the previous behaviour (an unscoped pop).
+ *
+ * @param cwd - absolute workspace root.
+ * @param sessionId - the calling session's id, when known.
+ * @returns the change id to scope the gate to, or undefined when none.
+ */
+async function resolveGateChangeId(cwd: string, sessionId: string | undefined): Promise<string | undefined> {
+  const index = await new ProjectionStore({ workspaceRoot: cwd }).readIndex().catch(() => undefined)
+  if (index === undefined) return undefined
+  const actives = index.changes.filter(isActiveChange)
+  if (actives.length === 0) return undefined
+  const focused = focusFor(cwd).get()
+  if (focused !== undefined && actives.some(change => change.changeId === focused)) return focused
+  if (actives.length === 1) return actives[0]?.changeId
+  if (sessionId !== undefined) {
+    const bound = sessionChangeFor(cwd, sessionId)
+    if (bound !== undefined && actives.some(change => change.changeId === bound)) return bound
+  }
+  return undefined
+}
+
+/**
  * The slash-report line `formatCommandReport` prints for the customer UI
  * (「类型：系统斜杠指令，无需大模型」 — this card cost no LLM tokens). Inside a
  * `baf_gate_ask` tool result the same line reads as "not an answer at all":
@@ -247,11 +285,11 @@ export function apply(ctx: Context): void {
       gateId: {
         type: 'string',
         required: true,
-        description: 'The §22 gate id. Must be one of: scaffold | new-workflow | intake-classify | active-conflict | bind-workflow | open-advance | clarify-advance | design-advance | plan-advance | design-confirm | verify-archive | abandon | resume. The system pops due gates itself after each completed turn (§22.19) — explicit calls are mid-turn re-pops or the requirement bootstrap; active-conflict pops automatically when a requirement arrives beside a running change, bind-workflow when several changes are active, and new-workflow is the first dialog of any new requirement (an explicit new-workflow call behaves exactly like the intake-classify bootstrap). Unknown ids return a refusal card.',
+        description: 'The §22 gate id. Must be one of: scaffold | new-workflow | intake-classify | active-conflict | bind-workflow | open-advance | bugfix-open-advance | clarify-advance | design-advance | plan-advance | verify-advance | design-confirm | verify-archive | abandon | resume. The system pops due gates itself after each completed turn (§22.19) — explicit calls are mid-turn re-pops or the requirement bootstrap; active-conflict pops automatically when a requirement arrives beside a running change, bind-workflow when several changes are active, and new-workflow is the first dialog of any new requirement (an explicit new-workflow call behaves exactly like the intake-classify bootstrap). Unknown ids return a refusal card.',
       },
       changeId: {
         type: 'string',
-        description: 'Optional active change id. Required for change-scoped gates (intake-classify, design-confirm, verify-archive, abandon, resume). Omit only for workspace-scoped gates (scaffold).',
+        description: 'The change this gate is about. Pass it whenever you know it. For a change-scoped gate (the whole advance family, design-confirm, verify-archive, abandon, resume, intake-classify, active-conflict) the system resolves the active change itself when you omit it — and scoping the gate to that change is what keeps one confirmation from being offered twice. Only the workspace-scoped gates (scaffold, new-workflow, bind-workflow) have no change id.',
       },
       requirement: {
         type: 'string',
@@ -491,6 +529,18 @@ export function apply(ctx: Context): void {
       // classification dialog pops as leg 2, so one tool call carries a new
       // requirement from an uninitialized workspace to a real classification
       // decision with no prose round-trip.
+      // 【变更】2026-10-29 (批次三十六 · 用户问题 2): a change-scoped gate pops
+      // WITH a change id, even when the model did not name one. The intake
+      // bootstrap above is the one exception: its no-id form means "mint a new
+      // change from the requirement", so it must keep reaching the pop
+      // unscoped. Every other change-scoped gate resolves the active change
+      // here — that is what lets the change-scoped on-screen slot dedupe this
+      // pop against the orchestrator's turn-end pop of the same decision (the
+      // customer reported the same card twice: the second covered the first).
+      if (input.changeId === undefined && isChangeScopedGate(input.gateId)) {
+        const scoped = await resolveGateChangeId(cwd, agentSessionId(agent))
+        if (scoped !== undefined) input = { ...input, changeId: scoped }
+      }
       const parts: string[] = []
       for (let leg = 1; ; leg += 1) {
         // 【变更】2026-09-28 (用户问题 7): this session is driving the change
@@ -528,6 +578,19 @@ export function apply(ctx: Context): void {
         }
         if (input.gateId === 'intake-classify' && draft !== undefined) {
           input = { ...input, bugPlan: draft }
+        }
+
+        // 【变更】2026-10-27 (批次三十二 · 用户问题 2): a PAUSED change pops NO
+        // confirmation gate. The brake covers the orchestrator's turn-end pop
+        // (popDueGate); the model's own ask is the other automatic pop, so it
+        // reads the same flag. The customer's explicit commands (/baf-go, the
+        // Tab's 推进) are untouched — a lock they cannot unlock is a dead end.
+        if (input.changeId !== undefined && isChangePaused(cwd, input.changeId)) {
+          return [textBlock([
+            ...parts,
+            card.text ?? '',
+            `【结果】\n  ${input.changeId} 的工作流已暂停——在你点「继续」之前不再自动弹出确认门。请如实说明当前状态，不要替客户决定，也不要重复调用本工具。`,
+          ].join('\n\n'))] as unknown as JsonValue[]
         }
 
         const outcome = await askGateDialogQueued(

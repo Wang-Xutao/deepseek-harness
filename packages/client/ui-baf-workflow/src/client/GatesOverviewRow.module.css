@@ -479,6 +479,16 @@
   padding-left: 13px;
 }
 
+/* 【变更】2026-10-29 (批次三十六 · 用户问题 6): the option's explanation — the
+   plain-language note under the label that says what the click does. */
+.optionHint {
+  flex: 1 1 100%;
+  color: var(--wf-ink-3);
+  font-size: 11px;
+  line-height: 16px;
+  word-break: break-word;
+}
+
 .option::before {
   content: '';
   position: absolute;

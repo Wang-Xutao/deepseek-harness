@@ -199,6 +199,21 @@
   word-break: break-all;
 }
 
+/* 【变更】2026-10-29 (批次三十六 · 用户问题 1): a failed read beside content
+   the customer already sees. Quieter than the error banner — the content
+   below it is still valid. */
+.statusNotice {
+  margin-top: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-state-danger-border);
+  border-radius: 6px;
+  background: var(--dsw-alias-state-danger-container);
+  color: var(--dsw-alias-state-danger-label);
+  font-size: 12px;
+  line-height: 18px;
+  word-break: break-all;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;
@@ -1388,7 +1403,7 @@
 .cmdList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 /* 【变更】2026-10-22 (批次十一 3): the 全局指令 card's responsive grid — full
@@ -1396,27 +1411,54 @@
 .cmdListGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 8px;
+  gap: 10px;
   margin-top: 10px;
 }
 
+/* 【变更】2026-10-29 (批次三十六 · 用户问题 3): the 指令集 command rows are
+   CARDS — a brand accent bar, the id as a mono chip, the rating as a
+   filled/hollow badge, and the two secondary lines side by side. The flat
+   stack of four left-aligned lines read as a wall of text. */
 .cmdRow {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
+  gap: 6px;
+  overflow: hidden;
+  padding: 11px 13px 12px 16px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-elevated, #fff);
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out, transform 150ms ease-out;
+}
+
+.cmdRow::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--dsw-alias-border-brand);
+  opacity: 0.6;
+}
+
+.cmdRow:hover {
+  border-color: var(--dsw-alias-border-brand);
+  box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--dsw-alias-label-primary) 55%, transparent);
+  transform: translateY(-1px);
 }
 
 .cmdHead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-.cmdName {
+.cmdIdChip {
+  padding: 1px 7px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-primary, transparent);
   font-family: var(--dsw-alias-font-mono, monospace);
   font-size: 12px;
   line-height: 18px;
@@ -1427,10 +1469,30 @@
 
 .cmdStars {
   flex: none;
-  color: var(--dsw-alias-label-tertiary);
+  display: inline-flex;
+  gap: 1px;
   font-size: 11px;
   line-height: 16px;
   letter-spacing: 1px;
+}
+
+.cmdStarFilled {
+  color: var(--dsw-alias-brand-primary);
+}
+
+.cmdStarEmpty {
+  color: var(--dsw-alias-label-tertiary);
+  opacity: 0.45;
+}
+
+/* 【变更】2026-10-29 (批次三十六 · 用户问题 3): the two secondary lines sit
+   side by side where the card is wide enough, and stack where it is not. */
+.cmdFieldPair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 14px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 /* One captioned explain line: 作用 / 功能 / 运行结果. */

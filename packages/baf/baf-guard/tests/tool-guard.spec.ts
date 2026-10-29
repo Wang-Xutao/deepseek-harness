@@ -505,10 +505,16 @@ describe('sync disk state', () => {
       expect(guard(exec('edit', {
         file_path: join(root, 'src', 'other.c'), old_string: 'a', new_string: 'b',
       }))).toContain('scope_exceeded')
-      // Doc writes stay legal inside the change dir.
+      // Doc writes stay legal inside the change dir — the ledger the
+      // implementation ticks is not a hand-edited upstream document.
+      expect(guard(exec('write', {
+        file_path: join(root, 'openspec', 'changes', changeId, 'plan.json'), content: '{}',
+      }))).toBeUndefined()
+      // 【变更】2026-10-29 (批次三十六 · 用户问题 8): the upstream document is
+      // the basis — the model may not rewrite it while the implementation runs.
       expect(guard(exec('write', {
         file_path: join(root, 'openspec', 'changes', changeId, 'design.md'), content: 'notes',
-      }))).toBeUndefined()
+      }))).toContain('upstream_document_locked')
     } finally {
       await clean()
     }
@@ -541,7 +547,7 @@ describe('sync disk state', () => {
         expect(readGuardWorkflowState(root).changeId).toBe(changeId)
         const guard = createBafToolGuard({ workspaceRoot: root })
         expect(guard(exec('write', {
-          file_path: join(root, 'openspec', 'changes', changeId, 'design.md'), content: 'notes',
+          file_path: join(root, 'openspec', 'changes', changeId, 'plan.json'), content: '{}',
         }))).toBeUndefined()
       } finally {
         await clean()
@@ -694,6 +700,71 @@ describe('secret scanner primitives', () => {
     expect(scanTextSecrets(`ghp_${'a'.repeat(36)}`)).toEqual(['github-token'])
     expect(scanTextSecrets('-----BEGIN RSA PRIVATE KEY-----')).toEqual(['private-key'])
     expect(scanTextSecrets('int x = 42;')).toEqual([])
+  })
+})
+
+// 【变更】2026-10-29 (批次三十六 · 用户问题 8): the upstream documents are the
+// BASIS. The demo1 session edited clarify.md eight times AFTER design.md and
+// plan.json were written; the drift detector raised the 「产物不同步」 alarm
+// and was right — the model rewrote the basis instead of the document that
+// depends on it.
+describe('policy: the upstream documents are locked', () => {
+  const changeDir = join(ROOT, 'openspec', 'changes', 'change-1')
+
+  it('denies a write to an upstream document of the current stage', () => {
+    const clarifyAtDesign = adjudicateFsWrite(CONFIG, state({ stage: 'design' }), {
+      root: ROOT, path: join(changeDir, 'clarify.md'),
+    })
+    expect(clarifyAtDesign).toMatchObject({ allowed: false, reasonCode: 'upstream_document_locked' })
+    const proposalAtDesign = adjudicateFsWrite(CONFIG, state({ stage: 'design' }), {
+      root: ROOT, path: join(changeDir, 'proposal.md'),
+    })
+    expect(proposalAtDesign).toMatchObject({ allowed: false, reasonCode: 'upstream_document_locked' })
+    const designAtImplement = adjudicateFsWrite(CONFIG, state({ stage: 'implement' }), {
+      root: ROOT, path: join(changeDir, 'design.md'),
+    })
+    expect(designAtImplement).toMatchObject({ allowed: false, reasonCode: 'upstream_document_locked' })
+  })
+
+  it('lets the stage write its OWN document', () => {
+    expect(adjudicateFsWrite(CONFIG, state({ stage: 'clarify' }), {
+      root: ROOT, path: join(changeDir, 'clarify.md'),
+    }).allowed).toBe(true)
+    expect(adjudicateFsWrite(CONFIG, state({ stage: 'design' }), {
+      root: ROOT, path: join(changeDir, 'design.md'),
+    }).allowed).toBe(true)
+    expect(adjudicateFsWrite(CONFIG, state({ stage: 'plan' }), {
+      root: ROOT, path: join(changeDir, 'plan.md'),
+    }).allowed).toBe(true)
+    expect(adjudicateFsWrite(CONFIG, state({ stage: 'implement' }), {
+      root: ROOT, path: join(changeDir, 'plan.json'),
+    }).allowed).toBe(true)
+    expect(adjudicateFsWrite(CONFIG, state({ stage: 'verify' }), {
+      root: ROOT, path: join(changeDir, 'checklist.md'),
+    }).allowed).toBe(true)
+  })
+
+  it('lets the customer-authorized 同步 rewrite a stale document', () => {
+    // The customer pressed 同步: the stale document may be re-authored.
+    const stale = ['openspec/changes/change-1/design.md']
+    expect(adjudicateFsWrite(CONFIG, state({ stage: 'implement', staleDocuments: stale }), {
+      root: ROOT, path: join(changeDir, 'design.md'),
+    }).allowed).toBe(true)
+    // The upstream itself is still locked — the sync re-authors the document
+    // that DEPENDS on it, never the basis.
+    expect(adjudicateFsWrite(CONFIG, state({ stage: 'implement', staleDocuments: stale }), {
+      root: ROOT, path: join(changeDir, 'clarify.md'),
+    })).toMatchObject({ allowed: false, reasonCode: 'upstream_document_locked' })
+  })
+
+  it('names the escape in the denial message', () => {
+    const decision = adjudicateFsWrite(CONFIG, state({ stage: 'design' }), {
+      root: ROOT, path: join(changeDir, 'clarify.md'),
+    })
+    expect(decision.allowed).toBe(false)
+    if (decision.allowed) return
+    expect(decision.message).toContain('上游基准')
+    expect(decision.message).toContain('同步')
   })
 })
 

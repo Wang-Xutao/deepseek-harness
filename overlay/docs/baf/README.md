@@ -5,6 +5,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | [enterprise-inputs.md](enterprise-inputs.md) | 企业待定值登记 + InstalledVersions 映射 + projection/change id 冻结 |
+| [matt-pocock-rules.md](matt-pocock-rules.md) | Matt Pocock 规则 × OpenSpec 工作流：规则源、8 规则域、四个阶段融入点与占位符语义 |
 | [error-codes.md](error-codes.md) | 稳定错误码与载荷 |
 | [compatibility-matrix.md](compatibility-matrix.md) | dsh / plugin / baseline 兼容矩阵模板 |
 | [checklist-phase0-4.md](checklist-phase0-4.md) | Phase 0–4 人工验收清单（开发用，不进用户帮助 site） |

@@ -25,9 +25,9 @@ import type {
 } from '@deepseek-ai/dsh-user-questions'
 import type {} from '@deepseek-ai/dsh-user-questions' // Context.userQuestions augmentation
 import type { ChangeIntake, GuardPolicy, StackAdapter, WorkflowNode } from '@deepseek-ai/dsh-baf-core'
-import { GATE_REGISTRY, type GateId, type GateOptionSpec, type GateSpec } from './gate-cards.ts'
+import { GATE_REGISTRY, bindOptions, recommendedOptionIdFor, resumeOptions, type GateId, type GateOptionSpec, type GateSpec } from './gate-cards.ts'
 import { modeZh } from './command-format.ts'
-import { enqueueAsk } from './ask-queue.ts'
+import { enqueueAsk, claimChangeGate, releaseChangeGate } from './ask-queue.ts'
 import { noteScaffoldDialogOffered } from './scaffold-offer.ts'
 import type { DriveAdapters } from './command-drives.ts'
 import { resolveIsolateService, resolveScaffoldService } from './session-gate.ts'
@@ -44,12 +44,25 @@ interface UserQuestionsLike {
 /**
  * The classifier's verdict shown on the intake-classify dialog (§22.17 I):
  * the customer confirms a judgment they can see, not a blind 「确认分类」.
+ *
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 4): the judgment carries the
+ * RECOMMENDED path and where its confidence came from, so the dialog can
+ * mark one option as 推荐 and quote the real percentage.
  */
 export type GateJudgment = Pick<ChangeIntake, 'mode' | 'kind' | 'summary' | 'confidence'>
+  & Partial<Pick<ChangeIntake, 'recommendedMode' | 'confidenceSource' | 'pathConfidence'>>
 
 /** Project an intake record into the dialog's judgment fields. */
 export function judgmentOf(intake: ChangeIntake): GateJudgment {
-  return { mode: intake.mode, kind: intake.kind, summary: intake.summary, confidence: intake.confidence }
+  return {
+    mode: intake.mode,
+    kind: intake.kind,
+    summary: intake.summary,
+    confidence: intake.confidence,
+    ...(intake.recommendedMode === undefined ? {} : { recommendedMode: intake.recommendedMode }),
+    ...(intake.confidenceSource === undefined ? {} : { confidenceSource: intake.confidenceSource }),
+    ...(intake.pathConfidence === undefined ? {} : { pathConfidence: intake.pathConfidence }),
+  }
 }
 
 /** Plain-Chinese label for a change kind id (registry vocabulary stays home). */
@@ -265,33 +278,50 @@ export async function askGateDialogQueued(
   controls?: GateDialogQueueControls,
 ): Promise<GateAskOutcome> {
   const queueSession = controls?.sessionId ?? sessionKeyOf(agent)
-  const outcome = await enqueueAsk({
-    sessionId: queueSession,
-    key: gateQueueKey(gate),
-    // 【变更】2026-09-29 (demo23 问题 4): change-scoped metadata — a terminal
-    // transition cancels the in-flight dialog of the change it ends, so the
-    // session popup and the Tab banner die together instead of outliving the
-    // workflow they were pushing.
-    ...(gate.changeId === undefined ? {} : { changeId: gate.changeId }),
-    ...(controls?.isMoot === undefined ? {} : { isMoot: controls.isMoot }),
-    ...(controls?.signal === undefined ? {} : { signal: controls.signal }),
-    run: controller => askGateDialog(service, agent, gate, controller.signal),
-  })
-  // 【变更】2026-09-23 (demo2 re-test): record the scaffold offer only AFTER
-  // the pop settles, and only when a dialog actually rendered (or an
-  // in-flight sibling owns one — it marks on its own settle). Recording at
-  // enqueue time self-tripped the orchestrator's own head-of-queue moot
-  // check; 'unavailable' (no dialog could show) and moot/abort drops
-  // correctly leave the marker cold so the turn-end evaluation still fires.
-  if (gate.gateId === 'scaffold'
-    && (outcome.kind === 'answered' && outcome.value.kind !== 'unavailable'
-      || outcome.kind === 'dropped' && outcome.reason === 'duplicate')) {
-    noteScaffoldDialogOffered(queueSession)
+  // 【变更】2026-10-27 (批次三十二 · 用户问题 10): the CHANGE-scoped slot. The
+  // per-session queue dedupes within one chain; this dedupes across chains, so
+  // the same gate of the same change can never be on screen twice — the
+  // orchestrator's turn-end pop and the model's own ask converge here.
+  const changeId = gate.changeId
+  const claimed = changeId === undefined ? false : claimChangeGate(changeId, gate.gateId)
+  if (changeId !== undefined && !claimed) {
+    // The dialog for this gate is already up. Standing down keeps the first one
+    // answerable instead of replacing it with a twin the customer cannot tell
+    // apart.
+    return { kind: 'paused', reason: 'dismissed' }
   }
-  if (outcome.kind === 'answered') return outcome.value
-  return outcome.reason === 'aborted'
-    ? { kind: 'paused', reason: 'cancelled' }
-    : { kind: 'paused', reason: 'dismissed' }
+  try {
+    const outcome = await enqueueAsk({
+      sessionId: queueSession,
+      key: gateQueueKey(gate),
+      // 【变更】2026-09-29 (demo23 问题 4): change-scoped metadata — a terminal
+      // transition cancels the in-flight dialog of the change it ends, so the
+      // session popup and the Tab banner die together instead of outliving the
+      // workflow they were pushing.
+      ...(gate.changeId === undefined ? {} : { changeId: gate.changeId }),
+      ...(controls?.isMoot === undefined ? {} : { isMoot: controls.isMoot }),
+      ...(controls?.signal === undefined ? {} : { signal: controls.signal }),
+      run: controller => askGateDialog(service, agent, gate, controller.signal),
+    })    // 【变更】2026-09-23 (demo2 re-test): record the scaffold offer only AFTER
+    // the pop settles, and only when a dialog actually rendered (or an
+    // in-flight sibling owns one — it marks on its own settle). Recording at
+    // enqueue time self-tripped the orchestrator's own head-of-queue moot
+    // check; 'unavailable' (no dialog could show) and moot/abort drops
+    // correctly leave the marker cold so the turn-end evaluation still fires.
+    if (gate.gateId === 'scaffold'
+      && (outcome.kind === 'answered' && outcome.value.kind !== 'unavailable'
+        || outcome.kind === 'dropped' && outcome.reason === 'duplicate')) {
+      noteScaffoldDialogOffered(queueSession)
+    }
+    if (outcome.kind === 'answered') return outcome.value
+    return outcome.reason === 'aborted'
+      ? { kind: 'paused', reason: 'cancelled' }
+      : { kind: 'paused', reason: 'dismissed' }
+  } finally {
+    // The dialog settled (answered / cancelled / dropped) — the slot is free
+    // again, so a later turn may offer the same gate once more.
+    if (claimed && changeId !== undefined) releaseChangeGate(changeId, gate.gateId)
+  }
 }
 
 /**
@@ -349,23 +379,14 @@ function dialogOptions(gate: GateDialogInput): readonly GateOptionSpec[] {
   // keyed access as total.
   const spec = (GATE_REGISTRY as Record<string, GateSpec | undefined>)[gate.gateId]
   if (spec === undefined) return []
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 6): the dynamic gates derive their
+  // options in the registry (with the same hint every option carries), so the
+  // dialog shows the explanation instead of the technical invocation.
   if (spec.dynamicOptions === 'resume-targets') {
-    return (gate.resumeCandidates ?? []).map(node => ({
-      id: `resume-${node}`,
-      label: `复位到 ${node}`,
-      command: '/baf-workflow-resume',
-      args: [node],
-    }))
+    return resumeOptions({ cwd: '', resumeCandidates: gate.resumeCandidates ?? [] })
   }
   if (spec.dynamicOptions === 'change-targets') {
-    // Same derivation as `bindOptions` in gate-cards — the answered label must
-    // map back to an option id `driveGateResolve` accepts.
-    return (gate.bindCandidates ?? []).map(changeId => ({
-      id: `bind-${changeId}`,
-      label: `接手 ${changeId}`,
-      command: '/baf-go',
-      args: [`change=${changeId}`],
-    }))
+    return bindOptions({ cwd: '', bindCandidates: gate.bindCandidates ?? [] })
   }
   return spec.options
 }
@@ -477,17 +498,30 @@ function artifactSection(gateId: GateId, changeId: string): string | undefined {
     .join('\n')
 }
 
+/**
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 4): the marker the recommended
+ * option carries on the wire. The client splits it off the option's
+ * description and renders a 「推荐」 badge; a surface that does not parse it
+ * still shows the word inline.
+ */
+export const RECOMMENDED_OPTION_MARKER = '【推荐】'
+
 /** One sentence under an option button: what clicking it will run. */
-function optionDescription(opt: GateOptionSpec, changeId: string | undefined): string {
-  if (opt.hint !== undefined) return opt.hint
-  // 【变更】2026-09-28 (用户问题 1.3): the dismiss hint names the revive
-  // command as CUSTOMER copy — it rides the wire on purpose (the client's
-  // hint filter no longer drops /baf- mentions).
-  if (opt.command === '__noop__') return '工作流暂停；需要继续时再敲一次 /baf-go'
-  const invocation = [opt.command, ...(opt.args ?? [])].join(' ')
-  return changeId === undefined || opt.id === 'init'
-    ? `将执行 ${invocation}`
-    : `将执行 ${invocation} change=${changeId}`
+function optionDescription(opt: GateOptionSpec, changeId: string | undefined, recommended = false): string {
+  const hint = opt.hint !== undefined
+    ? opt.hint
+    // 【变更】2026-09-28 (用户问题 1.3): the dismiss hint names the revive
+    // command as CUSTOMER copy — it rides the wire on purpose (the client's
+    // hint filter no longer drops /baf- mentions).
+    : opt.command === '__noop__'
+      ? '工作流暂停；需要继续时再敲一次 /baf-go'
+      : (() => {
+        const invocation = [opt.command, ...(opt.args ?? [])].join(' ')
+        return changeId === undefined || opt.id === 'init'
+          ? `将执行 ${invocation}`
+          : `将执行 ${invocation} change=${changeId}`
+      })()
+  return recommended ? `${RECOMMENDED_OPTION_MARKER}${hint}` : hint
 }
 
 /** Best-effort error code read (UserQuestionError carries `code`). */
@@ -534,12 +568,16 @@ export async function askGateDialog(
   // longer embedded in the question prose), and revisable gates append a
   // 【产物】 section whose `{{art:…}}` tokens render as openable links.
   const artifact = gate.changeId === undefined ? undefined : artifactSection(gate.gateId, gate.changeId)
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the recommended path and the
+  // REAL percentage. A direct keyword hit answers 100%; otherwise the number
+  // is the model's own evaluation.
+  const recommendedId = recommendedOptionIdFor(gate.gateId, gate.judgment?.recommendedMode ?? gate.judgment?.mode)
   const detail = [
     ...(gate.changeId === undefined ? [] : [`{{change:${gate.changeId}}}`]),
     spec.question,
     ...(gate.note ?? []),
     ...(gate.judgment === undefined ? [] : [
-      `系统初步判断：${modeZh(gate.judgment.mode)} · ${kindZh(gate.judgment.kind)} · 置信 ${gate.judgment.confidence.toFixed(2)}`,
+      `系统初步判断：${modeZh(gate.judgment.mode)} · ${kindZh(gate.judgment.kind)} · 置信 ${Math.round(gate.judgment.confidence * 100)}%`,
       `需求摘要：${gate.judgment.summary}`,
     ]),
     ...(gate.bugPlan !== undefined && hasBugField(gate.bugPlan) ? [bugPlanParagraph(gate.bugPlan)] : []),
@@ -553,7 +591,10 @@ export async function askGateDialog(
         question: spec.title,
         detail,
         header: 'BAF 工作流',
-        options: options.map(o => ({ label: o.label, description: optionDescription(o, gate.changeId) })),
+        options: options.map(o => ({
+          label: o.label,
+          description: optionDescription(o, gate.changeId, recommendedId === o.id),
+        })),
       }],
       ...(agent === undefined ? {} : { agent }),
       ...(signal === undefined ? {} : { signal }),

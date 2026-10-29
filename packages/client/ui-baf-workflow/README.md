@@ -24,7 +24,7 @@ The gate ledger shows the flow with the gate that guards each stage. Its hero ba
 
 ### Artifact preview
 
-A document artifact of a change opens in an in-place preview window — the same window the 测试流图's configuration files use (title, path, body, and an 「在侧栏打开」 footer action). The preview is a faster read, not a replacement for the sidebar: its footer action still hands the artifact to the right sidebar. The page is project-scoped and has no conversation behind it, so the reader borrows a live session of the same workspace to read the document.
+A document artifact of a change opens in an in-place preview window — the same window the 测试流图's configuration files use (title, path, body). The preview IS the reading surface: the document is already on screen, so its footer no longer carries an action that only moves it somewhere else. The page is project-scoped and has no conversation behind it, so the reader borrows a live session of the same workspace to read the document.
 
 ## Model Experience
 

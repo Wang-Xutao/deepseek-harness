@@ -84,9 +84,121 @@ interface SessionQueue {
  */
 const queues = sharedHostMap<SessionQueue>('ask-queue/sessions')
 
-/** Test seam — forget every session chain. A running host never calls this. */
+/**
+ * 【变更】2026-10-27 (批次三十二 · 用户问题 10): the CHANGE-scoped single-flight
+ * registry — the gates of one change that are on screen RIGHT NOW.
+ *
+ * Why the per-session queue was not enough: its key dedupe is scoped to ONE
+ * session's chain, so the same gate for the same change could still be popped
+ * twice through two chains — the orchestrator's turn-end pop (retargeted to the
+ * workspace's home session) and the model's mid-turn `baf_gate_ask` (scoped to
+ * the tool's own session). The customer then saw 「澄清已完成 · 请确认进入设计」
+ * twice: the first dialog was still unanswered when the second replaced it.
+ *
+ * This registry is keyed by (change, gate) and shared across bundle copies, so
+ * "one gate per change" holds across every surface and every session. A pop
+ * that finds its gate already on screen stands down as `duplicate` — the
+ * customer decides the outcome once.
+ */
+const CHANGE_GATES = sharedHostMap<Set<string>>('ask-queue/change-gates')
+
+/**
+ * The registry key of one change's gate.
+ * @param changeId - the change the gate is about.
+ * @param gateId - the gate id.
+ * @returns the key.
+ */
+export function changeGateKey(changeId: string, gateId: string): string {
+  return `${changeId}|${gateId}`
+}
+
+/**
+ * Claim the on-screen slot of one change's gate.
+ *
+ * The claim is held from the moment the pop starts until the dialog settles
+ * (answered, cancelled, or dropped) — so a second pop for the same gate is
+ * refused for exactly as long as the first dialog is on screen.
+ * @param changeId - the change the gate is about.
+ * @param gateId - the gate id.
+ * @returns true when the claim was granted; false when the gate is already on
+ *   screen.
+ */
+export function claimChangeGate(changeId: string, gateId: string): boolean {
+  let gates = CHANGE_GATES.get(changeId)
+  if (gates === undefined) {
+    gates = new Set<string>()
+    CHANGE_GATES.set(changeId, gates)
+  }
+  if (gates.has(gateId)) return false
+  gates.add(gateId)
+  return true
+}
+
+/**
+ * Release the on-screen slot of one change's gate — the dialog settled, so a
+ * later pop may offer it again.
+ * @param changeId - the change the gate is about.
+ * @param gateId - the gate id.
+ * @returns nothing.
+ */
+export function releaseChangeGate(changeId: string, gateId: string): void {
+  const gates = CHANGE_GATES.get(changeId)
+  if (gates === undefined) return
+  gates.delete(gateId)
+  if (gates.size === 0) CHANGE_GATES.delete(changeId)
+}
+
+/**
+ * Test seam — forget every session chain and every change's gate slot.
+ * A running host never calls this.
+ */
 export function resetAskQueue(): void {
   queues.clear()
+  CHANGE_GATES.clear()
+}
+
+/**
+ * The prefix every gate pop's queue key carries (`gate:<gateId>:<changeId>`).
+ */
+const GATE_KEY_PREFIX = 'gate:'
+
+/**
+ * The gate id of a queue key, when the key belongs to a gate pop.
+ * @param key - the queue key.
+ * @returns the gate id, or undefined for a non-gate key.
+ */
+function gateIdOfKey(key: string): string | undefined {
+  if (!key.startsWith(GATE_KEY_PREFIX)) return undefined
+  const rest = key.slice(GATE_KEY_PREFIX.length)
+  const separator = rest.indexOf(':')
+  return separator === -1 ? rest : rest.slice(0, separator)
+}
+
+/**
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 2): whether the same GATE is
+ * already queued or on screen in this session — regardless of the change id
+ * the two pops name.
+ *
+ * Why: a gate pop that carries NO change id cannot take the change-scoped
+ * on-screen slot (`claimChangeGate` is keyed by change + gate), so the
+ * orchestrator's turn-end pop of the SAME decision — which does carry the
+ * change id — used to pop a second dialog over the first one. Keying the
+ * dedupe on the GATE (not on change + gate) makes the session the last line of
+ * defence: one session shows one card per gate, and the second pop stands
+ * down instead of covering the first.
+ *
+ * @param state - the session's queue state.
+ * @param key - the key of the pop that wants to run.
+ * @returns true when the same gate is already active in this session.
+ */
+function gateAlreadyOnScreen(state: SessionQueue, key: string): boolean {
+  const gateId = gateIdOfKey(key)
+  if (gateId === undefined) return false
+  for (const active of state.active) {
+    if (active === key) continue
+    if (gateIdOfKey(active) === gateId) return true
+  }
+  return false
 }
 
 /**
@@ -104,6 +216,10 @@ export async function enqueueAsk<T>(entry: AskQueueEntry<T>): Promise<AskOutcome
     queues.set(entry.sessionId, state)
   }
   if (state.active.has(entry.key)) return { kind: 'dropped', reason: 'duplicate' }
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 2): the same gate already on
+  // screen in this session stands down even when the two pops name different
+  // change ids (the change-scoped slot cannot dedupe an unscoped pop).
+  if (gateAlreadyOnScreen(state, entry.key)) return { kind: 'dropped', reason: 'duplicate' }
 
   state.active.add(entry.key)
   const controller = new AbortController()

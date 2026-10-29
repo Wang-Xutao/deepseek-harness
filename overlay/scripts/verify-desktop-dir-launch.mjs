@@ -82,6 +82,40 @@ function assertRemotesClientMountsWorkflow() {
 }
 
 /**
+ * Fail when the packed client bundle omits the desktop-notification watcher.
+ * 【变更】2026-10-28 (问题 4): the renderer is the only party that sees the
+ * Session lifecycle — if a stale `lib/client.js` ships without the
+ * `shell.overlay` observer, no Session event ever reaches `notify:desktop`
+ * and the user sees 桌面通知无反应 with no error anywhere. The packed dsh
+ * web-frontend loads this exact file, so asserting its content here guards
+ * the whole chain.
+ */
+function assertClientBundleMountsNotificationWatcher() {
+  const clientBundle = join(
+    dshRoot,
+    'node_modules',
+    '@deepseek-ai',
+    'dsh-client-ui-baf-desktop',
+    'lib',
+    'client.js',
+  )
+  if (!existsSync(clientBundle)) {
+    throw new Error(`打包产物缺少 ${clientBundle}：请先重建 @deepseek-ai/dsh-client-ui-baf-desktop`)
+  }
+  const text = readFileSync(clientBundle, 'utf8')
+  if (!text.includes('notification-watcher')) {
+    throw new Error(
+      `打包产物 ${clientBundle} 未包含 notification-watcher：桌面通知观察者缺失，请重建客户端 bundle`,
+    )
+  }
+  if (!text.includes('observeRunning')) {
+    throw new Error(
+      `打包产物 ${clientBundle} 未包含 observeRunning：DesktopNotificationController 未随包，请重建客户端 bundle`,
+    )
+  }
+}
+
+/**
  * @param {number} ms
  * @returns {Promise<void>}
  */
@@ -143,6 +177,7 @@ function assertArtifacts() {
     }
   }
   assertRemotesClientMountsWorkflow()
+  assertClientBundleMountsNotificationWatcher()
 }
 
 /**

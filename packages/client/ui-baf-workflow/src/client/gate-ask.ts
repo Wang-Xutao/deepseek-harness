@@ -35,14 +35,28 @@ export const BAF_GATE_HEADER = 'BAF 工作流'
  * description MINUS the technical lines — `将执行 /baf-… change=…` dispatch
  * detail is model-facing copy, not customer copy (用户需求 工作流 2: 无技术细节).
  *
- * 【变更】2026-09-28 (用户问题 1.3): the /baf-go hint lines (「需要继续时再敲
+ * 【变更】2026-10-28 (用户问题 1.3): the /baf-go hint lines (「需要继续时再敲
  * 一次 /baf-go」) are CUSTOMER copy and must survive the filter — only the
  * `将执行`-prefixed dispatch lines are dropped now.
+ *
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 4): `recommended` marks the option
+ * the classifier recommends (the higher-confidence path) — the composer
+ * renders it with a 「推荐」 badge.
  */
 export interface GateAskOptionView {
   readonly label: string
   readonly hint?: string
+  readonly recommended?: boolean
 }
+
+/**
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 4): the marker the host puts in
+ * front of the recommended option's description. The host side is
+ * `RECOMMENDED_OPTION_MARKER` in baf-workflow/gate-dialog.ts; the two strings
+ * are kept in step by this constant's comment (the client package does not
+ * import the host bundle).
+ */
+export const RECOMMENDED_OPTION_MARKER = '【推荐】'
 
 /** One openable artifact chip (用户问题 1.5 — the 【产物】 section's rows). */
 export interface GateAskArtifact {
@@ -212,6 +226,24 @@ function optionHint(description: unknown): string | undefined {
 }
 
 /**
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 4): split the recommendation
+ * marker off an option's description. The marker rides the description (the
+ * wire's option shape has no field for it); the badge is a separate element,
+ * so the hint that remains is plain copy again.
+ * @param description - the raw option description.
+ * @returns the hint and whether the option is the recommended one.
+ */
+export function splitRecommendedOption(description: string | undefined): {
+  readonly hint?: string
+  readonly recommended: boolean
+} {
+  if (description === undefined) return { recommended: false }
+  if (!description.startsWith(RECOMMENDED_OPTION_MARKER)) return { hint: description, recommended: false }
+  const rest = description.slice(RECOMMENDED_OPTION_MARKER.length).trim()
+  return rest === '' ? { recommended: true } : { hint: rest, recommended: true }
+}
+
+/**
  * One `- ` item line → a {@link GateAskItem}; an `{{art:…}}`-led line becomes
  * an artifact chip whose label is the trailing text (falling back to the file
  * name when the host sends a bare token).
@@ -262,9 +294,16 @@ export function gateAskViewOf(pending: GateAskCarrier): GateAskView {
     options: rawOptions
       .map((opt): GateAskOptionView => {
         const label = typeof opt.label === 'string' ? opt.label : ''
-        const hint = optionHint(opt.description)
+        // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the recommendation
+        // marker is split off the description first, so the hint stays plain
+        // copy and the badge is its own element.
+        const { hint, recommended } = splitRecommendedOption(optionHint(opt.description))
         // exactOptionalPropertyTypes: the hint key exists only with a value.
-        return hint === undefined ? { label } : { label, hint }
+        return {
+          label,
+          ...(hint === undefined ? {} : { hint }),
+          ...(recommended ? { recommended: true } : {}),
+        }
       })
       .filter(opt => opt.label !== ''),
   }

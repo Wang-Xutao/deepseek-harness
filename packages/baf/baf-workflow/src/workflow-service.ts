@@ -19,7 +19,7 @@ import {
   type WorkflowService,
   type WorkflowStatus,
 } from '@deepseek-ai/dsh-baf-core'
-import { classifyIntake } from './intake.ts'
+import { classifyIntakeWithConfidence, type IntakeConfidenceEvaluator } from './intake.ts'
 import { ProjectionStore } from './projection.ts'
 import { effectiveRouteKeywordRules, readRouteTierConfigSync } from './route-config-io.ts'
 import { rememberTaskTier } from './task-tier-memory.ts'
@@ -28,6 +28,12 @@ import { assertTransitionAccepted, decideTransition } from './transition.ts'
 /** Options for {@link createWorkflowService}. */
 export interface WorkflowServiceOptions {
   readonly store: ProjectionStore
+  /**
+   * 【变更】2026-10-29 (批次三十七 · 用户问题 4): the model hook the intake
+   * classifier asks for a real confidence percentage. Absent → the keyword
+   * layer alone answers (a direct keyword hit is still 100%).
+   */
+  readonly confidenceEvaluator?: IntakeConfidenceEvaluator
 }
 
 /**
@@ -36,11 +42,11 @@ export interface WorkflowServiceOptions {
  * @returns service implementation.
  */
 export function createWorkflowService(options: WorkflowServiceOptions): WorkflowService {
-  const { store } = options
+  const { store, confidenceEvaluator } = options
 
   return {
     async intake(input: IntakeInput): Promise<IntakeResult> {
-      const intake = classifyIntake(input)
+      const intake = await classifyIntakeWithConfidence(input, confidenceEvaluator)
       const existing = await store.readEvents(intake.changeId)
       if (existing.events.length > 0) {
         throw new BafError('invalid_transition', 'change already has projection events', {

@@ -11,11 +11,14 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  bindOptions,
   GATE_REGISTRY,
+  isChangeScopedGate,
   isGateResolvingCommand,
   type GateId,
   renderGate,
   renderGateCard,
+  resumeOptions,
   type GateSpec,
 } from '../src/gate-cards.ts'
 
@@ -212,24 +215,24 @@ describe('renderGateCard (§22)', () => {
     // grammar.
     expect(result.text).toContain('设计已完成 · 请确认进入计划')
     expect(result.text).toContain('确认 · 进入计划')
-    expect(result.text).toContain('退回，继续澄清需求')
   })
 
   /**
-   * 【变更】2026-10-27 (批次三十一): the FIRST design pop offered no way back
-   * — the rollback to clarify lived on the parked re-pop only, so a customer
-   * who wanted to re-clarify at the first pop had nothing to click and read
-   * the workflow as stuck.
+   * 【变更】2026-10-27 (批次三十二 · 补充 1): the rollback to clarify is GONE
+   * from both design gates. It rewound the projection while the documents
+   * stayed as they were; the way back is now to edit the document and press
+   * 「同步」.
    */
-  it('offers the rollback to clarify on the FIRST design pop too', () => {
-    const result = renderGate('design-advance', { cwd: '/tmp/ws', changeId: 'CHG-003' })
-    expect(result.kind).toBe('success')
-    expect(result.text).toContain('确认 · 进入计划')
-    expect(result.text).toContain('退回，继续澄清需求')
-    expect(result.text).toContain('/baf-workflow-clarify')
-    // The dismissal stays available — the customer may want to park the
-    // decision without rolling back.
-    expect(result.text).toContain('暂不推进')
+  it('offers no rollback to clarify on the design gates', () => {
+    for (const gateId of ['design-advance', 'design-confirm'] as const) {
+      const result = renderGate(gateId, { cwd: '/tmp/ws', changeId: 'CHG-003' })
+      expect(result.kind).toBe('success')
+      expect(result.text).not.toContain('退回，继续澄清需求')
+      expect(result.text).not.toContain('/baf-workflow-clarify')
+      // The dismissal stays available — the customer may want to park the
+      // decision.
+      expect(result.text).toContain('暂不推进')
+    }
   })
 
   it('renders the verify-archive gate pointing at /baf-go (the §18.5 门 B)', () => {
@@ -286,6 +289,88 @@ describe('renderGateCard (§22)', () => {
           : renderGate(id, { cwd: '/tmp/ws' })
       expect(result.text).toContain('点工作流页签的按钮')
     }
+  })
+})
+
+describe('【变更】2026-10-29 (批次三十六 · 用户问题 1) every option explains itself', () => {
+  /**
+   * The customer asked: 「确认门的每个选项下都要有简单的解释」. Every option
+   * of every gate carries ONE short plain-Chinese sentence that says what the
+   * click DOES — the interactive dialog reads the same field, so the button
+   * the customer sees always carries an explanation.
+   */
+  it('every static option carries a non-empty hint that does not repeat its own label', () => {
+    for (const [id, spec] of Object.entries(GATE_REGISTRY)) {
+      if (spec.dynamicOptions !== undefined) continue
+      for (const opt of spec.options) {
+        const hint = opt.hint ?? ''
+        expect(hint.trim(), `${id}/${opt.id} hint`).not.toBe('')
+        // The hint explains the option — it must not be the label again.
+        expect(hint, `${id}/${opt.id} hint repeats the label`).not.toContain(opt.label)
+        expect(hint, `${id}/${opt.id} hint repeats the label`).not.toContain(opt.label.replaceAll(' · ', ''))
+        // One short sentence, not a paragraph.
+        expect(hint.length, `${id}/${opt.id} hint length`).toBeLessThanOrEqual(30)
+      }
+    }
+  })
+
+  it('the dynamic resume/bind options carry a hint too', () => {
+    const resume = resumeOptions({ cwd: '/tmp/ws', resumeCandidates: ['clarify', 'plan'], resumeAnchor: 'plan' })
+    expect(resume).toHaveLength(2)
+    for (const opt of resume) {
+      expect(opt.hint ?? '', `resume/${opt.id} hint`).not.toBe('')
+      expect(opt.hint ?? '').not.toContain(opt.label)
+    }
+    const bind = bindOptions({ cwd: '/tmp/ws', bindCandidates: ['CHG-100', 'CHG-200'] })
+    expect(bind).toHaveLength(2)
+    for (const opt of bind) {
+      expect(opt.hint ?? '', `bind/${opt.id} hint`).not.toBe('')
+      expect(opt.hint ?? '').not.toContain(opt.label)
+    }
+  })
+
+  it('the rendered option line leads with the hint and keeps the invocation as detail', () => {
+    const result = renderGate('intake-classify', { cwd: '/tmp/ws', changeId: 'CHG-001' })
+    expect(result.kind).toBe('success')
+    // The hint is the primary text of the line …
+    expect(result.text).toContain('确认 · 完整流程    → 按完整流程走：澄清→设计→计划→实现→验证→归档')
+    // … and the technical invocation stays available as the trailing detail.
+    expect(result.text).toContain('/baf-workflow-classify confirm mode=full-go-path')
+    expect(result.text).toContain('change=CHG-001')
+  })
+
+  it('no static option line falls back to the bare technical form', () => {
+    for (const [id, spec] of Object.entries(GATE_REGISTRY)) {
+      if (spec.dynamicOptions !== undefined) continue
+      const result = renderGate(id, { cwd: '/tmp/ws', changeId: 'CHG-001' })
+      expect(result.kind, `${id} render`).toBe('success')
+      for (const opt of spec.options) {
+        const line = result.text.split('\n').find(row => row.includes(opt.label))
+        expect(line, `${id}/${opt.id} option line`).toBeDefined()
+        expect(line ?? '', `${id}/${opt.id} option line`).toContain(opt.hint ?? '')
+      }
+    }
+  })
+})
+
+describe('【变更】2026-10-29 (批次三十六 · 用户问题 2) change-scoped gates', () => {
+  it('classifies the change-scoped gates next to the registry', () => {
+    // The advance family + the two confirm gates + abandon / resume / the
+    // intake classification / the active-change collision are about ONE
+    // change; the workspace decides about the WORKSPACE.
+    for (const gateId of [
+      'open-advance', 'bugfix-open-advance', 'clarify-advance', 'design-advance',
+      'plan-advance', 'verify-advance', 'design-confirm', 'verify-archive',
+      'abandon', 'resume', 'intake-classify', 'active-conflict',
+    ] as const) {
+      expect(isChangeScopedGate(gateId), gateId).toBe(true)
+    }
+    for (const gateId of ['scaffold', 'new-workflow', 'bind-workflow'] as const) {
+      expect(isChangeScopedGate(gateId), gateId).toBe(false)
+    }
+    // Every registry gate is classified exactly once — the set and the
+    // registry can never drift apart.
+    expect(Object.keys(GATE_REGISTRY).filter(id => isChangeScopedGate(id)).length).toBe(12)
   })
 })
 

@@ -48,6 +48,64 @@ export const ZOOM_MAX = 1.8
 /** Clamp a number into [min, max] — wheel-pan bounds. */
 export const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v))
 
+/* ── the stage names' English half ─────────────────────────────────────────── */
+
+/**
+ * 【变更】2026-10-28 (批次三十五 · 用户问题 1/2): the stage names' ENGLISH
+ * half — a plain TS constant, exactly like the 确认门配置流程图's `NODE_EN`
+ * (an English name is a NAME, not a translatable sentence: the zh label
+ * comes from the `node.*` locale keys and the English rides INLINE after it
+ * on ONE name line — 中文在前，英文在后).
+ *
+ * The zh label stays locale-owned; only this constant carries the English.
+ */
+export const NODE_EN: Readonly<Record<string, string>> = {
+  intake: 'Intake',
+  open: 'Open change',
+  clarify: 'Clarify',
+  design: 'Design',
+  plan: 'Plan',
+  implement: 'Implement',
+  verify: 'Verify',
+  archive: 'Archive',
+  drift: 'Drift',
+  completed: 'Completed',
+  abandoned: 'Abandoned',
+}
+
+/**
+ * 【变更】2026-10-28 (批次三十五 · 用户问题 1/2): the stage's BILINGUAL name —
+ * the zh label with the English name riding inline after it, on one name
+ * line (the 确认门配置流程图's `.nodeName` / `.nodeNameEn` anatomy).
+ *
+ * The surface owns the two classes (the graph card's and the rail card's
+ * names are styled differently); this component owns the ORDER and the
+ * one-line promise.
+ * @param props - the stage id, the locale binder and the two class names.
+ * @returns the name element tree.
+ */
+export function StageName(props: {
+  /** The stage's node id (the `node.*` locale key's suffix). */
+  id: string
+  /** The locale binder. */
+  t: (key: WorkflowTabKey) => string
+  /** The class of the whole name line. */
+  className?: string | undefined
+  /** The class of the English half. */
+  enClassName?: string | undefined
+  /** The test id of the name line. */
+  testid?: string | undefined
+}): ReactElement {
+  const { id, t, className, enClassName, testid } = props
+  const en = NODE_EN[id]
+  return (
+    <span className={className} data-testid={testid}>
+      {t(`node.${id}` as WorkflowTabKey)}
+      {en !== undefined && <span className={enClassName}>{en}</span>}
+    </span>
+  )
+}
+
 /* ── the 测试流图 jump chips ─────────────────────────────────────────────── */
 
 /**
@@ -123,6 +181,27 @@ export function artifactName(path: string): string {
 }
 
 /**
+ * 【变更】2026-10-28 (批次三十四 · 用户问题 6): the workspace-relative form of
+ * an artifact path.
+ *
+ * The graph's chips carry the ABSOLUTE paths the stage events recorded, and
+ * the workspace reader accepts workspace-relative paths only — the document
+ * preview answered 「仅支持工作区相对路径」 for every artifact. A path inside
+ * the workspace becomes relative; anything else is left alone (the reader
+ * refuses it with its own message).
+ * @param cwd - absolute workspace root.
+ * @param path - the artifact path.
+ * @returns the workspace-relative path, or the input when it is not inside.
+ */
+export function workspaceRelativePath(cwd: string, path: string): string {
+  const root = cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/')
+  const candidate = path.replace(/\\/g, '/')
+  const prefix = `${root.toLowerCase()}/`
+  if (!candidate.toLowerCase().startsWith(prefix)) return path
+  return candidate.slice(root.length + 1)
+}
+
+/**
  * 【变更】2026-10-27 (批次三十一): the flow graph's operating controls.
  *
  * The graph's top-right corner carries the buttons that OPERATE the flow. A
@@ -150,8 +229,11 @@ export interface WorkflowFlowControls {
    */
   readonly advanceReady?: boolean
   /**
-   * Re-arm the advance confirmation — the customer dismissed it and asks for it
-   * again. Absent on a surface that cannot advance.
+   * 【变更】2026-10-28 (批次三十五 · 用户问题 9): drive the SAME `/baf-go` a typed
+   * command would — ask channel and all — so the registered confirmation pops
+   * as this tab's live-gate dialog AND the conversation tab's modal at once.
+   * A deferred 暂不推进 is re-raised by this click. Absent on a surface that
+   * cannot advance.
    */
   readonly onAdvance?: () => void
 }
@@ -202,6 +284,21 @@ export function artifactDriftTags(
 }
 
 /**
+ * 【变更】2026-10-29 (批次三十七 · 用户问题 6): the document states the rail
+ * renders — the six-state lifecycle plus the two middle states the task
+ * ledger and the checklist carry.
+ */
+export type ArtifactRailState =
+  | 'missing'
+  | 'template'
+  | 'planned'
+  | 'filled'
+  | 'completed'
+  | 'updated'
+  | 'stale'
+  | 'clipped'
+
+/**
  * 【变更】2026-10-27 (批次三十一): the artifact rail.
  *
  * `onOpen` is OPTIONAL: the session tab opens an artifact in the sidebar, the
@@ -219,7 +316,7 @@ export function ArtifactRail(props: {
   rows: readonly {
     readonly file: string
     readonly path: string
-    readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
+    readonly state: ArtifactRailState
     readonly missing: readonly string[]
   }[]
   /**
@@ -232,13 +329,20 @@ export function ArtifactRail(props: {
   t: (key: WorkflowTabKey) => string
 }): ReactElement {
   const { rows, driftTags, disabled = false, onOpen, t } = props
-  const stateLabel = (state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'): string =>
+  const stateLabel = (state: ArtifactRailState): string =>
     t(`artifact.state.${state}`)
-  const stateClass = (state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'): string =>
-    state === 'filled' ? css.artifactStateFilled ?? ''
-      : state === 'planned' ? css.artifactStatePlanned ?? css.artifactStateTemplate ?? ''
-        : state === 'template' || state === 'clipped' ? css.artifactStateTemplate ?? ''
-          : css.artifactStateMissing ?? ''
+  const stateClass = (state: ArtifactRailState): string =>
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the six-state lifecycle
+    // reads as one ladder — 未生成（灰）→ 未填写（黄）→ 已填写（蓝）→
+    // 已完成（绿）, with 已更新（橙）and 待更新（红）for the documents that
+    // drifted out of that ladder.
+    state === 'completed' ? css.artifactStateCompleted ?? ''
+      : state === 'updated' ? css.artifactStateUpdated ?? ''
+        : state === 'stale' ? css.artifactStateStale ?? ''
+          : state === 'filled' ? css.artifactStateFilled ?? ''
+            : state === 'planned' ? css.artifactStatePlanned ?? css.artifactStateTemplate ?? ''
+              : state === 'template' || state === 'clipped' ? css.artifactStateTemplate ?? ''
+                : css.artifactStateMissing ?? ''
   // 【变更】2026-10-27 (批次三十一): the drift tag's own label + tone. The three
   // tags read as one sequence — 已修改 → 待同步 → 已同步 — so they share one
   // chip shape and differ only in hue.
@@ -286,16 +390,23 @@ export function ArtifactRail(props: {
                   {label}
                 </button>
               )}
-              {drift !== undefined && (
-                <span
-                  className={clsx(css.artifactDriftTag, driftClass(drift))}
-                  data-testid={`artifact-drift-tag-${row.file}`}
-                >
-                  {driftLabel(drift)}
+              {/* 【变更】2026-10-29 (批次三十六 · 用户问题 5): the drift tag and
+                  the state chip ride ONE right-aligned group — both read at the
+                  row's right edge, in the order 「已修改 / 待同步」 then the
+                  state. Before, only the state chip was pushed right, so the
+                  drift tag floated in the middle of the row. */}
+              <span className={css.artifactTrailing}>
+                {drift !== undefined && (
+                  <span
+                    className={clsx(css.artifactDriftTag, driftClass(drift))}
+                    data-testid={`artifact-drift-tag-${row.file}`}
+                  >
+                    {driftLabel(drift)}
+                  </span>
+                )}
+                <span className={clsx(css.artifactState, stateClass(row.state))}>
+                  {stateLabel(row.state)}
                 </span>
-              )}
-              <span className={clsx(css.artifactState, stateClass(row.state))}>
-                {stateLabel(row.state)}
               </span>
             </div>
             {(row.state === 'template' || row.state === 'planned') && row.missing.length > 0 && (
@@ -372,18 +483,109 @@ export function StageChecklist(props: {
 }
 
 /**
- * The stage's detail — status, figures, the next stage and its condition, and
- * the four catalog sections (purpose / prerequisites / artifacts / completion).
+ * 【变更】2026-10-27 (批次三十二 · 用户问题 5): the stage's NAME card — the
+ * stage name in big type plus the five figures that say where the stage
+ * stands (状态 / 耗时 / Tokens / 下一跳 / 条件).
+ *
+ * These five used to ride the 阶段详情 card's meta row, BELOW the checklist, so
+ * the customer had to scroll the rail to learn which stage they were looking
+ * at. They now ride the name card at the top of the rail; the 阶段详情 keeps
+ * only the catalog copy (目标 / 前置条件 / 产物 / 完成).
+ *
+ * The workflow rail and the 变更总览 detail page both render it, so the two
+ * surfaces answer 「我现在在哪个阶段、它到哪了、下一步是什么」 the same way.
+ * @param props - the card props.
+ * @returns the card element tree.
+ */
+export function StageSummaryCard(props: {
+  /** The stage name — the selected stage, or the change's current stage. */
+  name: string
+  /**
+   * 【变更】2026-10-28 (批次三十五 · 用户问题 1): the stage name's ENGLISH half
+   * — it rides INLINE after the zh name on the same line (中文在前，英文在后),
+   * the 确认门配置流程图's anatomy. Absent → the stage's OWN English name is
+   * taken from `node.id`; a terminal card (no node) names it explicitly.
+   */
+  nameEn?: string | undefined
+  /** The stage's node view; absent for a terminal card (no stage figures). */
+  node?: WorkflowTabNodeView | undefined
+  /** The forward edge leaving this stage — the next hop and its condition. */
+  nextEdge?: { id: string; to: string; condition: string } | null
+  t: (key: WorkflowTabKey) => string
+}): ReactElement {
+  const { name, nameEn, node, nextEdge, t } = props
+  // 【变更】2026-10-28 (批次三十五 · 用户问题 1): the stage's English name —
+  // the caller's own, or the stage's own (a node's id names it). The rail
+  // card and the graph card then say the SAME thing in the SAME two halves.
+  const englishName = nameEn ?? (node === undefined ? undefined : NODE_EN[node.id])
+  const status = node === undefined ? undefined : t(`status.${node.status}`)
+  const duration = node === undefined ? undefined : stageDuration(node.status, node.metrics?.durationMs)
+  const tokens = node === undefined
+    ? undefined
+    : stageTokens(node.status, node.metrics?.inputTokens, node.metrics?.outputTokens)
+  const next = nextEdge === undefined || nextEdge === null
+    ? undefined
+    : t(`node.${nextEdge.to}` as WorkflowTabKey)
+  const condition = nextEdge === undefined || nextEdge === null
+    ? undefined
+    : (CONDITION_ZH[nextEdge.id] ?? nextEdge.condition)
+  return (
+    <section className={clsx(css.card, css.cardAccent, css.stageSummaryCard)} aria-label={name}>
+      <h3 className={css.stageSummaryName} data-testid="stage-summary-name">
+        {name}
+        {englishName !== undefined && <span className={css.nodeNameEn}>{englishName}</span>}
+      </h3>
+      <div className={css.metaRow}>
+        {status !== undefined && (
+          <>
+            <span className={css.metaKey}>{t('detail.status')}</span>
+            <span>{status}</span>
+          </>
+        )}
+        {duration !== undefined && (
+          <>
+            <span className={css.metaKey}>{t('card.duration')}</span>
+            <span>{duration}</span>
+          </>
+        )}
+        {tokens !== undefined && (
+          <>
+            <span className={css.metaKey}>{t('card.tokens')}</span>
+            <span title={t('metrics.pending')}>{tokens}</span>
+          </>
+        )}
+        {next !== undefined && (
+          <>
+            <span className={css.metaKey}>{t('card.next')}</span>
+            <span>{next}</span>
+          </>
+        )}
+        {condition !== undefined && (
+          <>
+            <span className={css.metaKey}>{t('card.condition')}</span>
+            <span>{condition}</span>
+          </>
+        )}
+      </div>
+    </section>
+  )
+}
+
+/**
+ * The stage's detail — the four catalog sections (purpose / prerequisites /
+ * artifacts / completion).
  *
  * 【变更】2026-10-24 (批次二十 3): the anomaly block renders ONLY when this
  * stage actually sits failed/blocked; a healthy stage shows nothing there.
+ * 【变更】2026-10-27 (批次三十二 · 用户问题 5): the meta row (状态 / 耗时 /
+ * Tokens / 下一跳 / 条件) moved to the {@link StageSummaryCard} above it — the
+ * rail's top names the stage and says where it stands.
  */
 export function BilingualDetail(props: {
   node: WorkflowTabNodeView
   t: (key: WorkflowTabKey) => string
-  nextEdge: { id: string; to: string; condition: string } | null
 }): ReactElement {
-  const { node, t, nextEdge } = props
+  const { node, t } = props
   const zh = CATALOG_ZH[node.id]
   const failed = node.status === 'failed' || node.status === 'blocked'
   const sections: Array<{
@@ -412,24 +614,6 @@ export function BilingualDetail(props: {
 
   return (
     <>
-      <div className={css.metaRow}>
-        <span className={css.metaKey}>{t('detail.status')}</span>
-        <span>{t(`status.${node.status}`)}</span>
-        <span className={css.metaKey}>{t('card.duration')}</span>
-        <span>{stageDuration(node.status, node.metrics?.durationMs)}</span>
-        <span className={css.metaKey}>{t('card.tokens')}</span>
-        <span title={t('metrics.pending')}>
-          {stageTokens(node.status, node.metrics?.inputTokens, node.metrics?.outputTokens)}
-        </span>
-        {nextEdge !== null && (
-          <>
-            <span className={css.metaKey}>{t('card.next')}</span>
-            <span>{t(`node.${nextEdge.to}` as WorkflowTabKey)}</span>
-            <span className={css.metaKey}>{t('card.condition')}</span>
-            <span>{CONDITION_ZH[nextEdge.id] ?? nextEdge.condition}</span>
-          </>
-        )}
-      </div>
       {sections.map((section) => {
         if (section.block === undefined && section.items.length === 0) return null
         return (

@@ -270,7 +270,19 @@ export interface WorkflowTabView {
     readonly gateId: 'scaffold' | 'intake-classify'
     readonly changeId?: string
     readonly question: string
-    readonly options: readonly { readonly id: string; readonly label: string }[]
+    /** 【变更】2026-10-29 (批次三十六 · 用户问题 6): each option carries the
+     * registry's plain-language hint — what clicking it does. */
+    readonly options: readonly {
+      readonly id: string
+      readonly label: string
+      readonly hint?: string
+      /** 【变更】2026-10-29 (批次三十七 · 用户问题 4): the recommended option —
+       * the Tab marks it with a 「推荐」 badge. */
+      readonly recommended?: boolean
+      /** 【变更】2026-10-29 (批次三十七 · 用户问题 4): the confidence behind the
+       * recommendation, in percent. */
+      readonly confidence?: number
+    }[]
     /** Extra context lines under the question (intake-classify: the verdict). */
     readonly detail?: readonly string[]
   }
@@ -299,7 +311,7 @@ export interface WorkflowTabView {
     readonly path: string
     /** 【变更】2026-09-23 (demo5 issue #4): `planned` — tasks.md 计划完成、实现未完成的中间态.
      * 【变更】2026-09-28 (用户问题 3): `clipped` — bug-fix 路径裁剪的 full-go 产物行（已裁剪，无打开按钮）. */
-    readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'clipped'
+    readonly state: 'missing' | 'template' | 'planned' | 'filled' | 'completed' | 'updated' | 'stale' | 'clipped'
     readonly missing: readonly string[]
   }[]
   /**
@@ -326,6 +338,13 @@ export interface WorkflowTabView {
    * button in its default state.
    */
   readonly paused?: boolean
+  /**
+   * 【变更】2026-10-28 (批次三十五 · 用户问题 2): whether the change's advance
+   * decision was DECLINED (暂不推进) in the conversation tab. Absent when it
+   * was not — the Tab then suppresses its own advance dialog (no re-prompt),
+   * and the graph's 「推进」 button (one click = /baf-go) is the way forward.
+   */
+  readonly advanceDeclined?: boolean
 }
 
 /** 【变更】2026-10-27: one stage whose artifact predates an upstream artifact. */

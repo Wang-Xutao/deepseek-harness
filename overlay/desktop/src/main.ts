@@ -375,7 +375,10 @@ function closeSplash(): void {
 function openSplash(): void {
   splashWindow = new BrowserWindow({
     width: 380,
-    height: 300,
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 1): the panel grew from 300px
+    // to 340px so the logo group can sit clear of the slow-start hint row
+    // (see `.logos` margin-top in ui/splash.css) without crowding it.
+    height: 340,
     resizable: false,
     frame: false,
     transparent: true,

@@ -128,6 +128,7 @@ describe('CheckRunner.aggregate (批次十九 2.4)', () => {
  */
 async function setupAtVerify(options: {
   readonly realTest?: boolean
+  readonly stagesEnabled?: boolean
   readonly stack?: import('@deepseek-ai/dsh-baf-core').StackAdapter
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'baf-verify-gate-'))
@@ -140,6 +141,26 @@ async function setupAtVerify(options: {
     options.realTest === true ? baselineBody.replace('test: <enterprise-tbd>', 'test: ceedling test') : baselineBody,
     'utf8',
   )
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the 测试流's per-stage
+  // switches — the file the settings canvas writes.
+  if (options.stagesEnabled === true) {
+    await mkdir(join(root, '.baf', 'quality'), { recursive: true })
+    await writeFile(
+      join(root, '.baf', 'quality', 'test-flow.json'),
+      JSON.stringify({
+        stages: {
+          build: { enabled: true, haltOnError: true },
+          test: { enabled: true, haltOnError: true },
+          instrument: { enabled: true, haltOnError: true },
+          report: { enabled: true, haltOnError: true },
+          gate: { enabled: true, haltOnError: true },
+          lint: { enabled: true, haltOnError: true },
+          analyze: { enabled: true, haltOnError: true },
+        },
+      }, null, 2),
+      'utf8',
+    )
+  }
   const baseline = await loadBaselineFile(baselinePath)
   const pipeline = new StagePipeline({
     store,
@@ -299,6 +320,63 @@ describe('the Tab advance readiness names the blocking checks (批次十九 2.4)
       expect(view.advance?.ready).toBe(false)
       expect(view.advance?.missing.join('\n')).toContain('test-flow')
       expect(view.advance?.missing.join('\n')).toContain('ut_coverage.missing')
+    } finally {
+      await rm(harness.root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the 测试流 gate (批次三十六 · 用户问题 9)', () => {
+  it('the explicitly enabled stages gate the verify even with the placeholder baseline', async () => {
+    const stack: import('@deepseek-ai/dsh-baf-core').StackAdapter = {
+      detect: async () => ({ available: true, compiler: 'gcc' }),
+      runQuality: async input => ({
+        schema: 1,
+        baselineId: input.baseline.baselineId,
+        workspace: input.workspace.root,
+        toolVersions: { gcc: 'gcc 13' },
+        checks: [{ id: 'build', passed: true }],
+        artifacts: [],
+        passed: true,
+        diagnostics: [],
+      }),
+    }
+    const harness = await setupAtVerify({ stagesEnabled: true, stack })
+    try {
+      const driven = await harness.pipeline.driveVerifyStage(harness.changeId)
+      if (driven.node !== 'verify') throw new Error('expected a verify drive')
+      const flowRow = driven.result.report.checks.find(row => row.name === 'test-flow')
+      // The customer switched the stages on — the flow is no longer "not configured".
+      expect(flowRow?.required).toBe(true)
+    } finally {
+      await rm(harness.root, { recursive: true, force: true })
+    }
+  })
+
+  it('a workspace with no test flow configured says so — it never reads as 全部通过', async () => {
+    const stack: import('@deepseek-ai/dsh-baf-core').StackAdapter = {
+      detect: async () => ({ available: true, compiler: 'gcc' }),
+      runQuality: async input => ({
+        schema: 1,
+        baselineId: input.baseline.baselineId,
+        workspace: input.workspace.root,
+        toolVersions: { gcc: 'gcc 13' },
+        checks: [{ id: 'build', passed: true }],
+        artifacts: [],
+        passed: true,
+        diagnostics: [],
+      }),
+    }
+    const harness = await setupAtVerify({ stack })
+    try {
+      const driven = await harness.pipeline.driveVerifyStage(harness.changeId)
+      if (driven.node !== 'verify') throw new Error('expected a verify drive')
+      const flowRow = driven.result.report.checks.find(row => row.name === 'test-flow')
+      expect(flowRow?.required).toBe(false)
+      // The row says the flow never ran — it never reads as a green test.
+      expect(flowRow?.diagnostics.join('\n')).toContain('未执行真实测试')
+      const md = await readFile(join(harness.root, 'openspec', 'changes', harness.changeId, 'verify.md'), 'utf8')
+      expect(md).toContain('未执行真实测试')
     } finally {
       await rm(harness.root, { recursive: true, force: true })
     }

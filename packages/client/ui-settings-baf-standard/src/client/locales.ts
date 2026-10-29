@@ -155,6 +155,10 @@ const zh = {
   statusNoWorkspace: '还没有打开的工作区。先在会话里打开一个项目目录（或在项目里运行 /baf-scaffold 搭好 BAF 工作区），这里就能显示它的规范配置。',
   statusNoBaseline: '当前工作区还没有 BAF 基线（.baf/baseline.yml）。在会话里运行 /baf-scaffold 即可生成：基线配置 + 默认规则文档 + openspec 目录，一步到位。',
   statusFailed: '基线读取失败：',
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 1): a read that failed while a
+  // good summary was already on screen is a notice beside the content — the
+  // content stays, the message says what went wrong.
+  statusNotice: '最近一次读取失败（当前显示的是上一次读到的内容）：',
   // 【变更】2026-10-20 (批次三 4.2): baselineLabel/compatLabel 退役 — 基线档案
   // 头卡随多列网格一起删除，项目工程页只剩受保护路径与状态脚本。
   cwdLabel: '工作区',
@@ -424,6 +428,7 @@ const en = {
   statusNoWorkspace: 'No open workspace yet. Open a project directory in a session (or run /baf-scaffold inside one) and its standards config shows up here.',
   statusNoBaseline: 'This workspace has no BAF baseline (.baf/baseline.yml) yet. Run /baf-scaffold in a session: baseline + default rules document + the openspec directory, in one step.',
   statusFailed: 'Baseline read failed: ',
+  statusNotice: 'The latest read failed (what you see is the last content that was read): ',
   cwdLabel: 'Workspace',
   configFileLabel: 'Config file',
   // 2026-10-18 (项目工程 1.1–1.3): clickable path rows + AI-protected paths card.

@@ -34,12 +34,16 @@ const FIXTURE_BASELINE = fileURLToPath(
 const DESCRIPTION = 'feat: add export public API for reports'
 
 /** Workspace fixture: baseline + a real Git repo (drift anchor + full-go-path open). */
-async function setup() {
+async function setup(options: { readonly realTest?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'baf-go-'))
   await mkdir(join(root, '.baf'), { recursive: true })
+  const baselineBody = await readFile(FIXTURE_BASELINE, 'utf8')
   await writeFile(
     join(root, '.baf', 'baseline.yml'),
-    await readFile(FIXTURE_BASELINE, 'utf8'),
+    // 【变更】批次三十五 (问题 8): `realTest` swaps the placeholder stack.test
+    // for a real command, so the workspace OWES test-flow evidence — the
+    // implement→verify entry gate this batch adds goes live for the walk.
+    options.realTest === true ? baselineBody.replace('test: <enterprise-tbd>', 'test: ceedling test') : baselineBody,
     'utf8',
   )
   await execFileAsync('git', ['init', '-q'], { cwd: root })
@@ -178,14 +182,14 @@ async function reachImplement(root: string, focus: FocusStore): Promise<string> 
     allowlist: ['src/export.ts'],
     touched: [],
   }, null, 2)}\n`)
-  await author(root, changeId, 'proposal.md', [
-    '# Add report export API',
-    '',
-    '## Why',
-    '',
-    'Users need CSV export for monthly reports.',
-    '',
-  ].join('\n'))
+  // 【变更】2026-10-28 (批次三十三 · 用户问题 1): the walker used to re-author
+  // proposal.md HERE, at the plan stage — a leftover from before
+  // `startChange` authored it at the open stage. Re-writing an UPSTREAM
+  // document after the downstream stages are done is exactly the "the
+  // customer edited upstream" case the drift detector reports, so the walk
+  // held instead of reaching the implement rest. The upstream chain is
+  // authored in stage order now; the drift spec covers the late edit on
+  // purpose.
   await author(root, changeId, 'tasks.md', '# Tasks\n\n- [x] t1 Implement serializer\n')
   await driveGo({ cwd: root, focus })
   return changeId
@@ -312,7 +316,10 @@ describe('session binding (§18.3.1 / §18.6)', () => {
     const { root, focus } = await setup()
     try {
       // The incident's own wording: the classifier cannot settle a path.
-      await driveGo({ cwd: root, rawInput: '重构ecum模块', focus })
+      // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the wording carries NO
+      // path keyword — 「重构ecum模块」 now names one (重构 → full-go-path,
+      // 100%), so the undecidable case needs a keyword-free requirement.
+      await driveGo({ cwd: root, rawInput: 'ecum模块的登录态老是丢失', focus })
       const changeId = await activeId(root)
       expect((await statusOf(root, changeId)).intake?.mode).toBe('clarify-required')
 
@@ -629,6 +636,84 @@ describe('routing table (§18.4.2)', () => {
       expect(card.text).toContain('checklist.md')
       // The change stays at implement — verify never started.
       expect((await statusOf(root, changeId)).current).toBe('implement')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // 【变更】2026-10-28 (批次三十五 · 用户问题 8): the implement→verify 测试流
+  // precondition — a gated baseline (real stack.test) whose durable evidence is
+  // red refuses the verify entry BEFORE the confirm card, and a customer-action
+  // surface dispatches the implement 补单 naming the baf-quality chain.
+  it('refuses to enter verify while the 测试流 evidence is red, dispatching the flow order', { timeout: 60_000 }, async () => {
+    const { root, focus } = await setup({ realTest: true })
+    try {
+      const changeId = await reachImplement(root, focus)
+      await recordTouched(root, { changeId, file: 'src/export.ts' })
+      await completeTask(root, changeId, 't1')
+      await writeFile(
+        join(root, 'openspec', 'changes', changeId, 'checklist.md'),
+        [
+          '# Checklist',
+          '',
+          '- [x] npm test exports CSV with a header row',
+          '- [x] no console.error during the export run',
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+      const sent: DispatchSignal[] = []
+      const dispatch: GoDispatch = (signal) => { sent.push(signal); return 'sent' }
+      const card = await driveGo({ cwd: root, focus, dispatch, dispatchOrigin: 'customer' })
+      expect(card.kind).toBe('error')
+      expect(card.text).toContain('测试流未通过 · 不能开始验证')
+      expect(card.text).toContain('ut_coverage.missing')
+      // The change stays at implement — verify never started, no card popped.
+      expect((await statusOf(root, changeId)).current).toBe('implement')
+      // The 补单 rides the implement node with the new cause and the same
+      // baf-quality chain the 测试流图 buttons run.
+      expect(sent.length).toBeGreaterThan(0)
+      expect(sent[0]?.node).toBe('implement')
+      expect(sent[0]?.cause).toBe('test-flow-not-passed')
+      expect(sent[0]?.missing.join('\n')).toContain('baf-quality test')
+      expect(workOrderText(sent[0] as DispatchSignal)).toContain('【BAF 工单 · /baf-go 派单 · 测试流未通过】')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('green 测试流 evidence admits the verify entry on a gated baseline', { timeout: 60_000 }, async () => {
+    const { root, focus } = await setup({ realTest: true })
+    try {
+      const changeId = await reachImplement(root, focus)
+      await recordTouched(root, { changeId, file: 'src/export.ts' })
+      await completeTask(root, changeId, 't1')
+      await writeFile(
+        join(root, 'openspec', 'changes', changeId, 'checklist.md'),
+        [
+          '# Checklist',
+          '',
+          '- [x] npm test exports CSV with a header row',
+          '- [x] no console.error during the export run',
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+      // The durable evidence turns green (the model ran the 测试流图 chain).
+      await mkdir(join(root, '.baf', 'reports'), { recursive: true })
+      await writeFile(
+        join(root, '.baf', 'reports', 'ut-coverage.json'),
+        JSON.stringify({ passed: true, line: 92, minimum: 80 }),
+        'utf8',
+      )
+      await writeFile(
+        join(root, '.baf', 'reports', 'static-analysis.json'),
+        JSON.stringify({ passed: true, errors: 0 }),
+        'utf8',
+      )
+      const card = await driveGo({ cwd: root, focus })
+      // The confirm card pops — the entry no longer refuses.
+      expect(card.text).toContain('等待你的确认')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

@@ -13,6 +13,7 @@ import {
   PROJECTION_DIR,
   PROJECTION_INDEX_PATH,
   projectionLogPath,
+  WORKFLOW_NODES,
   type BaselineLock,
   type ChangeIntake,
   type NodeAnnotation,
@@ -330,14 +331,34 @@ function applyEvent(state: FoldState, event: ProjectionEvent): void {
       }
       break
     }
-    case 'stage-entered':
+    case 'stage-entered': {
       state.current = event.node
       state.nodes[event.node] = 'in-progress'
+      // 【变更】2026-10-28 (批次三十五 · 用户问题 8): entering a node resets
+      // every DOWNSTREAM COMPLETED stage to a clean slate. A T11 bounce back to
+      // implement used to leave the previous pass's verify 'completed' standing,
+      // so the rail read 验证已完成 while the change was back in implementation
+      // — the customer saw 「已完成」 before the rerun even started. Only
+      // `completed` resets: `skipped` is a mode decision (the fast-path cut),
+      // and `failed` is the last pass's audit record (the T11 bounce evidence
+      // stages.spec and bug-fix-path.spec assert) — neither is a stale success.
+      const enteredAt = WORKFLOW_NODES.indexOf(event.node)
+      for (const downstream of WORKFLOW_NODES) {
+        if (downstream === 'drift' || WORKFLOW_NODES.indexOf(downstream) <= enteredAt) continue
+        if (state.nodes[downstream] !== 'completed') continue
+        state.nodes[downstream] = 'available'
+        if (state.annotations[downstream] !== undefined) {
+          const nextAnnotations = { ...state.annotations }
+          Reflect.deleteProperty(nextAnnotations, downstream)
+          state.annotations = nextAnnotations
+        }
+      }
       // §19.3: `nodes.drift` tracks "currently parked in drift", not "has
       // ever drifted". Any entry — normal progression or a T13 resume —
       // resolves the park; the `drift-detected` audit events stay in the log.
       if (state.nodes.drift === 'drifted') Reflect.deleteProperty(state.nodes, 'drift')
       break
+    }
     case 'baseline-locked':
       state.baseline = event.lock
       break

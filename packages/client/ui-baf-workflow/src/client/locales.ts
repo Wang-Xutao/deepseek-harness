@@ -116,21 +116,25 @@ export type WorkflowTabKey =
   | 'flow.resumeWorkflow'
   | 'flow.pauseHelp'
   | 'flow.resumeHelp'
-  | 'flow.pauseDone'
-  | 'flow.resumeDone'
-  | 'flow.pauseUnavailable'
+  // 【变更】2026-10-28 (批次三十三 · 用户问题 3): the notice titles — one per
+  // action, so a failed 继续 never says 「暂停操作未能生效」.
+  | 'flow.pauseFailedTitle'
+  | 'flow.resumeFailedTitle'
+  | 'flow.syncFailedTitle'
+  | 'flow.syncRunningTitle'
+  | 'flow.syncRunning'
   | 'flow.sync'
   | 'flow.syncHelp'
   | 'flow.syncSyncing'
   | 'flow.driftTitle'
   | 'flow.driftBody'
+  | 'flow.lifecycleDriftBody'
   | 'flow.driftHold'
+  | 'flow.driftHoldRunning'
   | 'flow.driftNode'
-  | 'flow.syncDone'
-  | 'flow.syncQueued'
-  | 'flow.syncNoDrift'
   | 'flow.syncNoWorkspace'
-  | 'flow.syncUnavailable'
+  // 【变更】2026-10-28 (批次三十四 · 用户问题 2): the workflow graph's artifact
+  // labels — three characters each, so the node cards stay one line.
   | 'tflow.cfgFiles'
   | 'tflow.cfgPreview'
   | 'tflow.cfgOpen'
@@ -183,6 +187,8 @@ export type WorkflowTabKey =
   | 'intake.confirmation.rejected'
   | 'intake.heuristicNote'
   | 'intake.confidenceHelp'
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 4): the visible 置信度 line.
+  | 'intake.confidenceNote'
   | 'intake.allowlist'
   | 'kind.new-requirement'
   | 'kind.bug'
@@ -346,9 +352,6 @@ export type WorkflowTabKey =
   // fixed LEFT column + the rail's stage header + the strip's start time, and
   // the 变更总览 tab's redesigned ledger with its per-change detail modal.
   | 'rail.sideRail'
-  | 'rail.stage'
-  | 'rail.stageSelected'
-  | 'rail.stageCurrent'
   | 'strip.startedAt'
   | 'ovw.clickHint'
   | 'ovw.detailOpen'
@@ -398,7 +401,6 @@ export type WorkflowTabKey =
   | 'ovw.mode.clarify'
   | 'ovw.detailGraph'
   | 'ovw.detailGraphHint'
-  | 'ovw.detailStageHead'
   | 'ovw.detailStageHint'
   | 'ovw.detailSelectStage'
   | 'ovw.detailKind'
@@ -553,6 +555,9 @@ export type WorkflowTabKey =
   | 'artifact.state.template'
   | 'artifact.state.planned'
   | 'artifact.state.filled'
+  | 'artifact.state.completed'
+  | 'artifact.state.updated'
+  | 'artifact.state.stale'
   | 'artifact.state.clipped'
   // 【变更】2026-10-27 (批次三十一): the document's drift tag — the upstream
   // document that was edited, the downstream document that is stale, and the
@@ -703,23 +708,24 @@ export const en: Record<WorkflowTabKey, string> = {
   'flow.advanceHelp': 'Advance the workflow to the next stage.',
   'flow.pauseWorkflow': 'Pause',
   'flow.resumeWorkflow': 'Continue',
-  'flow.pauseHelp': 'Pause the workflow: it stops popping confirm gates and stops sending work orders on its own. Your own commands still work.',
-  'flow.resumeHelp': 'Continue the workflow: the due gate pops again and the outstanding work order goes back to the model.',
-  'flow.pauseDone': 'Workflow paused — no more automatic pops or work orders until you continue.',
-  'flow.resumeDone': 'Workflow continued — the due gate is back and the model has its work order.',
-  'flow.pauseUnavailable': 'The pause control could not be applied',
+  'flow.pauseHelp': 'Pause the workflow: the model’s current turn is interrupted, and the workflow stops popping confirm gates and sending work orders on its own. Your own commands still work.',
+  'flow.resumeHelp': 'Continue the workflow: the model gets 「继续」 and picks the work back up. If the model was idle, the due gate pops again.',
+  'flow.pauseFailedTitle': 'The pause did not take effect',
+  'flow.resumeFailedTitle': 'The workflow did not resume',
+  'flow.syncFailedTitle': 'The sync did not run',
+  'flow.syncRunningTitle': 'Syncing',
+  'flow.syncRunning': 'The model is re-authoring the outdated documents against the newest upstream. This notice clears by itself when they are done.',
   'flow.sync': 'Sync',
   'flow.syncHelp': 'Re-author the outdated artifacts against the newest upstream documents.',
   'flow.syncSyncing': 'Syncing',
   'flow.driftTitle': 'Artifacts out of sync',
   'flow.driftBody': '{upstream} was edited after {stale} was written, so {stale} may no longer match it.',
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle's own signal.
+  'flow.lifecycleDriftBody': '{updated} was edited after it was confirmed, so the documents after it need to be re-authored.',
   'flow.driftHold': 'The workflow holds here until the documents agree again.',
+  'flow.driftHoldRunning': 'A model turn is still running — sync once it ends, or stop the turn first.',
   'flow.driftNode': 'Stale stage',
-  'flow.syncDone': 'The work order went out — the model is re-authoring the stale documents now.',
-  'flow.syncQueued': 'That sync order is already on its way — the model is re-authoring the stale documents.',
-  'flow.syncNoDrift': 'Nothing is out of sync — every document already follows the newest upstream.',
   'flow.syncNoWorkspace': 'This change belongs to no workspace the app can reach.',
-  'flow.syncUnavailable': 'The sync order could not be sent',
   'tflow.cfgFiles': 'Config files',
   'tflow.cfgPreview': 'Config file preview',
   'tflow.cfgOpen': 'Open file',
@@ -728,7 +734,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.cfgLoading': 'Reading…',
   'tflow.fmtPathLabel': 'Format path',
   'strip.current': 'Current',
-  'strip.totalTime': 'Change time',
+  'strip.totalTime': 'Session time',
   'strip.totalTokens': 'Session tokens',
   'strip.empty': 'No active change — reference graph (template)',
   'strip.blocked': 'Blocked',
@@ -738,7 +744,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'mode.bugFixPath': 'Bug fix path',
   'mode.clarify': 'Needs clarify',
   'mode.help': 'Template = reference graph before a change starts. After intake: full-go-path / bug-fix-path / clarify-required.',
-  'card.duration': 'Time',
+  'card.duration': 'Session time',
   'card.tokens': 'Tokens',
   'card.next': 'Next',
   'card.condition': 'When',
@@ -759,9 +765,13 @@ export const en: Record<WorkflowTabKey, string> = {
   'route.dispatchOn': 'Dispatches on confirm: ',
   'intake.title': 'Change classification',
   'intake.help': 'Intake decides kind/mode/scope before writes. Trigger: chat or New change. Confirm → projection; reject → abandon; supplement → keep chatting.',
-  'intake.heuristicNote': 'Kind / scope / confidence are the system\'s keyword pre-judgment (unmatched shows To be determined; confirming does not rewrite them). Mode is the path YOU picked on the classification card; the bug-fix pick settles kind = Bug.',
-  'intake.confidenceHelp': 'Confidence = how strongly the keyword pre-judgment matched your description: 70% when a feature/bug keyword hit (新增/需求/feat… or bug/修复/fix…), 40% as the base when nothing matched. It only shapes the system\'s INITIAL suggestion — the path is settled by your click on the classification card, never by this number. It settles with the flow: kind at classification confirm, scope when the plan freezes the file allowlist.',
+  'intake.heuristicNote': 'Kind / scope / confidence come from the system\'s initial assessment (a keyword hit decides directly; when keywords cannot decide, the model evaluates; an undecided scope shows To be determined, and confirming does not rewrite them). Mode is the path YOU picked on the classification card; the bug-fix pick settles kind = Bug.',
+  'intake.confidenceHelp': 'Confidence = how strongly the system believes the path it recommends: a keyword hit (新增/需求/feat, bug/修复/fix, 重构/迁移) answers 100%, and when the keywords cannot decide the model evaluates the requirement and returns a real percentage. It only shapes the system\'s INITIAL suggestion — the path is settled by your click on the classification card, never by this number. It settles with the flow: kind at classification confirm, scope when the plan freezes the file allowlist.',
   'intake.allowlist': 'Allowlist',
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 4): the customer asked what
+  // 置信度 is and what it is for — the answer is a line on the card, not a
+  // hover title.
+  'intake.confidenceNote': 'Confidence is how strongly the system believes the path it recommends: a keyword hit (新增 / 需求 / feat, bug / 修复 / fix, 重构 / 迁移) answers 100%, and when the keywords cannot decide the model evaluates the requirement and returns a real percentage. It only shapes the first suggestion — the path is the one you pick on the classification card.',
   'intake.kind': 'Kind',
   'intake.mode': 'Mode',
   'intake.scope': 'Scope',
@@ -921,9 +931,6 @@ export const en: Record<WorkflowTabKey, string> = {
   'ovw.refresh': 'Refresh',
   // 【变更】2026-10-24 (批次十九 1.1/1.2/1.3/1.4)
   'rail.sideRail': 'Change info',
-  'rail.stage': 'Stage',
-  'rail.stageSelected': 'Selected stage',
-  'rail.stageCurrent': 'Current stage',
   'strip.startedAt': 'Started at',
   'ovw.clickHint': 'Click a change to open its flow and full history.',
   'ovw.detailOpen': 'Open details',
@@ -969,7 +976,6 @@ export const en: Record<WorkflowTabKey, string> = {
   'ovw.mode.clarify': 'Needs clarification',
   'ovw.detailGraph': 'Workflow graph',
   'ovw.detailGraphHint': 'Scroll to pan · Ctrl + wheel to zoom · click a node for its stage',
-  'ovw.detailStageHead': 'Stage',
   'ovw.detailStageHint': 'Pick a node in the graph to read its stage.',
   'ovw.detailSelectStage': 'No stage selected.',
   'ovw.detailKind': 'Kind',
@@ -1093,10 +1099,16 @@ export const en: Record<WorkflowTabKey, string> = {
   'artifact.open': 'Open',
   'artifact.gapCount': '{n} items missing (hover to view)',
   'artifact.missing': 'Not generated yet — run /baf-go to reach the stage that creates it',
-  'artifact.state.missing': 'not generated',
-  'artifact.state.template': 'template unfilled',
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 5): the English state chips keep
+  // the same one-word shape as their Chinese three-character counterparts.
+  'artifact.state.missing': 'not made',
+  'artifact.state.template': 'not filled',
   'artifact.state.planned': 'planned',
   'artifact.state.filled': 'filled',
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail.
+  'artifact.state.completed': 'done',
+  'artifact.state.updated': 'updated',
+  'artifact.state.stale': 'to update',
   'artifact.state.clipped': 'clipped',
   'artifact.drift.modified': 'Modified',
   'artifact.drift.pending': 'Out of sync',
@@ -1236,23 +1248,25 @@ export const zh: Record<WorkflowTabKey, string> = {
   'flow.advanceHelp': '把工作流推进到下一阶段。',
   'flow.pauseWorkflow': '暂停',
   'flow.resumeWorkflow': '继续',
-  'flow.pauseHelp': '暂停工作流：不再自动弹出确认门，也不再自动派发工单；你手动输入的命令照常生效。',
-  'flow.resumeHelp': '继续工作流：重新弹出到期的确认门，并把未完成的工单交回模型。',
-  'flow.pauseDone': '工作流已暂停——在你点「继续」之前，不再自动弹门，也不再自动派单。',
-  'flow.resumeDone': '工作流已继续——到期的确认门重新弹出，模型已收到工单。',
-  'flow.pauseUnavailable': '暂停操作未能生效',
+  'flow.pauseHelp': '暂停工作流：中断模型当前回合，不再自动弹出确认门，也不再自动派发工单；你手动输入的命令照常生效。',
+  'flow.resumeHelp': '继续工作流：给模型发「继续」，让它接着跑；模型空闲时重新弹出到期的确认门。',
+  'flow.pauseFailedTitle': '暂停操作未能生效',
+  'flow.resumeFailedTitle': '继续操作未能生效',
+  'flow.syncFailedTitle': '同步操作未能生效',
+  'flow.syncRunningTitle': '正在同步',
+  'flow.syncRunning': '模型正按最新上游重写过期的产物，完成后这条提示会自己消失。',
   'flow.sync': '同步',
   'flow.syncHelp': '按最新的上游文档重写过期的下游产物。',
   'flow.syncSyncing': '同步中',
   'flow.driftTitle': '产物不同步',
   'flow.driftBody': '{upstream} 在 {stale} 之后被修改，{stale} 可能已经与它不一致。',
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle's own signal —
+  // 已完成的文档被改动，其后的文档需要重新同步。
+  'flow.lifecycleDriftBody': '{updated} 在确认完成后被修改，其后的文档需要重新同步。',
   'flow.driftHold': '工作流在此暂停推进，等文档一致后再继续。',
+  'flow.driftHoldRunning': '模型回合进行中——等回合结束再点同步，或先停止本回合。',
   'flow.driftNode': '过期阶段',
-  'flow.syncDone': '工单已派出——模型正在按最新上游重写过期的产物。',
-  'flow.syncQueued': '这张同步工单已经在路上——模型正在按最新上游重写过期的产物。',
-  'flow.syncNoDrift': '没有不同步的产物——每份文档都已跟随最新上游。',
   'flow.syncNoWorkspace': '该变更不属于应用能访问的工作区。',
-  'flow.syncUnavailable': '同步工单未能派出',
   'tflow.cfgFiles': '配置文件',
   'tflow.cfgPreview': '配置文件预览',
   'tflow.cfgOpen': '打开文件',
@@ -1261,7 +1275,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.cfgLoading': '读取中…',
   'tflow.fmtPathLabel': '格式化路径',
   'strip.current': '当前',
-  'strip.totalTime': '变更耗时',
+  'strip.totalTime': '会话耗时',
   'strip.totalTokens': '会话 tokens',
   'strip.empty': '暂无变更 — 参考图（模板）',
   'strip.blocked': '阻断',
@@ -1271,7 +1285,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'mode.bugFixPath': '缺陷修复路径',
   'mode.clarify': '需先澄清',
   'mode.help': '模板 = 还没开始变更时的参考图。分类确认后才会变成完整流程 / 缺陷修复路径 / 需澄清。',
-  'card.duration': '耗时',
+  'card.duration': '会话耗时',
   'card.tokens': 'Tokens',
   'card.next': '下一跳',
   'card.condition': '条件',
@@ -1292,11 +1306,18 @@ export const zh: Record<WorkflowTabKey, string> = {
   'route.dispatchOn': '确认后派单：',
   'intake.title': '变更分类',
   'intake.help': '写源码前判定类型/模式/范围。触发：对话或「新建变更」。确认→投影；拒绝→放弃；补充→继续对话。',
-  'intake.heuristicNote': '类型 / 影响范围 / 置信度是系统关键词初判（没匹配上就显示「待定」，确认分类不会改写它们）；模式是你在分类卡上点的路径；选「缺陷修复路径」会把类型定为「缺陷」。',
-  // 【变更】2026-09-24 (demo6 问题 8): 置信度给出可读解释——40% 基准 / 70% 命中
-  // 关键词，且说明它在流程中何时落定（类型随确认、范围随计划白名单）。
-  'intake.confidenceHelp': '初判置信度 = 关键词初判的把握程度：描述里命中「新增 / 需求 / feat」或「bug / 修复 / fix」这类关键词时为 70%；一个关键词都没命中时为基准 40%。它只影响系统的最初建议——路径由你在分类卡上的点选决定，与这个数字无关。这两个字段会随流程落定：类型在分类确认时确定，影响范围在计划冻结文件白名单时确定。',
+  'intake.heuristicNote': '类型 / 影响范围 / 置信度来自系统初判（命中关键词直接定，定不了时由大模型评估；范围没定就显示「待定」，确认分类不会改写它们）；模式是你在分类卡上点的路径；选「缺陷修复路径」会把类型定为「缺陷」。',
+  // 【变更】2026-09-24 (demo6 问题 8): 置信度给出可读解释。
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 4): 置信度不再是两档固定值——关键词命中
+  // 直接 100%，定不了时由大模型评估，悬停说明与卡片文案保持一致。
+  'intake.confidenceHelp': '初判置信度 = 系统对「该走哪条路径」的把握：描述里命中「新增 / 需求 / feat」「bug / 修复 / fix」「重构 / 迁移」这类关键词时直接给 100%；关键词定不了时由大模型评估，给出真实的推荐百分比。它只影响系统的最初建议——路径由你在分类卡上的点选决定，与这个数字无关。这两个字段会随流程落定：类型在分类确认时确定，影响范围在计划冻结文件白名单时确定。',
   'intake.allowlist': '白名单',
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 4): 客户问「置信度到底是什么、
+  // 有什么用」——答案直接写在卡片上，不再只藏在悬停提示里。
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 4): 置信度不再是两档固定值——
+  // 关键词（中英文都算）直接命中就是 100%，关键词定不了时由大模型给出真实的
+  // 推荐百分比。
+  'intake.confidenceNote': '置信度是系统对「该走哪条路径」的把握：描述里命中「新增 / 需求 / feat」「bug / 修复 / fix」「重构 / 迁移」这类关键词时直接给 100%；关键词定不了时由大模型评估，给出真实的推荐百分比。它只影响系统的最初建议——流程走哪条路由，由你在分类确认卡上点。',
   'intake.kind': '类型',
   'intake.mode': '模式',
   'intake.scope': '影响范围',
@@ -1464,9 +1485,6 @@ export const zh: Record<WorkflowTabKey, string> = {
   'ovw.refresh': '刷新',
   // 【变更】2026-10-24 (批次十九 1.1/1.2/1.3/1.4)
   'rail.sideRail': '变更信息',
-  'rail.stage': '阶段',
-  'rail.stageSelected': '已选阶段',
-  'rail.stageCurrent': '当前阶段',
   'strip.startedAt': '开始时间',
   'ovw.clickHint': '点击变更项可展开它的流程图与完整历史记录。',
   'ovw.detailOpen': '查看详情',
@@ -1512,7 +1530,6 @@ export const zh: Record<WorkflowTabKey, string> = {
   'ovw.mode.clarify': '待澄清',
   'ovw.detailGraph': '工作流图',
   'ovw.detailGraphHint': '滚轮平移 · Ctrl + 滚轮缩放 · 点击节点查看该阶段',
-  'ovw.detailStageHead': '阶段详情',
   'ovw.detailStageHint': '在中间的流程图上点选一个节点，即可查看该阶段详情。',
   'ovw.detailSelectStage': '尚未选择阶段。',
   'ovw.detailKind': '变更类型',
@@ -1639,9 +1656,17 @@ export const zh: Record<WorkflowTabKey, string> = {
   'artifact.open': '打开',
   'artifact.gapCount': '缺 {n} 项（悬停查看）',
   'artifact.missing': '尚未生成——先 /baf-go 推进到产出它的阶段',
-  'artifact.state.missing': '尚未生成',
-  'artifact.state.template': '仍是未填的模板',
+  // 【变更】2026-10-29 (批次三十六 · 用户问题 5): every state chip is THREE
+  // characters, so the right-aligned column reads as one column. 「仍是未填的模板」
+  // became 「未填写」 and 「尚未生成」 became 「未生成」.
+  'artifact.state.missing': '未生成',
+  'artifact.state.template': '未填写',
   'artifact.state.planned': '已计划',
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail — the
+  // six-state ladder the customer reads on the 阶段产物 rail.
+  'artifact.state.completed': '已完成',
+  'artifact.state.updated': '已更新',
+  'artifact.state.stale': '待更新',
   'artifact.state.clipped': '已裁剪',
   'artifact.state.filled': '已填写',
   'artifact.drift.modified': '已修改',

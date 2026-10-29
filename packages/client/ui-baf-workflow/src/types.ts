@@ -343,6 +343,12 @@ export interface BafWorkflowGateOptionRow {
   readonly id: string
   readonly label: string
   readonly command: string
+  /**
+   * 【变更】2026-10-29 (批次三十六 · 用户问题 6): the option's plain-language
+   * explanation — what clicking it does. The customer asked for a short
+   * explanation under EVERY option; the host registry publishes it.
+   */
+  readonly hint?: string
 }
 
 /** One 客户确认门 row (a GATE_REGISTRY entry, verbatim). */
@@ -475,15 +481,32 @@ export interface BafWorkflowPauseRequest {
 }
 
 /**
+ * 【变更】2026-10-28 (批次三十三 · 用户问题 3): why a pause control request
+ * could not be carried out.
+ *
+ * `no-model-channel` — the session has no live model to interrupt, or to hand
+ * the 「继续」 instruction back to. It is the ONLY failure the control reports:
+ * everything else the workflow does after the brake comes off is shown by the
+ * surface that owns it (the due gate, the out-of-sync notice), not by a notice
+ * on top of the graph.
+ */
+export type BafWorkflowPauseFailureCode = 'no-model-channel'
+
+/**
  * 【变更】2026-10-27 (批次三十): the outcome of a pause control request.
  *
  * `resumed` reports whether the resume drive actually moved the workflow
  * (the gate popped / the work order went out); `unavailable` carries why it
  * could not (no live session, no dispatch channel).
+ *
+ * 【变更】2026-10-28 (批次三十三): the failure carries a code, so the client
+ * can title the notice after what the customer clicked instead of always
+ * saying 「暂停操作未能生效」 — and a short reason, so the notice is one line
+ * instead of the host's whole card.
  */
 export type BafWorkflowPauseResult =
   | { readonly status: 'ok'; readonly paused: boolean }
-  | { readonly status: 'unavailable'; readonly reason: string }
+  | { readonly status: 'unavailable'; readonly code: BafWorkflowPauseFailureCode; readonly reason: string }
 
 /**
  * 【变更】2026-10-27 (同步产物): result of the artifact-sync dispatch.

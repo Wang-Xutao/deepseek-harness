@@ -57,6 +57,10 @@ export * from './projection.ts'
 export type { BafWorkflowProjectionAppended } from './projection-events.ts'
 export * from './transition.ts'
 export * from './intake.ts'
+export {
+  setIntakeConfidenceEvaluator,
+  intakeConfidenceEvaluator,
+} from './intake-confidence.ts'
 export * from './workflow-service.ts'
 export * from './tab-view.ts'
 export * from './lanes.ts'
@@ -69,6 +73,9 @@ export * from './stages/artifact-drift.ts'
 // 【变更】2026-10-27 (批次三十): the per-change PAUSE flag (the 暂停/继续
 // button on the workflow graph).
 export * from './pause.ts'
+// 【变更】2026-10-28 (批次三十五 · 用户问题 2): the per-gate ADVANCE-DECLINE
+// marker (the conversation tab's 暂不推进, honored until 推进 re-raises it).
+export * from './advance-decline.ts'
 export * from './stages/check-runner.ts'
 export * from './stages/write.ts'
 export * from './stages/open.ts'
@@ -197,6 +204,25 @@ export {
  * snapshot stays strictly "one drive = one stage transition".
  */
 export { driveGo } from './go-coordinator.ts'
+/**
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 3): the ONE host entry point for the
+ * archive decision — the coordinator, the Tab's gate card and the client's own
+ * 「确认归档」 surface all come through here, so one change has exactly one
+ * archive decision (and the workspace baseline's
+ * `guard.requireHumanConfirmation` is honoured).
+ */
+export { driveArchiveDecision, type ArchiveDecisionInput } from './go-coordinator.ts'
+/**
+ * 【变更】2026-10-29 (批次三十六 · 用户问题 9): the shared implement→verify
+ * verdict (the Tab's 推进 readiness and the coordinator's transition read the
+ * SAME judgment) and the 测试流 chain runner the transition uses.
+ */
+export {
+  ensureTestFlowEvidence,
+  verifyEntryVerdict,
+  type TestFlowEvidenceResult,
+  type VerifyEntryVerdict,
+} from './test-flow-gate.ts'
 export {
   isActiveChange,
   listActiveChanges,

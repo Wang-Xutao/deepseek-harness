@@ -38,6 +38,8 @@ import { createWorkflowService } from './workflow-service.ts'
 import { cardTitle, formatCommandReport, modeZh } from './command-format.ts'
 import { loadWorkspaceBaseline } from './pipeline-factory.ts'
 import { sharedHostMap } from './host-memory.ts'
+import { intakeConfidenceEvaluator } from './intake-confidence.ts'
+import type { IntakeConfidenceEvaluator } from './intake.ts'
 
 /** What {@link beginIntake} decided — every caller branches on `kind`. */
 export type BeginIntakeOutcome =
@@ -175,13 +177,25 @@ function refusedInputCard(): CommandResult {
  * Runs only while holding the per-cwd chain tail, so the index read and the
  * mint are one atomic step within this process.
  */
-async function mintOrReuse(cwd: string, description: string): Promise<BeginIntakeOutcome> {
+async function mintOrReuse(
+  cwd: string,
+  description: string,
+  confidenceEvaluator?: IntakeConfidenceEvaluator,
+): Promise<BeginIntakeOutcome> {
   const store = new ProjectionStore({ workspaceRoot: cwd })
   const actives = (await store.readIndex()).changes.filter(isActiveChange)
 
   if (actives.length === 0) {
     const baseline = await loadWorkspaceBaseline(cwd)
-    const service = createWorkflowService({ store })
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the model hook the
+    // classifier asks for a real confidence percentage. The explicit argument
+    // wins; otherwise the process-wide evaluator (registered by the host
+    // plane) answers.
+    const evaluator = confidenceEvaluator ?? intakeConfidenceEvaluator()
+    const service = createWorkflowService({
+      store,
+      ...(evaluator === undefined ? {} : { confidenceEvaluator: evaluator }),
+    })
     const { intake } = await service.intake({
       description,
       workspace: { root: cwd },
@@ -220,14 +234,20 @@ async function mintOrReuse(cwd: string, description: string): Promise<BeginIntak
  *
  * @param cwd - workspace root.
  * @param rawInput - free-form change description (trimmed; empty refuses).
+ * @param confidenceEvaluator - optional model hook (批次三十七); defaults to the
+ * process-wide evaluator the host plane registered.
  * @returns which change the requirement now maps to, and the card to show.
  */
-export async function beginIntake(cwd: string, rawInput: string): Promise<BeginIntakeOutcome> {
+export async function beginIntake(
+  cwd: string,
+  rawInput: string,
+  confidenceEvaluator?: IntakeConfidenceEvaluator,
+): Promise<BeginIntakeOutcome> {
   const description = rawInput.trim()
   if (description === '') return { kind: 'refused-input', card: refusedInputCard() }
 
   const previous = locks.get(cwd) ?? Promise.resolve()
-  const run = previous.catch(() => undefined).then(() => mintOrReuse(cwd, description))
+  const run = previous.catch(() => undefined).then(() => mintOrReuse(cwd, description, confidenceEvaluator))
   locks.set(cwd, run)
   try {
     return await run

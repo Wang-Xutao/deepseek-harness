@@ -56,6 +56,10 @@ export function deriveWorkflowMetrics(
   // Built as an ordered list so a usage point finds its stage by scan.
   const windows: { readonly node: WorkflowNode; readonly start: number; end: number }[] = []
   const windowIndex = new Map<WorkflowNode, number>()
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 5): the nodes whose window a
+  // confirmation gate closed. The customer waits at the gate — that wait is
+  // not work time, so the window reopens when the answer arrives.
+  const parked = new Set<WorkflowNode>()
 
   const markEnter = (node: WorkflowNode, at: string) => {
     const ms = Date.parse(at)
@@ -77,7 +81,9 @@ export function deriveWorkflowMetrics(
     // is machine work. It keeps its window (token attribution stays intact)
     // but accrues no duration: waiting for the confirmation click does not
     // count toward the change's 耗时.
-    if (node !== 'intake') {
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 5): the DRIFT window is the
+    // same shape — the change is frozen on a customer decision.
+    if (node !== 'intake' && node !== 'drift') {
       durationMs.set(node, (durationMs.get(node) ?? 0) + (end - start))
     }
     enteredAt.delete(node)
@@ -89,7 +95,36 @@ export function deriveWorkflowMetrics(
     }
   }
 
+  /**
+   * 【变更】2026-10-29 (批次三十七 · 用户问题 5): close every open work window
+   * at a confirmation gate — the customer is the bottleneck now, and the wait
+   * must not land in 会话耗时.
+   * @param at - the park stamp.
+   */
+  const parkWindows = (at: string) => {
+    for (const node of [...enteredAt.keys()]) {
+      if (node === 'intake' || node === 'drift') continue
+      markLeave(node, at)
+      parked.add(node)
+    }
+  }
+
+  /**
+   * 【变更】2026-10-29 (批次三十七 · 用户问题 5): reopen the windows a gate
+   * closed once the answer arrives — the work continues from where it stopped.
+   * @param at - the resume stamp.
+   */
+  const resumeWindows = (at: string) => {
+    for (const node of parked) {
+      if (!enteredAt.has(node)) markEnter(node, at)
+    }
+    parked.clear()
+  }
+
   for (const event of events) {
+    // The answer to a parked gate reopens the window before this event is
+    // folded — the gate's own event is the park, the next one is the answer.
+    resumeWindows(event.at)
     switch (event.type) {
       case 'intake-classified':
         markEnter('intake', event.at)
@@ -106,6 +141,11 @@ export function deriveWorkflowMetrics(
         break
       case 'drift-detected':
         markEnter('drift', event.at)
+        break
+      // 【变更】2026-10-29 (批次三十七 · 用户问题 5): a parked confirmation
+      // gate is customer wait — the work windows close until the answer.
+      case 'awaiting-confirm':
+        parkWindows(event.at)
         break
       // 【变更】2026-09-23 (demo5 issue #5): a terminal event is a hard stop —
       // every still-open window (archive itself, or a change abandoned mid-
@@ -128,7 +168,10 @@ export function deriveWorkflowMetrics(
     = [...enteredAt.keys()].some(node => node !== 'intake' && node !== 'drift')
 
   for (const [node, start] of enteredAt) {
-    if (nowMs >= start && node !== 'intake') {
+    // 【变更】2026-10-29 (批次三十七 · 用户问题 5): the drift window is a
+    // customer decision (the change is frozen on it), so it accrues no
+    // duration either.
+    if (nowMs >= start && node !== 'intake' && node !== 'drift') {
       durationMs.set(node, (durationMs.get(node) ?? 0) + (nowMs - start))
     }
   }

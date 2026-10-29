@@ -18,16 +18,22 @@ import {
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { GATE_REGISTRY } from './gate-cards.ts'
+import { GATE_REGISTRY, recommendedOptionIdFor } from './gate-cards.ts'
 import { modeZh } from './command-format.ts'
 import { deriveLanes } from './lanes.ts'
 import { deriveWorkflowMetrics, type UsagePoint } from './metrics.ts'
 import type { ProjectionStore } from './projection.ts'
 import { pickActiveChange } from './projection.ts'
 import { bugRecordGate, changeArtifactStatus, clarifyGate, designGate, implementGate, planGate, proposalGate, type GateInput, type GateOutcome } from './stages/gates.ts'
+// 【变更】2026-10-29 (批次三十六 · 用户问题 9): the implement→verify entry
+// verdict — the ONE judgment the 推进 readiness and the coordinator's
+// transition share, so the button and the drive can never disagree.
+import { verifyEntryVerdict } from './test-flow-gate.ts'
 import { detectArtifactDrift, type ArtifactDriftRow, type WorkflowNodeId } from './stages/artifact-drift.ts'
 // 【变更】2026-10-27 (批次三十): the change's pause state.
 import { isChangePaused } from './pause.ts'
+// 【变更】2026-10-28 (批次三十五 · 用户问题 2): the change's declined advance.
+import { isAdvanceDeclinedForNode } from './advance-decline.ts'
 import { checkBlocksVerify } from './stages/check-runner.ts'
 import { readVerifyReport } from './stages/verify.ts'
 import { readLedger } from './stages/implement.ts'
@@ -69,6 +75,15 @@ export type WorkflowTabDriftView = WorkflowTabView & {
    * renders the button in its default state.
    */
   readonly paused?: boolean
+  /**
+   * 【变更】2026-10-28 (批次三十五 · 用户问题 2): whether the change's advance
+   * decision was DECLINED (暂不推进) in the conversation tab.
+   *
+   * ABSENT when not declined. The Tab then suppresses its own advance dialog
+   * (no re-prompt) — the graph's 「推进」 button, one click = `/baf-go`, is the
+   * way forward, and it re-raises the deferred confirmation.
+   */
+  readonly advanceDeclined?: boolean
 }
 
 /** Workspace path where the governing baseline is expected. */
@@ -82,9 +97,17 @@ const WORKSPACE_BASELINE_PATH = '.baf/baseline.yml'
  * pre-P1 fixtures).
  *
  * §13 R5 — when the caller passes a `snapshot` captured onto the matching
- * `awaiting-confirm` event, that snapshot wins over the live registry.
- * This keeps replay honest: a §22 edit after the park cannot silently
- * change what an already-parked customer sees.
+ * `awaiting-confirm` event, the snapshot's QUESTION wins over the live
+ * registry. This keeps replay honest: a §22 edit after the park cannot
+ * silently change what an already-parked customer was asked.
+ *
+ * 【变更】2026-10-27 (批次三十二 · 补充 1): the OPTIONS come from the LIVE
+ * registry even for a parked gate. The question is the audit record of what
+ * was asked; the options are the product's CURRENT action surface. When a
+ * registry edit removes an option, the parked card must stop offering it —
+ * otherwise the session dialog (which reads the registry) and this banner
+ * (which read the snapshot) offer different buttons for the same decision,
+ * and a button the product deleted keeps working in one place only.
  * @param confirmId - the change-level confirm gate id from `confirmGateOf`.
  * @param snapshot - optional frozen copy from the awaiting-confirm event.
  * @returns Tab gate payload, or undefined if registry has no mapping.
@@ -97,21 +120,17 @@ function enrichTabGate(
     : confirmId === 'verify-to-archive' ? 'verify-archive'
       : undefined
   if (gateId === undefined) return undefined
-  const spec = snapshot === undefined ? GATE_REGISTRY[gateId] : undefined
-  if (spec === undefined && snapshot === undefined) return undefined
+  const spec = GATE_REGISTRY[gateId]
+  if (spec === undefined) return undefined
   const node = confirmId === 'design-to-plan' ? 'design' as const
     : 'verify' as const
   const actionKey = confirmId === 'design-to-plan' ? 'gate.confirmIntoPlan'
     : 'gate.confirmArchive'
-  const question = snapshot?.question ?? spec?.question
+  const question = snapshot?.question ?? spec.question
   if (question === undefined) return undefined
-  const options = snapshot !== undefined
-    ? snapshot.options
-      .filter(opt => opt.command !== '__noop__' && opt.command !== '__continued__')
-      .map(opt => ({ id: opt.id, label: opt.label }))
-    : (spec?.options ?? [])
-      .filter(opt => opt.command !== '__noop__' && opt.command !== '__continued__')
-      .map(opt => ({ id: opt.id, label: opt.label }))
+  const options = spec.options
+    .filter(opt => opt.command !== '__noop__' && opt.command !== '__continued__')
+    .map(opt => ({ id: opt.id, label: opt.label }))
   return {
     id: confirmId,
     node,
@@ -235,6 +254,11 @@ export async function buildWorkflowTabView(
       workspaceRoot: store.workspaceRoot(),
       changeId: selected,
       mode: status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+      // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the projection events ride
+      // the call — they carry which stages ran, which is what turns a filled
+      // document into a confirmed (已完成) one and catches a completed
+      // document edited afterwards (已更新).
+      events,
     })
     // 【变更】2026-09-24 (demo6 问题 2): the frozen allowlist rides the same
     // payload once the plan completed — the rail's 影响范围 reads the real
@@ -266,21 +290,34 @@ export async function buildWorkflowTabView(
     // 【变更】2026-10-27 (同步产物): the stale documents of the focused change —
     // an upstream document edited AFTER a downstream one was written. The read
     // is a handful of `stat` calls (the same primitive the gate fingerprint
-    // uses), so it rides the ordinary paint.
+    // uses), so it rides the ordinary paint. 【变更】2026-10-28 (批次三十五):
+    // the events read above ride along — only a COMPLETED stage is judged, so
+    // the model's same-turn co-write of two documents is not a desync.
     const drift = await detectArtifactDrift(
       store.workspaceRoot(),
       selected,
       status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+      events,
     ).catch((): readonly ArtifactDriftRow[] => [])
     // 【变更】2026-10-27 (批次三十): the change's PAUSE state — the client renders
     // the 暂停/继续 button off it. The flag lives in host memory, not in the
     // projection: it is a present-tense operator control, not part of the
     // change's history.
     const paused = isChangePaused(store.workspaceRoot(), selected)
+    // 【变更】2026-10-28 (批次三十五 · 用户问题 2): the change's advance decision
+    // was declined in the conversation tab — the flag rides the view so the
+    // Tab stops re-prompting and the graph's 「推进」 becomes the way forward.
+    const advanceDeclined = isAdvanceDeclinedForNode(
+      store.workspaceRoot(),
+      selected,
+      status.current,
+      status.mode === 'bug-fix-path' ? 'bug-fix-path' : 'full-go-path',
+    )
     return attachArtifactDrift(
       attachWorkspaceGates(enriched, store.workspaceRoot()),
       drift,
       paused,
+      advanceDeclined,
     )
   } catch (error) {
     return attachWorkspaceGates({
@@ -299,15 +336,21 @@ export async function buildWorkflowTabView(
  * @param view - the assembled view.
  * @param drift - the stale documents.
  * @param paused - whether the change's workflow is paused.
+ * @param advanceDeclined - whether the change's advance decision was declined.
  * @returns the view with the drift fold attached.
  */
 function attachArtifactDrift(
   view: WorkflowTabView,
   drift: readonly ArtifactDriftRow[],
   paused: boolean,
+  advanceDeclined: boolean,
 ): WorkflowTabDriftView {
   const folded: WorkflowTabDriftView = drift.length === 0
-    ? view
+    ? {
+      ...view,
+      ...(paused ? { paused: true } : {}),
+      ...(advanceDeclined ? { advanceDeclined: true } : {}),
+    }
     : {
       ...view,
       artifactDrift: drift.map(row => ({
@@ -318,6 +361,8 @@ function attachArtifactDrift(
         sourceMtimeMs: row.sourceMtimeMs,
         mtimeMs: row.mtimeMs,
       })),
+      ...(paused ? { paused: true } : {}),
+      ...(advanceDeclined ? { advanceDeclined: true } : {}),
     }
   // The pause field is present only while the change IS paused.
   return paused ? { ...folded, paused: true } : folded
@@ -394,7 +439,21 @@ async function deriveAdvanceReadiness(
     case 'implement': {
       const ledger = await readLedger(cwd, changeId).catch(() => undefined)
       if (ledger === undefined) return { ready: false, missing: ['plan.json 账本不可读——补齐 tasks 结构（每任务 id / title / files / done / touched）'] }
-      return of(await implementGate(input, ledger.touched))
+      const gate = await implementGate(input, ledger.touched)
+      if (!gate.ok) return of(gate)
+      // 【变更】2026-10-29 (批次三十六 · 用户问题 9): the implement→verify entry
+      // reads the ONE shared verdict the coordinator's transition reads
+      // (`verifyEntryVerdict`), so the 推进 button can no longer offer an
+      // advance the coordinator refuses one click later — the customer's
+      // 「点不了还报错」. The `missing` lines name the REAL blocker (which
+      // checklist condition failed), not a generic message.
+      //
+      // The 测试流 part is NOT a blocker here: a gated workspace's missing
+      // evidence is resolved BY the transition (the coordinator runs the chain
+      // itself), so the button may offer the advance — the run's own failure
+      // is then reported as a real failure, not as a silent pass.
+      const verdict = await verifyEntryVerdict(input)
+      return { ready: verdict.ready, missing: verdict.missing }
     }
     case 'verify': {
       if (status.nodes.verify === 'completed') return { ready: true, missing: [] }
@@ -411,7 +470,7 @@ async function deriveAdvanceReadiness(
       return {
         ready: false,
         missing: blocked.map(check =>
-          `验证未通过：${check.name}${check.required ? '' : '（非必需，但检查已执行）'} —— ${check.diagnostics?.[0] ?? '检查失败，修复后重跑验证'}`,
+          `验证未通过：${check.name}${check.required ? '' : '（非必需，但检查已执行）'} —— ${check.diagnostics?.slice(0, 3).join('；') || '检查失败，修复后重跑验证'}`,
         ),
       }
     }
@@ -443,6 +502,14 @@ function attachIntakePendingGate(view: WorkflowTabView, status: WorkflowStatus):
     || status.intake.mode === 'clarify-required'
   if (!pending) return view
   const spec = GATE_REGISTRY['intake-classify']
+  // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the recommended path rides the
+  // option rows, so the Tab's button row can mark it with a 「推荐」 badge and
+  // quote the real percentage.
+  const recommendedId = recommendedOptionIdFor(
+    'intake-classify',
+    status.intake?.recommendedMode ?? status.intake?.mode,
+  )
+  const confidence = status.intake === undefined ? undefined : Math.round(status.intake.confidence * 100)
   return {
     ...view,
     pendingGate: {
@@ -451,10 +518,15 @@ function attachIntakePendingGate(view: WorkflowTabView, status: WorkflowStatus):
       question: spec.question,
       options: spec.options
         .filter(opt => opt.command !== '__noop__' && opt.command !== '__continued__')
-        .map(opt => ({ id: opt.id, label: opt.label })),
+        .map(opt => ({
+          id: opt.id,
+          label: opt.label,
+          ...(recommendedId === opt.id ? { recommended: true } : {}),
+          ...(confidence === undefined ? {} : { confidence }),
+        })),
       ...(status.intake === undefined ? {} : {
         detail: [
-          `系统初步判断：${modeZh(status.intake.mode)} · 置信 ${status.intake.confidence.toFixed(2)}`,
+          `系统初步判断：${modeZh(status.intake.mode)} · 置信 ${confidence ?? 0}%`,
           `需求摘要：${status.intake.summary}`,
         ],
       }),

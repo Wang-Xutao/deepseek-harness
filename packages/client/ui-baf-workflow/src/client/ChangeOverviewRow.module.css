@@ -17,6 +17,10 @@
  * and the page read as one loud gold field instead of a ledger. The accent
  * lines and glow tokens drop to hairline weight, the washes to a trace, and
  * the surfaces carry the page. The hue itself is untouched.
+ * 【变更】2026-10-28 (批次三十五 · 用户问题 1): the 变更详情 workspace's left
+ * rail grows a BOTTOM band for the change's event history (左下方) — the upper
+ * part keeps the change's identity and its documents, the lower part carries
+ * the timeline.
  */
 
 .block {
@@ -1033,17 +1037,39 @@
   display: flex;
 }
 
-/* 左侧 · the fixed left rail. */
+/* 左侧 · the fixed left rail.
+   【变更】2026-10-28 (批次三十五 · 用户问题 1): the rail now carries the
+   change's HISTORY in its BOTTOM band (左下方) — the upper part scrolls
+   (the classification + the documents), the history owns the lower part. */
 .wsLeft {
   flex: none;
-  width: 300px;
+  width: 320px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
   padding: 12px;
-  overflow: auto;
   border-right: 1px solid var(--ws-line);
   background: color-mix(in srgb, var(--wf-card) 60%, transparent);
+}
+
+/* The rail's upper part — the change's identity and its documents. */
+.wsLeftScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 【变更】2026-10-28 (批次三十五 · 用户问题 1): the rail's BOTTOM band — the
+   change's event history. It keeps its own scroll, so a long timeline never
+   pushes the change's identity off the rail. */
+.wsLeftHistory {
+  flex: none;
+  max-height: 46%;
+  overflow: auto;
 }
 
 /* 中间 · the graph. */
@@ -1103,43 +1129,11 @@
   background: color-mix(in srgb, var(--wf-card) 60%, transparent);
 }
 
-/* The stage head — the stage name in big type, so 「现在看的是哪个阶段」 reads
-   before any card does (the session rail's grammar, kept). */
-.wsStageHead {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--ws-line);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--wf-accent) 7%, transparent), transparent 78%);
-}
-
-.wsStageLabel {
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ws-ink-3);
-}
-
-.wsStageName {
-  font-size: 1.02rem;
-  font-weight: 800;
-  line-height: 1.35;
-  color: var(--ws-ink);
-}
-
-.wsStageStatus {
-  align-self: flex-start;
-  margin-top: 3px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  border: 1px solid var(--ws-line);
-  color: var(--ws-ink-2);
-}
+/* 【变更】2026-10-27 (批次三十二 · 用户问题 5): the stage head's own styles
+   left with it — the right rail's first element is now the shared
+   `StageSummaryCard` (the name plus the stage's figures), the same card the
+   session rail shows. The old head (label + big name + status pill) said
+   less and said it twice. */
 
 .wsRightScroll {
   flex: 1;
@@ -1224,6 +1218,17 @@
   white-space: nowrap;
 }
 
+/* 【变更】2026-10-28 (批次三十四 · 用户问题 6): the long values (期望产物 /
+   完成条件) WRAP — they are sentences, and the ellipsis cut them off mid
+   sentence. The label stays on its line; the value fills the rest. */
+.intakeValueWrap {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  line-height: 17px;
+}
+
 /* The confidence meter — a hairline track with a gold fill. */
 .confidence {
   position: relative;
@@ -1273,6 +1278,15 @@
   font-size: 11px;
   line-height: 17px;
   color: var(--ws-ink-2);
+}
+
+/* 【变更】2026-10-29 (批次三十六 · 用户问题 4): the 置信度 explanation line. */
+.intakeNote {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--ws-ink-2);
+  word-break: break-word;
 }
 
 /* The terminal card — a finished change's outcome (状态 / 产物 / 完成条件). */
@@ -1353,6 +1367,18 @@
   font-size: 10px;
   border: 1px solid var(--ws-line);
   color: var(--ws-ink-2);
+}
+
+/* 【变更】2026-10-28 (批次三十五 · 用户问题 1): the history's stage name is
+   BILINGUAL — the English name rides INLINE after the zh name on one line
+   (中文在前，英文在后), the 确认门配置流程图's anatomy: quieter ink, quieter
+   weight. */
+.historyNodeEn {
+  margin-left: 4px;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  color: var(--ws-ink-3);
 }
 
 .historyGate {
@@ -1462,25 +1488,7 @@
   overflow-wrap: anywhere;
 }
 
-.modalFoot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  padding: 0.55rem 0.9rem;
-  border-top: 1px solid var(--wf-line);
-}
-
-.modalAction {
-  align-self: flex-start;
-  margin-top: 0.2rem;
-  padding: 0.22rem 0.6rem;
-  font-size: 0.66rem;
-  font-weight: 700;
-  color: var(--wf-ink);
-  background: color-mix(in srgb, var(--wf-accent) 6%, var(--wf-card));
-  border: 1px solid color-mix(in srgb, var(--wf-accent) 32%, var(--wf-line));
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.modalAction:hover { background: color-mix(in srgb, var(--wf-accent) 10%, var(--wf-card)); }
+/* 【变更】2026-10-27 (批次三十二 · 用户问题 6): the preview's FOOTER left with
+   its 在侧栏打开 button — the document is already on screen in this window, so
+   the footer only moved it somewhere else. The preview is now title + path +
+   body, one reading surface. */

@@ -56,8 +56,11 @@ const join = (...names: ReadonlyArray<string | undefined>): string =>
   names.filter((name): name is string => name !== undefined && name !== '').join(' ')
 
 /**
- * One command row — mono id + stars, then the three captioned explain lines:
- * 作用 (the help table's desc), 功能 (mechanism) and 运行结果 (outcome).
+ * One command row — 【变更】2026-10-29 (批次三十六 · 用户问题 3): the row is a
+ * CARD. A brand accent bar marks it, the command id rides a mono chip, the
+ * help-table rating is a filled/hollow badge, and the two secondary lines
+ * (功能 / 运行结果) sit side by side under the emphasized 作用 line. The old
+ * flat stack of four left-aligned lines read as a wall of text.
  */
 function CommandRow({ command, t }: { command: BafCommandEntry; t: StandardsPanelProps['t'] }) {
   return (
@@ -66,22 +69,25 @@ function CommandRow({ command, t }: { command: BafCommandEntry; t: StandardsPane
       data-testid={`baf-command-${command.id.replace(/^\//, '').replace(/-/g, '_')}`}
     >
       <div className={css.cmdHead}>
-        <span className={css.cmdName}>{command.id}</span>
+        <span className={css.cmdIdChip}>{command.id}</span>
         <span className={css.cmdStars} aria-label={`★ ${String(command.stars)}`}>
-          {'★'.repeat(command.stars)}
+          <span className={css.cmdStarFilled}>{'★'.repeat(command.stars)}</span>
+          <span className={css.cmdStarEmpty}>{'★'.repeat(3 - command.stars)}</span>
         </span>
       </div>
       <div className={css.cmdField}>
         <span className={css.cmdFieldKey}>{t('cmdUseLabel')}</span>
         <span className={join(css.cmdFieldValue, css.cmdFieldDesc)}>{command.desc}</span>
       </div>
-      <div className={css.cmdField}>
-        <span className={css.cmdFieldKey}>{t('cmdEffectLabel')}</span>
-        <span className={css.cmdFieldValue}>{command.effect}</span>
-      </div>
-      <div className={css.cmdField}>
-        <span className={css.cmdFieldKey}>{t('cmdResultLabel')}</span>
-        <span className={css.cmdFieldValue}>{command.result}</span>
+      <div className={css.cmdFieldPair}>
+        <div className={css.cmdField}>
+          <span className={css.cmdFieldKey}>{t('cmdEffectLabel')}</span>
+          <span className={css.cmdFieldValue}>{command.effect}</span>
+        </div>
+        <div className={css.cmdField}>
+          <span className={css.cmdFieldKey}>{t('cmdResultLabel')}</span>
+          <span className={css.cmdFieldValue}>{command.result}</span>
+        </div>
       </div>
     </div>
   )

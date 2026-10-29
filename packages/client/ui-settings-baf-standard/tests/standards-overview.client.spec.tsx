@@ -179,6 +179,7 @@ function readyState(overrides: Partial<StandardsOverviewState> = {}): StandardsO
   return {
     status: 'ready',
     summary: readySummary(),
+    summaryError: undefined,
     enterpriseDocId: undefined,
     enterpriseDoc: undefined,
     localeActive: 'zh',
@@ -214,6 +215,7 @@ function notReadyState(status: StandardsOverviewState['status'], summary: BafSta
   return {
     status,
     summary,
+    summaryError: undefined,
     enterpriseDocId: undefined,
     enterpriseDoc: undefined,
     localeActive: 'zh',
@@ -1988,6 +1990,72 @@ describe('StandardsOverview mount refresh (六问题批 4.1 web 验证修复)', 
     cleanup()
     render(<StandardsProjectOverview {...props} />)
     expect(face.refreshIfClean).toHaveBeenCalledTimes(2)
+  })
+})
+
+// 【变更】2026-10-29 (批次三十六 · 用户问题 1): the 项目工程 page answered the
+// first visit with a one-frame error banner — the activation read failed while
+// the workspace Remote was still coming up, and the panel's own read replaced
+// the failure a moment later.
+describe('StandardsController · summary read sequencing (批次三十六 · 用户问题 1)', () => {
+  function ctxWith(summary: () => Promise<unknown>) {
+    const remote = { bafStandardConfig: { summary: vi.fn(summary) } }
+    return { ctx: { remote, get: vi.fn(() => undefined) }, remote }
+  }
+  const tick = () => new Promise(r => setTimeout(r, 0))
+
+  it('does not answer the page with the activation read’s failure', async () => {
+    const { ctx } = ctxWith(() => Promise.resolve({ ok: false, error: { message: 'waiting for service' } }))
+    const c = new StandardsController(ctx as never)
+    await tick()
+    const state = c.face().hooks.standards.getSnapshot()
+    expect(state.status).toBe('loading')
+    expect(state.summary).toBeUndefined()
+  })
+
+  it('lets the panel’s own read decide the status', async () => {
+    const { ctx } = ctxWith(() => Promise.resolve({ ok: false, error: { message: 'waiting for service' } }))
+    const c = new StandardsController(ctx as never)
+    await tick()
+    c.refreshIfClean()
+    await tick()
+    expect(c.face().hooks.standards.getSnapshot().status).toBe('failed')
+  })
+
+  it('drops a stale answer so an older failure never flashes over the newer one', async () => {
+    const resolvers: ((value: unknown) => void)[] = []
+    const remote = {
+      bafStandardConfig: {
+        summary: vi.fn(() => new Promise((resolve) => { resolvers.push(resolve) })),
+      },
+    }
+    const c = new StandardsController({ remote, get: vi.fn(() => undefined) } as never)
+    // The activation read is still in flight; the panel's read starts now.
+    c.refreshIfClean()
+    expect(resolvers.length).toBe(2)
+    // The newer read answers first; the older one answers last with a failure.
+    resolvers[1]?.({ ok: true, value: readySummary({ cwd: '/new' }) })
+    await tick()
+    resolvers[0]?.({ ok: false, error: { message: 'stale failure' } })
+    await tick()
+    const state = c.face().hooks.standards.getSnapshot()
+    expect(state.status).toBe('ready')
+    expect(state.summary?.cwd).toBe('/new')
+    expect(state.summaryError).toBeUndefined()
+  })
+
+  it('keeps the content and reports a failed read as a notice', async () => {
+    let answer: unknown = { ok: true, value: readySummary({ cwd: '/first' }) }
+    const { ctx } = ctxWith(() => Promise.resolve(answer))
+    const c = new StandardsController(ctx as never)
+    await tick()
+    answer = { ok: false, error: { message: 'boom' } }
+    await c.face().reload()
+    await tick()
+    const state = c.face().hooks.standards.getSnapshot()
+    expect(state.status).toBe('ready')
+    expect(state.summary?.cwd).toBe('/first')
+    expect(state.summaryError).toBe('boom')
   })
 })
 

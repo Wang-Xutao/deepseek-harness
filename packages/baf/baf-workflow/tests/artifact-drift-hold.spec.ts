@@ -146,6 +146,12 @@ async function activeId(root: string): Promise<string | undefined> {
   return index.changes.find(c => c.current !== 'completed' && c.current !== 'abandoned')?.changeId
 }
 
+/** The change's projection events — the drift detector's completion times. */
+async function eventsOf(root: string, changeId: string) {
+  const { events } = await new ProjectionStore({ workspaceRoot: root }).readEvents(changeId)
+  return events
+}
+
 /** Fresh module memories per test — the ledger is process-global otherwise. */
 beforeEach(() => {
   resetOrchestrator()
@@ -180,14 +186,28 @@ describe('the out-of-sync hold (批次三十一)', () => {
         '',
       ].join('\n'))
       await driveGo({ cwd: root, focus }) // open → clarify (template installed)
+      // 【变更】2026-10-28 (批次三十五 · 用户问题 1): the hold now judges only
+      // COMPLETED stages, so the fixture must SETTLE the clarify stage first —
+      // the model's same-turn co-write of two documents is its own authoring
+      // domain and must not hold anything.
+      await author(root, changeId, 'clarify.md', [
+        '# Clarify',
+        '',
+        '## Acceptance criteria',
+        '',
+        '- `npm test` passes with the export suite',
+        '- `curl /reports.csv` returns the rendered CSV rows',
+        '',
+      ].join('\n'))
+      await driveGo({ cwd: root, focus }) // clarify → design (template installed)
 
-      // The customer edits the upstream document AFTER the downstream one was
-      // written: the two no longer agree.
-      const clarifyMtime = await mtimeOf(root, changeId, 'clarify.md')
-      await stamp(root, changeId, 'proposal.md', clarifyMtime + STEP_MS)
-      expect(await detectArtifactDrift(root, changeId, 'full-go-path')).toHaveLength(1)
+      // The customer edits the upstream document AFTER the clarify stage
+      // settled: the two no longer agree.
+      const designMtime = await mtimeOf(root, changeId, 'design.md')
+      await stamp(root, changeId, 'proposal.md', designMtime + STEP_MS)
+      expect(await detectArtifactDrift(root, changeId, 'full-go-path', await eventsOf(root, changeId))).toHaveLength(1)
 
-      // The turn ends on the resting clarify stage whose gate still fails. The
+      // The turn ends on the resting design stage whose gate still fails. The
       // old behaviour dispatched the gap order; the hold refuses it — the
       // customer must sync the documents first.
       emit({ header: { id: 'sess-drift', cwd: root } }, turnEnd(1))
@@ -201,14 +221,14 @@ describe('the out-of-sync hold (批次三十一)', () => {
       // failing, so the turn-end still owes a gap order (the hold released it,
       // nothing else changed).
       await stamp(root, changeId, 'clarify.md', (await mtimeOf(root, changeId, 'proposal.md')) + STEP_MS)
-      expect(await detectArtifactDrift(root, changeId, 'full-go-path')).toHaveLength(0)
+      expect(await detectArtifactDrift(root, changeId, 'full-go-path', await eventsOf(root, changeId))).toHaveLength(0)
 
       // The next turn-end dispatches the very gap the held turn refused.
       emit({ header: { id: 'sess-drift', cwd: root } }, turnEnd(2))
-      await waitFor(async () => followups.length >= 1, logs, 'clarify gap order after the sync', 30_000).catch(() => undefined)
+      await waitFor(async () => followups.length >= 1, logs, 'design gap order after the sync', 30_000).catch(() => undefined)
       expect(followups.length).toBeGreaterThanOrEqual(1)
       expect(followups[0]).toContain('【BAF 工单 · /baf-go 派单】')
-      expect(followups[0]).toContain('阶段：clarify')
+      expect(followups[0]).toContain('阶段：design')
     } finally {
       await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }).catch(() => undefined)
     }
