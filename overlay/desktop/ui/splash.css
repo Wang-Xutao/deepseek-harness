@@ -185,8 +185,15 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 20px;
-  /* The gap between the slow-start hint row and the mark (用户问题 1). */
-  margin-top: 38px;
+  /*
+   * 【变更】2026-10-30 (用户问题 1): the gap between the slow-start hint row
+   * and the mark. 批次三十七 opened it to 38px because the two read as one
+   * crowded band at the old 5px; the customer answered that 38px reads as an
+   * empty band instead. The hint's TEXT now clears the mark by ~18px — the
+   * same distance as the mark's own gap to the wordmark below it — so the
+   * stack reads as one rhythm instead of a header floating over a logo.
+   */
+  margin-top: 20px;
   margin-bottom: 6px;
   min-height: 64px;
 }

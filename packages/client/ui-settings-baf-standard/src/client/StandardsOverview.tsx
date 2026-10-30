@@ -220,6 +220,12 @@ function StatusSurface({ state, summary, t, suppressNoBaseline }: {
   suppressNoBaseline?: boolean
 }) {
   if (state.status === 'loading') return <div className={css.status}>{t('statusLoading')}</div>
+  // 【变更】2026-10-30 (用户问题 1): a re-read is in flight. The page says so
+  // instead of painting the previous verdict — the red 「没有配置文件」 banner
+  // of the OLD workspace must never flash before the new read confirms it.
+  if (state.summaryPending) {
+    return <div className={css.status} data-testid="baf-standard-pending">{t('statusPending')}</div>
+  }
   if (state.status === 'failed') {
     return (
       <div className={css.statusError} data-testid="baf-standard-failed">
@@ -631,7 +637,10 @@ export function StandardsProjectOverview(props: StandardsPanelProps) {
           </div>
         </div>
       ) : null}
-      {summary?.status === 'no-baseline' ? (
+      {/* 【变更】2026-10-30 (用户问题 1): the 「没有配置文件」 verdict is a
+          CONFIRMED answer — the row (and its red banner) is withheld while a
+          re-read is in flight, so a stale verdict can never flash. */}
+      {summary?.status === 'no-baseline' && !state.summaryPending ? (
         <div className={css.generateRow} data-testid="baf-standard-generate">
           <div className={css.statusError}>{t('noBaselineError')}</div>
           <button

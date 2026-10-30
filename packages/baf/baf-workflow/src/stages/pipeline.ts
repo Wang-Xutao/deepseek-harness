@@ -503,12 +503,16 @@ export class StagePipeline {
         const ledger = await readLedger(this.ctx.workspace.root, changeId).catch(() => undefined)
         if (ledger !== undefined && ledger.allowlist.length > 0) {
           const affectedScope = deriveScopeFromAllowlist(ledger.allowlist)
-          await this.store.append(changeId, afterRender.projectionVersion, meta => ({
-            type: 'intake-settled' as const,
-            affectedScope,
-            reasonCodes: ['settled-at-plan'] as const,
-            ...meta,
-          })).catch(() => undefined)
+          // 【变更】2026-10-30 (用户问题 8b): nothing to settle while the
+          // allowlist holds no product file — the scope stays 待确定.
+          if (affectedScope !== 'unknown') {
+            await this.store.append(changeId, afterRender.projectionVersion, meta => ({
+              type: 'intake-settled' as const,
+              affectedScope,
+              reasonCodes: ['settled-at-plan'] as const,
+              ...meta,
+            })).catch(() => undefined)
+          }
         }
       }
     }

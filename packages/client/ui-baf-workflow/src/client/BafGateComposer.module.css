@@ -42,6 +42,24 @@
   border: 0;
 }
 
+/*
+ * 【变更】2026-10-30 (用户问题 3.4): the card's INLINE placement — the fallback
+ * for a conversation layout that carries no `[data-conversation-content]` pane
+ * to pin an overlay to.
+ *
+ * The old fallback was the overlay's own `inset: 0`: a viewport-wide blocker
+ * that covered the app's LEFT SIDEBAR too. The customer's rule is that the
+ * confirmation dialog's scope is the conversation tab alone — the sidebar must
+ * stay usable while a gate is open. The card therefore rides the
+ * conversation column as an ordinary block: no scrim, no backdrop, nothing
+ * outside the column is blocked.
+ */
+.inlineCard {
+  display: block;
+  width: 100%;
+  padding: 12px 0;
+}
+
 .frame {
   /* 【变更】2026-10-25 (批次二十一 2): the composer's own token block reads the
      platform's REAL aliases — the old chains ended in light literals (#1f2937
@@ -215,11 +233,22 @@ button.artifactChip:hover {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--gate-accent) 18%, transparent);
 }
 
-/* 用户问题 1.6: horizontal option row, confirm emphasized. */
+/* 用户问题 1.6: horizontal option row, confirm emphasized.
+   【变更】2026-10-30 (用户问题 3): the buttons no longer STRETCH to the card's
+   width — `flex: 1 1 140px` made 「确认 · 进入澄清」 and 「暂不推进」 sit at the
+   two far ends of the card with a lake of empty space between them. The
+   customer asked for them left-aligned next to each other: `flex: 0 0 auto`
+   keeps each button at its content width, and the row reads as one block.
+   【变更】2026-10-30 (用户问题 3 补充): ALL the options ride on ONE line — the
+   three-option gates wrapped to a second row, which read as two groups. The
+   row is `nowrap` and the buttons share the width evenly (`flex: 1 1 0`), so
+   the labels shrink instead of wrapping the row. */
 .options {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: 8px;
   margin-top: 6px;
 }
@@ -227,7 +256,9 @@ button.artifactChip:hover {
 .primaryBtn,
 .secondaryBtn {
   display: flex;
-  flex: 1 1 140px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
   flex-direction: column;
   gap: 2px;
   padding: 11px 14px;
@@ -288,6 +319,11 @@ button.artifactChip:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* 【变更】2026-10-30 (用户问题 3 补充): the options share ONE row, so a long
+     label wraps inside its button instead of pushing the row to a second
+     line. */
+  min-width: 0;
+  word-break: break-word;
 }
 
 /* 【变更】2026-10-29 (批次三十七 · 用户问题 4): the 「推荐」 badge on the
@@ -316,6 +352,10 @@ button.artifactChip:hover {
   font-size: 12px;
   line-height: 1.5;
   color: var(--gate-muted);
+  /* 【变更】2026-10-30 (用户问题 3 补充): the hint wraps inside its button —
+     the option ROW stays on one line. */
+  min-width: 0;
+  word-break: break-word;
 }
 
 .primaryBtn .optionHint {

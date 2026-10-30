@@ -101,6 +101,27 @@ function readySummary(overrides: Partial<BafStandardSummaryResult> = {}): BafSta
   }
 }
 
+/**
+ * The `useStandards` selector hook over a snapshot store — the panel's read
+ * channel in the tests (the real one comes from the registered slot).
+ * @param store - the snapshot store the panel reads.
+ * @returns the selector hook.
+ */
+type StandardsStore = ReturnType<typeof createSnapshotStore<StandardsOverviewState>>
+
+/**
+ * The `useStandards` selector hook over a snapshot store — the panel's read
+ * channel in the tests (the real one comes from the registered slot).
+ * @param store - the snapshot store the panel reads.
+ * @returns the selector hook.
+ */
+function standardsHook(store: StandardsStore) {
+  return <T,>(selector: (state: StandardsOverviewState) => T): T => useSyncExternalStore(
+    store.subscribe,
+    () => selector(store.getSnapshot()),
+  )
+}
+
 function harness(initial: StandardsOverviewState, faceOverrides: Partial<StandardsOverviewFace> = {}) {
   const store = createSnapshotStore<StandardsOverviewState>(initial)
   const face: StandardsOverviewFace = {
@@ -157,10 +178,7 @@ function harness(initial: StandardsOverviewState, faceOverrides: Partial<Standar
     ...faceOverrides,
   }
   const { hooks: _hooks, ...actions } = face
-  const useStandards = <T,>(selector: (state: StandardsOverviewState) => T): T => useSyncExternalStore(
-    store.subscribe,
-    () => selector(store.getSnapshot()),
-  )
+  const useStandards = standardsHook(store)
   const props = {
     ...kit,
     ...actions,
@@ -180,6 +198,7 @@ function readyState(overrides: Partial<StandardsOverviewState> = {}): StandardsO
     status: 'ready',
     summary: readySummary(),
     summaryError: undefined,
+    summaryPending: false,
     enterpriseDocId: undefined,
     enterpriseDoc: undefined,
     localeActive: 'zh',
@@ -216,6 +235,7 @@ function notReadyState(status: StandardsOverviewState['status'], summary: BafSta
     status,
     summary,
     summaryError: undefined,
+    summaryPending: false,
     enterpriseDocId: undefined,
     enterpriseDoc: undefined,
     localeActive: 'zh',
@@ -2056,6 +2076,106 @@ describe('StandardsController · summary read sequencing (批次三十六 · 用
     expect(state.status).toBe('ready')
     expect(state.summary?.cwd).toBe('/first')
     expect(state.summaryError).toBe('boom')
+  })
+})
+
+// 【变更】2026-10-30 (用户问题 1): switching to another project/workspace
+// flashed the red 「当前会话工作区还没有配置文件」 banner — the PREVIOUS
+// workspace's verdict stayed on screen until the new read landed. The read
+// now announces itself as pending, and a 「没有配置文件」 verdict is painted
+// only by the read that confirmed it.
+describe('StandardsController · the no-baseline verdict is confirmed before it paints (2026-10-30 用户问题 1)', () => {
+  const tick = () => new Promise(r => setTimeout(r, 0))
+
+  /** A controller whose summary reads answer BY HAND (one resolver per read:
+   *  the warm-up first, the panel's own read second). */
+  function pendingController() {
+    const resolvers: ((value: unknown) => void)[] = []
+    const remote = {
+      bafStandardConfig: {
+        summary: vi.fn(() => new Promise((resolve) => { resolvers.push(resolve) })),
+      },
+    }
+    const c = new StandardsController({ remote, get: vi.fn(() => undefined) } as never)
+    return { c, resolvers }
+  }
+
+  /** The panel props bound to a LIVE controller — its mount read really runs,
+   *  so the pending marker and the verdict come from the store itself. */
+  function liveProps(c: StandardsController) {
+    const store = c.face().hooks.standards
+    const { hooks: _hooks, ...actions } = c.face()
+    const useStandards = standardsHook(store)
+    return {
+      ...kit,
+      ...actions,
+      t: t as never,
+      useStandards,
+      useRemoteAccess: () => true,
+      useSessionAccess: () => true,
+      useWorkspaceAccess: () => true,
+    }
+  }
+
+  it('shows the pending state during a re-read, never the previous no-baseline banner', async () => {
+    const { c, resolvers } = pendingController()
+    const props = liveProps(c)
+    render(<StandardsProjectOverview {...props} />)
+    // The panel's own read confirms the missing config file.
+    resolvers[1]?.({ ok: true, value: { status: 'no-baseline', cwd: '/ws' } })
+    await tick()
+    expect(screen.getByTestId('baf-standard-generate').textContent).toContain('noBaselineError')
+    cleanup()
+    // A workspace switch starts a new read → the pending line, no stale banner.
+    c.refreshIfClean()
+    expect(c.face().hooks.standards.getSnapshot().summaryPending).toBe(true)
+    render(<StandardsProjectOverview {...props} />)
+    expect(screen.getByTestId('baf-standard-pending')).toBeDefined()
+    expect(screen.queryByTestId('baf-standard-generate')).toBeNull()
+  })
+
+  it('paints the no-baseline banner only after the read that confirms it resolves', async () => {
+    const { c, resolvers } = pendingController()
+    const props = liveProps(c)
+    render(<StandardsProjectOverview {...props} />)
+    // The read is still out — the page shows no verdict at all.
+    expect(screen.queryByTestId('baf-standard-generate')).toBeNull()
+    expect(c.face().hooks.standards.getSnapshot().summaryPending).toBe(true)
+    // The confirming read resolves → now the banner is allowed to paint.
+    resolvers[1]?.({ ok: true, value: { status: 'no-baseline', cwd: '/ws' } })
+    await tick()
+    expect(c.face().hooks.standards.getSnapshot().summaryPending).toBe(false)
+    expect(screen.getByTestId('baf-standard-generate').textContent).toContain('noBaselineError')
+  })
+
+  it('drops the warm-up read’s late no-baseline answer instead of painting it', async () => {
+    const { c, resolvers } = pendingController()
+    const props = liveProps(c)
+    // The panel's own read starts; the warm-up is still in flight.
+    render(<StandardsProjectOverview {...props} />)
+    expect(resolvers.length).toBe(2)
+    // The warm-up answers LAST with a stale verdict → it must not paint.
+    resolvers[0]?.({ ok: true, value: { status: 'no-baseline', cwd: '/old' } })
+    await tick()
+    const state = c.face().hooks.standards.getSnapshot()
+    expect(state.summary).toBeUndefined()
+    expect(state.status).toBe('loading')
+    expect(screen.queryByTestId('baf-standard-generate')).toBeNull()
+    // The newest read confirms it → only then the banner paints.
+    resolvers[1]?.({ ok: true, value: { status: 'no-baseline', cwd: '/new' } })
+    await tick()
+    expect(screen.getByTestId('baf-standard-generate').textContent).toContain('noBaselineError')
+  })
+
+  it('never lets the warm-up read paint the no-baseline verdict on its own', async () => {
+    const { c, resolvers } = pendingController()
+    // The warm-up answers BEFORE any panel mounted.
+    resolvers[0]?.({ ok: true, value: { status: 'no-baseline', cwd: '/old' } })
+    await tick()
+    const state = c.face().hooks.standards.getSnapshot()
+    expect(state.summary).toBeUndefined()
+    expect(state.status).toBe('loading')
+    expect(state.summaryPending).toBe(false)
   })
 })
 

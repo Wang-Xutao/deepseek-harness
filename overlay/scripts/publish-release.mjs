@@ -2,6 +2,14 @@
 /**
  * Publish baf-dsh update artifacts to GitHub Releases (no Actions).
  *
+ * 【变更】2026-10-30 (升级途径迁移): ⚠️ 更新通道（读取侧）已经迁到 **GitLab
+ * Releases**（host `gitlab.sinc.lan`，项目 `ai/workflow/baf-dsh`）。本脚本仍然
+ * 发布到 GitHub（`gh release upload`）——GitLab 的 release 是「link」而不是
+ * 「上传的 asset」，产物要先落到 CI 产物或对象存储，再把直链挂成 release
+ * link。因此：**跑本脚本不会让桌面端看到更新**。GitLab 发布侧（流水线）由
+ * 发布负责人配置，需求见 `overlay/docs/engineering/build.md` 的「发版
+ * （GitLab Releases）」一节。
+ *
  * Prerequisites:
  *   - `gh auth login` (needs repo contents write)
  *   - Run `node scripts/build-release.mjs` first (or `npm run build-release`)

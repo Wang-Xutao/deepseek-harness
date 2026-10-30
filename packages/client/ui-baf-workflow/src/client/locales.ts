@@ -155,6 +155,14 @@ export type WorkflowTabKey =
   | 'mode.help'
   | 'card.duration'
   | 'card.tokens'
+  // 【变更】2026-10-30 (用户问题 4): the workflow graph's own card labels —
+  // a stage card shows a STAGE's figures, and the terminal card shows the
+  // change's TOTAL, so the two must not borrow the shared 「会话耗时」 label
+  // that the change ledger also uses.
+  | 'card.stageDuration'
+  | 'card.stageTokens'
+  | 'card.totalDuration'
+  | 'card.totalTokens'
   | 'card.next'
   | 'card.condition'
   | 'card.done'
@@ -187,9 +195,9 @@ export type WorkflowTabKey =
   | 'intake.confirmation.rejected'
   | 'intake.heuristicNote'
   | 'intake.confidenceHelp'
-  // 【变更】2026-10-29 (批次三十六 · 用户问题 4): the visible 置信度 line.
-  | 'intake.confidenceNote'
   | 'intake.allowlist'
+  | 'intake.scopePending'
+  | 'intake.scopeFiles'
   | 'kind.new-requirement'
   | 'kind.bug'
   | 'kind.maintenance'
@@ -408,8 +416,11 @@ export type WorkflowTabKey =
   | 'ovw.detailConfidence'
   | 'ovw.detailReason'
   | 'ovw.detailConfirmation'
+  | 'ovw.detailConfirmationState'
+  | 'ovw.detailSummary'
   | 'ovw.detailTasks'
   | 'ovw.detailOpenSpec'
+  | 'ovw.detailOpenSpecHelp'
   | 'ovw.detailNoSession'
   | 'ovw.detailOpenFailed'
   // 【变更】2026-10-25 (批次二十四 1): the 文档产物 preview modal — the change
@@ -581,6 +592,8 @@ export type WorkflowTabKey =
   | 'stats.ttft'
   | 'stats.tokens'
   | 'stats.total'
+  | 'stats.changeTotal'
+  | 'stats.sessionTotal'
   | 'stats.input'
   | 'stats.cacheRead'
   | 'stats.cacheWrite'
@@ -734,7 +747,7 @@ export const en: Record<WorkflowTabKey, string> = {
   'tflow.cfgLoading': 'Reading…',
   'tflow.fmtPathLabel': 'Format path',
   'strip.current': 'Current',
-  'strip.totalTime': 'Session time',
+  'strip.totalTime': 'Flow time',
   'strip.totalTokens': 'Session tokens',
   'strip.empty': 'No active change — reference graph (template)',
   'strip.blocked': 'Blocked',
@@ -746,6 +759,10 @@ export const en: Record<WorkflowTabKey, string> = {
   'mode.help': 'Template = reference graph before a change starts. After intake: full-go-path / bug-fix-path / clarify-required.',
   'card.duration': 'Session time',
   'card.tokens': 'Tokens',
+  'card.stageDuration': 'Stage time',
+  'card.stageTokens': 'Stage tokens',
+  'card.totalDuration': 'Total time',
+  'card.totalTokens': 'Total tokens',
   'card.next': 'Next',
   'card.condition': 'When',
   'card.done': 'Done',
@@ -768,10 +785,8 @@ export const en: Record<WorkflowTabKey, string> = {
   'intake.heuristicNote': 'Kind / scope / confidence come from the system\'s initial assessment (a keyword hit decides directly; when keywords cannot decide, the model evaluates; an undecided scope shows To be determined, and confirming does not rewrite them). Mode is the path YOU picked on the classification card; the bug-fix pick settles kind = Bug.',
   'intake.confidenceHelp': 'Confidence = how strongly the system believes the path it recommends: a keyword hit (新增/需求/feat, bug/修复/fix, 重构/迁移) answers 100%, and when the keywords cannot decide the model evaluates the requirement and returns a real percentage. It only shapes the system\'s INITIAL suggestion — the path is settled by your click on the classification card, never by this number. It settles with the flow: kind at classification confirm, scope when the plan freezes the file allowlist.',
   'intake.allowlist': 'Allowlist',
-  // 【变更】2026-10-29 (批次三十六 · 用户问题 4): the customer asked what
-  // 置信度 is and what it is for — the answer is a line on the card, not a
-  // hover title.
-  'intake.confidenceNote': 'Confidence is how strongly the system believes the path it recommends: a keyword hit (新增 / 需求 / feat, bug / 修复 / fix, 重构 / 迁移) answers 100%, and when the keywords cannot decide the model evaluates the requirement and returns a real percentage. It only shapes the first suggestion — the path is the one you pick on the classification card.',
+  'intake.scopePending': 'No file touched yet — the scope settles once the plan freezes the file list: files under one directory read as within one module, files under several directories read as cross-module.',
+  'intake.scopeFiles': 'files',
   'intake.kind': 'Kind',
   'intake.mode': 'Mode',
   'intake.scope': 'Scope',
@@ -788,12 +803,12 @@ export const en: Record<WorkflowTabKey, string> = {
   'kind.maintenance': 'Maintenance',
   'kind.unknown': 'To be determined',
   'scope.single-file': 'Single file',
-  'scope.small-local': 'Small local change',
+  'scope.small-local': 'Within one module',
   'scope.cross-module': 'Cross-module',
   'scope.public-api': 'Public API',
   // 【变更】2026-09-25 (用户需求 工作流 7): the unsettled scope reads as the
   // plan-stage promise, not archive vocabulary — the plan freeze settles it.
-  'scope.unknown': 'To be confirmed at plan stage',
+  'scope.unknown': 'To be determined',
   'intake.confirm': 'Confirm classification',
   'intake.confirmFull': 'Confirm · Full path',
   'intake.confirmFullHelp': 'Confirm the classification and enter the full go path (one click: confirm + open)',
@@ -983,8 +998,11 @@ export const en: Record<WorkflowTabKey, string> = {
   'ovw.detailConfidence': 'Confidence',
   'ovw.detailReason': 'Reason',
   'ovw.detailConfirmation': 'Needs confirmation',
+  'ovw.detailConfirmationState': 'Confirmation',
+  'ovw.detailSummary': 'Requirement summary',
   'ovw.detailTasks': 'Tasks',
   'ovw.detailOpenSpec': 'Openspec',
+  'ovw.detailOpenSpecHelp': 'This change must be recorded as an OpenSpec change proposal (spec first) before any code is written.',
   'ovw.detailNoSession': 'No live session in this workspace — the artifacts are read-only here.',
   'ovw.detailOpenFailed': 'Could not open the artifact in the sidebar.',
   'ovw.artifactPreview': 'Document preview',
@@ -1106,7 +1124,10 @@ export const en: Record<WorkflowTabKey, string> = {
   'artifact.state.planned': 'planned',
   'artifact.state.filled': 'filled',
   // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail.
-  'artifact.state.completed': 'done',
+  // 【变更】2026-10-30 (用户问题 4): 「已完成」读起来像「这件事做完了」，但这一档
+  // 的真实含义是「客户已确认、文档被锁死」——改读「已锁定」(locked)，与锁文档的
+  // 行为一致。
+  'artifact.state.completed': 'locked',
   'artifact.state.updated': 'updated',
   'artifact.state.stale': 'to update',
   'artifact.state.clipped': 'clipped',
@@ -1127,6 +1148,8 @@ export const en: Record<WorkflowTabKey, string> = {
   'stats.ttft': 'First token',
   'stats.tokens': 'Tokens',
   'stats.total': 'Total',
+  'stats.changeTotal': 'This change',
+  'stats.sessionTotal': 'This session',
   'stats.input': 'Input (uncached)',
   'stats.cacheRead': 'Cache read',
   'stats.cacheWrite': 'Cache write',
@@ -1275,7 +1298,7 @@ export const zh: Record<WorkflowTabKey, string> = {
   'tflow.cfgLoading': '读取中…',
   'tflow.fmtPathLabel': '格式化路径',
   'strip.current': '当前',
-  'strip.totalTime': '会话耗时',
+  'strip.totalTime': '流程耗时',
   'strip.totalTokens': '会话 tokens',
   'strip.empty': '暂无变更 — 参考图（模板）',
   'strip.blocked': '阻断',
@@ -1287,6 +1310,10 @@ export const zh: Record<WorkflowTabKey, string> = {
   'mode.help': '模板 = 还没开始变更时的参考图。分类确认后才会变成完整流程 / 缺陷修复路径 / 需澄清。',
   'card.duration': '会话耗时',
   'card.tokens': 'Tokens',
+  'card.stageDuration': '阶段耗时',
+  'card.stageTokens': '阶段 Tokens',
+  'card.totalDuration': '合计耗时',
+  'card.totalTokens': '合计 Tokens',
   'card.next': '下一跳',
   'card.condition': '条件',
   'card.done': '已作',
@@ -1312,12 +1339,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   // 直接 100%，定不了时由大模型评估，悬停说明与卡片文案保持一致。
   'intake.confidenceHelp': '初判置信度 = 系统对「该走哪条路径」的把握：描述里命中「新增 / 需求 / feat」「bug / 修复 / fix」「重构 / 迁移」这类关键词时直接给 100%；关键词定不了时由大模型评估，给出真实的推荐百分比。它只影响系统的最初建议——路径由你在分类卡上的点选决定，与这个数字无关。这两个字段会随流程落定：类型在分类确认时确定，影响范围在计划冻结文件白名单时确定。',
   'intake.allowlist': '白名单',
-  // 【变更】2026-10-29 (批次三十六 · 用户问题 4): 客户问「置信度到底是什么、
-  // 有什么用」——答案直接写在卡片上，不再只藏在悬停提示里。
-  // 【变更】2026-10-29 (批次三十七 · 用户问题 4): 置信度不再是两档固定值——
-  // 关键词（中英文都算）直接命中就是 100%，关键词定不了时由大模型给出真实的
-  // 推荐百分比。
-  'intake.confidenceNote': '置信度是系统对「该走哪条路径」的把握：描述里命中「新增 / 需求 / feat」「bug / 修复 / fix」「重构 / 迁移」这类关键词时直接给 100%；关键词定不了时由大模型评估，给出真实的推荐百分比。它只影响系统的最初建议——流程走哪条路由，由你在分类确认卡上点。',
+  'intake.scopePending': '还没动文件——计划阶段冻结文件清单后按目录判定：都在一个目录下读作「模块内」，跨目录读作「跨模块」。',
+  'intake.scopeFiles': '个文件',
   'intake.kind': '类型',
   'intake.mode': '模式',
   'intake.scope': '影响范围',
@@ -1336,12 +1359,12 @@ export const zh: Record<WorkflowTabKey, string> = {
   // 选择在分类确认即定类型，其余在归档时随账本落定。
   'kind.unknown': '待分类/归档确定',
   'scope.single-file': '单文件',
-  'scope.small-local': '局部小改',
+  'scope.small-local': '模块内',
   'scope.cross-module': '跨模块',
   'scope.public-api': '公共 API',
   // 【变更】2026-09-25 (用户需求 工作流 7): 未落定的影响范围读「待计划阶段确认」——
   // 计划阶段冻结文件白名单时确定（pipeline settled-at-plan），不是归档时确定。
-  'scope.unknown': '待计划阶段确认',
+  'scope.unknown': '待确定',
   'intake.confirm': '确认分类',
   'intake.confirmFull': '确认 · 完整流程',
   'intake.confirmFullHelp': '确认分类并进入完整流程（一次点击 = 确认 + 进入建立变更）',
@@ -1537,8 +1560,11 @@ export const zh: Record<WorkflowTabKey, string> = {
   'ovw.detailConfidence': '置信度',
   'ovw.detailReason': '判定依据',
   'ovw.detailConfirmation': '需人工确认',
+  'ovw.detailConfirmationState': '确认状态',
+  'ovw.detailSummary': '需求摘要',
   'ovw.detailTasks': '任务进度',
   'ovw.detailOpenSpec': '需要 Openspec',
+  'ovw.detailOpenSpecHelp': '该变更须先落成 Openspec 变更提案（规格先行），再进入编码。',
   'ovw.detailNoSession': '该工作区没有可用会话 — 此处的阶段产物仅作只读展示。',
   'ovw.detailOpenFailed': '无法在侧栏打开该产物。',
   'ovw.artifactPreview': '文档预览',
@@ -1664,7 +1690,9 @@ export const zh: Record<WorkflowTabKey, string> = {
   'artifact.state.planned': '已计划',
   // 【变更】2026-10-29 (批次三十七 · 用户问题 6): the lifecycle tail — the
   // six-state ladder the customer reads on the 阶段产物 rail.
-  'artifact.state.completed': '已完成',
+  // 【变更】2026-10-30 (用户问题 4): 「已完成」→「已锁定」——这一档是「客户已确认、
+  // 文档被锁死」，不是「这件事做完了」。
+  'artifact.state.completed': '已锁定',
   'artifact.state.updated': '已更新',
   'artifact.state.stale': '待更新',
   'artifact.state.clipped': '已裁剪',
@@ -1686,6 +1714,8 @@ export const zh: Record<WorkflowTabKey, string> = {
   'stats.ttft': '首字延迟',
   'stats.tokens': 'Tokens',
   'stats.total': '合计',
+  'stats.changeTotal': '本变更',
+  'stats.sessionTotal': '本次会话',
   'stats.input': '输入（未命中）',
   'stats.cacheRead': '缓存读',
   'stats.cacheWrite': '缓存写',

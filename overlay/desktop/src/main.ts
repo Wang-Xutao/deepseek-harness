@@ -35,7 +35,7 @@ import { syncSkillTree } from './plugin-sync.ts'
 import { mergePrefs, parsePrefs, type AppPrefs, type CloseAction, DEFAULT_PREFS } from './prefs.ts'
 import { readyTimeoutMs } from './ready-timeout.ts'
 import { parseWebReadyUrl } from './ready-url.ts'
-import { DEFAULT_CHANNEL_TAG, DEFAULT_UPDATE_OWNER, DEFAULT_UPDATE_REPO } from './update/defaults.ts'
+import { DEFAULT_CHANNEL_TAG, DEFAULT_UPDATE_HOST, DEFAULT_UPDATE_PROJECT } from './update/defaults.ts'
 import { setSignaturePackaged } from './update/public-key.ts'
 import { UpdateService, updateRequestPath, updateResponsePath, updateStatePath, type CheckUpdateResult } from './update/service.ts'
 import { userFacingLaunchError } from './user-errors.ts'
@@ -378,7 +378,10 @@ function openSplash(): void {
     // 【变更】2026-10-29 (批次三十七 · 用户问题 1): the panel grew from 300px
     // to 340px so the logo group can sit clear of the slow-start hint row
     // (see `.logos` margin-top in ui/splash.css) without crowding it.
-    height: 340,
+    // 【变更】2026-10-30 (用户问题 1): the hint row came back too far — the
+    // mark now clears it by ~18px, so the panel shrinks back to 324px and the
+    // stack no longer floats over an empty band.
+    height: 324,
     resizable: false,
     frame: false,
     transparent: true,
@@ -544,10 +547,15 @@ async function createWindow(url: string): Promise<void> {
   await window.loadURL(url)
 }
 
-function githubConfig(): { owner: string, repo: string, channelTag: string } {
+/**
+ * 【变更】2026-10-30 (升级途径迁移): the update channel is a GITLAB project —
+ * the channel release af-channel-stable and the versioned releases live
+ * there, and the manifest signature stays the trust anchor.
+ */
+function gitlabConfig(): { host: string, project: string, channelTag: string } {
   return {
-    owner: DEFAULT_UPDATE_OWNER,
-    repo: DEFAULT_UPDATE_REPO,
+    host: DEFAULT_UPDATE_HOST,
+    project: DEFAULT_UPDATE_PROJECT,
     channelTag: DEFAULT_CHANNEL_TAG,
   }
 }
@@ -560,7 +568,7 @@ function createUpdateService(): UpdateService {
   return new UpdateService({
     userData,
     seedVersions: seedVersions(),
-    github: githubConfig(),
+    gitlab: gitlabConfig(),
     pluginDir: pluginDir(),
     runtimeDir: runtimeDir(),
     stopChild: () => {

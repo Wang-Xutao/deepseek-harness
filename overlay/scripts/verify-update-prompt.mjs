@@ -6,8 +6,8 @@
  *   通道检查 → 应用内更新弹窗 → 设置按钮的更新标签 → 真正落地的更新。
  *
  * 产品代码一行不改：
- *  - 通道地址写死在产品里（api.github.com + 仓库坐标），所以探针起一个本地假
- *    GitHub API，用 NODE_OPTIONS=--require 把指向 api.github.com 的请求改写过去
+ *  - 通道地址写死在产品里（GitLab host + 项目坐标），所以探针起一个本地假
+ *    GitLab API，用 NODE_OPTIONS=--require 把指向该 host 的请求改写过去
  *    （overlay/scripts/verify-update-prompt-fetch.cjs）；
  *  - 签名：探针跑的是开发态外壳，签名策略允许显式跳过（BAF_UPDATE_ALLOW_UNSIGNED=1），
  *    所以探针不依赖本机那把未入库的测试私钥；打包态拒绝测试 key 是产品策略，
@@ -194,10 +194,13 @@ function manifestBytes(epoch) {
 }
 
 /**
- * Serve the channel the way GitHub would.
+ * Serve the channel the way GitLab would: a release carries LINKS.
+ * 【变更】2026-10-30 (升级途径迁移): the update channel moved from GitHub
+ * Releases to GitLab Releases — the release JSON is `{ tag_name, assets: {
+ * links: [{ name, url }] } }` and the link URL is the download address.
  * @returns {Promise<{ base: string, hits: string[], close: () => Promise<void> }>} the server handle.
  */
-async function startMockGithub() {
+async function startMockGitlab() {
   const hits = []
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
@@ -206,35 +209,25 @@ async function startMockGithub() {
       res.writeHead(code, { 'Content-Type': type })
       res.end(body)
     }
-    if (url.pathname.includes('/releases/tags/')) {
-      const tag = decodeURIComponent(url.pathname.split('/releases/tags/')[1] ?? '')
+    if (url.pathname.includes('/releases/')) {
+      const tag = decodeURIComponent(url.pathname.split('/releases/')[1] ?? '')
       if (tag === 'baf-channel-stable') {
         send(200, JSON.stringify({
           tag_name: tag,
-          assets: [
-            { id: 1, name: 'manifest.json', browser_download_url: 'https://api.github.com/assets/manifest.json', url: 'https://api.github.com/assets/manifest.json', size: manifestBytes(EPOCH_BASE + epochCounter + 1).length },
-            { id: 2, name: 'manifest.sig', browser_download_url: 'https://api.github.com/assets/manifest.sig', url: 'https://api.github.com/assets/manifest.sig', size: 64 },
-          ],
+          assets: {
+            links: [
+              { name: 'manifest.json', url: 'https://gitlab.sinc.lan/assets/manifest.json' },
+              { name: 'manifest.sig', url: 'https://gitlab.sinc.lan/assets/manifest.sig' },
+            ],
+          },
         }))
         return
       }
       if (tag === manifest.tag) {
-        const assets = pluginArtifact === undefined
-          ? [{
-              id: 3,
-              name: manifest.artifacts.shell.name,
-              browser_download_url: 'https://api.github.com/assets/setup.exe',
-              url: 'https://api.github.com/assets/setup.exe',
-              size: manifest.artifacts.shell.size,
-            }]
-          : [{
-              id: 3,
-              name: pluginArtifact.name,
-              browser_download_url: `https://api.github.com/assets/${pluginArtifact.name}`,
-              url: `https://api.github.com/assets/${pluginArtifact.name}`,
-              size: pluginArtifact.size,
-            }]
-        send(200, JSON.stringify({ tag_name: tag, assets }))
+        const links = pluginArtifact === undefined
+          ? [{ name: manifest.artifacts.shell.name, url: 'https://gitlab.sinc.lan/assets/setup.exe' }]
+          : [{ name: pluginArtifact.name, url: `https://gitlab.sinc.lan/assets/${pluginArtifact.name}` }]
+        send(200, JSON.stringify({ tag_name: tag, assets: { links } }))
         return
       }
       send(404, JSON.stringify({ message: 'Not Found' }))
@@ -271,8 +264,8 @@ async function startMockGithub() {
   }
 }
 
-const mock = await startMockGithub()
-console.log('mock github:', mock.base)
+const mock = await startMockGitlab()
+console.log('mock gitlab:', mock.base)
 
 try { execFileSync('taskkill', ['/IM', 'electron.exe', '/F'], { stdio: 'ignore' }) } catch { /* nothing running */ }
 try { execFileSync('taskkill', ['/IM', 'baf-dsh.exe', '/F'], { stdio: 'ignore' }) } catch { /* nothing running */ }
@@ -671,7 +664,7 @@ if (variant === 'optional') {
   )
 }
 
-console.log('--- mock github hits ---')
+console.log('--- mock gitlab hits ---')
 console.log(mock.hits.join('\n'))
 console.log(JSON.stringify({ fail: out.fail, skipped: out.skipped }, null, 2))
 ws.close()

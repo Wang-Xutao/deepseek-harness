@@ -55,7 +55,10 @@ describe('工作流图 · the drift affordances (批次三十一)', () => {
     expect(screen.queryByTestId('flow-change-tag')).toBeNull()
   })
 
-  it('offers no advance when the change cannot advance', () => {
+  it('keeps the advance button in place but disabled when the change cannot advance', () => {
+    // 【变更】2026-10-30 (用户问题 3 补充): the button used to VANISH, leaving
+    // an empty slot in the toolbar that read as a missing button. It keeps its
+    // place now, disabled, and its title says what is missing.
     render(
       <FlowCanvas
         view={buildClientTemplateTabView()}
@@ -71,7 +74,8 @@ describe('工作流图 · the drift affordances (批次三十一)', () => {
         t={t}
       />,
     )
-    expect(screen.queryByTestId('flow-advance')).toBeNull()
+    const advance = screen.getByTestId('flow-advance') as HTMLButtonElement
+    expect(advance.disabled).toBe(true)
     expect(screen.getByTestId('flow-toggle-pause')).toBeTruthy()
   })
 
@@ -201,7 +205,9 @@ describe('工作流图 · the artifact labels and paths (批次三十四)', () =
     expect(zh['artifact.state.missing' as keyof typeof zh]).toBe('未生成')
     expect(zh['artifact.state.template' as keyof typeof zh]).toBe('未填写')
     expect(zh['artifact.state.filled' as keyof typeof zh]).toBe('已填写')
-    expect(zh['artifact.state.completed' as keyof typeof zh]).toBe('已完成')
+    // 【变更】2026-10-30 (用户问题 4): 「已完成」→「已锁定」——这一档是「客户
+    // 已确认、文档被锁死」，不是「这件事做完了」。
+    expect(zh['artifact.state.completed' as keyof typeof zh]).toBe('已锁定')
     expect(zh['artifact.state.updated' as keyof typeof zh]).toBe('已更新')
     expect(zh['artifact.state.stale' as keyof typeof zh]).toBe('待更新')
     expect(zh['artifact.drift.modified' as keyof typeof zh]).toBe('已修改')

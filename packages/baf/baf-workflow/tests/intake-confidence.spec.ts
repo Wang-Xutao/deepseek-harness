@@ -56,8 +56,21 @@ describe('the keyword layer (批次三十七 · 用户问题 4)', () => {
     })
     expect(rework.confidence).toBe(1)
     expect(rework.recommendedMode).toBe('full-go-path')
-    // 【变更】2026-10-29 (批次三十七): 重构 reaches across modules.
-    expect(rework.affectedScope).toBe('cross-module')
+    // 【变更】2026-10-30 (用户问题 8): 重构 says what KIND of change this is,
+    // never how wide it is — the scope stays 待定 until the plan freezes the
+    // file list (the customer asked: 「还没有修改代码文件，怎么就直接显示跨模块了」).
+    expect(rework.affectedScope).toBe('unknown')
+  })
+
+  it('keeps the scope the customer stated in their own words', () => {
+    // 【变更】2026-10-30 (用户问题 8): the BREADTH words are the customer's
+    // own statement about the blast radius — they are kept.
+    const broad = suggestIntake({
+      description: '这个改动要跨模块调整电源管理',
+      workspace: { root: '/tmp' },
+    })
+    expect(broad.affectedScope).toBe('cross-module')
+    expect(broad.reasonCodes).toContain('keyword-broad-scope')
   })
 
   it('a requirement that reads as both a defect and a rework stays undecided', () => {

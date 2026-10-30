@@ -91,4 +91,120 @@ describe('deriveWorkflowMetrics', () => {
     expect(derived.byNode.implement?.durationMs).toBe(90_000)
     expect(derived.byNode.verify?.inputTokens).toBeUndefined()
   })
+
+  it('2026-10-30 (用户问题 7): takes the approval WAIT out of 流程耗时', () => {
+    // The model works the open stage; the customer is asked to allow an
+    // operation and answers 40 s later. The wait is not work time.
+    const events = [
+      { type: 'stage-entered', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', node: 'open' },
+    ] as unknown as ProjectionEvent[]
+
+    const t = (s: string): number => Date.parse(`2026-01-01T00:${s}.000Z`)
+    const derived = deriveWorkflowMetrics(events, t('01:30'), [], [
+      { startMs: t('00:30'), endMs: t('01:10') },
+    ])
+    // 90 s of wall time minus the 40 s the customer spent deciding.
+    expect(derived.byNode.open?.durationMs).toBe(50_000)
+    expect(derived.totals.totalDurationMs).toBe(50_000)
+    // The wait is over and the model works again — the timer runs.
+    expect(derived.totals.running).toBe(true)
+  })
+
+  it('2026-10-30 (用户问题 7): a PENDING approval freezes the live clock', () => {
+    const events = [
+      { type: 'stage-entered', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', node: 'open' },
+    ] as unknown as ProjectionEvent[]
+
+    const t = (s: string): number => Date.parse(`2026-01-01T00:${s}.000Z`)
+    const pending = deriveWorkflowMetrics(events, t('01:00'), [], [
+      { startMs: t('00:30') },
+    ])
+    // The window is still open, but the change is blocked on the customer:
+    // the clock must freeze, and the wait so far is not work time.
+    expect(pending.totals.running).toBe(false)
+    expect(pending.totals.totalDurationMs).toBe(30_000)
+  })
+
+  it('2026-10-30 (用户问题 7): a DANGLING approval ask never freezes the clock forever', () => {
+    // The demo6 session carried four asks with no decision (the session was
+    // interrupted). A stale ask is not evidence of a live wait — it must not
+    // freeze the change's clock nor eat its duration.
+    const events = [
+      { type: 'stage-entered', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', node: 'open' },
+    ] as unknown as ProjectionEvent[]
+
+    // Two hours later: the ask is long dead.
+    const stale = deriveWorkflowMetrics(events, Date.parse('2026-01-01T02:00:00.000Z'), [], [
+      { startMs: Date.parse('2026-01-01T00:00:00.000Z') },
+    ])
+    expect(stale.totals.running).toBe(true)
+    expect(stale.totals.totalDurationMs).toBe(7_200_000)
+  })
+
+  it('2026-10-30 (用户问题 2.3): counts only the time the model was actually running', () => {
+    // The stage sat open for ten minutes; the model ran two of them and came
+    // back for two more. The other six were the customer's.
+    const events = [
+      { type: 'stage-entered', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', node: 'open' },
+      { type: 'stage-completed', seq: 2, eventId: 'b', at: '2026-01-01T00:10:00.000Z', node: 'open', artifacts: [] },
+    ] as unknown as ProjectionEvent[]
+
+    const derived = deriveWorkflowMetrics(events, Date.parse('2026-01-01T00:10:00.000Z'), [], [], {
+      spans: [
+        { startMs: Date.parse('2026-01-01T00:00:00.000Z'), endMs: Date.parse('2026-01-01T00:02:00.000Z') },
+        { startMs: Date.parse('2026-01-01T00:07:00.000Z'), endMs: Date.parse('2026-01-01T00:09:00.000Z') },
+      ],
+      running: false,
+    })
+    expect(derived.byNode.open?.durationMs).toBe(4 * 60_000)
+    expect(derived.totals.totalDurationMs).toBe(4 * 60_000)
+  })
+
+  it('2026-10-30 (用户问题 2.3): a STOPPED model freezes the clock on an open stage', () => {
+    // The change's stage never completed and the model was stopped at 00:10 —
+    // the timer used to run forever against the open window.
+    const events = [
+      { type: 'stage-entered', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', node: 'open' },
+    ] as unknown as ProjectionEvent[]
+
+    const derived = deriveWorkflowMetrics(events, Date.parse('2026-01-01T01:00:00.000Z'), [], [], {
+      spans: [{ startMs: Date.parse('2026-01-01T00:00:00.000Z'), endMs: Date.parse('2026-01-01T00:10:00.000Z') }],
+      running: false,
+    })
+    expect(derived.totals.running).toBe(false)
+    expect(derived.totals.totalDurationMs).toBe(10 * 60_000)
+  })
+
+  it('2026-10-30 (用户问题 2.3): an OPEN turn runs while the agent is running', () => {
+    const events = [
+      { type: 'stage-entered', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', node: 'open' },
+    ] as unknown as ProjectionEvent[]
+
+    const derived = deriveWorkflowMetrics(events, Date.parse('2026-01-01T00:30:00.000Z'), [], [], {
+      spans: [{ startMs: Date.parse('2026-01-01T00:00:00.000Z') }],
+      running: true,
+    })
+    expect(derived.totals.running).toBe(true)
+    expect(derived.totals.totalDurationMs).toBe(30 * 60_000)
+  })
+
+  it('2026-10-30 (用户问题 2.3): a parked gate is excluded even inside a running turn', () => {
+    // The gate pops INSIDE the turn — the model is blocked on the customer
+    // while its turn is open — so the turn span alone would count the wait.
+    // The park closes the window; the two rules compose.
+    const events = [
+      { type: 'stage-entered', seq: 1, eventId: 'a', at: '2026-01-01T00:00:00.000Z', node: 'open' },
+      { type: 'awaiting-confirm', seq: 2, eventId: 'b', at: '2026-01-01T00:01:00.000Z' },
+      { type: 'stage-entered', seq: 3, eventId: 'c', at: '2026-01-01T00:03:00.000Z', node: 'open' },
+      { type: 'stage-completed', seq: 4, eventId: 'd', at: '2026-01-01T00:06:00.000Z', node: 'open', artifacts: [] },
+    ] as unknown as ProjectionEvent[]
+
+    const derived = deriveWorkflowMetrics(events, Date.parse('2026-01-01T00:06:00.000Z'), [], [], {
+      spans: [{ startMs: Date.parse('2026-01-01T00:00:00.000Z'), endMs: Date.parse('2026-01-01T00:06:00.000Z') }],
+      running: false,
+    })
+    // One minute before the gate, three minutes after the answer — the two
+    // minutes the customer took are NOT counted, although the turn was open.
+    expect(derived.byNode.open?.durationMs).toBe(4 * 60_000)
+  })
 })

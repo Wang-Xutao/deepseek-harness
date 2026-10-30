@@ -16,7 +16,7 @@ import type {
   WorkflowDashboardRow,
   WorkflowDashboardView,
 } from '@deepseek-ai/dsh-baf-core'
-import { deriveWorkflowMetrics, type UsagePoint } from './metrics.ts'
+import { deriveWorkflowMetrics, type ApprovalWait, type ModelActivity, type UsagePoint } from './metrics.ts'
 import type { ProjectionIndexEntry, ProjectionStore } from './projection.ts'
 import { changeArtifactStatus } from './stages/gates.ts'
 
@@ -59,17 +59,21 @@ async function taskCounts(workspaceRoot: string, changeId: string): Promise<{ do
  * of every session that ever drove this workspace fold correctly without a
  * per-change session map; points outside every window (preamble turns) are
  * unattributed by design. Absent (the old call shape) keeps rows token-less.
+ * @param approvalWaits - 【变更】2026-10-30 (用户问题 7): the spans the customer
+ * spent deciding an approval — they are taken out of the row's duration.
  * @returns every change row (newest first) plus the header rollups.
  */
 export async function buildWorkflowDashboard(
   store: ProjectionStore,
   usagePoints: readonly UsagePoint[] = [],
+  approvalWaits: readonly ApprovalWait[] = [],
+  modelActivity?: ModelActivity,
 ): Promise<WorkflowDashboardView> {
   const workspaceRoot = store.workspaceRoot()
   const index = await store.readIndex()
   const rows: WorkflowDashboardRow[] = []
   for (const entry of index.changes) {
-    const row = await dashboardRowFor(store, workspaceRoot, entry, usagePoints)
+    const row = await dashboardRowFor(store, workspaceRoot, entry, usagePoints, approvalWaits, modelActivity)
     rows.push(row)
   }
   // Newest activity first — the same ranking pickActiveChange applies.
@@ -126,6 +130,8 @@ async function dashboardRowFor(
   workspaceRoot: string,
   entry: ProjectionIndexEntry,
   usagePoints: readonly UsagePoint[],
+  approvalWaits: readonly ApprovalWait[],
+  modelActivity?: ModelActivity,
 ): Promise<WorkflowDashboardRow> {
   const base: WorkflowDashboardRow = {
     changeId: entry.changeId,
@@ -144,7 +150,12 @@ async function dashboardRowFor(
     const startedAt = events[0]?.at
     // 【变更】2026-09-28 (用户问题 4): usage samples ride along so per-node
     // tokens attribute by stage windows — same fold the Tab view runs.
-    const { byNode } = deriveWorkflowMetrics(events, Date.now(), usagePoints)
+    // 【变更】2026-10-30 (用户问题 2.3): the model's ACTIVITY rides along too —
+    // the row's 会话耗时 counts only the time the model was working. Without
+    // it the ledger reported a change that never finished as 「704m6s」: the
+    // stage window stayed open and the wall clock kept running long after the
+    // model had stopped.
+    const { byNode } = deriveWorkflowMetrics(events, Date.now(), usagePoints, approvalWaits, modelActivity)
     // Every present node's duration/tokens sum to the row's rollup.
     let durationMs = 0
     let inputTokens = 0

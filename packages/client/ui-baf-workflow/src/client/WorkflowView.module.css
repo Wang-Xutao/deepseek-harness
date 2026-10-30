@@ -80,19 +80,11 @@
  * PAUSED change switches it off (`nodeRunning` is not applied at all), so a
  * paused workflow looks still — the brake is visible in the picture, not only in
  * the button label.
+ *
+ * 【变更】2026-10-30 (用户问题 4): the pulse itself was rewritten — it lives
+ * next to the selection frame below, because both are the graph's 「what is
+ * happening NOW」 language.
  */
-@keyframes wfRunPulse {
-  0%, 100% {
-    box-shadow:
-      0 0 0 0 color-mix(in srgb, var(--wf-accent) 42%, transparent),
-      0 10px 24px -16px color-mix(in srgb, #000 28%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 0 8px color-mix(in srgb, var(--wf-accent) 0%, transparent),
-      0 14px 30px -16px color-mix(in srgb, var(--wf-accent) 55%, transparent);
-  }
-}
 
 .strip {
   display: flex;
@@ -550,8 +542,68 @@
   animation: wfFadeUp 380ms ease both, wfPulse 2.2s ease-in-out infinite;
 }
 
-.nodeSelected { border-color: var(--wf-ink); }
+/*
+ * 【变更】2026-10-30 (用户问题 4): the SELECTED card.
+ *
+ * It used to be ONE declaration — `border-color: var(--wf-ink)` — which drew
+ * a 1px near-black box around the card; the customer called it 「很丑的黑色选中
+ * 框」. The frame is now the brand gold, and it is drawn OUTSIDE the card by a
+ * pseudo-element: the card's own box-shadow belongs to the RUNNING pulse
+ * (a CSS animation overwrites a static box-shadow on every frame), so a
+ * selection ring painted with box-shadow would vanish the moment the selected
+ * stage started running. A pseudo-element owns its own layer and survives the
+ * pulse.
+ */
+.nodeSelected {
+  border-color: color-mix(in srgb, var(--wf-accent) 90%, transparent);
+  border-width: 2px;
+  z-index: 3;
+}
+
+.nodeSelected::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 18px;
+  border: 1.5px solid color-mix(in srgb, var(--wf-accent) 88%, transparent);
+  box-shadow:
+    0 0 20px -2px color-mix(in srgb, var(--wf-accent) 72%, transparent),
+    0 0 44px -14px color-mix(in srgb, var(--wf-accent) 60%, transparent);
+  pointer-events: none;
+  animation: wfSelectGlow 2.4s ease-in-out infinite;
+}
+
+/* The selection breathes — a slow brighten, never a strobe. */
+@keyframes wfSelectGlow {
+  0%, 100% { opacity: 0.68; }
+  50% { opacity: 1; }
+}
+
 .nodeOffPath { opacity: 0.75; }
+
+/*
+ * 【变更】2026-10-30 (用户问题 4): the RUNNING card's halo was too quiet — a
+ * 0→8px ring fading to nothing, which on a busy canvas read as a static card.
+ * The pulse now spreads wider (2→14px), carries a real outer GLOW that never
+ * fully fades, and lifts the card's own brightness — the live stage is
+ * unmistakable at a glance.
+ */
+@keyframes wfRunPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--wf-accent) 58%, transparent),
+      0 0 16px -2px color-mix(in srgb, var(--wf-accent) 58%, transparent),
+      0 10px 24px -16px color-mix(in srgb, #000 28%, transparent);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 14px color-mix(in srgb, var(--wf-accent) 0%, transparent),
+      0 0 34px 2px color-mix(in srgb, var(--wf-accent) 78%, transparent),
+      0 14px 30px -16px color-mix(in srgb, var(--wf-accent) 60%, transparent);
+    filter: brightness(1.08);
+  }
+}
 
 /* 【变更】2026-10-27 (批次三十二 · 用户问题 8): the stage the model is working
    on NOW — the running halo. Absent while the change is paused, so a paused
@@ -1491,18 +1543,9 @@
   word-break: break-word;
 }
 
-/* 【变更】2026-10-29 (批次三十六 · 用户问题 4): the 置信度 explanation line —
-   the number's meaning was only on a hover title, so the customer could not
-   read what it is or what it is for. */
-.intakeNote {
-  margin-top: 0.45rem;
-  padding-top: 0.45rem;
-  border-top: 1px solid var(--wf-line);
-  color: var(--wf-muted);
-  font-size: 0.7rem;
-  line-height: 1.5;
-  word-break: break-word;
-}
+/* 【变更】2026-10-30 (用户问题 1): the 置信度 说明段落 (.intakeNote) is
+   deleted — the customer asked for it to go; the hover title still explains
+   the number. The rule stays as a placeholder-free block. */
 
 /* 【变更】2026-09-24 (demo6 问题 4): the history modal's records column under
    the canvas — the graph keeps its size, the records scroll. */
@@ -1999,7 +2042,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flowNode, .card, .edge, .edgeActive, .nodeCurrent { animation: none; }
+  /* 【变更】2026-10-30 (用户问题 4): the running card and the selection frame
+     are animated too — the rule used to spare them, so a reduced-motion user
+     still got a pulsing graph. */
+  .flowNode, .card, .edge, .edgeActive, .nodeCurrent, .nodeRunning, .nodeSelected::after {
+    animation: none;
+  }
 }
 
 /* §18.5 parked gate: a distinct "waiting on you" state, deliberately not the

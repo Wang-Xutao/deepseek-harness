@@ -392,7 +392,7 @@ BAF 不是：单独的一段 system prompt、单独的 `baf` 命令、单独的 
 | session 模型选择               | `packages/api/session-controller/src/{agent,commands,catalog}.ts`（projection、header 恢复、`session/model-unavailable`）                              |
 | 默认模型                       | `packages/core/agent-default-model`                                                                                                                      |
 | usage/定价                     | `packages/llm/token-meter`                                                                                                                               |
-| desktop 更新                   | `overlay/desktop/src/update/{manifest,github,plan,apply,service}.ts`、`overlay/desktop/src/versions.ts`                                                |
+| desktop 更新                   | `overlay/desktop/src/update/{manifest,gitlab,plan,apply,service}.ts`、`overlay/desktop/src/versions.ts`                                                |
 
 host-plane service 不得放进 preset 的 per-agent isolate realm，否则产生实例泄漏、重复注册或桌面侧无法读取。
 
@@ -1076,7 +1076,9 @@ locked / available / in-progress / completed / failed / blocked / drifted / skip
 
 ### 11.3 Manifest 签名和下载
 
-`generate-manifest.mjs` 生成 canonical JSON、artifact SHA-256、逐文件 hash 和 Ed25519 signature；CI 私钥只来自 secret；`public-key.ts` 用正式公钥和 key id；生产强制签名（缺签名/错 key/签名不匹配/过期直接拒绝）；开发模式跳过必须显式配置且不进生产构建；`github.ts` 继续负责下载校验。
+`generate-manifest.mjs` 生成 canonical JSON、artifact SHA-256、逐文件 hash 和 Ed25519 signature；CI 私钥只来自 secret；`public-key.ts` 用正式公钥和 key id；生产强制签名（缺签名/错 key/签名不匹配/过期直接拒绝）；开发模式跳过必须显式配置且不进生产构建；`gitlab.ts` 继续负责下载校验。
+
+【变更】2026-10-30 (升级途径迁移)：更新通道从 GitHub Releases 迁到 **GitLab Releases**（host `gitlab.sinc.lan`，项目 `ai/workflow/baf-dsh`，公开项目、更新器不带令牌）。通道 Release `baf-channel-stable` 带 `manifest.json` + `manifest.sig`，版本 Release `baf-dsh-v<version>` 带 `baf-plugin-*.zip` / `baf-runtime-*.zip` / `baf-dsh-Setup-*.exe`；产物以 **release links** 挂载（指向 CI 产物或对象存储直链），读取侧按 link 的 `url` 直取，签名仍是唯一信任锚。
 
 ### 11.4 应用和回滚
 
@@ -1688,7 +1690,7 @@ export function resolveRoute(
 - `packages/preset/agent-presets/tests/{display,shipped-root,composition-inventory,authoring}.spec.ts`（BAF roster 断言）+ 新增 `tests/baf-roster.spec.ts`；
 - `packages/client/ui-agent-preset` 快照与 e2e（`apps/web/tests/agent-preset-authoring.e2e.ts`、`apps/cli/tests/web-agent-presets.e2e.ts`）；
 - `overlay/desktop/src/versions.ts`（schema 2 迁移）；
-- `overlay/desktop/src/update/{manifest,github,public-key,plan,apply,service}.ts`（schema 2、签名、scoped plan/apply）；
+- `overlay/desktop/src/update/{manifest,gitlab,public-key,plan,apply,service}.ts`（schema 2、签名、scoped plan/apply）；
 - `overlay/desktop/src/{main.ts,preload-desktop.ts}`（splash、IPC）；
 - `overlay/scripts/{pack-plugin,pack-dsh,generate-manifest,build-release}.mjs`；
 - `packages/baf/baf-workflow/src/{commands.ts,cmdline.ts,command-drives.ts,command-format.ts,stages/pipeline.ts,index.ts}`（Phase 8.7–8.10：`/baf-go`、`/baf-workflow-resume`、输出规范、`driveResumeStage`）；

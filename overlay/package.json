@@ -18,6 +18,7 @@
     "verify-update-prompt": "node scripts/verify-update-prompt.mjs",
     "build-release": "node scripts/build-release.mjs",
     "publish-release": "node scripts/publish-release.mjs",
+    "publish-release-gitlab": "node scripts/publish-release-gitlab.mjs",
     "release": "node scripts/build-release.mjs && node scripts/publish-release.mjs",
     "test": "npm --prefix desktop test",
     "dist": "npm run fetch-node && npm run docs:build && npm run brand-web && npm run verify-help-build && npm run pack-dsh && npm run prepare-branding && npm --prefix desktop run dist",

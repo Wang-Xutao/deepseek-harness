@@ -38,18 +38,154 @@ export interface UsagePoint {
 }
 
 /**
+ * 【变更】2026-10-30 (用户问题 7): one approval WAIT — the span between the
+ * moment the harness asked the customer to allow an operation and the moment
+ * the customer answered.
+ *
+ * The wait is not work: the model is blocked on a human, exactly like it is
+ * blocked at a confirmation gate. The customer asked that 「等待审批」 not count
+ * toward 流程耗时 — so the fold takes these spans OUT of the stage durations.
+ *
+ * A wait with no `endMs` is still PENDING — the customer has not answered yet.
+ * While one is pending the change is not running either, so the client clock
+ * freezes on the last real figure.
+ */
+export interface ApprovalWait {
+  /** Epoch ms of the `approval/asked` event. */
+  readonly startMs: number
+  /** Epoch ms of the `approval/decided` event; undefined while pending. */
+  readonly endMs?: number
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 7): how long an approval ask may stay "pending"
+ * before it counts as dead.
+ *
+ * The session log records `approval/asked` before the customer answers and
+ * `approval/decided` after. An ask WITHOUT a decision is normally a live
+ * approval — the model is blocked on the customer, so the clock must freeze
+ * and the wait must not count. But a session that was interrupted (or a
+ * customer who dismissed the card) leaves the ask dangling FOREVER — the
+ * demo6 session carried four of them — and a dangling ask must not freeze
+ * the change's clock for the rest of its life.
+ *
+ * So a pending ask counts only while it is recent enough to still be on
+ * screen; beyond that window the evidence is stale and nothing is excluded.
+ */
+export const PENDING_APPROVAL_WINDOW_MS = 30 * 60_000
+
+/**
+ * 【变更】2026-10-30 (用户问题 2.3): one MODEL-ACTIVE span — a turn the agent
+ * loop actually ran.
+ *
+ * The session log brackets every turn with `turn/start` → `turn/end`. Inside a
+ * turn the model is working; between turns it is not — the customer is typing,
+ * a confirmation gate is open, the workflow is paused, or the model was
+ * stopped. The customer asked that 会话耗时 count ONLY 「大模型在跑的时间」, so
+ * the fold measures every stage window against these spans: the time the
+ * customer spent away, the time a paused workflow sat still, and the time a
+ * stopped model waited never reach the total.
+ *
+ * A span with no `endMs` is still OPEN — the turn has not ended in the log.
+ */
+export interface ModelSpan {
+  /** Epoch ms of the `turn/start` event. */
+  readonly startMs: number
+  /** Epoch ms of the `turn/end` event; undefined while the turn is open. */
+  readonly endMs?: number
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 2.3): what the model was doing, as the host
+ * read it from the session log.
+ *
+ * `spans` is EMPTY when the host could not read the log (an old session, a
+ * log it cannot open). The fold then measures the stage windows the way it
+ * always did — the measure degrades to the old one instead of collapsing to
+ * zero.
+ */
+export interface ModelActivity {
+  /** The turns the agent loop ran, oldest first. */
+  readonly spans: readonly ModelSpan[]
+  /**
+   * Whether the agent is running RIGHT NOW. The host reads the live agent's
+   * status; `undefined` means it could not tell (a dead session, a test
+   * composition without an agent), and the fold then treats an OPEN turn as
+   * running.
+   */
+  readonly running?: boolean
+}
+
+/**
+ * Merge the model's spans into disjoint intervals, oldest first.
+ * @param spans - the raw spans (an open span runs to `nowMs`).
+ * @param nowMs - the clock an open span runs to.
+ * @returns the merged, disjoint spans.
+ */
+function mergeModelSpans(spans: readonly ModelSpan[], nowMs: number): { startMs: number; endMs: number }[] {
+  const sorted = spans
+    .map(span => ({ startMs: span.startMs, endMs: span.endMs ?? nowMs }))
+    .filter(span => span.endMs > span.startMs)
+    .sort((a, b) => a.startMs - b.startMs)
+  const merged: { startMs: number; endMs: number }[] = []
+  for (const span of sorted) {
+    const last = merged[merged.length - 1]
+    if (last !== undefined && span.startMs <= last.endMs) {
+      last.endMs = Math.max(last.endMs, span.endMs)
+      continue
+    }
+    merged.push({ ...span })
+  }
+  return merged
+}
+
+/**
+ * The parts of `[start, end)` that fall inside the model's active spans.
+ * @param start - the interval's start.
+ * @param end - the interval's end.
+ * @param spans - the merged active spans; undefined = the whole interval.
+ * @returns the covered sub-intervals.
+ */
+function activeParts(
+  start: number,
+  end: number,
+  spans: readonly { startMs: number; endMs: number }[] | undefined,
+): { start: number; end: number }[] {
+  if (spans === undefined) return [{ start, end }]
+  const parts: { start: number; end: number }[] = []
+  for (const span of spans) {
+    const from = Math.max(start, span.startMs)
+    const to = Math.min(end, span.endMs)
+    if (to > from) parts.push({ start: from, end: to })
+  }
+  return parts
+}
+
+/**
  * Fold projection events into stage duration metrics, attributing usage
  * points to stages by their time windows.
  * @param events - ordered projection events.
  * @param nowMs - clock for open in-progress stages (tests inject).
  * @param usagePoints - the session's per-step usage samples, any order.
+ * @param approvalWaits - 【变更】2026-10-30 (用户问题 7): the spans where the
+ * customer was deciding an approval — they are taken OUT of the durations.
+ * @param modelActivity - 【变更】2026-10-30 (用户问题 2.3): the turns the model
+ * actually ran — the durations count only the time inside them.
  * @returns per-node and total metrics.
  */
 export function deriveWorkflowMetrics(
   events: readonly ProjectionEvent[],
   nowMs: number = Date.now(),
   usagePoints: readonly UsagePoint[] = [],
+  approvalWaits: readonly ApprovalWait[] = [],
+  modelActivity?: ModelActivity,
 ): DerivedWorkflowMetrics {
+  // 【变更】2026-10-30 (用户问题 2.3): the model's active spans — the turns the
+  // agent loop ran. Undefined (no spans read) means the measure degrades to
+  // the window durations it always had, instead of collapsing to zero.
+  const modelSpans = modelActivity?.spans ?? []
+  const activeSpans = modelSpans.length === 0 ? undefined : mergeModelSpans(modelSpans, nowMs)
+  const hasOpenTurn = modelSpans.some(span => span.endMs === undefined)
   const enteredAt = new Map<WorkflowNode, number>()
   const durationMs = new Map<WorkflowNode, number>()
   // Stage windows in event order: [enter(node), enter(next non-same node)).
@@ -67,6 +203,13 @@ export function deriveWorkflowMetrics(
     enteredAt.set(node, ms)
     // A re-entry (T11 verify→implement→verify, drift resumes) opens a NEW
     // window; usage attribution keeps them separate, durations accumulate.
+    // 【变更】2026-10-30 (用户问题 7): the previous window of the SAME node is
+    // closed where the new one opens — otherwise it stayed open forever and
+    // every approval wait after it was counted twice.
+    const previous = windowIndex.get(node)
+    if (previous !== undefined && windows[previous] !== undefined && windows[previous].end === Number.POSITIVE_INFINITY) {
+      windows[previous].end = ms
+    }
     windows.push({ node, start: ms, end: Number.POSITIVE_INFINITY })
     windowIndex.set(node, windows.length - 1)
   }
@@ -83,9 +226,9 @@ export function deriveWorkflowMetrics(
     // count toward the change's 耗时.
     // 【变更】2026-10-29 (批次三十七 · 用户问题 5): the DRIFT window is the
     // same shape — the change is frozen on a customer decision.
-    if (node !== 'intake' && node !== 'drift') {
-      durationMs.set(node, (durationMs.get(node) ?? 0) + (end - start))
-    }
+    // 【变更】2026-10-30 (用户问题 2.3): the duration itself is derived from
+    // the WINDOWS after the fold, clipped to the model's active spans — so
+    // this step only closes the window.
     enteredAt.delete(node)
     // Close every later window opened before this leave (the chain walk on
     // re-entries); the simple common case closes exactly this node's window.
@@ -160,19 +303,61 @@ export function deriveWorkflowMetrics(
     }
   }
 
-  // 【变更】2026-09-28 (用户问题 4 停表): `running` — a WORK stage's window is
-  // still open (entered, not completed): the model is actively working this
-  // change, so the Tab's live timer may tick. Intake (customer confirm wait)
-  // and drift (customer resume decision) never count as running.
-  const running
-    = [...enteredAt.keys()].some(node => node !== 'intake' && node !== 'drift')
+  // 【变更】2026-10-30 (用户问题 7): an approval the customer has NOT answered
+  // yet blocks the model exactly like a confirmation gate does — the change is
+  // not running, so the client clock freezes and the pending wait is not
+  // counted. A DANGLING ask (no decision in the log — an interrupted session,
+  // a dismissed card) only counts while it is recent enough to still be on
+  // screen: the demo6 session carried four such asks, and they must not
+  // freeze the change's clock for the rest of its life.
+  const livePending = approvalWaits.filter(wait =>
+    wait.endMs === undefined
+    && wait.startMs <= nowMs
+    && nowMs - wait.startMs <= PENDING_APPROVAL_WINDOW_MS)
+  const approvalPending = livePending.length > 0
 
-  for (const [node, start] of enteredAt) {
-    // 【变更】2026-10-29 (批次三十七 · 用户问题 5): the drift window is a
-    // customer decision (the change is frozen on it), so it accrues no
-    // duration either.
-    if (nowMs >= start && node !== 'intake' && node !== 'drift') {
-      durationMs.set(node, (durationMs.get(node) ?? 0) + (nowMs - start))
+  // The waits that are real evidence of a customer wait: every decided pair,
+  // plus a pending one that is still live (its wait runs up to now).
+  const effectiveWaits = approvalWaits.flatMap((wait) => {
+    if (wait.endMs !== undefined) return [{ startMs: wait.startMs, endMs: wait.endMs }]
+    if (livePending.includes(wait)) return [{ startMs: wait.startMs, endMs: nowMs }]
+    return []
+  })
+
+  // 【变更】2026-09-28 (用户问题 4 停表): `running` — a WORK stage's window is
+  // still open (entered, not completed) AND the model is running on the
+  // change: the Tab's live timer may tick. Intake (customer confirm wait)
+  // and drift (customer resume decision) never count as running.
+  //
+  // 【变更】2026-10-30 (用户问题 2.3): the window alone was not enough. A
+  // change whose stage never completed — the customer stopped the model, or
+  // the session was left open — kept its window open forever, and the strip's
+  // timer ran forever against it: the customer saw 「会话耗时 一直在跑」 on a
+  // session where nothing was running. The model must be running NOW.
+  const stageOpen = [...enteredAt.keys()].some(node => node !== 'intake' && node !== 'drift')
+  const modelRunning = modelActivity === undefined ? true : (modelActivity.running ?? hasOpenTurn)
+  const running = !approvalPending && stageOpen && modelRunning
+
+  // 【变更】2026-10-30 (用户问题 2.3): the per-node durations come from the
+  // WINDOWS, clipped to the model's active spans and minus the approval waits.
+  //
+  // A window is the exact span the workflow sat in a stage. Clipping it to
+  // the turns the model ran is what turns it into 「大模型在跑的时间」: the
+  // customer's typing time, a paused workflow and a stopped model never reach
+  // the total. The approval waits are then taken out of what is left — the
+  // model was blocked on a human there too.
+  for (const window of windows) {
+    if (window.node === 'intake' || window.node === 'drift') continue
+    const windowEnd = window.end === Number.POSITIVE_INFINITY ? nowMs : window.end
+    for (const part of activeParts(window.start, windowEnd, activeSpans)) {
+      let approved = 0
+      for (const wait of effectiveWaits) {
+        const from = Math.max(part.start, wait.startMs)
+        const to = Math.min(part.end, wait.endMs)
+        if (to > from) approved += to - from
+      }
+      const worked = Math.max(0, part.end - part.start - approved)
+      durationMs.set(window.node, (durationMs.get(window.node) ?? 0) + worked)
     }
   }
 

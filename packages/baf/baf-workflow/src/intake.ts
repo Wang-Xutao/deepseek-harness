@@ -206,9 +206,13 @@ export function suggestIntake(input: IntakeInput): IntakeCandidate {
   }
 
   let affectedScope: AffectedScope = scopeHint
-  if (signals.rework || signals.broad) {
-    // 【变更】2026-10-29 (批次三十七 · 用户问题 4): 重构 / 大范围 changes reach
-    // across modules, so the blast radius is cross-module — the full path.
+  if (signals.broad) {
+    // 【变更】2026-10-30 (用户问题 8): only the customer's OWN breadth words
+    // set the scope. The rework group (重构 / 迁移 / 改造 …) says what KIND of
+    // change this is, never how wide it is — a rework of ONE module read as
+    // 「跨模块」 on the classification card although no file had been touched
+    // yet. The scope is settled by the plan's frozen file list (see
+    // `deriveScopeFromAllowlist`), so until then it stays 待定.
     affectedScope = 'cross-module'
     reasonCodes.push('keyword-broad-scope')
   } else if (PUBLIC_API_RE.test(text)) {
@@ -297,7 +301,14 @@ export function reviewIntake(
   // 【变更】2026-10-29 (批次三十七 · 用户问题 4): the low-confidence guard now
   // reads the model's own percentage — a requirement the model is unsure
   // about still goes to the clarification branch instead of guessing.
-  if (kind === 'unknown' || confidence < 0.55 || affectedScope === 'unknown') {
+  // 【变更】2026-10-30 (用户问题 8): an UNSETTLED scope alone no longer sends
+  // the change into the clarification branch: the scope is settled by the
+  // plan's frozen file list, and a new requirement's PATH is already decided
+  // by its kind (完整流程). Only a DEFECT depends on the scope — the fast path
+  // is only legal for a small blast radius — so an unsettled scope still asks
+  // the customer which path to take there.
+  const scopeUndecided = affectedScope === 'unknown'
+  if (kind === 'unknown' || confidence < 0.55 || (scopeUndecided && kind === 'bug')) {
     mode = 'clarify-required'
     reasonCodes.push('clarify-required')
   }
@@ -410,9 +421,12 @@ export async function classifyIntakeWithConfidence(
   const recommendedMode: WorkflowMode = bug > full ? 'bug-fix-path' : 'full-go-path'
   const confidence = Math.max(full, bug) / 100
   const kind: ChangeKind = verdict.kind === 'unknown' ? candidate.kind : verdict.kind
-  const affectedScope: AffectedScope = verdict.affectedScope === 'unknown'
-    ? candidate.affectedScope
-    : verdict.affectedScope
+  // 【变更】2026-10-30 (用户问题 8): the model's SCOPE guess is NOT taken as
+  // the change's scope. The model reads a requirement text, not the code
+  // base — it cannot know which modules the change will touch, and a guess
+  // froze the card on 「跨模块」 before a single file existed. The scope is
+  // settled by the plan's frozen file list instead (deriveScopeFromAllowlist).
+  const affectedScope: AffectedScope = candidate.affectedScope
 
   const reviewed = reviewIntake({
     ...candidate,
@@ -471,25 +485,41 @@ function moduleRootOf(file: string): string {
  * 【变更】2026-10-28 (批次三十四 · 用户问题 3): derive the 影响范围 from the
  * plan's frozen file allowlist.
  *
- * The rule used to count FILES: one file → 单文件, up to three → 局部小改,
- * more → 跨模块. 「跨模块」 names a change that reaches MODULES, so a
- * single-module rework that touches fourteen files (the customer's ECU
- * abstraction refactor) read as 「跨模块」 although it touched one module.
+ * 【变更】2026-10-30 (用户问题 8b): the rule follows the CUSTOMER's words —
+ * 「如果都在一个目录下，则显示为模块内，如果出现不同目录下的则为跨模块」:
  *
- * The rule now counts MODULE ROOTS — the first path segment of every PRODUCT
- * file in the allowlist. Two or more roots → 跨模块; one product file →
- * 单文件; one root → 局部小改. The workflow's own documents (the OpenSpec
- * change directory, the BAF state directory) are process output and never
- * form a module root.
+ * - no product file yet → 待确定 (unknown);
+ * - every product file under ONE module root → 模块内 (small-local);
+ * - product files under SEVERAL module roots → 跨模块 (cross-module).
+ *
+ * The rule counts MODULE ROOTS — the first path segment of every PRODUCT file
+ * in the list. The workflow's own documents (the OpenSpec change directory,
+ * the BAF state directory) are process output and never form a module root.
+ *
+ * The old rule counted FILES (one file → 单文件, up to three → 局部小改, more
+ * → 跨模块) — 「跨模块」 names a change that reaches MODULES, so a
+ * single-module rework of fourteen files read as 「跨模块」 although it touched
+ * one module.
  * @param allowlist - the plan's frozen file list.
  * @returns the derived scope.
  */
 export function deriveScopeFromAllowlist(
   allowlist: readonly string[],
-): 'single-file' | 'small-local' | 'cross-module' {
-  const productFiles = allowlist.filter(file => !isProcessArtifact(file))
-  if (productFiles.length === 0) return 'small-local'
-  if (productFiles.length === 1) return 'single-file'
+): AffectedScope {
+  return deriveScopeFromFiles(allowlist)
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 8b): the same derivation over ANY file list —
+ * the plan's allowlist, the ledger's touched set, or their union.
+ * @param files - workspace-relative file paths.
+ * @returns the derived scope ('unknown' while no product file is known).
+ */
+export function deriveScopeFromFiles(
+  files: readonly string[],
+): AffectedScope {
+  const productFiles = files.filter(file => !isProcessArtifact(file))
+  if (productFiles.length === 0) return 'unknown'
   const roots = new Set(productFiles.map(moduleRootOf))
   return roots.size > 1 ? 'cross-module' : 'small-local'
 }

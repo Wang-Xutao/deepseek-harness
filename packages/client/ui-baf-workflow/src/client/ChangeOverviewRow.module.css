@@ -1039,37 +1039,41 @@
 
 /* 左侧 · the fixed left rail.
    【变更】2026-10-28 (批次三十五 · 用户问题 1): the rail now carries the
-   change's HISTORY in its BOTTOM band (左下方) — the upper part scrolls
-   (the classification + the documents), the history owns the lower part. */
+   change's HISTORY in its BOTTOM band (左下方).
+   【变更】2026-10-30 (用户问题 2.4): the rail itself is the ONE scroller. The
+   three cards stack in order (变更分类 / 阶段产物 / 历史记录) and the rail
+   scrolls once; before this the upper band and the history band each scrolled
+   on their own, so the customer met two nested scrollbars in a 320px rail. */
 .wsLeft {
   flex: none;
   width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 12px;
   border-right: 1px solid var(--ws-line);
   background: color-mix(in srgb, var(--wf-card) 60%, transparent);
 }
 
-/* The rail's upper part — the change's identity and its documents. */
+/* The rail's content — the change's identity, its documents and its history,
+   in that order. It never scrolls on its own. */
 .wsLeftScroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
 }
 
 /* 【变更】2026-10-28 (批次三十五 · 用户问题 1): the rail's BOTTOM band — the
-   change's event history. It keeps its own scroll, so a long timeline never
-   pushes the change's identity off the rail. */
+   change's event history.
+   【变更】2026-10-30 (用户问题 2.4): it rides the rail's single scrollbar —
+   the band keeps its own max-height cap so the timeline cannot push the two
+   cards above it off the rail, but it does not scroll by itself. */
 .wsLeftHistory {
   flex: none;
-  max-height: 46%;
-  overflow: auto;
+  overflow: visible;
 }
 
 /* 中间 · the graph. */
@@ -1273,20 +1277,61 @@
   color: var(--wf-warn);
 }
 
-.intakeSummary {
-  margin: 8px 0 0;
-  font-size: 11px;
-  line-height: 17px;
-  color: var(--ws-ink-2);
+/* 【变更】2026-10-30 (用户问题 2.4): the old `.intakeSummary` paragraph (the
+   raw `confirmed` line) is gone — the confirmation state is a labeled row
+   now, and 需求摘要 rides `.intakeBlock`. */
+
+/* 【变更】2026-10-30 (用户问题 1): the 置信度 说明段落 (.intakeNote) is
+   deleted — the customer asked for it to go; the hover title still explains
+   the number. */
+
+/* 【变更】2026-10-30 (用户问题 8b): the change detail lists EVERY file the
+   影响范围 hover carries — one row per file, monospace, wrapped.
+   【变更】2026-10-30 (用户问题 2.4): the list no longer scrolls on its own —
+   the rail carries the single scrollbar. */
+.scopeFileList {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  list-style: none;
+  border: 1px solid var(--ws-line, var(--wf-line, rgba(127, 127, 127, 0.22)));
+  border-radius: 8px;
+  background: var(--ws-surface, var(--wf-surface, rgba(127, 127, 127, 0.05)));
 }
 
-/* 【变更】2026-10-29 (批次三十六 · 用户问题 4): the 置信度 explanation line. */
-.intakeNote {
-  margin: 8px 0 0;
+/* 【变更】2026-10-30 (用户问题 2.4): 需求摘要 — the customer's OWN words.
+   It rides the card as a labelled block (not a key/value row): the text is a
+   sentence, and a right-aligned one-line value would cut it off. */
+.intakeBlock {
+  margin: 2px 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--wf-accent) 55%, transparent);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--wf-accent) 7%, transparent);
+}
+
+.intakeBlockLabel {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ws-ink-3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.intakeBlockValue {
+  margin: 0;
+  color: var(--ws-ink);
   font-size: 11px;
   line-height: 17px;
-  color: var(--ws-ink-2);
-  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.scopeFileRow {
+  font-family: var(--ds-font-family-code, ui-monospace, Consolas, monospace);
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--ws-ink-2, var(--wf-ink-2, rgba(127, 127, 127, 0.9)));
+  word-break: break-all;
 }
 
 /* The terminal card — a finished change's outcome (状态 / 产物 / 完成条件). */

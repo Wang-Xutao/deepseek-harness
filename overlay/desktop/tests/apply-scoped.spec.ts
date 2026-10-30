@@ -18,10 +18,10 @@ import type { AppVersions } from '../src/versions.ts'
 import { loadVersions, saveVersions } from '../src/versions.ts'
 import { buildScopedUpdatePlans, type ScopedPlanResult } from '../src/update/plan.ts'
 import { applyScopedUpdate, type ApplyHooks } from '../src/update/apply.ts'
-import type { GithubUpdateConfig } from '../src/update/github.ts'
+import type { GitlabUpdateConfig } from '../src/update/gitlab.ts'
 import type { UpdateManifest } from '../src/update/manifest.ts'
 
-const CONFIG: GithubUpdateConfig = { owner: 'o', repo: 'r', channelTag: 'baf-channel-stable' }
+const CONFIG: GitlabUpdateConfig = { host: 'https://gitlab.example', project: 'group/project', channelTag: 'baf-channel-stable' }
 
 // Put System32 first so extract.ts's `tar.exe` resolves bsdtar like packaged
 // Electron does — under Git Bash the PATH's tar.exe is MSYS GNU tar, which
@@ -125,23 +125,23 @@ function makeHooks(artifacts: Record<string, Record<string, string>>, opts: {
     writeZip(zipPath, entries)
     zips[name] = zipPath
   }
-  // Patch github.ts download functions via module-level fetch stub is not
+  // Patch gitlab.ts download functions via module-level fetch stub is not
   // possible here — instead the spec passes a patched config through a
   // module cache override set up in installDownloadStub().
   installDownloadStub(zips, dir)
   return hooks
 }
 
-/** Stub github.ts resolveReleaseAsset/downloadAssetToFile through fetch. */
+/** Stub gitlab.ts resolveReleaseAsset/downloadAssetToFile through fetch. */
 function installDownloadStub(zips: Record<string, string>, dir: string): void {
   const realFetch = globalThis.fetch
   stubbedFetch.current = async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input)
-    if (url.includes('/releases/tags/')) {
+    if (url.includes('/releases/')) {
       const names = Object.keys(zips)
       return {
         ok: true, status: 200,
-        json: async () => ({ tag_name: 'x', assets: names.map((n, i) => ({ id: i, name: n, browser_download_url: '', url: `zip://${n}`, size: 1 })) }),
+        json: async () => ({ tag_name: 'x', assets: { links: names.map((n, i) => ({ id: i, name: n, url: `zip://${n}` })) } }),
       } as unknown as Response
     }
     if (url.startsWith('zip://')) {

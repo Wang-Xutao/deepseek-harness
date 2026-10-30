@@ -6,7 +6,7 @@
 import { NODE_CATALOG } from './catalog.ts'
 import { buildWorkflowGraph } from './graph.ts'
 import type { ConfirmGate } from './events.ts'
-import type { ChangeIntake, WorkflowMode } from './intake.ts'
+import type { AffectedScope, ChangeIntake, WorkflowMode } from './intake.ts'
 import type { NodeCatalogEntry } from './catalog.ts'
 import { TRANSITIONS } from './workflow.ts'
 import type {
@@ -241,6 +241,26 @@ export interface WorkflowTabView {
    * absent before plan or when no ledger is readable.
    */
   readonly planAllowlist?: readonly string[]
+  /**
+   * 【变更】2026-10-30 (用户问题 8b): the change's SCOPE — the files it
+   * touches and the verdict they carry.
+   *
+   * The customer asked for the 影响范围 to be honest while the change is still
+   * running: default 待确定, and once files start changing, the files go into
+   * the hover (and the change detail lists them in full). All files in ONE
+   * directory → 模块内; files in DIFFERENT directories → 跨模块.
+   *
+   * `files` is the union of the plan's frozen allowlist and the ledger's
+   * touched set (what the implementation actually changed), process
+   * artifacts (the workflow's own documents) filtered out. `kind` is
+   * 'unknown' while no product file is known yet.
+   */
+  readonly scope?: {
+    /** The product files the change touches, workspace-relative. */
+    readonly files: readonly string[]
+    /** 'unknown' (nothing yet) | 'small-local' (one module) | 'cross-module'. */
+    readonly kind: AffectedScope
+  }
   /**
    * Whether the Tab 「推进」 button may advance the change right now
    * (2026-09-22 user report #4): the button used to be always clickable, so

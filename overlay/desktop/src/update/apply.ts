@@ -7,8 +7,8 @@ import {
   downloadAssetToFile,
   resolveReleaseAsset,
   updatesDir,
-  type GithubUpdateConfig,
-} from './github.ts'
+  type GitlabUpdateConfig,
+} from './gitlab.ts'
 import type { ScopedPlanResult, ScopedUpdatePlan, UpdateAction, UpdateScope } from './plan.ts'
 import type { UpdatePlan } from './plan.ts'
 
@@ -64,13 +64,13 @@ export type ApplyHooks = {
  *    applied in THIS pass roll back in reverse order and the child restarts
  *    on the old bits. A scope applied in an earlier pass is never touched.
  *
- * @param config - GitHub download config.
+ * @param config - GitLab release coordinates.
  * @param scoped - the scoped plan result (from buildScopedUpdatePlans).
  * @param local - current versions.
  * @param hooks - process/fs hooks owned by main.
  */
 export async function applyScopedUpdate(
-  config: GithubUpdateConfig,
+  config: GitlabUpdateConfig,
   scoped: ScopedPlanResult,
   local: AppVersions,
   hooks: ApplyHooks,
@@ -105,14 +105,14 @@ export async function applyScopedUpdate(
       progress({ phase: 'download', message: '正在下载安装包…', percent: 10 })
       const asset = await resolveReleaseAsset(config, scoped.manifest.tag, art)
       const setupPath = join(pending, art.name)
-      await downloadAssetToFile(config, asset, setupPath, art.sha256)
+      await downloadAssetToFile(asset, setupPath, art.sha256)
       // Stage the plugin zip alongside (best-effort): the new version picks
       // the pending download up and applies it at its own safety point.
       if (plugin?.action === 'download' && scoped.manifest.artifacts.plugin !== undefined) {
         try {
           const pluginArt = scoped.manifest.artifacts.plugin
           const pluginAsset = await resolveReleaseAsset(config, scoped.manifest.tag, pluginArt)
-          await downloadAssetToFile(config, pluginAsset, join(pending, pluginArt.name), pluginArt.sha256)
+          await downloadAssetToFile(pluginAsset, join(pending, pluginArt.name), pluginArt.sha256)
         } catch {
           // Staging is opportunistic; the installer handoff must proceed.
         }
@@ -152,7 +152,7 @@ export async function applyScopedUpdate(
           progress({ phase: 'download', message: '正在下载运行时…', percent: 40 })
           const asset = await resolveReleaseAsset(config, scoped.manifest.tag, art)
           const zipPath = join(pending, art.name)
-          await downloadAssetToFile(config, asset, zipPath, art.sha256)
+          await downloadAssetToFile(asset, zipPath, art.sha256)
           const nextDir = `${hooks.runtimeDir}.next`
           const bakDir = `${hooks.runtimeDir}.bak`
           rmSync(nextDir, { recursive: true, force: true })
@@ -181,7 +181,7 @@ export async function applyScopedUpdate(
           progress({ phase: 'download', message: '正在下载插件包…', percent: 45 })
           const asset = await resolveReleaseAsset(config, scoped.manifest.tag, art)
           const zipPath = join(pending, art.name)
-          await downloadAssetToFile(config, asset, zipPath, art.sha256)
+          await downloadAssetToFile(asset, zipPath, art.sha256)
           const nextDir = `${hooks.pluginDir}.next`
           const bakDir = `${hooks.pluginDir}.bak`
           rmSync(nextDir, { recursive: true, force: true })
@@ -342,13 +342,13 @@ export async function rollbackScope(scope: 'plugin' | 'runtime', hooks: Rollback
 /**
  * Legacy flat-plan entry (§12 9.4 adapter) — routes the flat booleans into
  * the scoped engine so existing callers keep working unchanged.
- * @param config - GitHub download config.
+ * @param config - GitLab release coordinates.
  * @param plan - flat update plan.
  * @param local - current versions.
  * @param hooks - process/fs hooks owned by main.
  */
 export async function applyUpdatePlan(
-  config: GithubUpdateConfig,
+  config: GitlabUpdateConfig,
   plan: UpdatePlan,
   local: AppVersions,
   hooks: ApplyHooks,

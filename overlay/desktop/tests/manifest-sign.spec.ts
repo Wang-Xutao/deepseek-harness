@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { createHash, generateKeyPairSync, sign } from 'node:crypto'
-import { fetchChannelManifest, verifyManifestSignature, UpdateFault, type GithubUpdateConfig } from '../src/update/github.ts'
+import { fetchChannelManifest, verifyManifestSignature, UpdateFault, type GitlabUpdateConfig } from '../src/update/gitlab.ts'
 import { checkManifestPolicy, parseManifest, type UpdateManifest } from '../src/update/manifest.ts'
 import {
   registerSigningKey,
@@ -17,7 +17,7 @@ import {
   type UpdateSigningKey,
 } from '../src/update/public-key.ts'
 
-const CONFIG: GithubUpdateConfig = { owner: 'o', repo: 'r', channelTag: 'baf-channel-stable' }
+const CONFIG: GitlabUpdateConfig = { host: 'https://gitlab.example', project: 'group/project', channelTag: 'baf-channel-stable' }
 
 /**
  * Await a rejection and expose its fault code (问题 5: the thrown message keeps
@@ -62,18 +62,19 @@ function buildManifest(overrides: Record<string, unknown> = {}): Record<string, 
   }
 }
 
-/** GitHub release double serving manifest.json (+ optional manifest.sig). */
+/** 【变更】2026-10-30 (升级途径迁移): the GitLab release double — the channel
+ *  release carries manifest.json (+ optional manifest.sig) as release LINKS. */
 function serveRelease(manifestBytes: Buffer, signature?: Buffer) {
-  const assets = [
-    { id: 1, name: 'manifest.json', browser_download_url: 'u', url: 'asset://manifest.json', size: manifestBytes.byteLength },
-    ...(signature === undefined ? [] : [{
-      id: 2, name: 'manifest.sig', browser_download_url: 'u', url: 'asset://manifest.sig', size: signature.byteLength,
-    }]),
-  ]
+  const assets = {
+    links: [
+      { name: 'manifest.json', url: 'asset://manifest.json' },
+      ...(signature === undefined ? [] : [{ name: 'manifest.sig', url: 'asset://manifest.sig' }]),
+    ],
+  }
   const body = (buf: Buffer) => ({ ok: true, status: 200, arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) })
   return async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input)
-    if (url.endsWith('/releases/tags/baf-channel-stable')) {
+    if (url.endsWith('/releases/baf-channel-stable')) {
       return { ok: true, status: 200, json: async () => ({ tag_name: 'baf-dsh-v0.0.24', assets }) } as unknown as Response
     }
     if (url === 'asset://manifest.json') return body(manifestBytes) as unknown as Response

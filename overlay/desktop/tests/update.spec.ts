@@ -144,7 +144,7 @@ describe('dispatchUpdateRequest (9.6 子→主命令回路)', () => {
     const service = new UpdateService({
       userData: dir,
       seedVersions: { bafDsh: '0.0.23', dsh: '0.1.10', bafPlugin: '0.0.23' },
-      github: { owner: 'baf', repo: 'dsh', channelTag: 'baf-dsh-stable' },
+      gitlab: { host: 'https://gitlab.example', project: 'group/project', channelTag: 'baf-dsh-stable' },
       pluginDir: join(dir, 'plugin'),
       runtimeDir: join(dir, 'runtime'),
       stopChild: () => {},

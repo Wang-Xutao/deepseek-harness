@@ -48,6 +48,9 @@ import { formatDuration, formatTimestamp, formatTokens, modeLabel } from './dash
 import { buildDashboardHtml, type DashboardHtmlChangeDetail, type DashboardHtmlGraph, type DashboardHtmlGraphEdge, type DashboardHtmlGraphNode, type DashboardHtmlLabels } from './dashboard-html.ts'
 import { FlowCanvas } from './FlowCanvas.tsx'
 import { ArtifactRail, BilingualDetail, StageChecklist, StageSummaryCard, COL_W, NODE_EN, NODE_H, NODE_W, ROW_H, artifactDriftTags, stageExecuted, workspaceRelativePath } from './flow-parts.tsx'
+// 【变更】2026-10-30 (用户问题 6): the shared per-second duration clock — the
+// detail page's 耗时 ticks once a second while its stage runs.
+import { useLiveDurationMs } from './live-duration.ts'
 import { conditionTextOf } from './graph-template.ts'
 import css from './ChangeOverviewRow.module.css'
 
@@ -588,7 +591,10 @@ function toBoardDetail(
       intake: {
         kind: view.intake.kind,
         modeLabel: modeLabel(view.intake.mode, t),
-        affectedScope: t(`scope.${view.intake.affectedScope}` as WorkflowTabKey),
+        // 【变更】2026-10-30 (用户问题 8b): the row reads the FILES the change
+        // touches (the scope the detail page shows), falling back to the
+        // recorded intake scope for a view that predates the scope fold.
+        affectedScope: t(`scope.${view.scope?.kind ?? view.intake.affectedScope}` as WorkflowTabKey),
         confidence: view.intake.confidence,
         reasonCodes: view.intake.reasonCodes,
         openspecRequired: view.intake.openspecRequired,
@@ -1254,6 +1260,18 @@ function ChangeDetailWorkspace(props: {
     [view, selected],
   )
 
+  // 【变更】2026-10-30 (用户问题 6): the detail page's right panel ticks its
+  // 耗时 once a second while the described stage is the running one — the same
+  // clock the workflow page's strip and rail read.
+  const liveStageMs = useLiveDurationMs({
+    view,
+    baseMs: view !== undefined && view.current !== null && view.current !== 'completed' && view.current !== 'abandoned'
+      ? view.nodes.find(node => node.id === view.current)?.metrics?.durationMs
+      : undefined,
+    running: view?.metrics?.running,
+    computedAt: view?.metrics?.computedAt,
+  })
+
   // The selected stage's outgoing edge — the same 「下一阶段 + 条件」 line the
   // session rail shows.
   const nextEdge = useMemo((): { id: string; to: string; condition: string } | null => {
@@ -1389,6 +1407,11 @@ function ChangeDetailWorkspace(props: {
           <div className={css.wsBody}>
             {/* ── 左侧 · classification + artifacts + the HISTORY (bottom) ── */}
             <aside className={css.wsLeft} data-testid="change-detail-left">
+              {/* 【变更】2026-10-30 (用户问题 2.4): the rail carries ONE
+                  scrollbar. The three cards — 变更分类 / 阶段产物 / 历史记录 —
+                  stack in that order inside a single scroller; before this the
+                  upper band and the history band each scrolled on their own,
+                  so the customer met two nested scrollbars in a 320px rail. */}
               <div className={css.wsLeftScroll}>
                 {loading && <LoadingPlate label={t('ovw.detailLoading')} testid="change-detail-loading" />}
                 {!loading && detail === undefined && (
@@ -1421,22 +1444,23 @@ function ChangeDetailWorkspace(props: {
                     {openNotice !== undefined && (
                       <p className={css.wsWarn} data-testid="change-detail-open-failed">{openNotice}</p>
                     )}
+                    {/* 【变更】2026-10-28 (批次三十五 · 用户问题 1): the change's
+                        HISTORY moved DOWN from the right rail to the rail's
+                        BOTTOM band (左下方). It is the change's story (what
+                        happened, in order); the right rail answers 「这个阶段
+                        现在怎么样」, and the left rail's upper part answers
+                        「这个变更是什么」.
+                        【变更】2026-10-30 (用户问题 2.4): it now shares the
+                        rail's single scrollbar with the two cards above it. */}
+                    <div className={css.wsLeftHistory} data-testid="change-detail-history-region">
+                      <HistoryPanel
+                        history={detail?.status === 'ready' ? detail.history : []}
+                        t={t}
+                      />
+                    </div>
                   </>
                 )}
               </div>
-              {/* 【变更】2026-10-28 (批次三十五 · 用户问题 1): the change's
-                  HISTORY moved DOWN from the right rail to the rail's BOTTOM
-                  band (左下方). It is the change's story (what happened, in
-                  order); the right rail answers 「这个阶段现在怎么样」, and the
-                  left rail's upper part answers 「这个变更是什么」. */}
-              {view !== undefined && (
-                <div className={css.wsLeftHistory} data-testid="change-detail-history-region">
-                  <HistoryPanel
-                    history={detail?.status === 'ready' ? detail.history : []}
-                    t={t}
-                  />
-                </div>
-              )}
             </aside>
 
             {/* ── 中间 · the complete workflow graph ───────────────────────── */}
@@ -1485,6 +1509,7 @@ function ChangeDetailWorkspace(props: {
                           ? undefined
                           : NODE_EN[selectedNode.id]}
                       node={selectedNode}
+                      liveDurationMs={selectedNode?.id === view?.current ? liveStageMs : undefined}
                       nextEdge={nextEdge}
                       t={t}
                     />
@@ -1564,9 +1589,59 @@ function ChangeDetailWorkspace(props: {
 }
 
 /**
+ * The change kinds the wire may carry (packages/baf/baf-core/src/intake.ts).
+ */
+const CHANGE_KINDS = ['new-requirement', 'bug', 'maintenance', 'unknown'] as const
+
+/**
+ * The confirmation states the wire may carry (packages/baf/baf-core/src/intake.ts).
+ */
+const CONFIRMATION_STATES = ['pending', 'confirmed', 'rejected'] as const
+
+/**
+ * 【变更】2026-10-30 (用户问题 2.4): the change's KIND, in the customer's
+ * language.
+ *
+ * The wire carries the raw enum (`new-requirement` / `bug` / `maintenance` /
+ * `unknown`); the card used to print it verbatim, so the customer read
+ * `new-requirement` where a Chinese label belonged. An unknown enum falls back
+ * to 「待分类」 rather than printing the wire value.
+ * @param kind - the wire kind.
+ * @param t - the locale translator.
+ * @returns the localized kind label.
+ */
+function changeKindLabel(kind: string, t: ChangeOverviewRowProps['t']): string {
+  return CHANGE_KINDS.includes(kind as typeof CHANGE_KINDS[number])
+    ? t(`kind.${kind}` as WorkflowTabKey)
+    : t('kind.unknown')
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 2.4): the change's CONFIRMATION state, in the
+ * customer's language.
+ *
+ * The card used to print the raw enum (`confirmed`) as a bare line under the
+ * flags, so the customer read an English word with no label. An unknown value
+ * falls back to the wire value — the state is still true information.
+ * @param value - the wire confirmation state.
+ * @param t - the locale translator.
+ * @returns the localized confirmation label.
+ */
+function confirmationStateLabel(value: string, t: ChangeOverviewRowProps['t']): string {
+  return CONFIRMATION_STATES.includes(value as typeof CONFIRMATION_STATES[number])
+    ? t(`intake.confirmation.${value}` as WorkflowTabKey)
+    : value
+}
+
+/**
  * 【变更】2026-10-24 (批次二十 3): the change's CLASSIFICATION card — the
  * intake's kind, mode, affected scope, confidence and reasons. It is the
  * ledger's left column: what the change IS, before any stage runs.
+ *
+ * 【变更】2026-10-30 (用户问题 2.4): the card now reads in the customer's
+ * language (the kind and the confirmation state are localized), the 判定依据
+ * row is gone, and the customer's OWN requirement text — 需求摘要 — rides the
+ * card, because a change whose summary is missing cannot be reviewed.
  * @param props - the card props.
  * @returns the card element tree.
  */
@@ -1582,51 +1657,89 @@ function IntakeCard(props: { view: WorkflowTabView; t: ChangeOverviewRowProps['t
     )
   }
   const percent = Math.round(Math.max(0, Math.min(1, intake.confidence)) * 100)
+  // 【变更】2026-10-30 (用户问题 8b): the change's FILES and the scope they
+  // carry — 待确定 while nothing is touched, 模块内 when every file is under
+  // one directory, 跨模块 when the files reach several directories.
+  const scopeFiles = view.scope?.files ?? []
+  const scopeLabel = view.scope === undefined || view.scope.kind === 'unknown'
+    ? t('scope.unknown')
+    : t(`scope.${view.scope.kind}` as WorkflowTabKey)
   return (
     <section className={css.wsCard} data-testid="change-detail-intake">
       <h3 className={css.wsCardTitle}>{t('ovw.detailIntake')}</h3>
+      {/* 【变更】2026-10-30 (用户问题 2.4): 需求摘要 comes FIRST — it is the
+          customer's own words, and everything below it is the machine's
+          reading of those words. */}
+      {intake.summary !== '' && (
+        <div className={css.intakeBlock} data-testid="change-detail-summary">
+          <span className={css.intakeBlockLabel}>{t('ovw.detailSummary')}</span>
+          <p className={css.intakeBlockValue}>{intake.summary}</p>
+        </div>
+      )}
       <div className={css.intakeRow}>
         <span className={css.intakeKey}>{t('ovw.detailKind')}</span>
-        <span className={css.intakeValue}>{intake.kind}</span>
+        <span className={css.intakeValue} data-testid="change-detail-kind">
+          {changeKindLabel(intake.kind, t)}
+        </span>
       </div>
       <div className={css.intakeRow}>
         <span className={css.intakeKey}>{t('ovw.columnMode')}</span>
         <span className={css.intakeValue}>{modeLabel(intake.mode, t)}</span>
       </div>
       <div className={css.intakeRow}>
-        <span className={css.intakeKey}>{t('ovw.detailScope')}</span>
-        {/* 【变更】2026-10-28 (批次三十四 · 用户问题 6): the scope reads as the
-            customer's word (跨模块 / 局部小改 / 单文件), not the raw enum the
-            session rail already localizes. */}
-        <span className={css.intakeValue}>{t(`scope.${intake.affectedScope}` as WorkflowTabKey)}</span>
-      </div>
-      <div className={css.intakeRow}>
         <span className={css.intakeKey}>{t('ovw.detailConfidence')}</span>
-        <span className={css.intakeValue}>{percent}%</span>
+        <span className={css.intakeValue} title={t('intake.confidenceHelp')}>{percent}%</span>
       </div>
       <div className={css.confidence}>
         <span className={css.confidenceFill} style={{ width: `${percent}%` }} />
       </div>
-      {/* 【变更】2026-10-29 (批次三十六 · 用户问题 4): the 置信度 number's
-          meaning and purpose ride the card as a line — the customer asked
-          「置信度到底是什么，有什么用」 and a bare percentage did not say. */}
-      <p className={css.intakeNote}>{t('intake.confidenceNote')}</p>
-      {intake.reasonCodes.length > 0 && (
-        <div className={css.intakeRow}>
-          <span className={css.intakeKey}>{t('ovw.detailReason')}</span>
-          <span className={css.intakeValue}>{intake.reasonCodes.join(' · ')}</span>
-        </div>
+      {/* 【变更】2026-10-30 (用户问题 2.4): the 判定依据 row is GONE — the
+          customer asked for it to be deleted; the raw reason codes were
+          machine plumbing, not something they could act on. */}
+      {/* 【变更】2026-10-30 (用户问题 8b): the 影响范围 rides here — after the
+          confidence meter and before the flags — and it reads the FILES the
+          change touches. The change detail must show EVERY file the hover
+          lists, so the list is printed in full under the row. */}
+      <div className={css.intakeRow}>
+        <span className={css.intakeKey}>{t('ovw.detailScope')}</span>
+        <span
+          className={css.intakeValue}
+          title={scopeFiles.length === 0 ? t('intake.scopePending') : scopeFiles.join('\n')}
+        >
+          {scopeLabel}
+          {scopeFiles.length > 0 && ` · ${scopeFiles.length} ${t('intake.scopeFiles')}`}
+        </span>
+      </div>
+      {scopeFiles.length > 0 && (
+        <ul className={css.scopeFileList} data-testid="change-detail-scope-files">
+          {scopeFiles.map(file => (
+            <li key={file} className={css.scopeFileRow}>{file}</li>
+          ))}
+        </ul>
       )}
       <div className={css.intakeFlags}>
         {intake.openspecRequired && (
-          <span className={css.intakeFlag}>{t('ovw.detailOpenSpec')} ✓</span>
+          // 【变更】2026-10-30 (用户问题 2.4): the flag explains itself — the
+          // customer asked 「需要 Openspec ✓ 是什么」, so the hover says what
+          // the flag MEANS for this change.
+          <span className={css.intakeFlag} title={t('ovw.detailOpenSpecHelp')}>
+            {t('ovw.detailOpenSpec')} ✓
+          </span>
         )}
         {intake.requiresUserConfirmation && (
           <span className={css.intakeFlag} data-tone="warn">{t('ovw.detailConfirmation')}</span>
         )}
       </div>
+      {/* 【变更】2026-10-30 (用户问题 2.4): the confirmation state is a labeled
+          row in the customer's language — it used to be a bare `confirmed`
+          line with no label at all. */}
       {intake.confirmation !== '' && (
-        <p className={css.intakeSummary}>{intake.confirmation}</p>
+        <div className={css.intakeRow}>
+          <span className={css.intakeKey}>{t('ovw.detailConfirmationState')}</span>
+          <span className={css.intakeValue} data-testid="change-detail-confirmation">
+            {confirmationStateLabel(intake.confirmation, t)}
+          </span>
+        </div>
       )}
     </section>
   )

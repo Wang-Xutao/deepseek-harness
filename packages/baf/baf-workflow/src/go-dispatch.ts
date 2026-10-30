@@ -368,6 +368,14 @@ export function workOrderText(signal: DispatchSignal): string {
       ? ['1c. 澄清阶段要把 proposal.md 的 Why / Scope / Impact 全部写成真实内容（占位符必须替换），未填写完 proposal.md 不算澄清完成；']
       : []),
     '2. 补齐后立即结束本回合——系统会在回合结束时自动弹出下一阶段裁决卡，无需你调用任何命令；',
+    // 【变更】2026-10-30 (用户问题 5): the workspace boundary. The demo6 session
+    // kept asking the customer to approve a read of the SIBLING workspace
+    // (「需要确认 demo6 与相邻工作区 ecum 源码的实际差异集合」) — the model went
+    // looking for the callers of a module this workspace does not contain, and
+    // every such attempt became an approval prompt. The work order now says
+    // where the boundary is: the workspace is all the change may touch; a fact
+    // that lives outside it is a QUESTION for the customer, not a read.
+    '2a. 只在本工作区（当前目录）内读写；本工作区里没有的事实不要去相邻目录、兄弟仓库或工作区外面找——需要工作区之外的信息时用 baf_question_ask 问客户，不要自行访问；',
     '3. 需要客户决策时调用 baf_question_ask，不要用文字向客户提问；',
     // 【变更】2026-10-27 (同步产物): the sync order names the 同步 button — the
     // customer action that authorized it.

@@ -94,6 +94,9 @@ function detailFixture(changeId: string): BafWorkflowChangeDetailResult {
         confirmation: '',
         summary: 'touches the app entry',
       },
+      // 【变更】2026-10-30 (用户问题 8b): the scope reads the FILES the change
+      // touches — one directory → 模块内.
+      scope: { files: ['app/main.ts', 'app/util.ts'], kind: 'small-local' },
       nodes: [
         {
           id: 'intake',
@@ -305,8 +308,13 @@ describe('ChangeOverviewRow (批次十八 2.2/2.3 变更总览 tab)', () => {
     expect(left.textContent).toContain('ovw.detailIntake')
     expect(left.textContent).toContain('proposal.md')
     // 【变更】2026-10-28 (批次三十四 · 用户问题 6): the scope reads as the
-    // customer's word (跨模块 / 局部小改 / 单文件), not the raw enum.
+    // customer's word (跨模块 / 模块内), not the raw enum.
     expect(left.textContent).toContain('scope.small-local')
+    // 【变更】2026-10-30 (用户问题 8b): the change detail lists EVERY file the
+    // scope's hover carries.
+    const scopeFiles = screen.getByTestId('change-detail-scope-files')
+    expect(scopeFiles.textContent).toContain('app/main.ts')
+    expect(scopeFiles.textContent).toContain('app/util.ts')
     const history = screen.getByTestId('change-detail-history')
     expect(history.textContent).toContain('hist.intakeClassified')
     expect(history.textContent).toContain('hist.stageEntered')

@@ -20,8 +20,8 @@ baf-dsh 的版本分**三层**，检查更新、查看版本都在 **设置 → 
 
 | 故障码 | 一句话 | 技术原因（发生在了什么） | 处理指引 |
 | --- | --- | --- | --- |
-| **U-01** | 更新服务尚未就绪 | 更新来自 GitHub Releases 的 `baf-channel-stable` 通道；仓库尚未发布该 Release（HTTP 404）。发布侧需在 baf 分支打 `baf-dsh-v*` 标签并完成发版工作流。 | 稍后再试即可；若你是发布侧，请先完成通道发版。 |
-| **U-02** | 网络连接失败 | 访问 GitHub（api.github.com / release 资产下载）在网络层失败（DNS、代理、断网、防火墙）。 | 检查网络或代理后重试；内网环境需放行 github.com 与 api.github.com。 |
+| **U-01** | 更新服务尚未就绪 | 更新来自 GitLab Releases 的 `baf-channel-stable` 通道（项目 `ai/workflow/baf-dsh`）；仓库尚未发布该 Release（HTTP 404）。发布侧需在 baf 分支打 `baf-dsh-v*` 标签并完成发版流水线。 | 稍后再试即可；若你是发布侧，请先完成通道发版。 |
+| **U-02** | 网络连接失败 | 访问 GitLab（`gitlab.sinc.lan` 的 Release API / 产物直链下载）在网络层失败（DNS、代理、断网、防火墙）。 | 检查网络或代理后重试；内网环境需放行 `gitlab.sinc.lan` 与产物所在的存储域名。 |
 | **U-03** | 更新通道数据异常 | 通道能访问，但内容不对：非 404 的 HTTP 错误（限流 403/5xx 等）、Release 缺少 `manifest.json`、manifest 解析失败。 | 稍后再试；持续出现说明通道发布物损坏，需发布侧补齐 manifest。 |
 | **U-04** | 更新包安全校验未通过 | 更新包未通过安全校验：manifest 缺签名、签名 keyId 未注册、使用测试签名 key、签名不匹配，或安装包 sha256 校验失败。 | **不要**重试绕过；这是安全机制在拦截被篡改或不完整的更新，请联系发布侧核实。 |
 

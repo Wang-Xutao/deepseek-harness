@@ -57,7 +57,7 @@ import { BUG_FIX_PATH_LEDGER_FILE } from './stages/bug-fix-path.ts'
 import { ARTIFACT_FILES } from '@deepseek-ai/dsh-baf-openspec'
 import { focusFor } from './session-focus.ts'
 import { homeSessionFor } from './session-home.ts'
-import { isChangePaused } from './pause.ts'
+import { isChangePaused, setChangePaused, RESUME_INSTRUCTION } from './pause.ts'
 // 【变更】2026-10-27 (批次三十一): the out-of-sync hold — the workflow waits
 // while a downstream document no longer matches its upstream.
 import { detectArtifactDrift, type ArtifactDriftRow } from './stages/artifact-drift.ts'
@@ -93,9 +93,93 @@ function stamp(): string {
  */
 const OFFERED = new Map<string, string>()
 
+/**
+ * 【变更】2026-10-30 (用户问题 3.3): the customer's own last word, per session.
+ *
+ * The graph's 「继续」 button hands the model the word 「继续」; the customer can
+ * type the SAME word in the conversation. This row reads the typed prompt so
+ * the brake comes off either way — the two controls are one control.
+ */
+const LAST_PROMPT = new Map<string, string>()
+
+/**
+ * 【变更】2026-10-30 (用户问题 3.3): the text of a typed customer prompt.
+ *
+ * Only a `user`-sourced message counts — the workflow's own notices (the
+ * `baf-workflow` producer, the resume instruction it hands the model) are not
+ * the customer speaking.
+ * @param message - the `user/message` payload.
+ * @returns the prompt's text, or an empty string.
+ */
+function typedTextOf(message: unknown): string {
+  if (typeof message !== 'object' || message === null) return ''
+  const source = (message as { readonly source?: { readonly kind?: unknown } }).source
+  if (source?.kind !== 'user') return ''
+  const content = (message as { readonly content?: unknown }).content
+  if (!Array.isArray(content)) return ''
+  const parts: string[] = []
+  for (const block of content) {
+    if (typeof block !== 'object' || block === null) continue
+    const typed = block as { readonly type?: unknown; readonly text?: unknown }
+    if (typed.type === 'text' && typeof typed.text === 'string') parts.push(typed.text)
+  }
+  return parts.join('\n').trim()
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 3.3): the change this workspace's workflow line
+ * sits on — the focused active change, else the lone active one.
+ * @param cwd - the workspace root.
+ * @returns the change id, or undefined when there is none.
+ */
+async function boundChangeId(cwd: string): Promise<string | undefined> {
+  const index = await new ProjectionStore({ workspaceRoot: cwd }).readIndex()
+  const actives = index.changes.filter(isActiveChange)
+  const focused = focusFor(cwd).get()
+  const bound = focused === undefined
+    ? undefined
+    : actives.find(entry => entry.changeId === focused)
+  if (bound !== undefined) return bound.changeId
+  const picked = pickActiveChange(index.changes)
+  return picked.kind === 'one' ? picked.changeId : undefined
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 3.3): the customer stopped the model in the
+ * CONVERSATION — that is the workflow's 暂停.
+ *
+ * The graph's 「暂停」 button already cuts the turn; the converse was missing,
+ * so the customer stopped the model and the graph kept saying the workflow was
+ * running. One brake, two surfaces.
+ * @param cwd - the workspace root.
+ * @returns nothing.
+ */
+async function pauseBoundChange(cwd: string): Promise<void> {
+  const changeId = await boundChangeId(cwd)
+  if (changeId === undefined) return
+  if (isChangePaused(cwd, changeId)) return
+  setChangePaused(cwd, changeId, true, { interrupted: true })
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 3.3): the customer typed 「继续」 — the brake
+ * comes off, exactly like the graph's 「继续」 button.
+ * @param cwd - the workspace root.
+ * @param prompt - the customer's last typed prompt.
+ * @returns nothing.
+ */
+async function releaseBrakeOnResume(cwd: string, prompt: string | undefined): Promise<void> {
+  if (prompt !== RESUME_INSTRUCTION) return
+  const changeId = await boundChangeId(cwd)
+  if (changeId === undefined) return
+  if (!isChangePaused(cwd, changeId)) return
+  setChangePaused(cwd, changeId, false)
+}
+
 /** Reset the orchestrator memories (tests). */
 export function resetOrchestrator(): void {
   OFFERED.clear()
+  LAST_PROMPT.clear()
   resetScaffoldOffer()
 }
 
@@ -107,14 +191,46 @@ export function resetOrchestrator(): void {
  */
 export function apply(ctx: Context): void {
   ctx.on('session/event', (session, event) => {
+    // 【变更】2026-10-30 (用户问题 3.3): a new turn starts → the previous
+    // turn's prompt is stale. Only the CURRENT turn's own word may release the
+    // brake; otherwise a 「继续」 typed two turns ago would keep releasing it.
+    if (event.type === 'turn/start') {
+      LAST_PROMPT.delete(String(session.header.id))
+      return
+    }
+    // 【变更】2026-10-30 (用户问题 3.3): the customer's own prompt — the 「继续」
+    // typed in the conversation releases the workflow's brake, exactly like the
+    // graph's 「继续」 button.
+    if (event.type === 'user/message') {
+      const text = typedTextOf((event.data as { readonly message?: unknown }).message)
+      if (text !== '') LAST_PROMPT.set(String(session.header.id), text)
+      return
+    }
     if (event.type !== 'turn/end') return
-    // Only a completed turn means "the model finished its slice" — aborted /
-    // error / blocked / max-tokens turns are mid-work, not a resting point.
-    if ((event.data as { reason?: { kind?: string } }).reason?.kind !== 'completed') return
     const s = session as unknown as SessionLike
     const cwd = s.header.cwd
     if (cwd === undefined || cwd === '') return
-    void orchestrateTurn(ctx, s, cwd)
+    const reason = (event.data as { readonly reason?: { readonly kind?: string; readonly reason?: { readonly kind?: string } } }).reason
+    // 【变更】2026-10-30 (用户问题 3.3): the customer stopped the model in the
+    // conversation — the workflow's 暂停. Only a USER cancellation counts: a
+    // fork, a hook or a disposal is not the customer taking the wheel.
+    if (reason?.kind === 'aborted' && reason.reason?.kind === 'user') {
+      void pauseBoundChange(cwd)
+        .catch((error: unknown) => {
+          ctx.logger.warn(`baf-orchestrator: pausing the bound change failed: ${error instanceof Error ? error.message : String(error)}`)
+        })
+      return
+    }
+    // Only a completed turn means "the model finished its slice" — aborted /
+    // error / blocked / max-tokens turns are mid-work, not a resting point.
+    if (reason?.kind !== 'completed') return
+    void (async () => {
+      // 【变更】2026-10-30 (用户问题 3.3): the customer's 「继续」 releases the
+      // brake BEFORE the resting point is derived — otherwise the turn ends on
+      // a paused change and nothing pops.
+      await releaseBrakeOnResume(cwd, LAST_PROMPT.get(String(session.header.id)))
+      await orchestrateTurn(ctx, s, cwd)
+    })()
       .catch((error: unknown) => {
         ctx.logger.warn(`baf-orchestrator: turn orchestration failed: ${error instanceof Error ? error.message : String(error)}`)
       })

@@ -41,6 +41,13 @@ export interface StandardsOverviewState {
    */
   summaryError: string | undefined
   /**
+   * 【变更】2026-10-30 (用户问题 1): a summary read is in flight. The page
+   * shows its pending line instead of the previous verdict — the red
+   * 「没有配置文件」 banner is a VERDICT, so it may only be painted by the
+   * read that confirmed it, never by a read a newer one has superseded.
+   */
+  summaryPending: boolean
+  /**
    * 【变更】2026-10-20 (批次六 5): the 企业规范 viewer's open document id
    * (undefined = viewer closed). The docs are product constants, so this
    * survives summary reloads and workspace switches.
@@ -219,6 +226,7 @@ const INITIAL: StandardsOverviewState = {
   status: 'loading',
   summary: undefined,
   summaryError: undefined,
+  summaryPending: false,
   enterpriseDocId: undefined,
   enterpriseDoc: undefined,
   localeActive: 'zh',
@@ -356,9 +364,17 @@ export class StandardsController {
    *
    * A failure also never clears a summary the customer already sees: it is
    * kept and the message becomes a notice line.
+   *
+   * 【变更】2026-10-30 (用户问题 1): the read announces itself as PENDING
+   * before it awaits. Without that marker the page keeps painting the
+   * previous verdict — switching workspace flashed the red 「没有配置文件」
+   * banner of the OLD workspace until the new answer landed. The marker is
+   * cleared together with the answer it belongs to (see applySummary), so no
+   * frame ever shows a stale verdict without it.
    */
   private async readSummary(warmup = false): Promise<void> {
     const seq = ++this.summarySeq
+    this.store.update((state) => { state.summaryPending = true })
     let outcome: BafStandardSummaryResult
     try {
       const response = await this.ctx.remote.bafStandardConfig.summary()
@@ -392,6 +408,17 @@ export class StandardsController {
   /** Fold one summary answer into the store (shared by reload's outcomes). */
   private applySummary(summary: BafStandardSummaryResult, warmup = false): void {
     this.store.update((state) => {
+      // 【变更】2026-10-30 (用户问题 1): this answer IS the newest read, so no
+      // read is in flight any more. The pending marker clears in the SAME
+      // update that installs the answer — otherwise the page would show one
+      // frame with the old verdict and no pending marker.
+      state.summaryPending = false
+      // 【变更】2026-10-30 (用户问题 1): the warm-up read cannot confirm a
+      // missing config file — it does not know which workspace the panel will
+      // ask about, and its answer may land before the panel's own read even
+      // starts. Its 「没有配置文件」 verdict is dropped; only the panel's read
+      // may paint it (the warm-up still seeds a ready projection).
+      if (warmup && summary.status === 'no-baseline') return
       // 【变更】2026-10-29 (批次三十六 · 用户问题 1): a failed read never
       // clears what the customer already sees. The summary the panel shows
       // stays; the failure becomes a notice line beside it. Only a panel that

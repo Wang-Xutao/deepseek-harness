@@ -404,7 +404,7 @@ describe('tab view', () => {
 })
 
 describe('the 影响范围 derivation from the frozen allowlist', () => {
-  it('reads one module as 局部小改, not 跨模块', () => {
+  it('reads one module as 模块内, not 跨模块', () => {
     // 【变更】2026-10-28 (批次三十四 · 用户问题 3): the customer's ECU
     // abstraction rework touched fourteen files of ONE module and the scope
     // read as 跨模块 — the old rule counted files, the word names modules.
@@ -425,10 +425,18 @@ describe('the 影响范围 derivation from the frozen allowlist', () => {
       'openspec/changes/change-1/verify.md',
       'openspec/changes/change-1/checklist.md',
       'ecum/service/ecum.c',
-    ])).toBe('single-file')
+    ])).toBe('small-local')
   })
 
-  it('reads a single product file as 单文件', () => {
-    expect(deriveScopeFromAllowlist(['ecum/service/ecum.c'])).toBe('single-file')
+  it('【变更】2026-10-30 (用户问题 8b): one directory reads as 模块内 — a single file included', () => {
+    // The customer's rule: 「如果都在一个目录下，则显示为模块内」. A single
+    // file is one directory too, so it reads as 模块内 — not 单文件.
+    expect(deriveScopeFromAllowlist(['ecum/service/ecum.c'])).toBe('small-local')
+  })
+
+  it('【变更】2026-10-30 (用户问题 8b): no file yet reads as 待确定', () => {
+    expect(deriveScopeFromAllowlist([])).toBe('unknown')
+    // The workflow's own documents are process output, not product files.
+    expect(deriveScopeFromAllowlist(['openspec/changes/change-1/plan.md'])).toBe('unknown')
   })
 })

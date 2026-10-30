@@ -152,6 +152,10 @@ const zh = {
   qflowEnAnalyze: 'Static analysis (cppcheck)',
   qflowEnFormat: 'Final layout (clang-format)',
   statusLoading: '正在读取工作区基线…',
+  // 【变更】2026-10-30 (用户问题 1): a re-read is in flight — the page says so
+  // instead of painting the previous verdict (the red 「没有配置文件」 banner
+  // must never flash before the new read confirms it).
+  statusPending: '正在重新读取工作区基线…',
   statusNoWorkspace: '还没有打开的工作区。先在会话里打开一个项目目录（或在项目里运行 /baf-scaffold 搭好 BAF 工作区），这里就能显示它的规范配置。',
   statusNoBaseline: '当前工作区还没有 BAF 基线（.baf/baseline.yml）。在会话里运行 /baf-scaffold 即可生成：基线配置 + 默认规则文档 + openspec 目录，一步到位。',
   statusFailed: '基线读取失败：',
@@ -425,6 +429,10 @@ const en = {
   qolAssetReadFailed: 'Read failed: ',
   qolAssetModalTitle: 'Quality asset preview',
   statusLoading: 'Reading the workspace baseline…',
+  // 【变更】2026-10-30 (用户问题 1): a re-read is in flight — the page says so
+  // instead of painting the previous verdict (the red 「没有配置文件」 banner
+  // must never flash before the new read confirms it).
+  statusPending: 'Re-reading the workspace baseline…',
   statusNoWorkspace: 'No open workspace yet. Open a project directory in a session (or run /baf-scaffold inside one) and its standards config shows up here.',
   statusNoBaseline: 'This workspace has no BAF baseline (.baf/baseline.yml) yet. Run /baf-scaffold in a session: baseline + default rules document + the openspec directory, in one step.',
   statusFailed: 'Baseline read failed: ',

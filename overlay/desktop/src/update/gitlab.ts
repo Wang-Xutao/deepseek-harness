@@ -1,3 +1,27 @@
+/**
+ * 【变更】2026-10-30 (升级途径迁移): the baf-dsh update channel reads GITLAB
+ * Releases, not GitHub Releases.
+ *
+ * The channel is a GitLab Release on the project `ai/workflow/baf-dsh` (host
+ * `gitlab.sinc.lan`):
+ *
+ * - the CHANNEL release (`baf-channel-stable`) carries the signed manifest
+ *   (`manifest.json` + `manifest.sig`) as release LINKS;
+ * - the VERSION release (`baf-dsh-v<version>`) carries the artifacts
+ *   (`baf-plugin-*.zip`, `baf-runtime-*.zip`, `baf-dsh-Setup-*.exe`) as
+ *   release links too.
+ *
+ * A GitLab release link is an ordinary URL (CI job artifact or an object
+ * storage直链), so downloading is a plain GET — no API token is needed for a
+ * public project, and the manifest signature remains the only trust anchor
+ * (the channel's own TLS is not a substitute for it).
+ *
+ * The fault-code vocabulary (U-01…U-04) is unchanged: the customer-facing
+ * card quotes the code, not the provider's error text.
+ *
+ * @module update/gitlab
+ */
+
 import { createHash, createPublicKey, verify } from 'node:crypto'
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -7,9 +31,13 @@ import type { ManifestArtifact } from './manifest.ts'
 import { parseManifest, type UpdateManifest } from './manifest.ts'
 import { findSigningKey, signaturePolicy, type UpdateSigningKey } from './public-key.ts'
 
-export type GithubUpdateConfig = {
-  owner: string
-  repo: string
+/** The GitLab project coordinates the updater reads. */
+export type GitlabUpdateConfig = {
+  /** GitLab host base URL, e.g. `https://gitlab.sinc.lan`. */
+  host: string
+  /** Project path, e.g. `ai/workflow/baf-dsh` (URL-encoded into the API path). */
+  project: string
+  /** The channel release tag that carries the signed manifest. */
   channelTag: string
 }
 
@@ -48,60 +76,104 @@ export function classifyUpdateError(error: unknown): UpdateFaultCode {
   return 'U-03'
 }
 
-type GhAsset = {
-  id: number
-  name: string
-  browser_download_url: string
-  url: string
-  size: number
+/** One downloadable file on a GitLab release (a release link). */
+export type ReleaseAsset = {
+  /** The file name the manifest names (`manifest.json`, `baf-plugin-0.0.3.zip`, …). */
+  readonly name: string
+  /** The download URL. */
+  readonly url: string
+  /** The byte size, when the release reports one. */
+  readonly size?: number
 }
 
-type GhRelease = {
-  tag_name: string
-  assets: GhAsset[]
+/** The GitLab release shape the updater reads. */
+type GlRelease = {
+  tag_name?: string
+  assets?: {
+    links?: Array<{
+      name?: string
+      url?: string
+      direct_asset_url?: string
+    }>
+  }
 }
 
 /**
- * @param _config - repo coordinates (token auth deferred for private repos).
- * @returns public GitHub API headers.
+ * The API path of one release.
+ * @param config - the GitLab coordinates.
+ * @param tag - the release tag.
+ * @returns the absolute API URL.
  */
-export function githubHeaders(_config: GithubUpdateConfig): Record<string, string> {
+function releaseUrl(config: GitlabUpdateConfig, tag: string): string {
+  const host = config.host.replace(/\/+$/, '')
+  const project = encodeURIComponent(config.project)
+  return `${host}/api/v4/projects/${project}/releases/${encodeURIComponent(tag)}`
+}
+
+/**
+ * The request headers for the release API. A public project needs no token;
+ * the header set stays minimal so a private mirror can add one later.
+ * @param _config - the GitLab coordinates (token support reserved).
+ * @returns the request headers.
+ */
+export function gitlabHeaders(_config: GitlabUpdateConfig): Record<string, string> {
   return {
-    Accept: 'application/vnd.github+json',
+    Accept: 'application/json',
     'User-Agent': 'baf-dsh-updater',
-    'X-GitHub-Api-Version': '2022-11-28',
   }
+}
+
+/**
+ * Fetch one release and read its links.
+ * @param config - the GitLab coordinates.
+ * @param tag - the release tag.
+ * @returns the release's links, keyed by file name.
+ * @throws when the release is missing or carries no links.
+ */
+async function fetchReleaseLinks(
+  config: GitlabUpdateConfig,
+  tag: string,
+): Promise<Map<string, ReleaseAsset>> {
+  const res = await fetch(releaseUrl(config, tag), { headers: gitlabHeaders(config) })
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new UpdateFault(
+        'U-01',
+        `无法读取更新通道（HTTP 404）。GitLab 项目 ${config.project} 尚未发布 Release「${tag}」；请先在 baf 分支打 tag baf-dsh-v* 并完成发版流水线。`,
+      )
+    }
+    throw new UpdateFault('U-03', `无法读取更新通道（HTTP ${String(res.status)}）`)
+  }
+  const release = await res.json() as GlRelease
+  const assets = new Map<string, ReleaseAsset>()
+  for (const link of release.assets?.links ?? []) {
+    if (link.name === undefined) continue
+    const url = link.direct_asset_url ?? link.url
+    if (url === undefined) continue
+    assets.set(link.name, { name: link.name, url })
+  }
+  return assets
 }
 
 /**
  * Fetch the channel release and parse its manifest (+ optional signature).
- * @param config - GitHub coordinates.
+ * @param config - the GitLab coordinates.
+ * @returns the verified manifest.
  */
-export async function fetchChannelManifest(config: GithubUpdateConfig): Promise<UpdateManifest> {
-  const releaseUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/releases/tags/${encodeURIComponent(config.channelTag)}`
-  const releaseRes = await fetch(releaseUrl, { headers: githubHeaders(config) })
-  if (!releaseRes.ok) {
-    if (releaseRes.status === 404) {
-      throw new UpdateFault(
-        'U-01',
-        `无法读取更新通道（HTTP 404）。仓库尚未发布 Release「${config.channelTag}」；请先在 baf 分支打 tag baf-dsh-v* 并完成发版工作流。`,
-      )
-    }
-    throw new UpdateFault('U-03', `无法读取更新通道（HTTP ${String(releaseRes.status)}）`)
-  }
-  const release = await releaseRes.json() as GhRelease
-  const manifestAsset = release.assets.find(a => a.name === 'manifest.json')
+export async function fetchChannelManifest(config: GitlabUpdateConfig): Promise<UpdateManifest> {
+  const assets = await fetchReleaseLinks(config, config.channelTag)
+  const manifestAsset = assets.get('manifest.json')
   if (manifestAsset === undefined) {
     throw new UpdateFault('U-03', '更新通道缺少 manifest.json')
   }
-  const manifestBuf = await downloadAssetBuffer(config, manifestAsset)
+  const manifestBuf = await downloadAssetBuffer(manifestAsset)
   const parsed = parseManifest(JSON.parse(manifestBuf.toString('utf8')) as unknown)
   if (!parsed.ok) throw new UpdateFault('U-03', parsed.error)
 
   // §11.3: 验签后才解释 signed 字段（issuedAt/expiresAt/releaseEpoch 的
   // policy 检查在 plan 阶段跑）。生产缺签名/错 key/签名不匹配直接拒绝。
   const policy = signaturePolicy()
-  const sigAsset = release.assets.find(a => a.name === parsed.value.signature.asset)
+  const sigAsset = assets.get(parsed.value.signature.asset)
   if (policy.required) {
     if (sigAsset === undefined) throw new UpdateFault('U-04', `更新通道缺少 ${parsed.value.signature.asset}`)
     const key = findSigningKey(parsed.value.signature.keyId)
@@ -111,7 +183,7 @@ export async function fetchChannelManifest(config: GithubUpdateConfig): Promise<
     if (key.testOnly && !policy.allowTestKeys) {
       throw new UpdateFault('U-04', 'manifest 使用测试签名 key（生产构建拒绝）')
     }
-    const sig = await downloadAssetBuffer(config, sigAsset)
+    const sig = await downloadAssetBuffer(sigAsset)
     if (!verifyManifestSignature(manifestBuf, sig, key)) {
       throw new UpdateFault('U-04', 'manifest 签名校验失败')
     }
@@ -122,22 +194,18 @@ export async function fetchChannelManifest(config: GithubUpdateConfig): Promise<
 
 /**
  * Resolve an artifact from the versioned release named by the manifest tag.
- * @param config - GitHub coordinates.
+ * @param config - the GitLab coordinates.
  * @param tag - release tag (e.g. baf-dsh-v0.1.0).
  * @param artifact - artifact descriptor from the manifest.
+ * @returns the release link that carries the file.
  */
 export async function resolveReleaseAsset(
-  config: GithubUpdateConfig,
+  config: GitlabUpdateConfig,
   tag: string,
   artifact: ManifestArtifact,
-): Promise<GhAsset> {
-  const releaseUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/releases/tags/${encodeURIComponent(tag)}`
-  const releaseRes = await fetch(releaseUrl, { headers: githubHeaders(config) })
-  if (!releaseRes.ok) {
-    throw new Error(`无法读取版本 Release ${tag}（HTTP ${String(releaseRes.status)}）`)
-  }
-  const release = await releaseRes.json() as GhRelease
-  const asset = release.assets.find(a => a.name === artifact.name)
+): Promise<ReleaseAsset> {
+  const assets = await fetchReleaseLinks(config, tag)
+  const asset = assets.get(artifact.name)
   if (asset === undefined) {
     throw new Error(`Release ${tag} 缺少资产 ${artifact.name}`)
   }
@@ -145,20 +213,18 @@ export async function resolveReleaseAsset(
 }
 
 /**
- * Download a GitHub release asset to a file and verify sha256.
- * @param config - GitHub coordinates.
- * @param asset - release asset metadata.
+ * Download a release asset to a file and verify sha256.
+ * @param asset - the release link metadata.
  * @param destPath - local destination path.
  * @param expectedSha256 - hex digest.
  */
 export async function downloadAssetToFile(
-  config: GithubUpdateConfig,
-  asset: GhAsset,
+  asset: ReleaseAsset,
   destPath: string,
   expectedSha256: string,
 ): Promise<void> {
   mkdirSync(dirname(destPath), { recursive: true })
-  const buf = await downloadAssetBuffer(config, asset)
+  const buf = await downloadAssetBuffer(asset)
   const actual = createHash('sha256').update(buf).digest('hex')
   if (actual.toLowerCase() !== expectedSha256.toLowerCase()) {
     throw new UpdateFault('U-04', `校验失败：${asset.name}`)
@@ -166,13 +232,13 @@ export async function downloadAssetToFile(
   writeFileSync(destPath, buf)
 }
 
-async function downloadAssetBuffer(config: GithubUpdateConfig, asset: GhAsset): Promise<Buffer> {
-  // Private assets require the API asset URL with octet-stream accept.
-  const headers = {
-    ...githubHeaders(config),
-    Accept: 'application/octet-stream',
-  }
-  const res = await fetch(asset.url, { headers, redirect: 'follow' })
+/**
+ * Download one release asset into memory.
+ * @param asset - the release link metadata.
+ * @returns the file bytes.
+ */
+export async function downloadAssetBuffer(asset: ReleaseAsset): Promise<Buffer> {
+  const res = await fetch(asset.url, { redirect: 'follow' })
   if (!res.ok) {
     throw new Error(`下载失败 ${asset.name}（HTTP ${String(res.status)}）`)
   }
@@ -206,21 +272,15 @@ function decodeSignature(signature: Buffer): Buffer {
 
 /**
  * Stream helper kept for tests / large downloads if needed later.
- * @param config - GitHub coordinates.
- * @param asset - asset metadata.
- * @param destPath - destination file.
+ * @param asset - the release link metadata.
+ * @param destPath - local destination path.
  */
 export async function downloadAssetStreaming(
-  config: GithubUpdateConfig,
-  asset: GhAsset,
+  asset: ReleaseAsset,
   destPath: string,
 ): Promise<void> {
   mkdirSync(dirname(destPath), { recursive: true })
-  const headers = {
-    ...githubHeaders(config),
-    Accept: 'application/octet-stream',
-  }
-  const res = await fetch(asset.url, { headers, redirect: 'follow' })
+  const res = await fetch(asset.url, { redirect: 'follow' })
   if (!res.ok || res.body === null) {
     throw new Error(`下载失败 ${asset.name}`)
   }

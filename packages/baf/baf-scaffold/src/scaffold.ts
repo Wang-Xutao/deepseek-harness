@@ -214,6 +214,7 @@ export function defaultRulesTemplate(): string {
 
 - 项目是什么、为谁做、边界在哪里，写在 README 或 openspec/project.md；拿不准算不算范围内的事，先对照章程，仍拿不准就问客户。
 - 每个变更（openspec/changes/<id>）的 proposal 用一句话说明它服务于章程中的哪一项。
+- 【变更】2026-10-30 (用户问题 5): 工作区边界——只在本工作区（当前目录）内读写；本工作区里没有的事实不要去相邻目录、兄弟仓库或工作区外面找（每一次这样的探查都会变成要客户点「允许」的审批弹窗）；确实需要工作区之外的信息时问客户。
 
 ## coding-style 编码风格
 

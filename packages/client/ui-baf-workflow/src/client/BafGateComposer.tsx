@@ -36,6 +36,9 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { answerGateOption, answerGateRevision, dispatchNodeOfGate, gateAskViewOf, isSecondaryOptionLabel, type GateAskCarrier } from './gate-ask.ts'
+// 【变更】2026-10-30 (用户问题 3.1): the answered-gate rendezvous — the graph's
+// parked-gate banner must cancel IN SYNC with this dialog.
+import { noteGateAnswered, noteGateShown } from './gate-sync.ts'
 import { isWorkflowTabActive, subscribeTabActivity } from './tab-activity.ts'
 import { RouteDispatchLine } from './WorkflowView.tsx'
 import type { WorkflowNodeId, WorkflowTabRoutePreview } from './tab-types.ts'
@@ -67,19 +70,30 @@ export interface BafGateComposerProps {
 /**
  * Measure the conversation pane a composer-seat node sits in (用户问题 1.4).
  * Tracks the pane's live viewport rect (ResizeObserver + any scroll event,
- * capture-phase so nested scrollers are heard, + window resize). Returns
- * null until measured or when no pane is found (fullscreen fallback).
+ * capture-phase so nested scrollers are heard, + window resize).
+ *
+ * `found` says the LOOKUP finished — not that it succeeded. The caller needs
+ * the difference: while the lookup is pending the card must not flash, and
+ * when it FAILED the card must not fall back to a viewport-wide overlay
+ * (that would block the app's left sidebar, which the customer must keep
+ * using).
+ * @param sentinel - the zero-height anchor in the composer seat.
+ * @returns the pane rect (null when there is no pane) and whether the lookup
+ *   has finished.
  */
 function useConversationPaneRect(sentinel: React.RefObject<HTMLDivElement | null>): {
   readonly rect: { readonly left: number; readonly top: number; readonly width: number; readonly height: number } | null
+  readonly found: boolean
 } {
   const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
+  const [found, setFound] = useState(false)
   useEffect(() => {
     const node = sentinel.current
     if (node === null) return
     const pane = node.closest('[data-conversation-content]')
     if (pane === null) {
       setRect(null)
+      setFound(true)
       return
     }
     const measure = (): void => {
@@ -90,6 +104,7 @@ function useConversationPaneRect(sentinel: React.RefObject<HTMLDivElement | null
           : { left: r.left, top: r.top, width: r.width, height: r.height })
     }
     measure()
+    setFound(true)
     const observer = new ResizeObserver(measure)
     observer.observe(pane)
     window.addEventListener('resize', measure)
@@ -103,7 +118,7 @@ function useConversationPaneRect(sentinel: React.RefObject<HTMLDivElement | null
       window.removeEventListener('scroll', measure, true)
     }
   }, [sentinel])
-  return { rect }
+  return { rect, found }
 }
 
 /**
@@ -154,21 +169,177 @@ export function BafGateComposer(props: BafGateComposerProps): React.ReactElement
   const [answered, setAnswered] = useState<string | null>(null)
   const [reviseText, setReviseText] = useState('')
   const seatRef = useRef<HTMLDivElement | null>(null)
-  const { rect: paneRect } = useConversationPaneRect(seatRef)
+  const { rect: paneRect, found: paneFound } = useConversationPaneRect(seatRef)
   const reviseInputId = useId()
-  if (tabActive) return null
   const view = gateAskViewOf(matched)
+  // 【变更】2026-10-30 (用户问题 3.1): a NEW decision clears the shared answer —
+  // the graph's banner must not stay suppressed by a gate from an earlier step.
+  useEffect(() => {
+    if (sessionId !== undefined) noteGateShown(sessionId, view.id)
+  }, [sessionId, view.id])
+  if (tabActive) return null
   if (view.options.length === 0) return null
   const disabled = answered !== null
   const primaryLabel = view.options.find(opt => !isSecondaryOptionLabel(opt.label))?.label
   // 用户问题 1.4: pin the overlay to the conversation pane's viewport rect;
   // inline left/top/width/height win over the stylesheet's `inset: 0`
-  // (over-constrained edges drop), and null falls back to fullscreen.
+  // (over-constrained edges drop).
   const overlayStyle = paneRect === null ? undefined : {
     left: `${paneRect.left}px`,
     top: `${paneRect.top}px`,
     width: `${paneRect.width}px`,
     height: `${paneRect.height}px`,
+  }
+  // 【变更】2026-10-30 (用户问题 3.4): the modal's scope is the CONVERSATION
+  // TAB alone — the app's left sidebar must stay usable. The card body is
+  // therefore rendered once and placed either in the pane-pinned overlay or,
+  // when there is no pane to pin to, INLINE in the conversation column.
+  const card = (
+    <>
+      <section className={css.frame}>
+        <header className={css.headerRow}>
+          <p className={css.eyebrow}>BAF 工作流</p>
+          {/* 用户问题 1.2: the 变更 id is a fixed top-right chip — never
+           * buried inside the body copy. */}
+          {view.changeId !== undefined && (
+            <span className={css.changeChip} data-baf-change-id={view.changeId}>变更 {view.changeId}</span>
+          )}
+        </header>
+        <h2 className={css.title}>{view.title}</h2>
+        {view.sections.map((section, si) => (
+          <section key={si} className={css.bodySection}>
+            {section.title !== undefined && <h3 className={css.sectionTitle}>{section.title}</h3>}
+            {section.blocks.map((block, bi) => block.kind === 'text'
+              ? <p key={bi} className={css.body}>{block.text}</p>
+              : (
+                <ul key={bi} className={css.bodyList}>
+                  {block.items.map((item, ii) => (
+                    <li key={ii}>
+                      {item.artifact === undefined
+                        ? item.text
+                        : (openArtifact !== undefined
+                          ? (
+                            <button
+                              type="button"
+                              className={css.artifactChip}
+                              data-baf-artifact={item.artifact.path}
+                              onClick={() => { openArtifact(item.artifact?.path ?? '') }}
+                            >
+                              📄 {item.artifact.label} ↗
+                            </button>
+                          )
+                          : <span className={css.artifactChip}>📄 {item.artifact.label}</span>)}
+                    </li>
+                  ))}
+                </ul>
+              ))}
+          </section>
+        ))}
+        {/* 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview — the
+         * tier·model the confirm's work order runs on (Auto sessions only;
+         * gates that dispatch nothing model-authored render no line). */}
+        {routePreview !== undefined && t !== undefined && (
+          <RouteDispatchLine
+            load={routePreview}
+            changeId={view.changeId ?? null}
+            node={dispatchNodeOfGate(view.id)}
+            t={t}
+          />
+        )}
+        {/* 用户问题 1.6: horizontal row, confirm emphasized. */}
+        <div className={css.options}>
+          {view.options.map(opt => (
+            <button
+              key={opt.label}
+              type="button"
+              className={opt.label === primaryLabel ? css.primaryBtn : css.secondaryBtn}
+              data-baf-gate-option={opt.label}
+              disabled={disabled}
+              onClick={() => {
+                setAnswered(opt.label)
+                // 【变更】2026-10-30 (用户问题 3.1): tell the workflow graph
+                // that this decision is settled, so ITS banner cancels in
+                // sync instead of coming back the moment this dialog closes.
+                if (sessionId !== undefined) {
+                  noteGateAnswered(sessionId, {
+                    ...(view.changeId === undefined ? {} : { changeId: view.changeId }),
+                    gateId: view.id,
+                  })
+                }
+                answerGateOption(matched, view, opt.label)
+              }}
+            >
+              <span className={css.optionLabel}>
+                {opt.label}
+                {/* 【变更】2026-10-29 (批次三十七 · 用户问题 4): the
+                    recommended path (the higher-confidence one) carries a
+                    「推荐」 badge. */}
+                {opt.recommended === true && (
+                  <span className={css.recommendBadge} data-baf-recommended="">推荐</span>
+                )}
+              </span>
+              {opt.hint !== undefined && <span className={css.optionHint}>{opt.hint}</span>}
+            </button>
+          ))}
+        </div>
+        {/* 用户问题 1.7: free-text revision → the host dispatches a work
+         * order against the artifact; the gate re-pops after the rework. */}
+        {view.allowsRevise && (
+          <div className={css.revise}>
+            <label className={css.reviseLabel} htmlFor={reviseInputId}>有修改意见？写下后提交，系统派单修订产物，改好后再次弹出确认</label>
+            <textarea
+              id={reviseInputId}
+              className={css.reviseInput}
+              rows={2}
+              value={reviseText}
+              placeholder="例如：Scope 里补充不改哪些；Why 一句话讲清目标"
+              disabled={disabled}
+              onChange={(event) => { setReviseText(event.target.value) }}
+            />
+            <button
+              type="button"
+              className={css.reviseSubmit}
+              data-baf-revise-submit=""
+              disabled={disabled || reviseText.trim() === ''}
+              onClick={() => {
+                setAnswered('revise')
+                // 【变更】2026-10-30 (用户问题 3.1): a revision is an answer
+                // too — the graph's banner must cancel with it.
+                if (sessionId !== undefined) {
+                  noteGateAnswered(sessionId, {
+                    ...(view.changeId === undefined ? {} : { changeId: view.changeId }),
+                    gateId: view.id,
+                  })
+                }
+                answerGateRevision(matched, view, reviseText)
+              }}
+            >
+              提交修改意见
+            </button>
+          </div>
+        )}
+      </section>
+    </>
+  )
+  // 【变更】2026-10-30 (用户问题 3.4): the pane lookup has not answered yet —
+  // render nothing, so the card never flashes at the wrong place.
+  if (!paneFound) {
+    return <div ref={seatRef} className={css.sentinel} aria-hidden="true" />
+  }
+  // 【变更】2026-10-30 (用户问题 3.4): no conversation pane to pin to → the card
+  // rides INLINE in the conversation column. The old fallback was the
+  // stylesheet's `inset: 0` — a viewport-wide blocker that covered the app's
+  // LEFT SIDEBAR as well, and the customer must keep using it while a gate is
+  // open.
+  if (paneRect === null) {
+    return (
+      <>
+        <div ref={seatRef} className={css.sentinel} aria-hidden="true" />
+        <div className={css.inlineCard} data-baf-gate-card="" role="dialog" aria-label={view.title}>
+          {card}
+        </div>
+      </>
+    )
   }
   return (
     <>
@@ -182,112 +353,7 @@ export function BafGateComposer(props: BafGateComposerProps): React.ReactElement
         aria-modal="true"
         aria-label={view.title}
       >
-        <section className={css.frame}>
-          <header className={css.headerRow}>
-            <p className={css.eyebrow}>BAF 工作流</p>
-            {/* 用户问题 1.2: the 变更 id is a fixed top-right chip — never
-             * buried inside the body copy. */}
-            {view.changeId !== undefined && (
-              <span className={css.changeChip} data-baf-change-id={view.changeId}>变更 {view.changeId}</span>
-            )}
-          </header>
-          <h2 className={css.title}>{view.title}</h2>
-          {view.sections.map((section, si) => (
-            <section key={si} className={css.bodySection}>
-              {section.title !== undefined && <h3 className={css.sectionTitle}>{section.title}</h3>}
-              {section.blocks.map((block, bi) => block.kind === 'text'
-                ? <p key={bi} className={css.body}>{block.text}</p>
-                : (
-                  <ul key={bi} className={css.bodyList}>
-                    {block.items.map((item, ii) => (
-                      <li key={ii}>
-                        {item.artifact === undefined
-                          ? item.text
-                          : (openArtifact !== undefined
-                            ? (
-                              <button
-                                type="button"
-                                className={css.artifactChip}
-                                data-baf-artifact={item.artifact.path}
-                                onClick={() => { openArtifact(item.artifact?.path ?? '') }}
-                              >
-                                📄 {item.artifact.label} ↗
-                              </button>
-                            )
-                            : <span className={css.artifactChip}>📄 {item.artifact.label}</span>)}
-                      </li>
-                    ))}
-                  </ul>
-                ))}
-            </section>
-          ))}
-          {/* 【变更】2026-10-07 (九点批 问题 2): the「确认后派单」preview — the
-           * tier·model the confirm's work order runs on (Auto sessions only;
-           * gates that dispatch nothing model-authored render no line). */}
-          {routePreview !== undefined && t !== undefined && (
-            <RouteDispatchLine
-              load={routePreview}
-              changeId={view.changeId ?? null}
-              node={dispatchNodeOfGate(view.id)}
-              t={t}
-            />
-          )}
-          {/* 用户问题 1.6: horizontal row, confirm emphasized. */}
-          <div className={css.options}>
-            {view.options.map(opt => (
-              <button
-                key={opt.label}
-                type="button"
-                className={opt.label === primaryLabel ? css.primaryBtn : css.secondaryBtn}
-                data-baf-gate-option={opt.label}
-                disabled={disabled}
-                onClick={() => {
-                  setAnswered(opt.label)
-                  answerGateOption(matched, view, opt.label)
-                }}
-              >
-                <span className={css.optionLabel}>
-                  {opt.label}
-                  {/* 【变更】2026-10-29 (批次三十七 · 用户问题 4): the
-                      recommended path (the higher-confidence one) carries a
-                      「推荐」 badge. */}
-                  {opt.recommended === true && (
-                    <span className={css.recommendBadge} data-baf-recommended="">推荐</span>
-                  )}
-                </span>
-                {opt.hint !== undefined && <span className={css.optionHint}>{opt.hint}</span>}
-              </button>
-            ))}
-          </div>
-          {/* 用户问题 1.7: free-text revision → the host dispatches a work
-           * order against the artifact; the gate re-pops after the rework. */}
-          {view.allowsRevise && (
-            <div className={css.revise}>
-              <label className={css.reviseLabel} htmlFor={reviseInputId}>有修改意见？写下后提交，系统派单修订产物，改好后再次弹出确认</label>
-              <textarea
-                id={reviseInputId}
-                className={css.reviseInput}
-                rows={2}
-                value={reviseText}
-                placeholder="例如：Scope 里补充不改哪些；Why 一句话讲清目标"
-                disabled={disabled}
-                onChange={(event) => { setReviseText(event.target.value) }}
-              />
-              <button
-                type="button"
-                className={css.reviseSubmit}
-                data-baf-revise-submit=""
-                disabled={disabled || reviseText.trim() === ''}
-                onClick={() => {
-                  setAnswered('revise')
-                  answerGateRevision(matched, view, reviseText)
-                }}
-              >
-                提交修改意见
-              </button>
-            </div>
-          )}
-        </section>
+        {card}
       </div>
     </>
   )

@@ -2,7 +2,7 @@
  * BAF go-workflow Tab: theme-following flowchart with pan/zoom and click-expand.
  */
 import {
-  useCallback, useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import clsx from 'clsx'
@@ -42,10 +42,18 @@ import { createRefreshScheduler } from './refresh-scheduler.ts'
 import { RouteStatusRow } from './RouteStatusRow.tsx'
 import { answerGateOption, answerGateRevision, gateAskViewOf, isBafGatePending, isSecondaryOptionLabel, parseGateSections } from './gate-ask.ts'
 import { setWorkflowTabActive } from './tab-activity.ts'
+// 【变更】2026-10-30 (用户问题 3.1): the answered-gate rendezvous — the
+// session's dialog and this graph write to the same store, so a gate cancels
+// IN SYNC across the two tabs.
+import { answeredGateFor, noteGateAnswered, noteGateShown, subscribeAnsweredGates } from './gate-sync.ts'
 // 【变更】2026-10-24 (批次十八 2.3): the shared row display helpers — the
 // 工作流 page's 变更总览 ledger formats a change row the same way.
 // 【变更】2026-10-24 (批次十九 1.3): the timestamp helper — the strip's 开始时间.
 import { formatDuration, formatTokenCount, formatTimestamp, modeLabel } from './dashboard-format.ts'
+// 【变更】2026-10-30 (用户问题 2/6/7): the shared per-second duration clock —
+// the top strip and the rail's stage card read the SAME hook, so 流程耗时
+// ticks once a second everywhere and freezes while the customer waits.
+import { useLiveDurationMs } from './live-duration.ts'
 import css from './WorkflowView.module.css'
 
 /** intake.mode wire value → locale key (the rail's 变更分类 card). */
@@ -640,22 +648,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // 【变更】2026-09-23 (demo1 十问题 2): the current the view last
   // auto-selected — see applyView.
   const lastAutoCurrent = useRef<WorkflowNodeId | TerminalStateId | null>(null)
-  // 【变更】2026-09-25 (用户需求 工作流 3): per-second 变更耗时 interpolation
-  // anchor. `totalDurationMs` grows in real time host-side (open stage windows
-  // accumulate `nowMs - start` in the metrics fold), so between the 2 s
-  // refreshes the client can add the wall-clock elapsed to the LAST served
-  // value and stay consistent with the next refresh. Re-anchored on every
-  // applyView; frozen automatically once the change turns terminal
-  // (changeActive false → the frozen metrics value renders).
-  const timerAnchor = useRef<{ at: number; value: number | undefined }>({ at: Date.now(), value: undefined })
-  // 【变更】2026-09-25 (用户需求 工作流 3): the last value the 变更耗时
-  // interpolation painted for THIS change — the monotonic floor (see
-  // liveTotalMs) so poll pipeline lag / clock skew can never step the timer
-  // backwards mid-change.
-  const lastShownTotal = useRef<{ key: string; ms: number } | null>(null)
-  // The 1 s tick driving the interpolated display (only runs while the
-  // change is active — terminal changes never re-tick their frozen total).
-  const [nowTick, setNowTick] = useState(() => Date.now())
+  // 【变更】2026-10-30 (用户问题 2/6/7): the per-second 流程耗时 clock moved into
+  // the shared `useLiveDurationMs` hook — the top strip and the rail's stage
+  // card read the SAME clock, so they tick together and freeze together
+  // (the host says `running === false` while the change rests on a customer
+  // decision — a confirmation gate or an approval wait).
   // 【变更】2026-09-25 (用户需求 工作流 1): the TOP advance dialog's dismissal —
   // keyed `${changeId}:${current}` so 暂不推进 dismisses for THIS rest point
   // only; a real stage advance (or change switch) re-arms the dialog.
@@ -664,6 +661,52 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   // dialog — after a click every option disables until the carrier resolves
   // (the pending interaction clears and the card unmounts).
   const [gateAnswered, setGateAnswered] = useState<string | null>(null)
+  // 【变更】2026-10-30 (用户问题 3.1): the gate the customer ANSWERED, read from
+  // the shared answered-gate store — the session's dialog and this graph write
+  // to the same place, so a 暂不推进 in the conversation cancels the banner
+  // HERE, and a click here cancels it there.
+  //
+  // The graph's parked-gate banner and the session's dialog are the SAME
+  // decision, and the banner is suppressed while the dialog is up (the dialog
+  // is the fresher instant). But the PROJECTION still carries the park after
+  // the answer — the host clears it on the NEXT event — so the banner used to
+  // REAPPEAR the moment the dialog closed: the customer watched the
+  // confirmation they had just dismissed come back, and could never reach the
+  // 「推进」 button.
+  const sharedAnswer = useSyncExternalStore(
+    subscribeAnsweredGates,
+    () => answeredGateFor(sessionId),
+    () => undefined,
+  )
+  /**
+   * The parked gate's id captured when the answer arrived — the banner is the
+   * same decision while it shows THAT gate. A different parked gate is a
+   * different decision and shows normally.
+   */
+  const [answeredBannerGateId, setAnsweredBannerGateId] = useState<string | null>(null)
+  /**
+   * 【变更】2026-10-30 (用户问题 3.1): the parked gate's id, captured when the
+   * answer arrives.
+   */
+  const bannerGateId = view.gate?.gateId
+  useEffect(() => {
+    if (sharedAnswer === undefined) {
+      setAnsweredBannerGateId(null)
+      return
+    }
+    setAnsweredBannerGateId(bannerGateId ?? null)
+  }, [sharedAnswer, bannerGateId])
+  /**
+   * 【变更】2026-10-30 (用户问题 3.1): whether the parked-gate banner is the
+   * decision the customer has ALREADY answered.
+   * @param gateId - the banner's gate id.
+   * @returns true when the banner must stay hidden.
+   */
+  const answeredGateCovers = (gateId: string): boolean =>
+    sharedAnswer !== undefined
+    && answeredBannerGateId !== null
+    && answeredBannerGateId === gateId
+    && (sharedAnswer.changeId === undefined || sharedAnswer.changeId === view.changeId)
   // 【变更】2026-09-28 (用户问题 1.7 Tab parity): the revision draft of the
   // Tab-native decision surfaces (advance dialog, parked-gate banner) — keyed
   // per surface so switching surfaces resets the draft; `sent` swaps the form
@@ -778,12 +821,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     const safe = withRenderableGraph(next)
     setView(safe)
     setError(safe.blockedReason ?? null)
-    // 【变更】2026-09-25 (用户需求 工作流 3): anchor at the HOST's derivation
-    // stamp (the totals are computed before serialization/transport), not the
-    // local apply time — applying ~a second after computation re-anchored the
-    // interpolation behind the already-painted value and every 2 s poll made
-    // the timer visibly jump backwards (4m0s → 3m59s).
-    timerAnchor.current = { at: safe.metrics?.computedAt ?? Date.now(), value: safe.metrics?.totalDurationMs }
+    // 【变更】2026-10-30 (用户问题 2/6/7): the interpolation anchor moved into
+    // the shared `useLiveDurationMs` hook — it re-anchors on every new view
+    // snapshot, at the HOST's derivation stamp (the totals are computed before
+    // serialization/transport), so applying ~a second after computation cannot
+    // re-anchor the clock behind the already-painted value.
     // 2026-09-23 issue #5: terminal currents (completed/abandoned) have no
     // catalog node to select — keep whatever the customer last clicked; the
     // rail carries the archived docs (the archive-path read fix).
@@ -871,6 +913,13 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     [pendingInteraction],
   )
   const liveGateView = useMemo(() => (liveGate === null ? null : gateAskViewOf(liveGate)), [liveGate])
+  // 【变更】2026-10-30 (用户问题 3.1): the carrier's gate id — the identity of
+  // the decision on screen. A DIFFERENT gate clears the shared answer, so the
+  // banner of the new decision is not suppressed by the old one.
+  const liveGateId = liveGateView?.id ?? null
+  useEffect(() => {
+    if (liveGateId !== null) noteGateShown(sessionId, liveGateId)
+  }, [liveGateId, sessionId])
   // 【变更】2026-09-28 (用户问题 1.6): the emphasized confirm option of the
   // live gate card — the FIRST non-secondary option, the same heuristic the
   // session card renders by.
@@ -894,40 +943,19 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
     : `${view.changeId}:${view.current}`
   useEffect(() => { setAdvanceDismissed(null) }, [advanceKey])
 
-  // 【变更】2026-09-25 (用户需求 工作流 3): the 1 s ticker — runs only while a
-  // change is active; the interpolated value below stays frozen otherwise.
-  useEffect(() => {
-    if (!changeActive) return
-    const timer = window.setInterval(() => { setNowTick(Date.now()) }, 1000)
-    return () => { window.clearInterval(timer) }
-  }, [changeActive])
-  // Interpolated 变更耗时: anchor value + wall-clock elapsed since the anchor
-  // stamp. Never runs backwards within one change — a poll trailing the painted
-  // interpolation by clock skew would read as a stuck timer every 2 s, so the
-  // last shown value is a floor while this change stays active (terminal
-  // switches to the frozen host value, which is authoritative).
-  // 【变更】2026-09-28 (用户问题 4 停表): while the host reports
-  // `metrics.running === false` the change rests on a customer decision — the
-  // wall-clock wait is NOT workflow time, so the interpolation freezes and the
-  // display holds the host's last computed total.
-  const liveTotalMs = useMemo(() => {
-    const waitingOnCustomer = view.metrics?.running === false
-    const base = changeActive && !waitingOnCustomer && timerAnchor.current.value !== undefined
-      ? timerAnchor.current.value + Math.max(0, nowTick - timerAnchor.current.at)
-      : view.metrics?.totalDurationMs
-    if (changeActive && base !== undefined) {
-      // `changeActive`'s aliased predicate already narrowed changeId to string.
-      const key = view.changeId
-      const last = lastShownTotal.current
-      if (last !== null && last.key === key) {
-        const ms = Math.max(base, last.ms)
-        lastShownTotal.current = { key, ms }
-        return ms
-      }
-      lastShownTotal.current = { key, ms: base }
-    }
-    return base
-  }, [changeActive, nowTick, view.metrics?.totalDurationMs, view.metrics?.running, view.changeId])
+  // 【变更】2026-10-30 (用户问题 2/6/7): the 流程耗时 clock — the shared
+  // per-second hook. It advances once a second while the change works and
+  // FREEZES while the change rests on a customer decision (the host reports
+  // `metrics.running === false`: a confirmation gate the customer has not
+  // answered yet, or an approval the customer has not granted yet). The gate
+  // wait and the approval wait are therefore not counted, while the model's
+  // own running time is.
+  const liveTotalMs = useLiveDurationMs({
+    view,
+    baseMs: view.metrics?.totalDurationMs,
+    running: view.metrics?.running,
+    computedAt: view.metrics?.computedAt,
+  })
 
   useEffect(() => {
     if (preset !== 'baf') return
@@ -1033,20 +1061,51 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
   }, [selectedNode, selectedTerminal, view, t])
   const railStageName = railStage.name
   const railStageNode = railStage.node
+  // 【变更】2026-10-30 (用户问题 6): the RIGHT rail's 耗时 ticks once a second
+  // while the stage it describes is the running one — the same clock the top
+  // strip reads, so the two never disagree.
+  const liveStageMs = useLiveDurationMs({
+    view,
+    baseMs: view.current !== null && view.current !== 'completed' && view.current !== 'abandoned'
+      ? view.nodes.find(node => node.id === view.current)?.metrics?.durationMs
+      : undefined,
+    running: view.metrics?.running,
+    computedAt: view.metrics?.computedAt,
+  })
+  // 【变更】2026-10-30 (用户问题 8b): the change's FILES and the scope they
+  // carry — 待确定 while nothing is touched, 模块内 when every file is under
+  // one directory, 跨模块 when the files reach several directories.
+  const scopeFiles = view.scope?.files ?? []
+  const scopeLabel = view.scope === undefined || view.scope.kind === 'unknown'
+    ? t('scope.unknown')
+    : t(`scope.${view.scope.kind}` as WorkflowTabKey)
 
   // 【变更】2026-09-22 (user report #4) — strip token cell + stats-card
   // figures derived from the tokenUsage projection (undefined → placeholder).
-  const tokenTotal = tokenUsage === undefined ? undefined : billedTotalTokens(tokenUsage)
+  // 【变更】2026-10-30 (用户问题 4): the strip's token cell now reads the HOST's
+  // rollup — the very sum the stage cards add up to — so the two can never
+  // disagree. It used to read the session-wide `tokenUsage` projection, which
+  // counts the turns BEFORE the change started and the streaming retries the
+  // per-stage fold never sees; the customer asked for the stage cards' sum to
+  // equal the top, and those two sources could not agree by construction.
+  const changeTokenTotal = view.metrics === undefined
+    ? undefined
+    : (view.metrics.totalInputTokens ?? 0) + (view.metrics.totalOutputTokens ?? 0)
+  const tokenTotal = changeTokenTotal
   const tokenTooltip = useMemo(() => {
     if (tokenUsage === undefined) return t('metrics.pending')
     return [
-      `${t('stats.total')} ${formatTokenCount(billedTotalTokens(tokenUsage))}`,
+      // 【变更】2026-10-30 (用户问题 4): the tooltip names the two totals apart
+      // — the change's (the headline number) and the session's (which also
+      // carries the turns before the change began).
+      `${t('stats.changeTotal')} ${formatTokenCount(changeTokenTotal ?? 0)}`,
+      `${t('stats.sessionTotal')} ${formatTokenCount(billedTotalTokens(tokenUsage))}`,
       `${t('stats.input')} ${formatTokenCount(tokenUsage.uncachedInputTokens)}`,
       `${t('stats.cacheRead')} ${formatTokenCount(tokenUsage.cacheReadTokens)}`,
       `${t('stats.cacheWrite')} ${formatTokenCount(tokenUsage.cacheWriteTokens)}`,
       `${t('stats.output')} ${formatTokenCount(tokenUsage.outputTokens)}`,
     ].join('\n')
-  }, [tokenUsage, t])
+  }, [changeTokenTotal, tokenUsage, t])
 
   const nextEdge = useMemo(() => {
     if (view.current === null) return null
@@ -1360,6 +1419,12 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                   disabled={busy || gateAnswered !== null}
                   onClick={() => {
                     setGateAnswered(opt.label)
+                    // 【变更】2026-10-30 (用户问题 3.1): remember the answer so
+                    // the parked-gate banner does not come back behind it.
+                    noteGateAnswered(sessionId, {
+                      ...(liveGateView.changeId === undefined ? {} : { changeId: liveGateView.changeId }),
+                      gateId: liveGateView.id,
+                    })
                     answerGateOption(liveGate, liveGateView, opt.label)
                   }}
                 >
@@ -1388,6 +1453,12 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                 disabled={gateAnswered !== null || liveReviseText.trim() === ''}
                 onClick={() => {
                   setGateAnswered('revise')
+                  // 【变更】2026-10-30 (用户问题 3.1): the revision is an answer
+                  // too — the banner must not reappear behind it.
+                  noteGateAnswered(sessionId, {
+                    ...(liveGateView.changeId === undefined ? {} : { changeId: liveGateView.changeId }),
+                    gateId: liveGateView.id,
+                  })
                   answerGateRevision(liveGate, liveGateView, liveReviseText)
                 }}
               >
@@ -1488,13 +1559,19 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
           dialog above is showing (same decision, fresher instant).
           【变更】2026-10-27 (批次三十二 · 用户问题 2): suppressed while the
           change is PAUSED — a parked gate's confirm advances the change, and a
-          paused change must not advance. */}
+          paused change must not advance.
+          【变更】2026-10-30 (用户问题 3.1): suppressed after the customer
+          ANSWERED the same decision in the session (or here) — the projection
+          still carries the park, so the banner used to come back the moment
+          the dialog closed, and the customer could never reach the 「推进」
+          button. */}
       {view.gate !== undefined
         && view.gate.gateId !== undefined
         && view.gate.question !== undefined
         && view.changeId !== null
         && !paused
-        && liveGateView === null && (
+        && liveGateView === null
+        && !answeredGateCovers(view.gate.gateId) && (
         <section className={clsx(css.card, css.cardGate)} aria-label={t('gate.bannerTitle')}>
           <div className={css.cardTitle}>{t('gate.bannerTitle')}</div>
           {/* 【变更】2026-10-23 (批次十六 2.2): segmented 【…】 body — parity with
@@ -1745,21 +1822,6 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                   </span>
                   <span className={css.metaKey}>{t('intake.kind')}</span>
                   <span>{t(`kind.${view.intake.kind}` as WorkflowTabKey)}</span>
-                  {/* 【变更】2026-09-24 (demo6 问题 2): once the plan froze the
-                      allowlist the scope IS determined — show the settled
-                      label with the real file count (tooltip lists files). */}
-                  <span className={css.metaKey}>{t('intake.scope')}</span>
-                  <span
-                    className={css.scopeValue}
-                    title={view.planAllowlist === undefined
-                      ? t('intake.heuristicNote')
-                      : `${t('intake.allowlist')}（${view.planAllowlist.length}）:\n${view.planAllowlist.join('\n')}`}
-                  >
-                    {t(`scope.${view.intake.affectedScope}` as WorkflowTabKey)}
-                    {view.planAllowlist !== undefined && (
-                      <span className={css.scopeFiles}> · {t('intake.allowlist')} {view.planAllowlist.length}</span>
-                    )}
-                  </span>
                   {/* 【变更】2026-09-24 (demo6 问题 8): the hover now explains the
                       number itself (40% base / 70% keyword hit, and when each
                       field settles) instead of restating the pre-judgment. */}
@@ -1774,17 +1836,34 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
                       ? `已确认 · ${modeLabel(view.intake.mode, t)}`
                       : t(`intake.confirmation.${view.intake.confirmation}` as WorkflowTabKey)}
                   </span>
+                  {/* 【变更】2026-10-30 (用户问题 8b): the 影响范围 sits between
+                      确认状态 and 摘要, and it reads the FILES the change has
+                      touched (allowlist ∪ touched): 待确定 while nothing is
+                      touched, 模块内 when every file is under one directory,
+                      跨模块 when the files reach several directories. The hover
+                      lists every file. */}
+                  <span className={css.metaKey}>{t('intake.scope')}</span>
+                  <span
+                    className={css.scopeValue}
+                    title={scopeFiles.length === 0
+                      ? t('intake.scopePending')
+                      : `${scopeFiles.length} ${t('intake.scopeFiles')}:\n${scopeFiles.join('\n')}`}
+                  >
+                    {scopeLabel}
+                    {scopeFiles.length > 0 && (
+                      <span className={css.scopeFiles}> · {scopeFiles.length}</span>
+                    )}
+                  </span>
                   {/* 【变更】2026-09-24 (demo6 问题 3): the summary rides the same
                       key/value row style as 模式/类型 — it was a loose hint
                       paragraph while every other field was a labeled row. */}
                   <span className={css.metaKey}>{t('intake.summary')}</span>
                   <span className={css.summaryText}>{view.intake.summary}</span>
                 </div>
-                {/* 【变更】2026-10-29 (批次三十六 · 用户问题 4): the 置信度
-                    number's meaning and purpose ride the card as a line — the
-                    customer asked 「置信度到底是什么，有什么用」 and a hover
-                    title did not answer it. */}
-                <p className={css.intakeNote}>{t('intake.confidenceNote')}</p>
+                {/* 【变更】2026-10-30 (用户问题 1): the 置信度 说明段落 is gone —
+                    the customer asked for it to be deleted: the number speaks for
+                    itself on the card, and the hover title (intake.confidenceHelp)
+                    still explains it on demand. */}
                 {/* §13 R9 — keep the classification metadata visible after
                     confirm so the customer can re-check what was agreed.
                     Pending: the two registry path buttons (§22.17 J parity —
@@ -2071,6 +2150,11 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
               // the same /baf-go the typed command would, and the deferred
               // confirmation pops in BOTH tabs.
               advanceReady: view.advance?.ready === true && driftRows.length === 0 && !paused,
+              // 【变更】2026-10-30 (用户问题 3.5): while the model is RUNNING the
+              // 推进 button is GONE — the workflow is mid-turn, so there is
+              // nothing to confirm, and a click could only collide with the
+              // turn that is already running.
+              advanceHidden: sessionRunning,
               onAdvance: advanceFromToolbar,
             }}
             driftNodes={driftNodes}
@@ -2121,6 +2205,7 @@ export function WorkflowView(props: WorkflowViewProps): React.ReactElement {
             <StageSummaryCard
               name={railStageName}
               node={railStageNode}
+              liveDurationMs={railStageNode?.id === view.current ? liveStageMs : undefined}
               nextEdge={nextEdge}
               t={t}
             />

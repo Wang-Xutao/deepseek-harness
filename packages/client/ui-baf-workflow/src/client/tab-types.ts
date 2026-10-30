@@ -294,6 +294,16 @@ export interface WorkflowTabView {
    * file count from it). Absent before plan / on unreadable ledgers.
    */
   readonly planAllowlist?: readonly string[]
+  /**
+   * 【变更】2026-10-30 (用户问题 8b): the change's SCOPE — the files it
+   * touches (the plan allowlist ∪ the ledger's touched set) and the verdict
+   * they carry: 'unknown' (nothing yet → 待确定), 'small-local' (one module →
+   * 模块内) or 'cross-module' (several modules → 跨模块).
+   */
+  readonly scope?: {
+    readonly files: readonly string[]
+    readonly kind: string
+  }
   /** Set while the change is parked in drift, so the Tab offers a rollback (§19.5). */
   readonly resume?: {
     readonly anchor: WorkflowNodeId

@@ -30,6 +30,9 @@ import {
   buildWorkflowDashboard,
   buildWorkflowTabView,
   type BuildWorkflowTabViewOptions,
+  type ApprovalWait,
+  type ModelActivity,
+  type ModelSpan,
   type UsagePoint,
   beginIntake,
   bindSessionChange,
@@ -356,6 +359,148 @@ async function readSessionUsagePoints(ctx: Context, sessionId: SessionId): Promi
       points.push({ time: event.time ?? 0, inputTokens: input, outputTokens: output })
     }
     return points
+  } finally {
+    observation[Symbol.dispose]?.()
+  }
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 7): fold one session's APPROVAL WAITS — the
+ * spans between the harness asking the customer to allow an operation and the
+ * customer answering.
+ *
+ * The session log carries the audit pair `approval/asked` → `approval/decided`
+ * (both with the event's epoch-ms `time`), so the wait is exactly the gap
+ * between the two. An ask with no matching decision is still PENDING — the
+ * customer has not answered yet.
+ *
+ * These waits are NOT work: the metrics fold takes them out of the stage
+ * durations, and a pending one freezes the live clock (the model is blocked
+ * on a human, exactly like at a confirmation gate).
+ * @param ctx - host context.
+ * @param sessionId - the session whose log to fold.
+ * @returns one wait per approval ask (best effort).
+ */
+async function readSessionApprovalWaits(ctx: Context, sessionId: SessionId): Promise<readonly ApprovalWait[]> {
+  // The approval audit pair, as the persisted events carry it.
+  interface ApprovalEvent {
+    readonly type: string
+    readonly time?: number
+    readonly data?: { readonly id?: unknown }
+  }
+
+  // One cold observation of the session log (the API history read shape).
+  interface Observation {
+    readonly events: Iterable<ApprovalEvent>
+    [Symbol.dispose]?: () => void
+  }
+
+  type SessionQuery = { observeSession: (id: SessionId, options?: { projectionMode?: string }) => Promise<Observation> }
+  const query = (ctx as { sessionQuery?: SessionQuery }).sessionQuery
+  if (query === undefined) return []
+  const observation = await query.observeSession(sessionId, { projectionMode: 'none' })
+  try {
+    const waits: ApprovalWait[] = []
+    const pending = new Map<string, number>()
+    for (const event of observation.events) {
+      if (event.type === 'approval/asked') {
+        const id = typeof event.data?.id === 'string' ? event.data.id : undefined
+        if (id === undefined) continue
+        pending.set(id, event.time ?? 0)
+        continue
+      }
+      if (event.type === 'approval/decided') {
+        const id = typeof event.data?.id === 'string' ? event.data.id : undefined
+        if (id === undefined) continue
+        const startMs = pending.get(id)
+        if (startMs === undefined) continue
+        pending.delete(id)
+        waits.push({ startMs, endMs: event.time ?? startMs })
+      }
+    }
+    // The asks that never got an answer are still waiting on the customer.
+    for (const startMs of pending.values()) waits.push({ startMs })
+    return waits
+  } finally {
+    observation[Symbol.dispose]?.()
+  }
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 2.3): fold one session's MODEL ACTIVITY — the
+ * turns the agent loop actually ran.
+ *
+ * The session log brackets every turn with `turn/start` → `turn/end`. Inside a
+ * turn the model is working; between turns it is not — the customer is typing,
+ * a confirmation gate is open, the workflow is paused, or the model was
+ * stopped. The customer asked that 会话耗时 count ONLY 「大模型在跑的时间」, so
+ * the metrics fold measures every stage window against these spans.
+ *
+ * A turn with no `turn/end` is still OPEN. Whether it is still running is the
+ * HOST's call: the live agent's status says so. When the agent is NOT running
+ * (the customer stopped the model, the session was left open, the process died)
+ * the open turn is closed at the log's last event — the model cannot have
+ * worked past the last thing the log recorded. Without that cap the open turn
+ * would run to `now` forever and the change's timer would keep ticking on a
+ * session where nothing was running — the customer saw 「会话耗时 一直在跑」 on
+ * exactly such a session.
+ * @param ctx - host context.
+ * @param sessionId - the session whose log to fold.
+ * @param running - whether the live agent is running right now.
+ * @returns the model's activity (empty spans when the log is unreadable).
+ */
+async function readSessionModelActivity(
+  ctx: Context,
+  sessionId: SessionId,
+  running: boolean | undefined,
+): Promise<ModelActivity> {
+  // The turn bracket, as the persisted events carry it.
+  interface TurnEvent {
+    readonly type: string
+    readonly time?: number
+    readonly data?: { readonly turn?: unknown }
+  }
+
+  // One cold observation of the session log (the API history read shape).
+  interface Observation {
+    readonly events: Iterable<TurnEvent>
+    [Symbol.dispose]?: () => void
+  }
+
+  type SessionQuery = { observeSession: (id: SessionId, options?: { projectionMode?: string }) => Promise<Observation> }
+  const query = (ctx as { sessionQuery?: SessionQuery }).sessionQuery
+  if (query === undefined) return { spans: [] }
+  const observation = await query.observeSession(sessionId, { projectionMode: 'none' })
+  try {
+    const open = new Map<number, number>()
+    const spans: ModelSpan[] = []
+    let lastEventMs = 0
+    for (const event of observation.events) {
+      const at = event.time ?? 0
+      if (at > lastEventMs) lastEventMs = at
+      if (event.type === 'turn/start') {
+        const turn = typeof event.data?.turn === 'number' ? event.data.turn : undefined
+        if (turn === undefined) continue
+        open.set(turn, at)
+        continue
+      }
+      if (event.type === 'turn/end') {
+        const turn = typeof event.data?.turn === 'number' ? event.data.turn : undefined
+        if (turn === undefined) continue
+        const startMs = open.get(turn)
+        if (startMs === undefined) continue
+        open.delete(turn)
+        spans.push({ startMs, endMs: at })
+      }
+    }
+    // The turns that never ended. While the agent runs, the turn is still open
+    // and its span runs to now; once it stops, the turn is closed at the log's
+    // last event — the model cannot have worked past that.
+    for (const startMs of open.values()) {
+      spans.push(running === true ? { startMs } : { startMs, endMs: lastEventMs })
+    }
+    spans.sort((a, b) => a.startMs - b.startMs)
+    return { spans, ...(running === undefined ? {} : { running }) }
   } finally {
     observation[Symbol.dispose]?.()
   }
@@ -1021,6 +1166,12 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     const view = await buildWorkflowTabView(store, bound ?? undefined, {
       ...options,
       usagePoints: await this.usagePointsFor(sessionId),
+      // 【变更】2026-10-30 (用户问题 7): the approval waits of THIS session —
+      // the spans the customer spent deciding an approval are not work time.
+      approvalWaits: await this.approvalWaitsFor(sessionId),
+      // 【变更】2026-10-30 (用户问题 2.3): the turns THIS session's model ran —
+      // 流程耗时 counts only 「大模型在跑的时间」.
+      modelActivity: await this.modelActivityFor(sessionId),
     })
     // 多模型路由 M3 批次C — the「当前路由」row rides the same payload the Tab
     // already polls; `off` (config absent/disabled) costs no log scan at all.
@@ -1134,6 +1285,88 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     } catch {
       return []
     }
+  }
+
+  /** Cached `(sessionId → waits)` with the revision the fold was made at. */
+  private readonly approvalCache = new Map<SessionId, { revision: string; waits: readonly ApprovalWait[] }>()
+  /**
+   * The session's approval waits — the spans the customer spent deciding an
+   * approval. Read through the same cold `sessionQuery.observeSession` read
+   * the usage samples use; failures degrade to an empty list.
+   * @param sessionId - the session whose log to fold.
+   * @returns the waits (empty when unreadable or unchanged).
+   */
+  private async approvalWaitsFor(sessionId: SessionId): Promise<readonly ApprovalWait[]> {
+    try {
+      const stat = await this.ctx.sessionPersistence.stat(sessionId)
+      const revision = stat === undefined
+        ? 'none'
+        : `${String(stat.revision)}:${String(stat.eventCount ?? '?')}:${String(stat.sizeBytes ?? '?')}`
+      const cached = this.approvalCache.get(sessionId)
+      if (cached !== undefined && cached.revision === revision) return cached.waits
+      const waits = await readSessionApprovalWaits(this.ctx, sessionId)
+      this.approvalCache.set(sessionId, { revision, waits })
+      return waits
+    } catch {
+      return []
+    }
+  }
+
+  /** Cached `(sessionId → activity)` with the revision the fold was made at. */
+  private readonly activityCache = new Map<SessionId, { revision: string; activity: ModelActivity }>()
+
+  /**
+   * The session's MODEL ACTIVITY — the turns the agent loop ran, and whether
+   * it is running right now.
+   *
+   * The live agent's status is NOT cached: it changes between two reads of an
+   * unchanged log (the customer starts the model), and the turn it opens is
+   * then read fresh. Only the log-derived spans ride the revision cache.
+   * @param sessionId - the session whose log to fold.
+   * @returns the activity (empty spans when unreadable or unchanged).
+   */
+  private async modelActivityFor(sessionId: SessionId): Promise<ModelActivity> {
+    const running = this.livePauseAgent(sessionId)?.status === 'running'
+    try {
+      const stat = await this.ctx.sessionPersistence.stat(sessionId)
+      const revision = stat === undefined
+        ? 'none'
+        : `${String(stat.revision)}:${String(stat.eventCount ?? '?')}:${String(stat.sizeBytes ?? '?')}`
+      const cached = this.activityCache.get(sessionId)
+      if (cached !== undefined && cached.revision === revision) {
+        return { spans: cached.activity.spans, running }
+      }
+      const activity = await readSessionModelActivity(this.ctx, sessionId, running)
+      this.activityCache.set(sessionId, { revision, activity })
+      return { spans: activity.spans, running }
+    } catch {
+      return { spans: [], running }
+    }
+  }
+
+  /**
+   * The MODEL ACTIVITY of every session that ran in this workspace — the
+   * workspace dashboard and the change detail fold the same way the session
+   * tab does, and the rule is the same: the totals count only the time the
+   * model was working.
+   * @param cwd - workspace root.
+   * @returns the merged activity (best effort).
+   */
+  private async workspaceModelActivity(cwd: string): Promise<ModelActivity> {
+    const spans: ModelSpan[] = []
+    let running = false
+    try {
+      for (const snap of await this.ctx.sessionPersistence.list()) {
+        if (snap.header.cwd !== cwd) continue
+        const activity = await this.modelActivityFor(snap.header.id)
+        spans.push(...activity.spans)
+        if (activity.running === true) running = true
+      }
+    } catch {
+      // listing is best-effort — the rows still render without the clip
+    }
+    spans.sort((a, b) => a.startMs - b.startMs)
+    return { spans, running }
   }
 
   /**
@@ -1669,7 +1902,7 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     } catch {
       // listing is best-effort — a dashboard without tokens still renders
     }
-    return await buildWorkflowDashboard(store, points)
+    return await buildWorkflowDashboard(store, points, await this.workspaceApprovalWaits(cwd), await this.workspaceModelActivity(cwd))
   }
 
   /**
@@ -1704,7 +1937,12 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     } catch {
       // listing is best-effort — the rows still render without tokens
     }
-    const dashboard = await buildWorkflowDashboard(store, points)
+    const dashboard = await buildWorkflowDashboard(
+      store,
+      points,
+      await this.workspaceApprovalWaits(cwd),
+      await this.workspaceModelActivity(cwd),
+    )
     return {
       status: 'ready',
       cwd,
@@ -1744,6 +1982,12 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
     const view = await buildWorkflowTabView(store, changeId, {
       includeMetrics: true,
       usagePoints: await this.workspaceUsagePoints(cwd),
+      // 【变更】2026-10-30 (用户问题 7): the workspace's approval waits — the
+      // 流程耗时 must not carry the time the customer spent deciding them.
+      approvalWaits: await this.workspaceApprovalWaits(cwd),
+      // 【变更】2026-10-30 (用户问题 2.3): the workspace's model activity — the
+      // totals count only the time the model was working.
+      modelActivity: await this.workspaceModelActivity(cwd),
     })
     return {
       status: 'ready',
@@ -1773,6 +2017,26 @@ export class BafWorkflowTabRemote extends TypertRemoteService {
       // listing is best-effort — the view still renders without tokens
     }
     return points
+  }
+
+  /**
+   * 【变更】2026-10-30 (用户问题 7): every session that ever ran in this
+   * workspace contributes its approval waits — the spans the customer spent
+   * deciding an approval. The metrics fold takes them out of 流程耗时.
+   * @param cwd - workspace root.
+   * @returns the waits (best effort).
+   */
+  private async workspaceApprovalWaits(cwd: string): Promise<ApprovalWait[]> {
+    const waits: ApprovalWait[] = []
+    try {
+      for (const snap of await this.ctx.sessionPersistence.list()) {
+        if (snap.header.cwd !== cwd) continue
+        waits.push(...await this.approvalWaitsFor(snap.header.id))
+      }
+    } catch {
+      // listing is best-effort — the view still renders without the exclusion
+    }
+    return waits
   }
 
   @Remote('gateResolve')

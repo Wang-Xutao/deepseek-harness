@@ -52,6 +52,9 @@ import {
   type WorkflowFlowControls,
 } from './flow-parts.tsx'
 import css from './WorkflowView.module.css'
+// 【变更】2026-10-30 (用户问题 6): the shared per-second duration clock — the
+// running node's 耗时 ticks with the strip and the rail.
+import { useLiveDurationMs } from './live-duration.ts'
 
 /**
  * The flow graph canvas — pan / zoom / the node cards and their edges.
@@ -105,6 +108,18 @@ export function FlowCanvas(props: {
     for (const n of view.nodes) map.set(n.id, n)
     return map
   }, [view])
+
+  // 【变更】2026-10-30 (用户问题 6): the RUNNING node's 耗时 ticks once a
+  // second — the same clock the strip and the rail read, so the graph never
+  // shows a stage figure the side panels disagree with.
+  const liveCurrentMs = useLiveDurationMs({
+    view,
+    baseMs: view.current !== null && view.current !== 'completed' && view.current !== 'abandoned'
+      ? nodeById.get(view.current)?.metrics?.durationMs
+      : undefined,
+    running: view.metrics?.running,
+    computedAt: view.metrics?.computedAt,
+  })
 
   const placements = view.graph.nodes
   const maxCol = Math.max(0, ...placements.map(p => p.column))
@@ -187,12 +202,25 @@ export function FlowCanvas(props: {
       <div className={css.graphOverlay}>
         {controls !== undefined && (
           <>
-            {controls.onAdvance !== undefined && controls.advanceReady === true && (
+            {/* 【变更】2026-10-30 (用户问题 3 补充): the 推进 button keeps its
+                PLACE. It used to vanish whenever the change could not advance
+                right now, which left the toolbar with an empty slot next to
+                暂停 — the customer read it as a missing button. It is always
+                there now; when the advance is not legal yet it is disabled and
+                its title says what is missing.
+                【变更】2026-10-30 (用户问题 3.5): ONE case removes it — while the
+                model is running. The workflow is mid-turn, so there is nothing
+                to confirm; a live advance button next to a running turn invited
+                a click that could only collide with it. */}
+            {controls.onAdvance !== undefined && controls.advanceHidden !== true && (
               <button
                 type="button"
                 className={css.toolBtn}
                 data-testid="flow-advance"
-                title={t('flow.advanceHelp')}
+                disabled={controls.advanceReady !== true}
+                title={controls.advanceReady === true
+                  ? t('flow.advanceHelp')
+                  : (view.advance?.missing.join('\n') ?? t('flow.advanceHelp'))}
                 onClick={() => { controls.onAdvance?.() }}
               >
                 <span className={css.toolBtnIcon} aria-hidden>
@@ -404,27 +432,34 @@ export function FlowCanvas(props: {
                   )}
                 </div>
                 <div className={css.flowMetrics}>
-                  {/* The CURRENT terminal card (完成 / 已放弃) carries the
-                      change's TOTAL figures — the flow ran, so — would be a
-                      lie. The non-current terminal stays 已忽略 with —. */}
+                  {/* 【变更】2026-10-30 (用户问题 4): the CURRENT terminal card
+                      (完成 / 已放弃) carries the change's TOTAL figures — the
+                      flow ran, so — would be a lie. It is labelled 合计 so it
+                      is obviously the SUM the stage cards add up to, not
+                      another addend: the customer asked for the stage cards'
+                      sum to equal the top strip, and an unlabelled total here
+                      made the sum read as double. The non-current terminal
+                      stays 已忽略 with —. */}
                   {((): React.ReactElement => {
                     const isCurrentTerminal = (placement.id === 'completed' || placement.id === 'abandoned')
                       && view.current === placement.id
                     if (isCurrentTerminal) {
                       return (
                         <>
-                          <span>{t('card.duration')} {formatDuration(view.metrics?.totalDurationMs ?? 0)}</span>
+                          <span>{t('card.totalDuration')} {formatDuration(view.metrics?.totalDurationMs ?? 0)}</span>
                           <span title={t('metrics.pending')}>
-                            {t('card.tokens')} {formatTokens(view.metrics?.totalInputTokens ?? 0, view.metrics?.totalOutputTokens ?? 0)}
+                            {t('card.totalTokens')} {formatTokens(view.metrics?.totalInputTokens ?? 0, view.metrics?.totalOutputTokens ?? 0)}
                           </span>
                         </>
                       )
                     }
                     return (
                       <>
-                        <span>{t('card.duration')} {stageDuration(node?.status, node?.metrics?.durationMs)}</span>
+                        {/* 【变更】2026-10-30 (用户问题 6): the running node's own
+                            figure ticks with the shared clock. */}
+                        <span>{t('card.stageDuration')} {stageDuration(node?.status, placement.id === view.current ? liveCurrentMs : node?.metrics?.durationMs)}</span>
                         <span title={t('metrics.pending')}>
-                          {t('card.tokens')} {stageTokens(node?.status, node?.metrics?.inputTokens, node?.metrics?.outputTokens)}
+                          {t('card.stageTokens')} {stageTokens(node?.status, node?.metrics?.inputTokens, node?.metrics?.outputTokens)}
                         </span>
                       </>
                     )

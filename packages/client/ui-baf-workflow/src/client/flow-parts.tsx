@@ -236,6 +236,17 @@ export interface WorkflowFlowControls {
    * cannot advance.
    */
   readonly onAdvance?: () => void
+  /**
+   * 【变更】2026-10-30 (用户问题 3.5): whether the 推进 button must be HIDDEN
+   * altogether.
+   *
+   * The button is otherwise always in place (a disabled button says what is
+   * missing; an absent one reads as a missing button). The one exception the
+   * customer asked for: while the model is RUNNING, the advance must not be
+   * offered at all — the workflow is mid-turn, so there is nothing to confirm
+   * and a click would collide with the turn.
+   */
+  readonly advanceHidden?: boolean
 }
 
 /**
@@ -509,17 +520,27 @@ export function StageSummaryCard(props: {
   nameEn?: string | undefined
   /** The stage's node view; absent for a terminal card (no stage figures). */
   node?: WorkflowTabNodeView | undefined
+  /**
+   * 【变更】2026-10-30 (用户问题 6): the RUNNING stage's live elapsed time —
+   * the per-second value the shared `useLiveDurationMs` hook paints. The
+   * caller passes it only for the stage that is actually running, so a
+   * finished stage keeps its frozen host value.
+   */
+  liveDurationMs?: number | undefined
   /** The forward edge leaving this stage — the next hop and its condition. */
   nextEdge?: { id: string; to: string; condition: string } | null
   t: (key: WorkflowTabKey) => string
 }): ReactElement {
   const { name, nameEn, node, nextEdge, t } = props
+  // 【变更】2026-10-30 (用户问题 6): the RUNNING stage paints the per-second
+  // value; every other stage keeps its frozen host figure.
+  const stageMs = props.liveDurationMs ?? node?.metrics?.durationMs
   // 【变更】2026-10-28 (批次三十五 · 用户问题 1): the stage's English name —
   // the caller's own, or the stage's own (a node's id names it). The rail
   // card and the graph card then say the SAME thing in the SAME two halves.
   const englishName = nameEn ?? (node === undefined ? undefined : NODE_EN[node.id])
   const status = node === undefined ? undefined : t(`status.${node.status}`)
-  const duration = node === undefined ? undefined : stageDuration(node.status, node.metrics?.durationMs)
+  const duration = node === undefined ? undefined : stageDuration(node.status, stageMs)
   const tokens = node === undefined
     ? undefined
     : stageTokens(node.status, node.metrics?.inputTokens, node.metrics?.outputTokens)

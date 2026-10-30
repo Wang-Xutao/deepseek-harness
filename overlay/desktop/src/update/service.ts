@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import type { AppVersions } from '../versions.ts'
 import { loadVersions, saveVersions } from '../versions.ts'
 import { applyScopedUpdate, rollbackScope, type ApplyProgress, type ApplyResult } from './apply.ts'
-import { classifyUpdateError, fetchChannelManifest, type GithubUpdateConfig, type UpdateFaultCode } from './github.ts'
+import { classifyUpdateError, fetchChannelManifest, type GitlabUpdateConfig, type UpdateFaultCode } from './gitlab.ts'
 import { buildScopedUpdatePlans, buildUpdatePlan, type ScopedPlanResult, type UpdatePlan } from './plan.ts'
 
 /**
@@ -41,7 +41,7 @@ export type UpdateState = {
 export type UpdateServiceOptions = {
   userData: string
   seedVersions: AppVersions
-  github: GithubUpdateConfig
+  gitlab: GitlabUpdateConfig
   pluginDir: string
   runtimeDir: string
   stopChild: () => void
@@ -125,7 +125,7 @@ export class UpdateService {
   async checkForUpdate(): Promise<CheckUpdateResult> {
     const checkedAt = new Date().toISOString()
     try {
-      const manifest = await fetchChannelManifest(this.opts.github)
+      const manifest = await fetchChannelManifest(this.opts.gitlab)
       const previous = this.readState()
       const scoped = buildScopedUpdatePlans(this.versions, manifest, {
         skewMs: this.opts.clockSkewMs ?? 0,
@@ -181,7 +181,7 @@ export class UpdateService {
         scopes: [],
       }
     }
-    const result = await applyScopedUpdate(this.opts.github, this.lastScoped, this.versions, {
+    const result = await applyScopedUpdate(this.opts.gitlab, this.lastScoped, this.versions, {
       onProgress: this.opts.onProgress,
       stopChild: this.opts.stopChild,
       restartChild: this.opts.restartChild,

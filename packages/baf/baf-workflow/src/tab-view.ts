@@ -19,9 +19,10 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { GATE_REGISTRY, recommendedOptionIdFor } from './gate-cards.ts'
+import { deriveScopeFromFiles } from './intake.ts'
 import { modeZh } from './command-format.ts'
 import { deriveLanes } from './lanes.ts'
-import { deriveWorkflowMetrics, type UsagePoint } from './metrics.ts'
+import { deriveWorkflowMetrics, type ApprovalWait, type ModelActivity, type UsagePoint } from './metrics.ts'
 import type { ProjectionStore } from './projection.ts'
 import { pickActiveChange } from './projection.ts'
 import { bugRecordGate, changeArtifactStatus, clarifyGate, designGate, implementGate, planGate, proposalGate, type GateInput, type GateOutcome } from './stages/gates.ts'
@@ -171,6 +172,19 @@ export interface BuildWorkflowTabViewOptions {
    */
   readonly usagePoints?: readonly UsagePoint[]
   /**
+   * 【变更】2026-10-30 (用户问题 7): the spans where the customer was
+   * deciding an approval. They are NOT work time — the fold takes them out
+   * of the stage durations, and a still-pending approval freezes the live
+   * clock (the change is blocked on a human, exactly like at a gate).
+   */
+  readonly approvalWaits?: readonly ApprovalWait[]
+  /**
+   * 【变更】2026-10-30 (用户问题 2.3): the turns the model actually ran. The
+   * durations count ONLY the time inside them — the customer's typing time, a
+   * paused workflow and a stopped model never reach 流程耗时.
+   */
+  readonly modelActivity?: ModelActivity
+  /**
    * Resolve the T13 rollback targets for a change parked in drift (§19.5).
    *
    * Only called when `status.current === 'drift'`, because the authoritative
@@ -245,7 +259,9 @@ export async function buildWorkflowTabView(
       ...(lanes === undefined ? {} : { lanes }),
       ...(resume === undefined ? {} : { resume }),
     }
-    const derived = includeMetrics ? deriveWorkflowMetrics(events, Date.now(), options.usagePoints) : undefined
+    const derived = includeMetrics
+      ? deriveWorkflowMetrics(events, Date.now(), options.usagePoints, options.approvalWaits, options.modelActivity)
+      : undefined
     // 2026-09-21 (session 5.jsonl): classify every customer-editable artifact
     // of the focused change so the Tab rail can render one open button per
     // file with its live state — same single source (`changeArtifactStatus`)
@@ -266,6 +282,11 @@ export async function buildWorkflowTabView(
     // pre-judgment alone. Terminal changes read theirs from the archive
     // directory (the same fallback the artifact rows use).
     const planAllowlist = await readPlanAllowlist(store.workspaceRoot(), selected, status).catch(() => undefined)
+    // 【变更】2026-10-30 (用户问题 8b): the SCOPE rides the same payload — the
+    // files the change touches (allowlist ∪ touched) and the verdict they
+    // carry (one module → 模块内, several → 跨模块, none yet → 待确定).
+    const scopeFiles = await readScopeFiles(store.workspaceRoot(), selected, status).catch(() => [])
+    const scope = { files: scopeFiles, kind: deriveScopeFromFiles(scopeFiles) }
     const view = statusToTabView(status, changes, derived, extras)
     // 2026-09-22 (user report #4): the Tab 「推进」 button's readiness — same
     // file gates the drives run, so a click can never promise an advance the
@@ -278,6 +299,7 @@ export async function buildWorkflowTabView(
       ...(advance === undefined ? {} : { advance }),
       artifacts,
       ...(planAllowlist === undefined ? {} : { planAllowlist }),
+      scope,
     }
     // 【变更】2026-09-23 (demo2 user issue #2): a change parked at a pending
     // classification surfaces as the change-scoped pendingGate — the 完整流程 /
@@ -396,6 +418,39 @@ async function readPlanAllowlist(
     return parsed !== undefined && parsed.allowlist.length > 0 ? parsed.allowlist : undefined
   } catch {
     return undefined
+  }
+}
+
+/**
+ * 【变更】2026-10-30 (用户问题 8b): the change's SCOPE FILES — the plan's
+ * frozen allowlist UNION the ledger's touched set (what the implementation
+ * actually changed).
+ *
+ * The customer asked for the files to show up as the change progresses: while
+ * nothing is touched yet the scope reads 待确定, and every file that lands
+ * goes into the hover (and into the change detail's file list).
+ * @param cwd - workspace root.
+ * @param changeId - focused change.
+ * @param status - recovered workflow status.
+ * @returns the workspace-relative file paths (empty when nothing is known).
+ */
+async function readScopeFiles(
+  cwd: string,
+  changeId: string,
+  status: WorkflowStatus,
+): Promise<readonly string[]> {
+  const ledger = await readLedger(cwd, changeId).catch(() => undefined)
+  if (ledger !== undefined) {
+    return [...new Set([...ledger.allowlist, ...ledger.touched])]
+  }
+  if (status.terminal === undefined) return []
+  try {
+    const body = await readFile(join(cwd, 'openspec', 'changes', 'archive', changeId, 'plan.json'), 'utf8')
+    const parsed = parsePlanLedger(body)
+    if (parsed === undefined) return []
+    return [...new Set([...parsed.allowlist, ...parsed.touched])]
+  } catch {
+    return []
   }
 }
 

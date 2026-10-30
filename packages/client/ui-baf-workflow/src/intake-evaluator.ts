@@ -8,9 +8,13 @@
  * session log. The model answers with one JSON object:
  *
  *   {"kind":"new-requirement|bug|maintenance|unknown",
- *    "scope":"single-file|small-local|cross-module|public-api|unknown",
  *    "confidence":{"full-go-path":0-100,"bug-fix-path":0-100},
  *    "reason":"不超过 30 字的中文理由"}
+ *
+ * 【变更】2026-10-30 (用户问题 8): the model no longer judges the 影响范围 —
+ * it reads a requirement text, not the code base, and its guess froze the
+ * classification card on 「跨模块」 before a single file existed. The scope is
+ * settled by the plan's frozen file list (deriveScopeFromAllowlist).
  *
  * The parser is tolerant (the model may wrap the object in prose or a code
  * fence); anything it cannot read yields undefined, and the classifier falls
@@ -34,12 +38,13 @@ export const INTAKE_CONFIDENCE_SYSTEM = [
   '- bug-fix-path：缺陷修复路径（先写回归测试，再修根因）。只适合影响面很小的缺陷。',
   '',
   'kind 取值：new-requirement（新需求）/ bug（缺陷）/ maintenance（维护）/ unknown（待定）。',
-  'scope 取值：single-file（单文件）/ small-local（局部小改）/ cross-module（跨模块）/ public-api（对外接口）/ unknown（待定）。',
   '',
   'confidence 给出两条路径各自的把握程度（0-100 的整数）：把握越大越接近 100，两条路径可以都低（说明需求本身说不清）。',
   '',
+  '不要判断影响范围（你看不到代码，改动会碰到哪些模块由计划阶段冻结的文件清单决定）。',
+  '',
   '只输出一个 JSON 对象，不要输出其它文字：',
-  '{"kind":"...","scope":"...","confidence":{"full-go-path":0,"bug-fix-path":0},"reason":"不超过 30 字的中文理由"}',
+  '{"kind":"...","confidence":{"full-go-path":0,"bug-fix-path":0},"reason":"不超过 30 字的中文理由"}',
 ].join('\n')
 
 /** The output cap one evaluation runs under. */
@@ -52,7 +57,6 @@ export interface IntakeEvaluationRoute {
 }
 
 const KINDS: readonly ChangeKind[] = ['new-requirement', 'bug', 'maintenance', 'unknown']
-const SCOPES: readonly AffectedScope[] = ['single-file', 'small-local', 'cross-module', 'public-api', 'unknown']
 
 /**
  * Read one percentage out of the model's answer.
@@ -92,9 +96,10 @@ export function parseIntakeConfidence(text: string): IntakeConfidenceVerdict | u
   const bug = percent(scores['bug-fix-path'])
   if (full === undefined && bug === undefined) return undefined
   const kind = KINDS.includes(row.kind as ChangeKind) ? row.kind as ChangeKind : 'unknown'
-  const scope = SCOPES.includes(row.affectedScope as AffectedScope)
-    ? row.affectedScope as AffectedScope
-    : SCOPES.includes(row.scope as AffectedScope) ? row.scope as AffectedScope : 'unknown'
+  // 【变更】2026-10-30 (用户问题 8): the model no longer judges the scope —
+  // it cannot see the code base, and the scope is settled by the plan's
+  // frozen file list. A scope in the answer is tolerated but never read.
+  const scope: AffectedScope = 'unknown'
   const reason = typeof row.reason === 'string' ? row.reason.trim().slice(0, 60) : ''
   return {
     kind,
